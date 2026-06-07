@@ -57,9 +57,9 @@ Deno.serve(async (req) => {
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
-      // TWINT + card. Apple Pay / Google Pay are surfaced by Stripe under "card"
-      // when the buyer's device/wallet/country/account are eligible.
-      payment_method_types: ["card", "twint"],
+      // Payment methods are NOT hardcoded: Stripe automatically surfaces every
+      // method enabled in the account dashboard (card, TWINT, Apple/Google Pay…)
+      // based on currency, country and device eligibility.
       expires_at: expiresAtUnix,
       line_items: [{
         price_data: {
