@@ -29,7 +29,6 @@ Deno.test("redact hides secret-bearing keys before logging", async () => {
     from: () => ({ insert: (row: Record<string, unknown>) => { captured.push(row); return Promise.resolve({ error: null }); } }),
   };
   const { logApi } = await import("../_shared/db.ts");
-  // deno-lint-ignore no-explicit-any
   await logApi(fakeDb as unknown as Parameters<typeof logApi>[0], {
     service: "chargenow", endpoint: "/x", method: "POST",
     request: { Authorization: "Basic SUPERSECRET", token: "abc", nested: { api_key: "k" }, deviceId: "S1" },
