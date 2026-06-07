@@ -19,6 +19,7 @@ import AdminEvents from "./pages/admin/AdminEvents.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminMaintenance from "./pages/admin/AdminMaintenance.tsx";
 import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
+import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
 
 const queryClient = new QueryClient();
 
