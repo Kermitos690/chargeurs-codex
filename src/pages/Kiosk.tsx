@@ -291,10 +291,44 @@ export default function Kiosk() {
   return (
     <div className="relative min-h-screen overflow-hidden px-6 py-8 sm:px-12">
       <LiquidBackground />
+
+      {/* Connectivity banner — blocks confidence in payment when offline. */}
+      {offline && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive/90 py-2 text-sm font-semibold text-destructive-foreground">
+          <WifiOff className="h-4 w-4" />Connexion Internet indisponible — paiement temporairement impossible
+        </div>
+      )}
+
+      {/* Discreet update status: only auto-applies when idle. */}
+      {needRefresh && !offline && (
+        <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-center gap-2 bg-primary/80 py-1.5 text-xs font-medium text-primary-foreground">
+          <RefreshCw className="h-3.5 w-3.5" />
+          {busy ? "Mise à jour en attente (appliquée à la fin de l'opération)" : "Mise à jour en cours…"}
+        </div>
+      )}
+
+      {showDiag && (
+        <KioskDiagnostics
+          stationId={stationId}
+          lockedStation={lockedStation}
+          lastSync={station?.last_sync_at ?? null}
+          net={net}
+          chargenowConfigured={configured}
+          stationOnline={station?.online ?? null}
+          swUrl={swUrl}
+          needRefresh={needRefresh}
+          onApplyUpdate={applyUpdate}
+          onClose={() => setShowDiag(false)}
+        />
+      )}
+
       <header className="flex items-center justify-between">
-        <BrandLogo size="md" />
+        <button onClick={onLogoTap} aria-label="Chargeurs.ch" className="cursor-default">
+          <BrandLogo size="md" />
+        </button>
         <LanguageSwitcher />
       </header>
+
 
       <main className="mx-auto flex min-h-[80vh] max-w-5xl flex-col items-center justify-center text-center">
         <AnimatePresence mode="wait">
