@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { DataTable, StateChip } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Loader2, RefreshCw, Search } from "lucide-react";
 type Row = Record<string, any>;
 
 export default function AdminOrders() {
+  const { canWrite, isSuperAdmin } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
@@ -85,14 +87,20 @@ export default function AdminOrders() {
                 <div key={k as string} className="rounded-lg bg-muted/30 p-2"><div className="text-xs text-muted-foreground">{k}</div><div className="break-all font-mono text-xs">{String(v ?? "—")}</div></div>
               ))}
             </div>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => act("retry_chargenow", detail.id)} disabled={!!busy}>
-                {busy === "retry_chargenow" + detail.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réessayer ChargeNow"}
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => act("reconcile", detail.id)} disabled={!!busy}>Réconcilier</Button>
-              <Button size="sm" variant="secondary" onClick={() => act("manual_review", detail.id)} disabled={!!busy}>Revue manuelle</Button>
-              <Button size="sm" variant="destructive" onClick={() => act("refund", detail.id)} disabled={!!busy}>Rembourser (super_admin)</Button>
-            </div>
+            {canWrite ? (
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => act("retry_chargenow", detail.id)} disabled={!!busy}>
+                  {busy === "retry_chargenow" + detail.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réessayer ChargeNow"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => act("reconcile", detail.id)} disabled={!!busy}>Réconcilier</Button>
+                <Button size="sm" variant="secondary" onClick={() => act("manual_review", detail.id)} disabled={!!busy}>Revue manuelle</Button>
+                {isSuperAdmin && (
+                  <Button size="sm" variant="destructive" onClick={() => act("refund", detail.id)} disabled={!!busy}>Rembourser</Button>
+                )}
+              </div>
+            ) : (
+              <p className="mt-6 text-sm text-muted-foreground">Lecture seule — votre rôle ne permet pas d'actions sur les locations.</p>
+            )}
           </div>
         </div>
       )}

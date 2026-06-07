@@ -11,16 +11,22 @@ export default function AdminApiHealth() {
 
   const check = async () => {
     setTesting(true);
-    // sync-cabinet-status reports whether ChargeNow is configured.
-    const { data: sync } = await supabase.functions.invoke("sync-cabinet-status", { body: {} });
-    // create-stripe-checkout reports stripe config via a harmless probe.
-    const { count: eventCount } = await supabase.from("cabinet_events").select("id", { count: "exact", head: true });
-    setHealth({
-      chargenow: (sync as any)?.configured ?? false,
-      stripe: false, // determined when a checkout is attempted (key stored backend-only)
-      webhook: false,
-      eventPush: (eventCount ?? 0) > 0,
+    // Real backend probe — returns booleans only, never the secret values.
+    const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
+      body: { actionType: "health_check" },
     });
+    const h = (data as any)?.health;
+    if (error || !h) {
+      setHealth({ chargenow: false, stripe: false, webhook: false, eventPush: false });
+    } else {
+      const { count: eventCount } = await supabase.from("cabinet_events").select("id", { count: "exact", head: true });
+      setHealth({
+        chargenow: Boolean(h.chargenow),
+        stripe: Boolean(h.stripe),
+        webhook: Boolean(h.webhook),
+        eventPush: (eventCount ?? 0) > 0,
+      });
+    }
     setTesting(false);
   };
   useEffect(() => { check(); }, []);

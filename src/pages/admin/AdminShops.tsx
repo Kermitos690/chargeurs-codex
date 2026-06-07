@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw } from "lucide-react";
@@ -35,7 +36,7 @@ export default function AdminShops() {
       ) : (
         <pre className="glass max-h-96 overflow-auto rounded-2xl p-4 text-xs">{shops ? JSON.stringify(shops, null, 2) : "Cliquez sur Charger pour interroger ChargeNow (S1 getShopList)."}</pre>
       )}
-      <p className="text-xs text-muted-foreground">Création / modification / liaison de boutique (S3–S5, C9/C11) passent par le dispatcher admin (dry-run, confirmation, preuve dans /admin/api-coverage). Aucune route ChargeNow hors inventaire Apifox n'est utilisée.</p>
+      <p className="text-xs text-muted-foreground">Vue en lecture seule (S1 getShopList). La création / modification / suppression (S3–S5) et la liaison de boutique (C9/C11) ne sont pas exposées dans cette page : elles s'exécutent via le dispatcher admin testé dans <Link to="/admin/api-coverage" className="underline">/admin/api-coverage</Link> (dry-run, confirmation, preuve enregistrée). Aucune route ChargeNow hors inventaire Apifox n'est utilisée.</p>
     </div>
   );
 }

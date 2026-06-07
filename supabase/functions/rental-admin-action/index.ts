@@ -56,16 +56,49 @@ Deno.serve(async (req) => {
 
     if (action === "reconcile") {
       if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
-      // Best-effort: re-read ChargeNow order status if we have a tradeNo.
+      // Re-read ChargeNow order status if we have a tradeNo, then apply the
+      // result to the local state machine (not just metadata).
       const { orderQuery } = await import("../_shared/chargenow.ts");
       let cn: unknown = null;
-      if (session.apifox_trade_no) {
-        const res = await orderQuery(session.apifox_trade_no);
-        cn = res.data;
-        await db.from("rental_sessions").update({ chargenow_status: res.ok ? "queried" : "query_error" }).eq("id", rentalSessionId);
+      let applied: { chargenow_status: string; state?: string } | null = null;
+      if (!session.apifox_trade_no) {
+        await logApi(db, { service: "admin", endpoint: "reconcile", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: { skipped: "NO_TRADE_NO" } });
+        return json({ ok: true, chargenow: null, chargenow_skipped: true, reason: "NO_TRADE_NO" });
       }
-      await logApi(db, { service: "admin", endpoint: "reconcile", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: cn });
-      return json({ ok: true, chargenow: cn });
+
+      const res = await orderQuery(session.apifox_trade_no);
+      cn = res.data;
+      if (!res.ok) {
+        applied = { chargenow_status: "query_error" };
+      } else {
+        // Tolerant parsing of the documented rent-order response shape.
+        const d = (res.data as Record<string, any>) ?? {};
+        const o = d.data ?? d;
+        const returnTime = o.pGivebackTime ?? o.givebackTime ?? o.returnTime ?? o.pReturnTime ?? null;
+        const statusNum = Number(o.iStatus ?? o.status ?? NaN);
+        // status 1 / presence of a return time => battery returned & finished.
+        const returned = Boolean(returnTime) || statusNum === 1 || o.finished === true;
+        if (returned) {
+          // Only advance forward; never regress a closed/refunded session.
+          const terminal = ["closed", "refunded", "battery_returned"];
+          if (!terminal.includes(session.state)) {
+            applied = { chargenow_status: "returned", state: "battery_returned" };
+          } else {
+            applied = { chargenow_status: "returned" };
+          }
+        } else {
+          applied = { chargenow_status: "borrowing" };
+        }
+      }
+
+      const update: Record<string, unknown> = { chargenow_status: applied.chargenow_status };
+      if (applied.state) {
+        update.state = applied.state;
+        if (applied.state === "battery_returned") update.returned_at = new Date().toISOString();
+      }
+      await db.from("rental_sessions").update(update).eq("id", rentalSessionId);
+      await logApi(db, { service: "admin", endpoint: "reconcile", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: { cn, applied } });
+      return json({ ok: true, chargenow: cn, applied });
     }
 
     if (action === "refund") {

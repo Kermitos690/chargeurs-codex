@@ -2,13 +2,21 @@
 // and updates the database. No mock data: if the API is not configured or a
 // station is unreachable, the station is marked unknown/offline.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi } from "../_shared/db.ts";
+import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const db = adminClient();
+
+  // Admin-gated: this endpoint performs live ChargeNow calls and overwrites
+  // stations/slots/batteries. It must never be reachable anonymously.
+  const adminId = await requireAdmin(req, db);
+  if (!adminId) {
+    return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
     const body = await req.json().catch(() => ({}));

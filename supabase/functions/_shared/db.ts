@@ -57,8 +57,20 @@ export async function requireAdmin(req: Request, db: SupabaseClient): Promise<st
   const { data: { user }, error } = await db.auth.getUser(jwt);
   if (error || !user) return null;
   const { data: roles } = await db.from("user_roles").select("role").eq("user_id", user.id);
-  const isAdmin = (roles ?? []).some((r: { role: string }) => r.role === "admin");
+  const isAdmin = (roles ?? []).some((r: { role: string }) => r.role === "admin" || r.role === "super_admin");
   return isAdmin ? user.id : null;
+}
+
+// Verify the caller is an authenticated super_admin. Returns user id or null.
+export async function requireSuperAdmin(req: Request, db: SupabaseClient): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return null;
+  const jwt = authHeader.replace("Bearer ", "");
+  const { data: { user }, error } = await db.auth.getUser(jwt);
+  if (error || !user) return null;
+  const { data: roles } = await db.from("user_roles").select("role").eq("user_id", user.id);
+  const isSuper = (roles ?? []).some((r: { role: string }) => r.role === "super_admin");
+  return isSuper ? user.id : null;
 }
 
 export async function isSimulationMode(db: SupabaseClient): Promise<boolean> {

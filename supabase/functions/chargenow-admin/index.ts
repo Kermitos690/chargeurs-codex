@@ -4,7 +4,7 @@
 //   { confirm:true } is sent.
 // - Records every live result into public.api_coverage as proof.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
+import { adminClient, logApi, requireAdmin, requireSuperAdmin } from "../_shared/db.ts";
 import * as cn from "../_shared/chargenow.ts";
 
 const DANGEROUS = new Set([
@@ -123,6 +123,16 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const params = (body.params as Record<string, unknown>) ?? {};
+
+    // A1 (oauth2Login) relays credentials to ChargeNow — super_admin only.
+    if (code === "A1") {
+      const superId = await requireSuperAdmin(req, db);
+      if (!superId) {
+        return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED", code }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     const isDangerous = DANGEROUS.has(code);
     const maintenanceMode = Boolean(body.maintenanceMode);
     const confirm = Boolean(body.confirm);
