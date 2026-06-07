@@ -10,7 +10,12 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:unit": "vitest run src/test/roles.test.ts src/test/rentalState.test.ts",
+    "test:state": "vitest run src/test/rentalState.test.ts",
+    "test:roles": "vitest run src/test/roles.test.ts",
+    "test:db": "psql -f supabase/tests/db-tests.sql",
+    "test:all": "vitest run && psql -f supabase/tests/db-tests.sql"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
