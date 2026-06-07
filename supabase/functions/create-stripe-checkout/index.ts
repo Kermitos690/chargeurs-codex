@@ -44,7 +44,10 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+    const stripe = new Stripe(STRIPE_KEY, {
+      apiVersion: "2024-12-18.acacia",
+      httpClient: Stripe.createFetchHttpClient(),
+    });
     const base = APP_URL || origin || "";
     // Price is server-side ONLY.
     const amount = Number(session.amount_expected ?? session.amount ?? 2.0);
