@@ -58,6 +58,29 @@ export default function Kiosk() {
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
+  const [lockedStation, setLockedStation] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+
+  const net = useOnlineStatus();
+  const offline = net === "offline";
+  const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
+
+  // A payment / rental is in progress — block reloads, back navigation and
+  // disruptive auto-updates during these phases.
+  const busy = ["pricing", "starting", "qr", "waitpay"].includes(phase);
+
+  // Hidden diagnostics trigger: 5 quick taps on the logo.
+  const onLogoTap = useCallback(() => {
+    const nowMs = Date.now();
+    const r = tapRef.current;
+    r.n = nowMs - r.t < 600 ? r.n + 1 : 1;
+    r.t = nowMs;
+    if (r.n >= 5) { r.n = 0; setShowDiag(true); }
+  }, []);
+
+
   
 
   const loadStation = useCallback(async () => {
