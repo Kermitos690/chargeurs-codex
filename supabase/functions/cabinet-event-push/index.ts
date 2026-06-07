@@ -41,7 +41,7 @@ export interface EventPayload {
 export function unsignedAllowed(env: (k: string) => string | undefined = (k) => Deno.env.get(k)): boolean {
   const allow = env("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
   const mode = (env("ENVIRONMENT") ?? env("DENO_ENV") ?? "production").toLowerCase();
-  const nonProd = env === "development" || env === "test" || env === "local";
+  const nonProd = mode === "development" || mode === "test" || mode === "local";
   return allow && nonProd;
 }
 
