@@ -1223,6 +1223,7 @@ export type Database = {
         Args: { p_station: string; p_token: string }
         Returns: Json
       }
+      kiosk_session_status: { Args: { p_id: string }; Returns: Json }
       resolve_price_profile: {
         Args: { p_device: string; p_shop: string; p_station: string }
         Returns: {

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -54,7 +54,7 @@ export default function Kiosk() {
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
 
   const loadStation = useCallback(async () => {
     if (!stationId) return;
@@ -138,27 +138,16 @@ export default function Kiosk() {
     if (m) { setStatusMsg({ title: m.title, sub: m.sub }); setPhase(m.phase); }
   }, []);
 
-  // Realtime + polling fallback on the rental session.
+  // Poll the rental session status via a safe, scoped RPC (no direct table read:
+  // rental_sessions is staff-only and exposes Stripe/financial data).
   useEffect(() => {
     if (!sessionId || !["qr", "waitpay", "starting"].includes(phase)) return;
-    channelRef.current = supabase
-      .channel(`rental_${sessionId}`)
-      .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rental_sessions", filter: `id=eq.${sessionId}` },
-        (payload) => {
-          const r = payload.new as { state: string; selected_slot_num: number | null };
-          applyState(r.state, r.selected_slot_num);
-        })
-      .subscribe();
     const poll = setInterval(async () => {
-      const { data } = await supabase.from("rental_sessions")
-        .select("state, selected_slot_num").eq("id", sessionId).maybeSingle();
-      if (data) applyState((data as { state: string }).state, (data as { selected_slot_num: number | null }).selected_slot_num);
+      const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId });
+      const r = data as { state?: string; selected_slot_num?: number | null } | null;
+      if (r?.state) applyState(r.state, r.selected_slot_num ?? null);
     }, 3000);
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-      clearInterval(poll);
-    };
+    return () => clearInterval(poll);
   }, [sessionId, phase, applyState]);
 
   const startRental = async () => {
