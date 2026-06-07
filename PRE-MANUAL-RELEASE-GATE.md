@@ -83,3 +83,37 @@ monotone), transitions d'état contrôlées et idempotentes, secrets non exposé
 migrations versionnées, tests automatisables verts. Les éléments restants exigent
 objectivement matériel / paiement réel / callback fournisseur / session humaine /
 configuration externe — couverts par MANUAL-VALIDATION-PLAN.md.
+
+---
+
+# CONTRÔLE CONTRADICTOIRE (2026-06-07) — VERDICT RÉVISÉ : NO-GO
+
+## Inventaire chiffré (vérifié)
+- Routes frontend totales : 20 (kiosk: 3, pay: 3, admin: 14 incl. login, public: 1, 404: 1).
+- Edge Functions : 14. Auditées (lecture code) : 14. Testées en autorisation (anon→403) : 7/7 sensibles.
+- Fonctions SQL : 10. SECURITY DEFINER : 4 (has_role, kiosk_quote, kiosk_session_status, effective_price).
+- Tables : 27 ; RLS activée : oui sur les tables sensibles vérifiées.
+- Migrations : 19 (2 ajoutées par ce contrôle).
+- Tests Vitest : 14 (13 + example) — TOUS des tests de fonctions pures (roles.ts, rentalState.ts). 0 test d'intégration full-stack.
+- Tests SQL : 1 fichier (pricing + grants) — PASS.
+- Tests d'intégration / concurrence / résilience / Stripe-sim / ChargeNow-mock : 0.
+
+## Commandes (exécutées)
+- tsc --noEmit : exit 0.
+- vitest run (unit) : 13 PASS, exit 0.
+- psql test:db : ALL DB TESTS PASSED, exit 0.
+- eslint : exit 1 — 48 erreurs (majoritairement no-explicit-any) + 10 warnings. Non bloquant fonctionnel mais à corriger.
+
+## Corrections appliquées par ce contrôle
+1. `kiosk_session_status` durci : exige `public_session_code` en plus de l'UUID. Preuve anon REST : UUID+mauvais code → null ; UUID+bon code → données ; ancienne signature → PGRST202. Pay.tsx/Kiosk.tsx/create-stripe-checkout mis à jour (code propagé via ?c=).
+2. Idempotence callback ATOMIQUE : colonne `cabinet_events.external_event_id` + index UNIQUE partiel ; insert s'appuie sur 23505. Remplace l'ancien SELECT-then-INSERT "best-effort".
+
+## Catégories automatisables NON testées (raison du NO-GO)
+- Matrice de rôles complète par endpoint : seul le chemin anonyme (403) est prouvé ; les chemins positifs viewer/staff/operator/admin/super_admin/kiosk nécessitent des utilisateurs de test isolés non encore créés.
+- Scénarios kiosk (token absent/faux/expiré/révoqué/rotation/autre station/kiosk ou station désactivés) : non automatisés.
+- Suite Stripe simulée (checkout/webhook signé/dupliqué/hors-ordre/montant/devise/remboursements/concurrence) : inexistante.
+- Mock contractuel ChargeNow (auth, online/offline, éjection, callbacks BATTERY_IN/OUT, tradeNo, giveback) : inexistant.
+- Tests de concurrence et de résilience : non exécutés.
+
+## Verdict
+NO-GO POUR PHASE MANUELLE — tant que les catégories automatisables ci-dessus ne sont pas couvertes par des tests reproductibles. Les deux blocants durs (accès statut par UUID seul ; anti-rejeu non atomique) sont désormais corrigés et prouvés.
