@@ -1,0 +1,1 @@
+DELETE FROM public.cabinet_events WHERE event_type = 'TST_DEDUP' OR external_event_id LIKE 'dedup-proof-%';
