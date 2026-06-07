@@ -127,8 +127,52 @@ export default function Kiosk() {
     });
   }, [stationId]);
 
+  // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
+  // different cabinet id in the URL is treated as a mismatch (no silent switch).
+  useEffect(() => {
+    if (!isValidStationId(stationId)) { setMismatch(false); setLockedStation(getLockedStation()); return; }
+    const effective = lockStationIfUnset(stationId);
+    setLockedStation(effective);
+    setMismatch(!!effective && effective !== stationId);
+  }, [stationId]);
+
+  // Enable kiosk-mode (no zoom / select / pull-to-refresh) on the document.
+  useEffect(() => {
+    document.documentElement.classList.add("kiosk-mode");
+    const blockGesture = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", blockGesture);
+    document.addEventListener("contextmenu", blockGesture);
+    return () => {
+      document.documentElement.classList.remove("kiosk-mode");
+      document.removeEventListener("gesturestart", blockGesture);
+      document.removeEventListener("contextmenu", blockGesture);
+    };
+  }, []);
+
+  // Prevent accidental back / reload during an active payment or rental.
+  useEffect(() => {
+    if (!busy) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const onPopState = () => { window.history.pushState(null, "", window.location.href); };
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [busy]);
+
+  // Auto-apply a pending app update only when idle (no rental / payment).
+  useEffect(() => {
+    if (needRefresh && !busy && (phase === "idle" || phase === "loading")) {
+      const t = setTimeout(() => { applyUpdate(); }, 4000);
+      return () => clearTimeout(t);
+    }
+  }, [needRefresh, busy, phase, applyUpdate]);
 
   useEffect(() => {
+
     loadStation();
     loadQuote();
     supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
