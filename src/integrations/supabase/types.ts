@@ -14,16 +14,496 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      api_logs: {
+        Row: {
+          created_at: string
+          endpoint: string | null
+          error: string | null
+          id: string
+          method: string | null
+          request: Json | null
+          response: Json | null
+          service: string | null
+          status_code: number | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint?: string | null
+          error?: string | null
+          id?: string
+          method?: string | null
+          request?: Json | null
+          response?: Json | null
+          service?: string | null
+          status_code?: number | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string | null
+          error?: string | null
+          id?: string
+          method?: string | null
+          request?: Json | null
+          response?: Json | null
+          service?: string | null
+          status_code?: number | null
+        }
+        Relationships: []
+      }
+      apifox_orders: {
+        Row: {
+          created_at: string
+          id: string
+          rental_session_id: string | null
+          request: Json | null
+          response: Json | null
+          status: string | null
+          trade_no: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rental_session_id?: string | null
+          request?: Json | null
+          response?: Json | null
+          status?: string | null
+          trade_no?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rental_session_id?: string | null
+          request?: Json | null
+          response?: Json | null
+          status?: string | null
+          trade_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apifox_orders_rental_session_id_fkey"
+            columns: ["rental_session_id"]
+            isOneToOne: false
+            referencedRelation: "rental_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batteries: {
+        Row: {
+          battery_id: string
+          id: string
+          power_level: number | null
+          raw_data: Json | null
+          slot_num: number | null
+          station_id: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          battery_id: string
+          id?: string
+          power_level?: number | null
+          raw_data?: Json | null
+          slot_num?: number | null
+          station_id?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          battery_id?: string
+          id?: string
+          power_level?: number | null
+          raw_data?: Json | null
+          slot_num?: number | null
+          station_id?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cabinet_events: {
+        Row: {
+          event_type: string | null
+          id: string
+          payload: Json | null
+          received_at: string
+          severity: string | null
+          station_id: string | null
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          received_at?: string
+          severity?: string | null
+          station_id?: string | null
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          received_at?: string
+          severity?: string | null
+          station_id?: string | null
+        }
+        Relationships: []
+      }
+      kiosk_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json | null
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json | null
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json | null
+        }
+        Relationships: []
+      }
+      maintenance_actions: {
+        Row: {
+          action_type: string | null
+          created_at: string
+          id: string
+          params: Json | null
+          performed_by: string | null
+          result: Json | null
+          station_id: string | null
+        }
+        Insert: {
+          action_type?: string | null
+          created_at?: string
+          id?: string
+          params?: Json | null
+          performed_by?: string | null
+          result?: Json | null
+          station_id?: string | null
+        }
+        Update: {
+          action_type?: string | null
+          created_at?: string
+          id?: string
+          params?: Json | null
+          performed_by?: string | null
+          result?: Json | null
+          station_id?: string | null
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number | null
+          created_at: string
+          currency: string | null
+          id: string
+          payment_method: string | null
+          provider: string | null
+          raw_webhook: Json | null
+          rental_session_id: string | null
+          status: string | null
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          payment_method?: string | null
+          provider?: string | null
+          raw_webhook?: Json | null
+          rental_session_id?: string | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          payment_method?: string | null
+          provider?: string | null
+          raw_webhook?: Json | null
+          rental_session_id?: string | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_rental_session_id_fkey"
+            columns: ["rental_session_id"]
+            isOneToOne: false
+            referencedRelation: "rental_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_profiles: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          period_label: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          period_label?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          period_label?: string | null
+        }
+        Relationships: []
+      }
+      rental_sessions: {
+        Row: {
+          amount: number | null
+          apifox_trade_no: string | null
+          cabinet_id: string | null
+          checkout_url: string | null
+          closed_at: string | null
+          created_at: string
+          currency: string | null
+          customer_language: string | null
+          ejected_at: string | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          paid_at: string | null
+          returned_at: string | null
+          selected_slot_num: number | null
+          state: string
+          station_id: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          apifox_trade_no?: string | null
+          cabinet_id?: string | null
+          checkout_url?: string | null
+          closed_at?: string | null
+          created_at?: string
+          currency?: string | null
+          customer_language?: string | null
+          ejected_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          paid_at?: string | null
+          returned_at?: string | null
+          selected_slot_num?: number | null
+          state?: string
+          station_id: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          apifox_trade_no?: string | null
+          cabinet_id?: string | null
+          checkout_url?: string | null
+          closed_at?: string | null
+          created_at?: string
+          currency?: string | null
+          customer_language?: string | null
+          ejected_at?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          paid_at?: string | null
+          returned_at?: string | null
+          selected_slot_num?: number | null
+          state?: string
+          station_id?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      slots: {
+        Row: {
+          battery_id: string | null
+          id: string
+          raw_data: Json | null
+          slot_num: number
+          station_id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          battery_id?: string | null
+          id?: string
+          raw_data?: Json | null
+          slot_num: number
+          station_id: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          battery_id?: string | null
+          id?: string
+          raw_data?: Json | null
+          slot_num?: number
+          station_id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      stations: {
+        Row: {
+          cabinet_id: string | null
+          created_at: string
+          currency: string | null
+          id: string
+          last_sync_at: string | null
+          location_name: string | null
+          name: string
+          online: boolean | null
+          price_per_period: number | null
+          raw_data: Json | null
+          rentable_count: number | null
+          returnable_count: number | null
+          signal: number | null
+          station_id: string
+          status: string | null
+          total_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          cabinet_id?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_sync_at?: string | null
+          location_name?: string | null
+          name: string
+          online?: boolean | null
+          price_per_period?: number | null
+          raw_data?: Json | null
+          rentable_count?: number | null
+          returnable_count?: number | null
+          signal?: number | null
+          station_id: string
+          status?: string | null
+          total_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cabinet_id?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          last_sync_at?: string | null
+          location_name?: string | null
+          name?: string
+          online?: boolean | null
+          price_per_period?: number | null
+          raw_data?: Json | null
+          rentable_count?: number | null
+          returnable_count?: number | null
+          signal?: number | null
+          station_id?: string
+          status?: string | null
+          total_count?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          created_at: string
+          event_type: string | null
+          external_id: string | null
+          id: string
+          payload: Json | null
+          processed: boolean | null
+          provider: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+          provider?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string | null
+          external_id?: string | null
+          id?: string
+          payload?: Json | null
+          processed?: boolean | null
+          provider?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "staff" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +630,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "staff", "user"],
+    },
   },
 } as const
