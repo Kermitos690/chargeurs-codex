@@ -39,6 +39,10 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
       state: "needs_support", failure_code: "AMOUNT_MISMATCH",
       failure_message: `Montant payé ${paidCents} ${paidCur} ≠ attendu ${expectedCents} ${expectedCur}.`,
     }).eq("id", session.id);
+    await auditLog(db, {
+      action: "pricing.error", target: session.id,
+      data: { code: "PAID_AMOUNT_MISMATCH", paidCents, expectedCents, paidCur, expectedCur },
+    });
     return;
   }
 
@@ -51,6 +55,19 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
     amount_paid: paidCents / 100,
     paid_at: new Date().toISOString(),
   }).eq("id", session.id).in("state", ["checkout_created", "created", "payment_processing"]).select();
+
+  if (updated && updated.length > 0) {
+    await auditLog(db, {
+      action: "stripe.payment.succeeded", target: session.id,
+      data: {
+        paid_cents: paidCents, currency: paidCur,
+        price_profile_id: session.price_profile_id, price_profile_version: session.price_profile_version,
+        pricing_snapshot_hash: session.pricing_snapshot_hash ?? cs.metadata?.pricing_snapshot_hash ?? null,
+        stripe_metadata_hash: cs.metadata?.pricing_snapshot_hash ?? null,
+      },
+    });
+  }
+
 
   // Trigger ChargeNow order + ejection ONLY once, after confirmed payment.
   if (updated && updated.length > 0) {
