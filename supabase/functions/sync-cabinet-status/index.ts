@@ -5,6 +5,21 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
 
+// Typed (tolerant) view of the documented ChargeNow "Get Device Info" payload.
+interface CabinetInfo {
+  online?: boolean; onlineStatus?: number; status?: string;
+  slots?: number; slotNum?: number; totalSlots?: number; emptySlots?: number;
+  signal?: number; signalStrength?: number;
+}
+interface BatteryInfo {
+  slotNum?: number; slot?: number; slotId?: number;
+  batteryId?: string; sn?: string; bid?: string;
+  vol?: number; batteryCapacity?: number; power?: number; electricity?: number;
+}
+interface CabinetPayload {
+  cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -53,21 +68,22 @@ Deno.serve(async (req) => {
       }
 
       // Tolerant parsing of the documented response shape.
-      const d = res.data as Record<string, any>;
-      const payload = d.data ?? d;
+      const d = (res.data ?? {}) as CabinetPayload;
+      const payload = (d.data ?? d) as CabinetPayload;
       // Documented response shape (Apifox "1.Get Device Info" — GET /rent/cabinet/query):
       //   data.cabinet  : { online, slots (total), emptySlots, busySlots, signal, qrCode, id, shopId, ... }
       //   data.batteries: [{ slotNum, vol, batteryId }]  (batteries currently present & rentable)
       //   data.priceStrategy / data.shop
-      const cab = payload.cabinet ?? payload;
+      const cab = (payload.cabinet ?? payload) as CabinetInfo;
       const online = cab.online === true || cab.onlineStatus === 1 || cab.status === "online";
 
       // Batteries available to rent come from data.batteries[].
-      const batteries: any[] = Array.isArray(payload.batteries)
+      const batteries: BatteryInfo[] = Array.isArray(payload.batteries)
         ? payload.batteries
         : (Array.isArray(payload.slots) ? payload.slots : []).filter(
-            (s: any) => s.batteryId || s.sn || s.bid,
+            (s: BatteryInfo) => s.batteryId || s.sn || s.bid,
           );
+
 
       // total = number of physical slots; emptySlots = returnable capacity.
       const total = Number(cab.slots ?? cab.slotNum ?? cab.totalSlots ?? 0);

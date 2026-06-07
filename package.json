@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,7 +16,14 @@
     "test:state": "vitest run src/test/rentalState.test.ts",
     "test:roles": "vitest run src/test/roles.test.ts",
     "test:db": "psql -f supabase/tests/db-tests.sql",
-    "test:all": "vitest run && psql -f supabase/tests/db-tests.sql"
+    "test:stripe": "deno test --allow-net --allow-env --no-check supabase/functions/tests/stripe.test.ts",
+    "test:chargenow": "deno test --allow-net --allow-env --no-check supabase/functions/tests/chargenow_contract.test.ts",
+    "test:callbacks": "deno test --allow-net --allow-env --no-check supabase/functions/tests/cabinet_event_push.test.ts",
+    "test:concurrency": "deno test --allow-net --allow-env --no-check supabase/functions/tests/concurrency.test.ts",
+    "test:resilience": "deno test --allow-net --allow-env --no-check supabase/functions/tests/resilience.test.ts",
+    "test:security": "deno test --allow-net --allow-env --no-check supabase/functions/tests/security.test.ts",
+    "test:integration": "deno test --allow-net --allow-env --no-check supabase/functions/tests/",
+    "test:all": "vitest run && psql -f supabase/tests/db-tests.sql && deno test --allow-net --allow-env --no-check supabase/functions/tests/"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

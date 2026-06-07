@@ -9,6 +9,7 @@
 // matching token (constant-time compare). Replay/oversize requests are dropped.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SEVERITY: Record<string, string> = {
   CABINET_ONLINE: "info",
@@ -24,6 +25,26 @@ const SEVERITY: Record<string, string> = {
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB cap on the inbound payload.
 const REPLAY_WINDOW_MS = 5 * 60 * 1000; // accept events at most 5 min old/future.
 
+// Tolerant typed view of an inbound ChargeNow hardware event payload.
+export interface EventPayload {
+  eventType?: string; type?: string; event?: string;
+  deviceId?: string; cabinetid?: string; cabinetId?: string; stationId?: string;
+  timestamp?: string | number; ts?: string | number; eventTime?: string | number; time?: string | number;
+  messageId?: string | number; eventId?: string | number; msgId?: string | number; id?: string | number;
+  [k: string]: unknown;
+}
+
+// Production safety: the unsigned dev override is ONLY honored when the runtime
+// is EXPLICITLY marked as a non-production environment. If ENVIRONMENT is unset
+// or anything other than development/test/local, we treat the runtime as
+// production and the unsigned override has NO effect (fail-closed by default).
+export function unsignedAllowed(env: (k: string) => string | undefined = (k) => Deno.env.get(k)): boolean {
+  const allow = env("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
+  const mode = (env("ENVIRONMENT") ?? env("DENO_ENV") ?? "production").toLowerCase();
+  const nonProd = mode === "development" || mode === "test" || mode === "local";
+  return allow && nonProd;
+}
+
 // Constant-time string comparison (avoids timing side-channels).
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -38,20 +59,26 @@ function j(body: unknown, status: number) {
   });
 }
 
-Deno.serve(async (req) => {
+// Core request handler — exported and dependency-injected so the full signed
+// branch (secret gate, replay window, size cap, atomic dedup, state machine)
+// can be exercised by the automated integration harness with a fake db and a
+// temporary in-process secret. Production wires it to the real admin client.
+export async function handleEvent(
+  req: Request,
+  db: SupabaseClient,
+  env: (k: string) => string | undefined = (k) => Deno.env.get(k),
+): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  const db = adminClient();
 
-  const expectedSecret = Deno.env.get("CHARGENOW_EVENT_SECRET");
-  const allowUnsigned = Deno.env.get("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
+  const expectedSecret = env("CHARGENOW_EVENT_SECRET");
+  const allowUnsigned = unsignedAllowed(env);
 
   // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
     if (!allowUnsigned) {
-      // No secret AND unsigned mode not explicitly enabled → refuse everything.
       return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "CHARGENOW_EVENT_SECRET not configured" }, 503);
     }
-    // else: explicit dev override — proceed unauthenticated.
+    // else: explicit dev override in a non-production runtime — proceed unauthenticated.
   } else {
     const url = new URL(req.url);
     const provided = req.headers.get("x-event-secret")
@@ -69,7 +96,7 @@ Deno.serve(async (req) => {
     if (raw.length > MAX_BODY_BYTES) {
       return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
     }
-    let payload: Record<string, any> = {};
+    let payload: EventPayload = {};
     try { payload = raw ? JSON.parse(raw) : {}; } catch { return j({ ok: false, error: "INVALID_JSON" }, 400); }
 
     const eventType: string = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
@@ -134,4 +161,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     return j({ ok: false, error: String(e) }, 500);
   }
-});
+}
+
+Deno.serve((req) => handleEvent(req, adminClient()));

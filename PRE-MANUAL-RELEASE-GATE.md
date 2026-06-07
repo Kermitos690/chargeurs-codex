@@ -160,3 +160,27 @@ Correction appliquée: `rental-admin-action` validait les params AVANT l'autoris
 
 ## Verdict v2
 NO-GO POUR PHASE MANUELLE — tous les blocants de sécurité durs sont fermés et prouvés ; le NO-GO subsiste uniquement par manque de couverture de tests automatisés (mocks Stripe/ChargeNow + résilience), pas par défaut exploitable connu.
+
+---
+
+## FINAL AUTOMATED PHASE — verdict update
+
+Full automated integration harness built and executed. Evidence:
+`AUTOMATED-INTEGRATION-TEST-EVIDENCE.md`.
+
+- typecheck: exit 0 · build: exit 0
+- vitest unit: 13 PASS · SQL: 9 PASS · Deno integration: 50 PASS (stripe 15,
+  chargenow 13, callbacks 10, concurrency 3, resilience 5, security 4)
+- lint: 0 critical-path errors; 37 non-critical frontend `no-explicit-any` on
+  read-only admin display pages, documented and deferred.
+- Security: `cabinet-event-push` is fail-closed with a production guard that
+  neutralises `ALLOW_UNSIGNED_CHARGENOW_EVENTS` outside dev/test/local. Atomic
+  idempotency enforced by DB UNIQUE keys. Secret redaction tested.
+- Cleanup: harness is hermetic (in-memory) — zero live-DB fixtures created.
+
+**Verdict: GO POUR PHASE MANUELLE** (manual validation may begin; this is not GO-LIVE).
+
+Strictly manual / external remaining: real Stripe + TWINT/Apple Pay/Google Pay,
+external dashboard config, real ChargeNow callbacks, physical tablet/cabinet/
+battery, real ejection/return, and true multi-connection DB concurrency on the
+isolated staging DB.

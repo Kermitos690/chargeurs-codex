@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { RefreshCw, Loader2, Wifi, WifiOff, Battery } from "lucide-react";
+import { RefreshCw, Loader2, Wifi, WifiOff, Battery, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AdminStationDetail() {
@@ -98,7 +98,7 @@ export default function AdminStationDetail() {
   );
 }
 
-function Info({ label, value, icon: Icon, tone }: { label: string; value: any; icon?: any; tone?: string }) {
+function Info({ label, value, icon: Icon, tone }: { label: string; value: ReactNode; icon?: LucideIcon; tone?: string }) {
   return (
     <div className="glass rounded-2xl p-5">
       {Icon && <Icon className={cn("mb-2 h-5 w-5", tone)} />}

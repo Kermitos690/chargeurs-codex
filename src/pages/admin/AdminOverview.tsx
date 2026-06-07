@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Server, Wifi, BatteryCharging, CreditCard, AlertTriangle, Activity } from "lucide-react";
+import { Server, Wifi, BatteryCharging, CreditCard, AlertTriangle, Activity, type LucideIcon } from "lucide-react";
 
-type Stat = { label: string; value: string | number; icon: any; tone: string };
+type Stat = { label: string; value: string | number; icon: LucideIcon; tone: string };
 
 export default function AdminOverview() {
   const [stats, setStats] = useState<Stat[]>([]);

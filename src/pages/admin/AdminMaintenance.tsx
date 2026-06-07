@@ -24,7 +24,7 @@ export default function AdminMaintenance() {
       if (error) throw error;
       if ((data as any)?.ok) toast.success(`Action « ${actionType} » exécutée`);
       else toast.error((data as any)?.error ?? "Échec");
-    } catch (e: any) { toast.error(e.message ?? "Erreur"); }
+    } catch (e) { toast.error((e as Error).message ?? "Erreur"); }
     finally { setBusy(null); }
   };
 

@@ -9,7 +9,7 @@ import { Loader2, ArrowLeft, Save, FlaskConical, ExternalLink } from "lucide-rea
 
 const chf = (c: number) => (Number(c) / 100).toFixed(2);
 
-async function call(action: string, payload: Record<string, unknown> = {}) {
+async function call(action: string, payload: any = {}) {
   const { data, error } = await supabase.functions.invoke("pricing-admin", { body: { action, ...payload } });
   if (error) throw new Error(error.message);
   if (!(data as { ok?: boolean })?.ok) throw new Error((data as { error?: string })?.error ?? "Erreur");
@@ -37,14 +37,14 @@ const RULES: { key: string; label: string; money?: boolean }[] = [
 export default function AdminPricingDetail() {
   const { id } = useParams();
   const [data, setData] = useState<any>(null);
-  const [form, setForm] = useState<Record<string, any>>({});
+  const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [assign, setAssign] = useState({ scope: "station", scope_ref: "" });
   const [sim, setSim] = useState({ minutes: "30", return_state: "normal" });
-  const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
+  const [simResult, setSimResult] = useState<any>(null);
 
   const load = useCallback(async () => {
-    try { const d = await call("get", { id }); setData(d); setForm({ ...(d as any).profile }); }
+    try { const d = await call("get", { id }); setData(d); setForm({ ...((d as Record<string, any>).profile) }); }
     catch (e) { toast.error(String((e as Error).message)); }
   }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -56,7 +56,7 @@ export default function AdminPricingDetail() {
   const save = async () => {
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = { id, name: form.name, description: form.description, currency: form.currency, rounding: form.rounding, valid_to: form.valid_to || null, valid_from: form.valid_from || null, priority: Number(form.priority) || 0 };
+      const payload: any = { id, name: form.name, description: form.description, currency: form.currency, rounding: form.rounding, valid_to: form.valid_to || null, valid_from: form.valid_from || null, priority: Number(form.priority) || 0 };
       for (const r of RULES) payload[r.key] = Number(form[r.key]) || 0;
       await call("update", payload);
       toast.success("Tarif mis à jour (nouvelle version)"); load();
@@ -74,7 +74,7 @@ export default function AdminPricingDetail() {
     try {
       const end = new Date(Date.now() + Number(sim.minutes) * 60000).toISOString();
       const d = await call("simulate", { station: firstStation, end, return_state: sim.return_state });
-      setSimResult((d as { snapshot: Record<string, unknown> }).snapshot);
+      setSimResult((d as { snapshot: any }).snapshot);
     } catch (e) { toast.error(String((e as Error).message)); }
   };
 
