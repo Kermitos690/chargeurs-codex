@@ -49,16 +49,41 @@ Deno.serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
     const base = APP_URL || origin || "";
-    // Price is server-side ONLY — never trust the client, never a demo fallback.
-    const resolvedAmount = session.amount_expected ?? session.amount ?? null;
-    if (resolvedAmount == null || Number(resolvedAmount) <= 0) {
+
+    // Price is server-side ONLY — taken from the frozen pricing snapshot.
+    const snap = (session.pricing_snapshot ?? null) as Record<string, unknown> | null;
+    if (!snap || typeof snap !== "object") {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "MISSING_SNAPSHOT" } });
       return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const amount = Number(resolvedAmount);
-    const amountCents = Math.round(amount * 100);
-    const currency = (session.currency ?? "CHF").toLowerCase();
+    // Verify the snapshot was not tampered with (hash must match).
+    const recomputedHash = await snapshotHash(snap);
+    if (session.pricing_snapshot_hash && recomputedHash !== session.pricing_snapshot_hash) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_HASH_MISMATCH" } });
+      return new Response(JSON.stringify({ ok: false, error: "SNAPSHOT_INVALID" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    // Snapshot currency must match the session currency.
+    const snapCurrency = String(snap.currency ?? "").toUpperCase();
+    const sessCurrency = String(session.currency ?? "CHF").toUpperCase();
+    if (snapCurrency && snapCurrency !== sessCurrency) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "CURRENCY_MISMATCH", snapCurrency, sessCurrency } });
+      return new Response(JSON.stringify({ ok: false, error: "CURRENCY_MISMATCH" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const finalCents = Number(snap.final_cents ?? NaN);
+    const expectedCents = Math.round(Number(session.amount_expected ?? 0) * 100);
+    if (!Number.isFinite(finalCents) || finalCents <= 0 || finalCents !== expectedCents) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "AMOUNT_MISMATCH", finalCents, expectedCents } });
+      return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const amount = finalCents / 100;
+    const amountCents = finalCents;
+    const currency = sessCurrency.toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
+
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
