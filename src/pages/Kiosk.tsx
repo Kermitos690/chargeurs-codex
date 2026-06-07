@@ -65,7 +65,16 @@ export default function Kiosk() {
 
   const loadQuote = useCallback(async () => {
     if (!stationId) return;
-    const { data, error } = await supabase.rpc("effective_price", { p_station: stationId, p_device: null });
+    // Real kiosk authentication: a provisioned tablet stores its individual
+    // token in localStorage. The token is strictly bound to this station's id
+    // server-side (kiosk_quote), so a kiosk cannot impersonate another station.
+    const token = localStorage.getItem("kiosk_token");
+    if (!token) {
+      setQuote(null);
+      setQuoteError("KIOSK_AUTH_REQUIRED");
+      return;
+    }
+    const { data, error } = await supabase.rpc("kiosk_quote", { p_token: token, p_station: stationId });
     const snap = data as Record<string, unknown> | null;
     if (error || !snap || snap.error || !snap.final_cents) {
       setQuote(null);
@@ -243,7 +252,11 @@ export default function Kiosk() {
                   <div className="mt-2 text-sm text-muted-foreground">Tarif appliqué automatiquement à cette borne</div>
                 </div>
               ) : (
-                <p className="text-warning">{quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}</p>
+                <p className="text-warning">
+                  {quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID"
+                    ? "Borne non authentifiée — contactez l'exploitant."
+                    : quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}
+                </p>
               )}
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>Retour</Button>

@@ -279,7 +279,10 @@ export type Database = {
           label: string | null
           last_seen_at: string | null
           station_id: string
+          token_expires_at: string | null
           token_hash: string
+          token_revoked: boolean
+          token_rotated_at: string | null
           updated_at: string
         }
         Insert: {
@@ -289,7 +292,10 @@ export type Database = {
           label?: string | null
           last_seen_at?: string | null
           station_id: string
+          token_expires_at?: string | null
           token_hash: string
+          token_revoked?: boolean
+          token_rotated_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -299,7 +305,10 @@ export type Database = {
           label?: string | null
           last_seen_at?: string | null
           station_id?: string
+          token_expires_at?: string | null
           token_hash?: string
+          token_revoked?: boolean
+          token_rotated_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1209,6 +1218,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      kiosk_quote: {
+        Args: { p_station: string; p_token: string }
+        Returns: Json
       }
       resolve_price_profile: {
         Args: { p_device: string; p_shop: string; p_station: string }

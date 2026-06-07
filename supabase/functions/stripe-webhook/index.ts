@@ -3,7 +3,7 @@
 // success triggers ChargeNow order + battery ejection. Never ejects on
 // redirect/success_url. Idempotent via webhook_events(external_id unique).
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi, auditLog } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
@@ -34,14 +34,34 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
 
   if (!paid) return;
 
-  if (!amountOk || !currencyOk) {
+  // ---- Snapshot integrity: never trust client/Stripe metadata blindly. ----
+  // Recompute the deterministic hash from the DB-stored snapshot and compare it
+  // to both the stored hash and the hash carried in Stripe metadata.
+  let snapshotOk = true;
+  let recomputedHash: string | null = null;
+  if (session.pricing_snapshot) {
+    recomputedHash = await snapshotHash(session.pricing_snapshot);
+    const storedHash = session.pricing_snapshot_hash ?? null;
+    const metaHash = cs.metadata?.pricing_snapshot_hash ?? null;
+    snapshotOk = recomputedHash === storedHash && (!metaHash || metaHash === storedHash);
+  }
+
+  if (!amountOk || !currencyOk || !snapshotOk) {
     await db.from("rental_sessions").update({
-      state: "needs_support", failure_code: "AMOUNT_MISMATCH",
-      failure_message: `Montant payé ${paidCents} ${paidCur} ≠ attendu ${expectedCents} ${expectedCur}.`,
+      state: "needs_support",
+      failure_code: !snapshotOk ? "SNAPSHOT_MISMATCH" : "AMOUNT_MISMATCH",
+      failure_message: !snapshotOk
+        ? "Incohérence du snapshot tarifaire — vérification manuelle requise."
+        : `Montant payé ${paidCents} ${paidCur} ≠ attendu ${expectedCents} ${expectedCur}.`,
     }).eq("id", session.id);
     await auditLog(db, {
       action: "pricing.error", target: session.id,
-      data: { code: "PAID_AMOUNT_MISMATCH", paidCents, expectedCents, paidCur, expectedCur },
+      data: {
+        code: !snapshotOk ? "SNAPSHOT_MISMATCH" : "PAID_AMOUNT_MISMATCH",
+        paidCents, expectedCents, paidCur, expectedCur,
+        recomputedHash, storedHash: session.pricing_snapshot_hash ?? null,
+        metaHash: cs.metadata?.pricing_snapshot_hash ?? null,
+      },
     });
     return;
   }
