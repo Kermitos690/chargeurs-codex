@@ -63,12 +63,26 @@ export default function Kiosk() {
     setPhase((p) => (p === "loading" ? "idle" : p));
   }, [stationId]);
 
-  const loadProfiles = useCallback(async () => {
-    const { data } = await supabase.from("price_profiles").select("*").eq("active", true).order("amount");
-    const list = (data as PriceProfile[] | null) ?? [];
-    setProfiles(list);
-    setSelected((s) => s ?? list.find((p) => p.is_default) ?? list[0] ?? null);
-  }, []);
+  const loadQuote = useCallback(async () => {
+    if (!stationId) return;
+    const { data, error } = await supabase.rpc("effective_price", { p_station: stationId, p_device: null });
+    const snap = data as Record<string, unknown> | null;
+    if (error || !snap || snap.error || !snap.final_cents) {
+      setQuote(null);
+      setQuoteError((snap?.error as string) ?? error?.message ?? "PRICING_NOT_CONFIGURED");
+      return;
+    }
+    setQuoteError(null);
+    setQuote({
+      amount: Number(snap.amount),
+      currency: String(snap.currency),
+      profile_name: String(snap.profile_name ?? ""),
+      final_cents: Number(snap.final_cents),
+      profile_id: String(snap.profile_id ?? ""),
+      source: String(snap.source ?? ""),
+    });
+  }, [stationId]);
+
 
   useEffect(() => {
     loadStation();
