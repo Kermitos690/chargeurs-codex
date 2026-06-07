@@ -25,6 +25,7 @@ import AdminOrders from "./pages/admin/AdminOrders.tsx";
 import AdminPricing from "./pages/admin/AdminPricing.tsx";
 import AdminPricingDetail from "./pages/admin/AdminPricingDetail.tsx";
 import AdminShops from "./pages/admin/AdminShops.tsx";
+import AdminPartners from "./pages/admin/AdminPartners.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
 
@@ -55,6 +56,7 @@ const App = () => (
               <Route path="orders" element={<AdminOrders />} />
               <Route path="pricing" element={<AdminPricing />} />
               <Route path="pricing/:id" element={<AdminPricingDetail />} />
+              <Route path="partners" element={<AdminPartners />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="test-monitor" element={<AdminTestMonitor />} />
