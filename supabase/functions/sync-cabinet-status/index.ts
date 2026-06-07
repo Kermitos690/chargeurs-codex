@@ -47,50 +47,61 @@ Deno.serve(async (req) => {
       // Tolerant parsing of the documented response shape.
       const d = res.data as Record<string, any>;
       const payload = d.data ?? d;
+      // Documented response shape (Apifox "1.Get Device Info" — GET /rent/cabinet/query):
+      //   data.cabinet  : { online, slots (total), emptySlots, busySlots, signal, qrCode, id, shopId, ... }
+      //   data.batteries: [{ slotNum, vol, batteryId }]  (batteries currently present & rentable)
+      //   data.priceStrategy / data.shop
       const cab = payload.cabinet ?? payload;
       const online = cab.online === true || cab.onlineStatus === 1 || cab.status === "online";
-      const slots = payload.slots ?? payload.cabinetSlot ?? cab.slots ?? [];
-      const batteries = (Array.isArray(slots) ? slots : []).filter(
-        (s: any) => s.batteryId || s.sn || s.bid,
+
+      // Batteries available to rent come from data.batteries[].
+      const batteries: any[] = Array.isArray(payload.batteries)
+        ? payload.batteries
+        : (Array.isArray(payload.slots) ? payload.slots : []).filter(
+            (s: any) => s.batteryId || s.sn || s.bid,
+          );
+
+      // total = number of physical slots; emptySlots = returnable capacity.
+      const total = Number(cab.slots ?? cab.slotNum ?? cab.totalSlots ?? 0);
+      const rentable = batteries.length;
+      const returnable = Number(
+        cab.emptySlots ?? (total ? total - batteries.length : 0),
       );
-      const rentable = cab.rentable ?? cab.busySlots ?? batteries.length;
-      const total = cab.slotNum ?? cab.totalSlots ?? (Array.isArray(slots) ? slots.length : 0);
 
       await db.from("stations").update({
         status: online ? "online" : "offline",
         online,
         signal: cab.signal ?? cab.signalStrength ?? null,
         rentable_count: rentable,
-        returnable_count: total - batteries.length,
+        returnable_count: returnable,
         total_count: total,
         last_sync_at: new Date().toISOString(),
         raw_data: payload,
       }).eq("station_id", st.station_id);
 
-      // Upsert slots
-      if (Array.isArray(slots)) {
-        for (const s of slots) {
-          const slotNum = s.slotNum ?? s.slot ?? s.slotId;
-          if (slotNum == null) continue;
-          await db.from("slots").upsert({
+      // Upsert one slot row per battery currently present.
+      for (const b of batteries) {
+        const slotNum = b.slotNum ?? b.slot ?? b.slotId;
+        if (slotNum == null) continue;
+        const bid = b.batteryId ?? b.sn ?? b.bid ?? null;
+        await db.from("slots").upsert({
+          station_id: st.station_id,
+          slot_num: Number(slotNum),
+          status: bid ? "occupied" : "empty",
+          battery_id: bid,
+          raw_data: b,
+        }, { onConflict: "station_id,slot_num" });
+
+        if (bid) {
+          await db.from("batteries").upsert({
+            battery_id: bid,
             station_id: st.station_id,
             slot_num: Number(slotNum),
-            status: s.batteryId || s.sn ? "occupied" : "empty",
-            battery_id: s.batteryId ?? s.sn ?? null,
-            raw_data: s,
-          }, { onConflict: "station_id,slot_num" });
-
-          const bid = s.batteryId ?? s.sn ?? s.bid;
-          if (bid) {
-            await db.from("batteries").upsert({
-              battery_id: bid,
-              station_id: st.station_id,
-              slot_num: Number(slotNum),
-              status: "in_station",
-              power_level: s.batteryCapacity ?? s.power ?? s.electricity ?? null,
-              raw_data: s,
-            }, { onConflict: "battery_id" });
-          }
+            status: "in_station",
+            // "vol" is the documented battery voltage/charge field.
+            power_level: b.vol ?? b.batteryCapacity ?? b.power ?? b.electricity ?? null,
+            raw_data: b,
+          }, { onConflict: "battery_id" });
         }
       }
 
