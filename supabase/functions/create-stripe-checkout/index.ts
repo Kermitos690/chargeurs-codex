@@ -4,7 +4,7 @@
 // The amount is taken from the server-side rental_session.amount_expected.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
