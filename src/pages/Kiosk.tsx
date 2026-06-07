@@ -149,14 +149,14 @@ export default function Kiosk() {
   // Poll the rental session status via a safe, scoped RPC (no direct table read:
   // rental_sessions is staff-only and exposes Stripe/financial data).
   useEffect(() => {
-    if (!sessionId || !["qr", "waitpay", "starting"].includes(phase)) return;
+    if (!sessionId || !publicCode || !["qr", "waitpay", "starting"].includes(phase)) return;
     const poll = setInterval(async () => {
-      const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId });
+      const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId, p_code: publicCode });
       const r = data as { state?: string; selected_slot_num?: number | null } | null;
       if (r?.state) applyState(r.state, r.selected_slot_num ?? null);
     }, 3000);
     return () => clearInterval(poll);
-  }, [sessionId, phase, applyState]);
+  }, [sessionId, publicCode, phase, applyState]);
 
   const startRental = async () => {
     setPhase("starting");

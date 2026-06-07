@@ -32,7 +32,7 @@ export default function Pay() {
     load();
     const i = setInterval(load, 2500);
     return () => clearInterval(i);
-  }, [rentalSessionId]);
+  }, [rentalSessionId, sessionCode]);
 
   const paid = ["payment_succeeded", "ejecting", "ejected", "battery_taken", "active_rental"].includes(state) || outcome === "success";
   const cancelled = ["payment_cancelled", "payment_expired"].includes(state) || outcome === "cancel";
