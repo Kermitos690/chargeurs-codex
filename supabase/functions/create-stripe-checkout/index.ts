@@ -112,8 +112,8 @@ Deno.serve(async (req) => {
         expected_amount: String(amount),
         expected_currency: currency,
       },
-      success_url: `${base}/pay/${session.id}/success`,
-      cancel_url: `${base}/pay/${session.id}/cancel`,
+      success_url: `${base}/pay/${session.id}/success?c=${encodeURIComponent(session.public_session_code ?? "")}`,
+      cancel_url: `${base}/pay/${session.id}/cancel?c=${encodeURIComponent(session.public_session_code ?? "")}`,
     });
 
     const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();

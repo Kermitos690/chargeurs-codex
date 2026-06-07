@@ -214,6 +214,7 @@ export type Database = {
       cabinet_events: {
         Row: {
           event_type: string | null
+          external_event_id: string | null
           id: string
           payload: Json | null
           received_at: string
@@ -222,6 +223,7 @@ export type Database = {
         }
         Insert: {
           event_type?: string | null
+          external_event_id?: string | null
           id?: string
           payload?: Json | null
           received_at?: string
@@ -230,6 +232,7 @@ export type Database = {
         }
         Update: {
           event_type?: string | null
+          external_event_id?: string | null
           id?: string
           payload?: Json | null
           received_at?: string
@@ -1223,7 +1226,10 @@ export type Database = {
         Args: { p_station: string; p_token: string }
         Returns: Json
       }
-      kiosk_session_status: { Args: { p_id: string }; Returns: Json }
+      kiosk_session_status: {
+        Args: { p_code: string; p_id: string }
+        Returns: Json
+      }
       resolve_price_profile: {
         Args: { p_device: string; p_shop: string; p_station: string }
         Returns: {
