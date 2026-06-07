@@ -19,7 +19,9 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       // The kiosk wrapper (src/pwa/registerSW.ts) is the ONLY registrar.
       injectRegister: null,
-      registerType: "autoUpdate",
+      // "prompt": we control when the new SW activates so we never reload
+      // during an active rental or payment.
+      registerType: "prompt",
       filename: "sw.js",
       // No SW in dev / Lovable preview.
       devOptions: { enabled: false },
