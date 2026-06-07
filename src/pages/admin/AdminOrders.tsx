@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { DataTable, StateChip } from "@/components/admin/DataTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Loader2, RefreshCw, Search } from "lucide-react";
 type Row = Record<string, any>;
 
 export default function AdminOrders() {
+  const { canWrite, isSuperAdmin } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [detail, setDetail] = useState<Row | null>(null);
