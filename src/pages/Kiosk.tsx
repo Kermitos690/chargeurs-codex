@@ -54,7 +54,7 @@ export default function Kiosk() {
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
 
   const loadStation = useCallback(async () => {
     if (!stationId) return;
