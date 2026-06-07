@@ -31,9 +31,11 @@ const cn = await import("../_shared/chargenow.ts");
 
 const HTTP_ERRORS = [400, 401, 403, 404, 409, 429, 500] as const;
 
+type ApiResult = Awaited<ReturnType<typeof cn.cabinetQuery>>;
+
 // Generic helper: run an op, assert success mapping + auth header present.
 async function expectSuccess(
-  run: () => Promise<cn.ApiResult>,
+  run: () => Promise<ApiResult>,
   assertCall: (call: { url: string; init?: RequestInit }) => void,
 ) {
   const s = stubFetch(() => jsonResponse({ code: 0, data: { ok: true } }));
