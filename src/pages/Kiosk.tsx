@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw,
+  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
@@ -12,6 +12,10 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useKioskPwa } from "@/pwa/useKioskPwa";
+import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/kioskLock";
+import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
