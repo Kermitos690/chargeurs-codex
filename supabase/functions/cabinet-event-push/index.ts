@@ -24,6 +24,26 @@ const SEVERITY: Record<string, string> = {
 const MAX_BODY_BYTES = 64 * 1024; // 64 KB cap on the inbound payload.
 const REPLAY_WINDOW_MS = 5 * 60 * 1000; // accept events at most 5 min old/future.
 
+// Tolerant typed view of an inbound ChargeNow hardware event payload.
+export interface EventPayload {
+  eventType?: string; type?: string; event?: string;
+  deviceId?: string; cabinetid?: string; cabinetId?: string; stationId?: string;
+  timestamp?: string | number; ts?: string | number; eventTime?: string | number; time?: string | number;
+  messageId?: string | number; eventId?: string | number; msgId?: string | number; id?: string | number;
+  [k: string]: unknown;
+}
+
+// Production safety: the unsigned dev override is ONLY honored when the runtime
+// is EXPLICITLY marked as a non-production environment. If ENVIRONMENT is unset
+// or anything other than development/test/local, we treat the runtime as
+// production and the unsigned override has NO effect (fail-closed by default).
+export function unsignedAllowed(): boolean {
+  const allow = Deno.env.get("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
+  const env = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "production").toLowerCase();
+  const nonProd = env === "development" || env === "test" || env === "local";
+  return allow && nonProd;
+}
+
 // Constant-time string comparison (avoids timing side-channels).
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
