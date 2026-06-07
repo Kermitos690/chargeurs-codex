@@ -9,6 +9,7 @@
 // matching token (constant-time compare). Replay/oversize requests are dropped.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SEVERITY: Record<string, string> = {
   CABINET_ONLINE: "info",
@@ -37,9 +38,9 @@ export interface EventPayload {
 // is EXPLICITLY marked as a non-production environment. If ENVIRONMENT is unset
 // or anything other than development/test/local, we treat the runtime as
 // production and the unsigned override has NO effect (fail-closed by default).
-export function unsignedAllowed(): boolean {
-  const allow = Deno.env.get("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
-  const env = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "production").toLowerCase();
+export function unsignedAllowed(env: (k: string) => string | undefined = (k) => Deno.env.get(k)): boolean {
+  const allow = env("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
+  const mode = (env("ENVIRONMENT") ?? env("DENO_ENV") ?? "production").toLowerCase();
   const nonProd = env === "development" || env === "test" || env === "local";
   return allow && nonProd;
 }
