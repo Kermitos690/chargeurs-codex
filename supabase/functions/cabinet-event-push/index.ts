@@ -63,15 +63,16 @@ Deno.serve(async (req) => {
   const db = adminClient();
 
   const expectedSecret = Deno.env.get("CHARGENOW_EVENT_SECRET");
-  const allowUnsigned = Deno.env.get("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
+  const allowUnsigned = unsignedAllowed();
 
   // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
     if (!allowUnsigned) {
-      // No secret AND unsigned mode not explicitly enabled → refuse everything.
+      // No secret AND unsigned mode not explicitly enabled in a NON-production
+      // runtime → refuse everything (in production this is always the case).
       return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "CHARGENOW_EVENT_SECRET not configured" }, 503);
     }
-    // else: explicit dev override — proceed unauthenticated.
+    // else: explicit dev override in a non-production runtime — proceed unauthenticated.
   } else {
     const url = new URL(req.url);
     const provided = req.headers.get("x-event-secret")
