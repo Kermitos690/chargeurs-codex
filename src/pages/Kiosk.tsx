@@ -363,7 +363,7 @@ export default function Kiosk() {
                 </Button>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {!configured ? "API non configurée" : !station.online ? "Borne hors ligne" : "Aucune batterie disponible"}
+                  {offline ? "Connexion indisponible" : !configured ? "API non configurée" : !station.online ? "Borne hors ligne" : "Aucune batterie disponible"}
                 </div>
               )}
             </motion.div>
