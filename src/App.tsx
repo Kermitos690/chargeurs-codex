@@ -20,6 +20,10 @@ import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminMaintenance from "./pages/admin/AdminMaintenance.tsx";
 import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
 import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
+import AdminOrders from "./pages/admin/AdminOrders.tsx";
+import AdminPricing from "./pages/admin/AdminPricing.tsx";
+import AdminShops from "./pages/admin/AdminShops.tsx";
+import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 
 const queryClient = new QueryClient();
 
