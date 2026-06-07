@@ -77,8 +77,14 @@ Deno.serve(async (req) => {
         applied = { chargenow_status: "query_error" };
       } else {
         // Tolerant parsing of the documented rent-order response shape.
-        const d = (res.data as Record<string, any>) ?? {};
-        const o = d.data ?? d;
+        interface RentOrder {
+          pGivebackTime?: string | number | null; givebackTime?: string | number | null;
+          returnTime?: string | number | null; pReturnTime?: string | number | null;
+          pGivebackDeviceid?: string | null; givebackDeviceId?: string | null; returnSlot?: string | null;
+          data?: RentOrder;
+        }
+        const d = ((res.data as RentOrder) ?? {}) as RentOrder;
+        const o = (d.data ?? d) as RentOrder;
         // AUTHORITATIVE return signal = a physical giveback timestamp returned
         // by ChargeNow. We deliberately do NOT treat a generic "completed"/
         // closed order, a missing order, or a finished flag as a return: those
