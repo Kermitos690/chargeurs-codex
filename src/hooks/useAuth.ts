@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { canView, canWrite as canWriteFn, isSuperAdmin as isSuperFn } from "@/lib/roles";
 
-const VIEW_ROLES = ["admin", "super_admin", "staff", "operator", "viewer"];
-const WRITE_ROLES = ["admin", "super_admin"];
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -30,14 +29,14 @@ export function useAuth() {
       const r = (data ?? []).map((x: { role: string }) => x.role);
       setRoles(r);
       // Admin = anyone with a back-office role that can VIEW the admin UI.
-      setIsAdmin(r.some((role) => VIEW_ROLES.includes(role)));
+      setIsAdmin(canView(r));
       setLoading(false);
     });
   }, [user]);
 
   // Write access is restricted to roles the backend `requireAdmin` accepts.
-  const canWrite = roles.some((r) => WRITE_ROLES.includes(r));
-  const isSuperAdmin = roles.includes("super_admin");
+  const canWrite = canWriteFn(roles);
+  const isSuperAdmin = isSuperFn(roles);
 
   return { user, roles, isAdmin, canWrite, isSuperAdmin, loading };
 }
