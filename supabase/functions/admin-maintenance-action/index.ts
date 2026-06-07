@@ -19,6 +19,22 @@ Deno.serve(async (req) => {
   try {
     const { actionType, stationId, slotNum, eventPushUrl } = await req.json();
 
+    // Real backend health probe (no secrets exposed, only booleans).
+    if (actionType === "health_check") {
+      const stripe = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
+      const webhookSecret = Boolean(Deno.env.get("STRIPE_WEBHOOK_SECRET"));
+      const chargenow = isChargeNowConfigured();
+      // Webhook is "live" only if the secret is set AND at least one verified
+      // Stripe webhook event has been processed.
+      const { count: webhookEvents } = await db
+        .from("webhook_events").select("id", { count: "exact", head: true });
+      const webhook = webhookSecret && (webhookEvents ?? 0) > 0;
+      return new Response(JSON.stringify({
+        ok: true,
+        health: { stripe, webhook, webhookSecret, chargenow, webhookEvents: webhookEvents ?? 0 },
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (!isChargeNowConfigured() && actionType !== "test_auth") {
       return new Response(JSON.stringify({ ok: false, error: "CHARGENOW_NOT_CONFIGURED" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
