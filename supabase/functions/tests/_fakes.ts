@@ -12,7 +12,7 @@ interface Filter { col: string; val: unknown; type: "eq" | "in"; }
 //   from(t).upsert(obj, {onConflict})                    -> { error }
 //   from(t).update(obj).eq(col,val)                      -> { data, error }
 //   from(t).select(cols).eq().in().order().limit()       -> { data }
-class Builder implements PromiseLike<{ data: Row[] | null; error: { code?: string; message?: string } | null }> {
+class Builder {
   private op: "select" | "insert" | "update" = "select";
   private payload: Row | null = null;
   private filters: Filter[] = [];
