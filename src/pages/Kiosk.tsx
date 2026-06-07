@@ -18,8 +18,9 @@ type Station = {
   online: boolean; signal: number | null; rentable_count: number;
   price_per_period: number; currency: string; last_sync_at: string | null;
 };
-type PriceProfile = {
-  id: string; name: string; amount: number; currency: string; period_label: string | null; is_default: boolean;
+type Quote = {
+  amount: number; currency: string; profile_name: string;
+  final_cents: number; profile_id: string; source: string; error?: string;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 
