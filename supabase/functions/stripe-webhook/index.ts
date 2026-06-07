@@ -155,8 +155,11 @@ Deno.serve(async (req) => {
           await db.from("payments").update({
             status: "refunded", refund_id: ch.id, refunded_at: new Date().toISOString(),
           }).eq("stripe_payment_intent_id", piId);
-          await db.from("rental_sessions").update({ state: "refunded" })
-            .eq("stripe_payment_intent_id", piId);
+          const { data: refSessions } = await db.from("rental_sessions").update({ state: "refunded" })
+            .eq("stripe_payment_intent_id", piId).select("id");
+          for (const s of refSessions ?? []) {
+            await auditLog(db, { action: "stripe.refunded", target: s.id, data: { payment_intent: piId, charge: ch.id, amount_refunded: ch.amount_refunded } });
+          }
         }
         break;
       }
