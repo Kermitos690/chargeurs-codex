@@ -15,7 +15,7 @@ export default function AdminApiHealth() {
     const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
       body: { actionType: "health_check" },
     });
-    const h = (data as any)?.health;
+    const h = (data as Record<string, unknown>)?.health;
     if (error || !h) {
       setHealth({ chargenow: false, stripe: false, webhook: false, eventPush: false });
     } else {

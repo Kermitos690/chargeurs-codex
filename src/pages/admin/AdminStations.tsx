@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Wifi, WifiOff, RefreshCw, ChevronRight, Loader2 } from "lucide-react";
 
 export default function AdminStations() {
-  const [stations, setStations] = useState<any[]>([]);
+  const [stations, setStations] = useState<Record<string, unknown>[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   const load = async () => {
@@ -18,7 +18,7 @@ export default function AdminStations() {
   const syncAll = async () => {
     setSyncing(true);
     const { data } = await supabase.functions.invoke("sync-cabinet-status", { body: {} });
-    if ((data as any)?.configured === false) toast.error("API ChargeNow non configurée");
+    if ((data as Record<string, unknown>)?.configured === false) toast.error("API ChargeNow non configurée");
     else toast.success("Synchronisation terminée");
     await load();
     setSyncing(false);

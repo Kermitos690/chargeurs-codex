@@ -22,8 +22,8 @@ export default function AdminMaintenance() {
         body: { actionType, stationId, slotNum: Number(slotNum), ...extra },
       });
       if (error) throw error;
-      if ((data as any)?.ok) toast.success(`Action « ${actionType} » exécutée`);
-      else toast.error((data as any)?.error ?? "Échec");
+      if ((data as Record<string, unknown>)?.ok) toast.success(`Action « ${actionType} » exécutée`);
+      else toast.error((data as Record<string, unknown>)?.error ?? "Échec");
     } catch (e: any) { toast.error(e.message ?? "Erreur"); }
     finally { setBusy(null); }
   };

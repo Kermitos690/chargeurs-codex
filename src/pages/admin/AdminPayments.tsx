@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DataTable, StateChip } from "@/components/admin/DataTable";
 
 export default function AdminPayments() {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   useEffect(() => {
     supabase.from("payments").select("*").order("created_at", { ascending: false }).limit(100)
       .then(({ data }) => setRows(data ?? []));

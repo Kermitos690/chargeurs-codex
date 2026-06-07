@@ -34,7 +34,7 @@ export default function AdminOrders() {
     setBusy(action + id);
     const { data, error } = await supabase.functions.invoke("rental-admin-action", { body: { action, rentalSessionId: id } });
     setBusy(null);
-    if (error || !(data as any)?.ok) toast.error((data as any)?.error ?? "Action refusée");
+    if (error || !(data as Record<string, unknown>)?.ok) toast.error((data as Record<string, unknown>)?.error ?? "Action refusée");
     else { toast.success("Action exécutée"); load(); setDetail(null); }
   };
 

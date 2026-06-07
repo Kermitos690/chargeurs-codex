@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Loader2, ArrowRight } from "lucide-react";
 
 export default function AdminSettings() {
-  const [prices, setPrices] = useState<any[]>([]);
+  const [prices, setPrices] = useState<Record<string, unknown>[]>([]);
   const [lang, setLang] = useState("fr");
   const [saving, setSaving] = useState(false);
 
@@ -25,9 +25,9 @@ export default function AdminSettings() {
       body: { actionType: "set_default_language", language: l },
     });
     setSaving(false);
-    if (error || !(data as any)?.ok) {
+    if (error || !(data as Record<string, unknown>)?.ok) {
       setLang(prev);
-      toast.error((data as any)?.error ?? "Échec de la mise à jour");
+      toast.error((data as Record<string, unknown>)?.error ?? "Échec de la mise à jour");
     } else {
       toast.success("Langue par défaut : " + l.toUpperCase());
     }

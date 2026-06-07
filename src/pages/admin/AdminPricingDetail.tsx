@@ -36,7 +36,7 @@ const RULES: { key: string; label: string; money?: boolean }[] = [
 
 export default function AdminPricingDetail() {
   const { id } = useParams();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [assign, setAssign] = useState({ scope: "station", scope_ref: "" });

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw } from "lucide-react";
 
 export default function AdminShops() {
-  const [shops, setShops] = useState<any>(null);
+  const [shops, setShops] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
