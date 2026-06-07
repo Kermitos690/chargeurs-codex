@@ -259,11 +259,34 @@ export default function Kiosk() {
   };
 
   const available = station?.rentable_count ?? 0;
-  const canRent = station?.online && available > 0 && configured;
+  const canRent = station?.online && available > 0 && configured && !offline;
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
+
+  // Cabinet mismatch: this tablet is locked to another borne. Refuse to operate
+  // and offer to return to the locked cabinet (no silent cross-borne switch).
+  if (mismatch && lockedStation) {
+    return (
+      <div className="relative grid min-h-screen place-items-center px-6 text-center">
+        <LiquidBackground />
+        <div className="glass-strong liquid-border flex max-w-md flex-col items-center gap-5 rounded-3xl p-8">
+          <div className="grid h-20 w-20 place-items-center rounded-full bg-warning/20"><Lock className="h-10 w-10 text-warning" /></div>
+          <h1 className="font-display text-2xl font-bold">Borne verrouillée</h1>
+          <p className="text-muted-foreground">
+            Cette tablette est configurée pour la borne <span className="font-mono text-foreground">{lockedStation}</span>,
+            mais l'URL demande <span className="font-mono text-foreground">{stationId}</span>.
+          </p>
+          <Button onClick={() => { window.location.href = `/kiosk/${lockedStation}`; }} className="rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
+            Revenir à la borne {lockedStation}
+          </Button>
+          <button onClick={onLogoTap} className="text-xs text-muted-foreground/60">·</button>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="relative min-h-screen overflow-hidden px-6 py-8 sm:px-12">
