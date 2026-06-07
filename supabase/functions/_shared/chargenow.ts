@@ -15,12 +15,16 @@ const BASE_URL =
 
 const BASIC_USER = Deno.env.get("CHARGENOW_BASIC_USERNAME") ?? "";
 const BASIC_PASS = Deno.env.get("CHARGENOW_BASIC_PASSWORD") ?? "";
+// Preferred: store the ready-made base64 token (everything after "Basic ").
+// This avoids any colon/special-char splitting issues with username:password.
+const BASIC_AUTH = Deno.env.get("CHARGENOW_BASIC_AUTH") ?? "";
 
 export function isChargeNowConfigured(): boolean {
-  return Boolean(BASIC_USER && BASIC_PASS);
+  return Boolean(BASIC_AUTH || (BASIC_USER && BASIC_PASS));
 }
 
 function authHeader(): string {
+  if (BASIC_AUTH) return "Basic " + BASIC_AUTH.replace(/^Basic\s+/i, "").trim();
   return "Basic " + btoa(`${BASIC_USER}:${BASIC_PASS}`);
 }
 
