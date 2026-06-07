@@ -263,10 +263,10 @@ export default function Kiosk() {
 
           {phase === "qr" && checkoutUrl && (
             <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
-              {selected && (
+              {quote && (
                 <div className="text-center">
-                  <div className="text-lg font-semibold">{selected.name}</div>
-                  <div className="text-3xl font-bold text-gradient-cyan">{fmtAmount(selected.amount, selected.currency)}</div>
+                  <div className="text-lg font-semibold">{quote.profile_name}</div>
+                  <div className="text-3xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
                 </div>
               )}
               <h2 className="font-display text-2xl font-bold sm:text-3xl">Scannez ce QR code avec votre téléphone pour payer</h2>
