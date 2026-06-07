@@ -25,6 +25,7 @@ import AdminPricing from "./pages/admin/AdminPricing.tsx";
 import AdminPricingDetail from "./pages/admin/AdminPricingDetail.tsx";
 import AdminShops from "./pages/admin/AdminShops.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
+import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
               <Route path="pricing/:id" element={<AdminPricingDetail />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
+              <Route path="test-monitor" element={<AdminTestMonitor />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="maintenance" element={<AdminMaintenance />} />

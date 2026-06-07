@@ -6,7 +6,7 @@ import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Server, CreditCard, BatteryCharging, Radio, Settings, Wrench, Activity, LogOut, Loader2, ListChecks,
-  ShoppingCart, Tag, Store, HeartPulse,
+  ShoppingCart, Tag, Store, HeartPulse, ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ const nav = [
   { to: "/admin/stations", icon: Server, label: "Bornes" },
   { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes" },
   { to: "/admin/rental-flow-health", icon: HeartPulse, label: "Santé parcours" },
+  { to: "/admin/test-monitor", icon: ClipboardCheck, label: "Contrôle de test" },
   { to: "/admin/pricing", icon: Tag, label: "Tarifs" },
   { to: "/admin/shops", icon: Store, label: "Boutiques" },
   { to: "/admin/payments", icon: CreditCard, label: "Paiements" },
