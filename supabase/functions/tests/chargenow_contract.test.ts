@@ -75,7 +75,7 @@ Deno.test("cabinet query — network failure returns error, ok=false (no throw)"
 Deno.test("order close — sends auth and parses success", async () => {
   const s = stubFetch(() => jsonResponse({ code: 0 }));
   try {
-    const res = await cn.orderClose({ tradeNo: "T-1", orderId: "T-1" });
+    const res = await cn.orderClose({ tradeNo: "T-1" });
     assertEquals(res.ok, true);
     assert((s.calls[0].init?.headers as Record<string, string>).Authorization.startsWith("Basic "));
   } finally { s.restore(); }
