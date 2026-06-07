@@ -1,16 +1,23 @@
-// create-rental-session — starts a rental. Creates the DB session, optionally
-// creates the ChargeNow rent order (stores tradeNo), then defers to Stripe
-// checkout creation. No mock fallback: requires real configuration.
+// create-rental-session — starts a rental from the kiosk.
+// SECURITY: the frontend sends ONLY stationId, shopId? and priceProfileId.
+// The price is ALWAYS resolved server-side from public.price_profiles.
+// Any amount sent by the client is ignored. No mock fallback.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi } from "../_shared/db.ts";
-import { isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
+import { adminClient } from "../_shared/db.ts";
+
+function shortCode(): string {
+  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
+  return `CHG-${s}`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
 
   try {
-    const { stationId, language } = await req.json();
+    const { stationId, priceProfileId, language } = await req.json();
     if (!stationId) {
       return new Response(JSON.stringify({ ok: false, error: "MISSING_STATION" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -27,40 +34,39 @@ Deno.serve(async (req) => {
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ---- Resolve price SERVER-SIDE (never trust client amount) ----
+    let profile: { id: string; amount: number; currency: string; name: string } | null = null;
+    if (priceProfileId) {
+      const { data } = await db.from("price_profiles")
+        .select("id, amount, currency, name, active").eq("id", priceProfileId).maybeSingle();
+      if (data && data.active !== false) profile = data as typeof profile;
+    }
+    if (!profile) {
+      const { data } = await db.from("price_profiles")
+        .select("id, amount, currency, name, active").eq("is_default", true).maybeSingle();
+      if (data) profile = data as typeof profile;
+    }
+
+    const amount = Number(profile?.amount ?? station.price_per_period ?? 2.0);
+    const currency = profile?.currency ?? station.currency ?? "CHF";
     const cabinetId = station.cabinet_id || station.station_id;
 
-    // 1. Create rental session row
     const { data: session, error: insErr } = await db.from("rental_sessions").insert({
       station_id: stationId,
       cabinet_id: cabinetId,
+      shop_id: station.shop_id ?? null,
+      price_profile_id: profile?.id ?? null,
       state: "created",
-      amount: station.price_per_period ?? 2.0,
-      currency: station.currency ?? "CHF",
+      public_session_code: shortCode(),
+      amount,
+      amount_expected: amount,
+      currency,
       customer_language: language ?? "fr",
     }).select().single();
     if (insErr || !session) throw insErr ?? new Error("INSERT_FAILED");
 
-    // 2. Optionally create ChargeNow rent order (best-effort; tradeNo stored)
-    if (isChargeNowConfigured()) {
-      const callbackURL = `${Deno.env.get("SUPABASE_URL")}/functions/v1/chargenow-rent-callback`;
-      const res = await orderCreate({ deviceId: cabinetId, callbackURL });
-      await logApi(db, {
-        service: "chargenow", endpoint: "/rent/order/create", method: "POST",
-        status_code: res.status, request: { cabinetId }, response: res.data, error: res.error,
-      });
-      const tradeNo = (res.data as any)?.data?.tradeNo ?? (res.data as any)?.tradeNo ?? null;
-      await db.from("apifox_orders").insert({
-        rental_session_id: session.id, trade_no: tradeNo,
-        request: { cabinetId }, response: res.data, status: res.ok ? "created" : "error",
-      });
-      if (tradeNo) {
-        await db.from("rental_sessions").update({
-          apifox_trade_no: tradeNo, state: "apifox_order_created",
-        }).eq("id", session.id);
-        session.apifox_trade_no = tradeNo;
-      }
-    }
-
+    // NOTE: the ChargeNow rent order is created AFTER confirmed payment
+    // (in the Stripe webhook → eject-after-payment), never before.
     return new Response(JSON.stringify({ ok: true, session }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
