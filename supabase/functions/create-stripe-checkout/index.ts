@@ -137,6 +137,18 @@ Deno.serve(async (req) => {
       amount: amount, currency: session.currency, status: "pending",
     }, { onConflict: "stripe_session_id" });
 
+    await auditLog(db, {
+      action: "stripe.checkout.created",
+      target: session.id,
+      data: {
+        stripe_checkout_session_id: checkout.id,
+        station_id: session.station_id, kiosk_device_id: session.kiosk_device_id ?? null,
+        price_profile_id: session.price_profile_id, price_profile_version: session.price_profile_version,
+        amount_cents: amountCents, currency,
+        pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
+      },
+    });
+
     return new Response(JSON.stringify({
       ok: true, checkout_url: checkout.url, checkout_id: checkout.id,
       public_session_code: session.public_session_code,
