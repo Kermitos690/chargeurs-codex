@@ -5,6 +5,21 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
 
+// Typed (tolerant) view of the documented ChargeNow "Get Device Info" payload.
+interface CabinetInfo {
+  online?: boolean; onlineStatus?: number; status?: string;
+  slots?: number; slotNum?: number; totalSlots?: number; emptySlots?: number;
+  signal?: number; signalStrength?: number;
+}
+interface BatteryInfo {
+  slotNum?: number; slot?: number; slotId?: number;
+  batteryId?: string; sn?: string; bid?: string;
+  vol?: number; batteryCapacity?: number; power?: number; electricity?: number;
+}
+interface CabinetPayload {
+  cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
