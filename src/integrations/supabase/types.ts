@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_coverage: {
+        Row: {
+          backend_fn: string | null
+          code: string
+          dangerous: boolean
+          http_method: string
+          last_error: string | null
+          live_result: Json | null
+          live_test_status: string
+          mock_supported: boolean
+          mock_test_status: string
+          module: string
+          name: string
+          params: string | null
+          path: string
+          proof: Json | null
+          seq: number
+          ui_page: string | null
+          updated_at: string
+          validation: string | null
+        }
+        Insert: {
+          backend_fn?: string | null
+          code: string
+          dangerous?: boolean
+          http_method: string
+          last_error?: string | null
+          live_result?: Json | null
+          live_test_status?: string
+          mock_supported?: boolean
+          mock_test_status?: string
+          module: string
+          name: string
+          params?: string | null
+          path: string
+          proof?: Json | null
+          seq?: number
+          ui_page?: string | null
+          updated_at?: string
+          validation?: string | null
+        }
+        Update: {
+          backend_fn?: string | null
+          code?: string
+          dangerous?: boolean
+          http_method?: string
+          last_error?: string | null
+          live_result?: Json | null
+          live_test_status?: string
+          mock_supported?: boolean
+          mock_test_status?: string
+          module?: string
+          name?: string
+          params?: string | null
+          path?: string
+          proof?: Json | null
+          seq?: number
+          ui_page?: string | null
+          updated_at?: string
+          validation?: string | null
+        }
+        Relationships: []
+      }
       api_logs: {
         Row: {
           created_at: string

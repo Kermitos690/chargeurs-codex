@@ -5,7 +5,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, Server, CreditCard, BatteryCharging, Radio, Settings, Wrench, Activity, LogOut, Loader2,
+  LayoutDashboard, Server, CreditCard, BatteryCharging, Radio, Settings, Wrench, Activity, LogOut, Loader2, ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,7 @@ const nav = [
   { to: "/admin/events", icon: Radio, label: "Événements" },
   { to: "/admin/maintenance", icon: Wrench, label: "Maintenance" },
   { to: "/admin/api-health", icon: Activity, label: "Santé API" },
+  { to: "/admin/api-coverage", icon: ListChecks, label: "Couverture API" },
   { to: "/admin/settings", icon: Settings, label: "Réglages" },
 ];
 

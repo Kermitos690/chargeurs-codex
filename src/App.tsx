@@ -19,6 +19,7 @@ import AdminEvents from "./pages/admin/AdminEvents.tsx";
 import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminMaintenance from "./pages/admin/AdminMaintenance.tsx";
 import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
+import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="settings" element={<AdminSettings />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
+              <Route path="api-coverage" element={<AdminApiCoverage />} />
             </Route>
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
