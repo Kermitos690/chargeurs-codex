@@ -29,6 +29,11 @@ Deno.serve(async (req) => {
     const isOperator = isAdmin || roles.includes("operator");
     const isSuper = roles.includes("super_admin");
 
+    // Defense-in-depth: every action requires operator+ (refund additionally
+    // requires super_admin, checked in its branch). Authorize BEFORE parsing
+    // params so non-privileged callers always get a clean 403, never a hint.
+    if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
+
     const { action, rentalSessionId } = await req.json();
     if (!action || !rentalSessionId) return json({ ok: false, error: "MISSING_PARAMS" }, 400);
 
