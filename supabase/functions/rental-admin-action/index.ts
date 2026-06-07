@@ -74,22 +74,31 @@ Deno.serve(async (req) => {
         // Tolerant parsing of the documented rent-order response shape.
         const d = (res.data as Record<string, any>) ?? {};
         const o = d.data ?? d;
+        // AUTHORITATIVE return signal = a physical giveback timestamp returned
+        // by ChargeNow. We deliberately do NOT treat a generic "completed"/
+        // closed order, a missing order, or a finished flag as a return: those
+        // can be true without the battery being back in a valid slot.
         const returnTime = o.pGivebackTime ?? o.givebackTime ?? o.returnTime ?? o.pReturnTime ?? null;
-        const statusNum = Number(o.iStatus ?? o.status ?? NaN);
-        // status 1 / presence of a return time => battery returned & finished.
-        const returned = Boolean(returnTime) || statusNum === 1 || o.finished === true;
+        const givebackSlot = o.pGivebackDeviceid ?? o.givebackDeviceId ?? o.returnSlot ?? null;
+        const returned = Boolean(returnTime);
+
         if (returned) {
-          // Only advance forward; never regress a closed/refunded session.
-          const terminal = ["closed", "refunded", "battery_returned"];
-          if (!terminal.includes(session.state)) {
+          // State machine: only advance to battery_returned from an in-flight
+          // rental. Never regress terminal/support states.
+          const ADVANCEABLE = ["active_rental", "battery_taken", "ejected"];
+          if (ADVANCEABLE.includes(session.state)) {
             applied = { chargenow_status: "returned", state: "battery_returned" };
           } else {
+            // Returned per ChargeNow but local state is terminal or unexpected
+            // → record metadata only, do NOT mutate the state machine.
             applied = { chargenow_status: "returned" };
           }
+          await logApi(db, { service: "admin", endpoint: "reconcile:return", method: "POST", status_code: 200, request: { rentalSessionId, by: uid, fromState: session.state }, response: { returnTime, givebackSlot } });
         } else {
           applied = { chargenow_status: "borrowing" };
         }
       }
+
 
       const update: Record<string, unknown> = { chargenow_status: applied.chargenow_status };
       if (applied.state) {
