@@ -230,6 +230,8 @@ export default function Kiosk() {
   }, [sessionId, publicCode, phase, applyState]);
 
   const startRental = async () => {
+    // Never create a rental/payment without a confirmed connection.
+    if (offline) { setStatusMsg({ title: "Connexion indisponible", sub: "Vérifiez la connexion Internet de la borne avant de payer." }); setPhase("error"); return; }
     setPhase("starting");
     try {
       const { data: sess } = await supabase.functions.invoke("create-rental-session", {
