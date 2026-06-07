@@ -411,6 +411,82 @@ export type Database = {
           },
         ]
       }
+      price_assignments: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          price_profile_id: string
+          scope: string
+          scope_ref: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          price_profile_id: string
+          scope: string
+          scope_ref: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          price_profile_id?: string
+          scope?: string
+          scope_ref?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_assignments_price_profile_id_fkey"
+            columns: ["price_profile_id"]
+            isOneToOne: false
+            referencedRelation: "price_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      price_profile_versions: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          price_profile_id: string
+          snapshot: Json
+          version: number
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          price_profile_id: string
+          snapshot: Json
+          version: number
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          price_profile_id?: string
+          snapshot?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_profile_versions_price_profile_id_fkey"
+            columns: ["price_profile_id"]
+            isOneToOne: false
+            referencedRelation: "price_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       price_profiles: {
         Row: {
           active: boolean
@@ -418,25 +494,67 @@ export type Database = {
           chargenow_price_id: string | null
           created_at: string
           currency: string | null
+          daily_cap_cents: number
+          deposit_cents: number
+          description: string | null
+          grace_minutes: number
           id: string
+          included_minutes: number
+          initial_fee_cents: number
           is_default: boolean | null
+          late_fee_cents: number
+          max_amount_cents: number
+          min_amount_cents: number
           name: string
           period_label: string | null
+          period_minutes: number
+          price_per_period_cents: number
+          priority: number
+          rounding: string
           shop_id: string | null
+          tax_percent: number
+          total_cap_cents: number
+          unreturned_after_minutes: number
+          unreturned_fee_cents: number
           updated_at: string
+          updated_by: string | null
+          valid_from: string | null
+          valid_to: string | null
+          version: number
         }
         Insert: {
           active?: boolean
-          amount?: number
+          amount: number
           chargenow_price_id?: string | null
           created_at?: string
           currency?: string | null
+          daily_cap_cents?: number
+          deposit_cents?: number
+          description?: string | null
+          grace_minutes?: number
           id?: string
+          included_minutes?: number
+          initial_fee_cents?: number
           is_default?: boolean | null
+          late_fee_cents?: number
+          max_amount_cents?: number
+          min_amount_cents?: number
           name: string
           period_label?: string | null
+          period_minutes?: number
+          price_per_period_cents?: number
+          priority?: number
+          rounding?: string
           shop_id?: string | null
+          tax_percent?: number
+          total_cap_cents?: number
+          unreturned_after_minutes?: number
+          unreturned_fee_cents?: number
           updated_at?: string
+          updated_by?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          version?: number
         }
         Update: {
           active?: boolean
@@ -444,12 +562,33 @@ export type Database = {
           chargenow_price_id?: string | null
           created_at?: string
           currency?: string | null
+          daily_cap_cents?: number
+          deposit_cents?: number
+          description?: string | null
+          grace_minutes?: number
           id?: string
+          included_minutes?: number
+          initial_fee_cents?: number
           is_default?: boolean | null
+          late_fee_cents?: number
+          max_amount_cents?: number
+          min_amount_cents?: number
           name?: string
           period_label?: string | null
+          period_minutes?: number
+          price_per_period_cents?: number
+          priority?: number
+          rounding?: string
           shop_id?: string | null
+          tax_percent?: number
+          total_cap_cents?: number
+          unreturned_after_minutes?: number
+          unreturned_fee_cents?: number
           updated_at?: string
+          updated_by?: string | null
+          valid_from?: string | null
+          valid_to?: string | null
+          version?: number
         }
         Relationships: []
       }
@@ -591,8 +730,12 @@ export type Database = {
           failure_code: string | null
           failure_message: string | null
           id: string
+          kiosk_device_id: string | null
           paid_at: string | null
           price_profile_id: string | null
+          price_profile_version: number | null
+          pricing_snapshot: Json | null
+          pricing_snapshot_hash: string | null
           public_session_code: string | null
           retry_count: number
           returned_at: string | null
@@ -629,8 +772,12 @@ export type Database = {
           failure_code?: string | null
           failure_message?: string | null
           id?: string
+          kiosk_device_id?: string | null
           paid_at?: string | null
           price_profile_id?: string | null
+          price_profile_version?: number | null
+          pricing_snapshot?: Json | null
+          pricing_snapshot_hash?: string | null
           public_session_code?: string | null
           retry_count?: number
           returned_at?: string | null
@@ -667,8 +814,12 @@ export type Database = {
           failure_code?: string | null
           failure_message?: string | null
           id?: string
+          kiosk_device_id?: string | null
           paid_at?: string | null
           price_profile_id?: string | null
+          price_profile_version?: number | null
+          pricing_snapshot?: Json | null
+          pricing_snapshot_hash?: string | null
           public_session_code?: string | null
           retry_count?: number
           returned_at?: string | null
@@ -1035,12 +1186,36 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compute_pricing: {
+        Args: {
+          p_currency: string
+          p_device: string
+          p_end: string
+          p_rental_state: string
+          p_return_state: string
+          p_shop: string
+          p_start: string
+          p_station: string
+        }
+        Returns: Json
+      }
+      effective_price: {
+        Args: { p_device: string; p_station: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      resolve_price_profile: {
+        Args: { p_device: string; p_shop: string; p_station: string }
+        Returns: {
+          profile_id: string
+          source: string
+        }[]
       }
     }
     Enums: {
