@@ -406,6 +406,78 @@ export type Database = {
         }
         Relationships: []
       }
+      partners: {
+        Row: {
+          address: string | null
+          billing_details: Json | null
+          billing_method: string | null
+          city: string | null
+          commission_rate: number
+          country: string | null
+          created_at: string
+          email: string | null
+          end_date: string | null
+          id: string
+          legal_name: string
+          logo_url: string | null
+          manager_name: string | null
+          notes: string | null
+          partner_type: string
+          phone: string | null
+          start_date: string | null
+          status: string
+          trade_name: string | null
+          updated_at: string
+          vat_number: string | null
+        }
+        Insert: {
+          address?: string | null
+          billing_details?: Json | null
+          billing_method?: string | null
+          city?: string | null
+          commission_rate?: number
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          end_date?: string | null
+          id?: string
+          legal_name: string
+          logo_url?: string | null
+          manager_name?: string | null
+          notes?: string | null
+          partner_type?: string
+          phone?: string | null
+          start_date?: string | null
+          status?: string
+          trade_name?: string | null
+          updated_at?: string
+          vat_number?: string | null
+        }
+        Update: {
+          address?: string | null
+          billing_details?: Json | null
+          billing_method?: string | null
+          city?: string | null
+          commission_rate?: number
+          country?: string | null
+          created_at?: string
+          email?: string | null
+          end_date?: string | null
+          id?: string
+          legal_name?: string
+          logo_url?: string | null
+          manager_name?: string | null
+          notes?: string | null
+          partner_type?: string
+          phone?: string | null
+          start_date?: string | null
+          status?: string
+          trade_name?: string | null
+          updated_at?: string
+          vat_number?: string | null
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number | null
@@ -908,6 +980,7 @@ export type Database = {
           id: string
           name: string
           opening_hours: Json | null
+          partner_id: string | null
           updated_at: string
         }
         Insert: {
@@ -922,6 +995,7 @@ export type Database = {
           id?: string
           name: string
           opening_hours?: Json | null
+          partner_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -936,9 +1010,18 @@ export type Database = {
           id?: string
           name?: string
           opening_hours?: Json | null
+          partner_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shops_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       slots: {
         Row: {
@@ -980,6 +1063,7 @@ export type Database = {
           location_name: string | null
           name: string
           online: boolean | null
+          partner_id: string | null
           price_per_period: number | null
           raw_data: Json | null
           rentable_count: number | null
@@ -1000,6 +1084,7 @@ export type Database = {
           location_name?: string | null
           name: string
           online?: boolean | null
+          partner_id?: string | null
           price_per_period?: number | null
           raw_data?: Json | null
           rentable_count?: number | null
@@ -1020,6 +1105,7 @@ export type Database = {
           location_name?: string | null
           name?: string
           online?: boolean | null
+          partner_id?: string | null
           price_per_period?: number | null
           raw_data?: Json | null
           rentable_count?: number | null
@@ -1031,7 +1117,15 @@ export type Database = {
           total_count?: number | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stations_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       system_incidents: {
         Row: {
