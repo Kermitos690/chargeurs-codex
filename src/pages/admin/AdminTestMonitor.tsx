@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Download, FileJson, FileText, Search } from "lucide-react";
+import MutationTestMonitor from "@/components/admin/MutationTestMonitor";
 
 // ---------------------------------------------------------------------------
 // Staging manual-validation monitor.
@@ -291,6 +292,10 @@ export default function AdminTestMonitor() {
           </Button>
         </div>
       </div>
+
+      <MutationTestMonitor />
+
+
 
       <div className="glass liquid-border rounded-2xl p-5">
         <div className="flex flex-wrap items-center gap-2">

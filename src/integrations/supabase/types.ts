@@ -1066,6 +1066,63 @@ export type Database = {
         }
         Relationships: []
       }
+      test_runs: {
+        Row: {
+          cabinet_id: string | null
+          correlation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          endpoint_code: string
+          endpoint_name: string | null
+          environment: string
+          error: string | null
+          id: string
+          level: string
+          performed_by: string | null
+          physical_test_required: boolean
+          request_redacted: Json | null
+          response_redacted: Json | null
+          status_code: number | null
+          verdict: string
+        }
+        Insert: {
+          cabinet_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint_code: string
+          endpoint_name?: string | null
+          environment?: string
+          error?: string | null
+          id?: string
+          level: string
+          performed_by?: string | null
+          physical_test_required?: boolean
+          request_redacted?: Json | null
+          response_redacted?: Json | null
+          status_code?: number | null
+          verdict: string
+        }
+        Update: {
+          cabinet_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          endpoint_code?: string
+          endpoint_name?: string | null
+          environment?: string
+          error?: string | null
+          id?: string
+          level?: string
+          performed_by?: string | null
+          physical_test_required?: boolean
+          request_redacted?: Json | null
+          response_redacted?: Json | null
+          status_code?: number | null
+          verdict?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
