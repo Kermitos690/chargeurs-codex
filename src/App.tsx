@@ -51,6 +51,7 @@ const App = () => (
               <Route path="rentals" element={<AdminRentals />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="pricing" element={<AdminPricing />} />
+              <Route path="pricing/:id" element={<AdminPricingDetail />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="events" element={<AdminEvents />} />
