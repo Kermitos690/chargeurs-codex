@@ -1,0 +1,1 @@
+UPDATE public.price_profiles SET amount = 0.50 WHERE is_default = true;
