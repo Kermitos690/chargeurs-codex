@@ -61,6 +61,7 @@ export default function Kiosk() {
   const [lockedStation, setLockedStation] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
 
   const net = useOnlineStatus();
