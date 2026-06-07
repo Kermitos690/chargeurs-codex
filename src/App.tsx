@@ -47,6 +47,10 @@ const App = () => (
               <Route path="stations/:stationId" element={<AdminStationDetail />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="rentals" element={<AdminRentals />} />
+              <Route path="orders" element={<AdminOrders />} />
+              <Route path="pricing" element={<AdminPricing />} />
+              <Route path="shops" element={<AdminShops />} />
+              <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
