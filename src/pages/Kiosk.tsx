@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock,
+  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
