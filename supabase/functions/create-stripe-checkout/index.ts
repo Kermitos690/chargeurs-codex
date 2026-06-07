@@ -44,7 +44,10 @@ Deno.serve(async (req) => {
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+    const stripe = new Stripe(STRIPE_KEY, {
+      apiVersion: "2024-12-18.acacia",
+      httpClient: Stripe.createFetchHttpClient(),
+    });
     const base = APP_URL || origin || "";
     // Price is server-side ONLY.
     const amount = Number(session.amount_expected ?? session.amount ?? 2.0);
@@ -54,9 +57,9 @@ Deno.serve(async (req) => {
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
-      // TWINT + card. Apple Pay / Google Pay are surfaced by Stripe under "card"
-      // when the buyer's device/wallet/country/account are eligible.
-      payment_method_types: ["card", "twint"],
+      // Payment methods are NOT hardcoded: Stripe automatically surfaces every
+      // method enabled in the account dashboard (card, TWINT, Apple/Google Pay…)
+      // based on currency, country and device eligibility.
       expires_at: expiresAtUnix,
       line_items: [{
         price_data: {
@@ -78,7 +81,7 @@ Deno.serve(async (req) => {
       },
       success_url: `${base}/pay/${session.id}/success`,
       cancel_url: `${base}/pay/${session.id}/cancel`,
-    }, { idempotencyKey: `checkout_${session.id}` });
+    });
 
     const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();
 

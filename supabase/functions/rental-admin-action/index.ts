@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       if (!pay || !pay.stripe_payment_intent_id) return json({ ok: false, error: "NO_PAYMENT_INTENT" });
       if (pay.status === "refunded" || pay.refunded_at) return json({ ok: true, alreadyRefunded: true });
 
-      const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+      const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient() });
       const refund = await stripe.refunds.create(
         { payment_intent: pay.stripe_payment_intent_id },
         { idempotencyKey: `refund_${rentalSessionId}` },
