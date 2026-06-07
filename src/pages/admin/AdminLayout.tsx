@@ -1,47 +1,78 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
-import {
-  LayoutDashboard, Server, CreditCard, BatteryCharging, Radio, Settings, Wrench, Activity, LogOut, Loader2, ListChecks,
-  ShoppingCart, Tag, Store, HeartPulse, ClipboardCheck,
-} from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { LogOut, Loader2, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ADMIN_NAV } from "./adminNav";
 
-const nav = [
-  { to: "/admin", icon: LayoutDashboard, label: "Vue d'ensemble", end: true },
-  { to: "/admin/stations", icon: Server, label: "Bornes" },
-  { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes" },
-  { to: "/admin/rental-flow-health", icon: HeartPulse, label: "Santé parcours" },
-  { to: "/admin/test-monitor", icon: ClipboardCheck, label: "Contrôle de test" },
-  { to: "/admin/pricing", icon: Tag, label: "Tarifs" },
-  { to: "/admin/shops", icon: Store, label: "Boutiques" },
-  { to: "/admin/payments", icon: CreditCard, label: "Paiements" },
-  { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)" },
-  { to: "/admin/events", icon: Radio, label: "Événements" },
-  { to: "/admin/maintenance", icon: Wrench, label: "Maintenance" },
-  { to: "/admin/api-health", icon: Activity, label: "Santé API" },
-  { to: "/admin/api-coverage", icon: ListChecks, label: "Couverture API" },
-  { to: "/admin/settings", icon: Settings, label: "Réglages" },
-];
+function NavGroups({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <nav className="flex flex-col gap-5">
+      {ADMIN_NAV.map((group) => (
+        <div key={group.label} className="flex flex-col gap-1">
+          <p className="px-4 pb-1 text-[0.68rem] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            {group.label}
+          </p>
+          {group.items.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all",
+                  isActive
+                    ? "bg-gradient-primary text-primary-foreground shadow-glow"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )
+              }
+            >
+              <n.icon className="h-5 w-5 shrink-0" />
+              <span>{n.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 export default function AdminLayout() {
   const { user, isAdmin, loading } = useAuth();
   const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/admin/login");
+  };
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /><LiquidBackground /></div>;
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <LiquidBackground />
+      </div>
+    );
   }
-  if (!user) { navigate("/admin/login", { replace: true }); return null; }
+  if (!user) {
+    navigate("/admin/login", { replace: true });
+    return null;
+  }
   if (!isAdmin) {
     return (
       <div className="relative grid min-h-screen place-items-center px-5 text-center">
         <LiquidBackground />
         <div className="glass-strong rounded-3xl p-10">
           <p className="mb-4 text-lg">Votre compte n'a pas les droits administrateur.</p>
-          <Button onClick={async () => { await supabase.auth.signOut(); navigate("/admin/login"); }} variant="ghost">Se déconnecter</Button>
+          <Button onClick={signOut} variant="ghost">Se déconnecter</Button>
         </div>
       </div>
     );
@@ -51,34 +82,39 @@ export default function AdminLayout() {
     <div className="relative min-h-screen">
       <LiquidBackground />
       <div className="flex min-h-screen">
+        {/* Desktop sidebar */}
         <aside className="glass-strong sticky top-0 hidden h-screen w-64 flex-col p-5 lg:flex">
-          <div className="mb-8"><BrandLogo size="sm" /></div>
-          <nav className="flex flex-1 flex-col gap-1">
-            {nav.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end}
-                className={({ isActive }) => cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all",
-                  isActive ? "bg-gradient-primary text-primary-foreground shadow-glow" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}>
-                <n.icon className="h-5 w-5" />{n.label}
-              </NavLink>
-            ))}
-          </nav>
-          <Button onClick={async () => { await supabase.auth.signOut(); navigate("/admin/login"); }} variant="ghost" className="mt-4 gap-2 justify-start">
+          <div className="mb-6"><BrandLogo size="sm" /></div>
+          <ScrollArea className="-mx-2 flex-1 px-2">
+            <NavGroups />
+          </ScrollArea>
+          <Button onClick={signOut} variant="ghost" className="mt-4 justify-start gap-2">
             <LogOut className="h-4 w-4" />Déconnexion
           </Button>
         </aside>
 
-        {/* Mobile top nav */}
-        <div className="glass-strong fixed inset-x-0 top-0 z-20 flex gap-1 overflow-x-auto p-2 lg:hidden">
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end}
-              className={({ isActive }) => cn("flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs",
-                isActive ? "bg-gradient-primary text-primary-foreground" : "text-muted-foreground")}>
-              <n.icon className="h-4 w-4" />{n.label}
-            </NavLink>
-          ))}
-        </div>
+        {/* Mobile top bar with hamburger sheet */}
+        <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
+          <BrandLogo size="sm" />
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Ouvrir le menu" className="border border-border">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="glass-strong w-[85vw] max-w-sm border-border p-0">
+              <div className="flex h-full flex-col p-5">
+                <div className="mb-6"><BrandLogo size="sm" /></div>
+                <ScrollArea className="-mx-2 flex-1 px-2">
+                  <NavGroups onNavigate={() => setOpen(false)} />
+                </ScrollArea>
+                <Button onClick={signOut} variant="ghost" className="mt-4 justify-start gap-2">
+                  <LogOut className="h-4 w-4" />Déconnexion
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </header>
 
         <main className="flex-1 overflow-x-hidden p-5 pt-20 sm:p-8 lg:pt-8">
           <Outlet />
