@@ -323,11 +323,47 @@ export default function Kiosk() {
         />
       )}
 
-      <header className="flex items-center justify-between">
+      {/* Controlled kiosk help overlay (no free navigation menu). */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-6 backdrop-blur-sm">
+          <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-8 text-left">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-2xl font-bold">Besoin d'aide ?</h2>
+              <button onClick={() => setShowHelp(false)} aria-label="Fermer l'aide" className="rounded-full p-2 hover:bg-muted">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <ol className="space-y-3 text-muted-foreground">
+              <li>1. Touchez « Louer une batterie ».</li>
+              <li>2. Scannez le QR code avec votre téléphone et payez.</li>
+              <li>3. Une batterie se libère automatiquement.</li>
+              <li>4. Rendez-la dans n'importe quelle borne du réseau.</li>
+            </ol>
+            <p className="mt-5 text-sm text-muted-foreground">
+              Un problème ? Contactez <span className="text-foreground">support@chargeurs.ch</span>
+            </p>
+            <Button onClick={() => setShowHelp(false)} className="mt-6 w-full rounded-full bg-gradient-primary py-5 text-lg font-bold">
+              J'ai compris
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <header className="flex items-center justify-between gap-3">
         <button onClick={onLogoTap} aria-label="Chargeurs.ch" className="cursor-default">
           <BrandLogo size="md" />
         </button>
-        <LanguageSwitcher />
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowHelp(true)}
+            variant="ghost"
+            className="gap-2 rounded-full border border-border px-5 py-5 text-base"
+            aria-label="Aide"
+          >
+            <HelpCircle className="h-5 w-5" />Aide
+          </Button>
+          <LanguageSwitcher />
+        </div>
       </header>
 
 
