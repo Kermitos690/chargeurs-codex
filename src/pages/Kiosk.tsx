@@ -43,8 +43,8 @@ export default function Kiosk() {
   const { stationId } = useParams();
   const { lang } = useI18n();
   const [station, setStation] = useState<Station | null>(null);
-  const [profiles, setProfiles] = useState<PriceProfile[]>([]);
-  const [selected, setSelected] = useState<PriceProfile | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
