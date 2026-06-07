@@ -209,3 +209,8 @@ html.kiosk-mode textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* Smooth anchor scrolling on the public site (never on locked kiosk). */
+html:not(.kiosk-mode) {
+  scroll-behavior: smooth;
+}
