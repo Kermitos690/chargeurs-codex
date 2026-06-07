@@ -271,6 +271,8 @@ export type Database = {
           payment_method: string | null
           provider: string | null
           raw_webhook: Json | null
+          refund_id: string | null
+          refunded_at: string | null
           rental_session_id: string | null
           status: string | null
           stripe_payment_intent_id: string | null
@@ -284,6 +286,8 @@ export type Database = {
           payment_method?: string | null
           provider?: string | null
           raw_webhook?: Json | null
+          refund_id?: string | null
+          refunded_at?: string | null
           rental_session_id?: string | null
           status?: string | null
           stripe_payment_intent_id?: string | null
@@ -297,6 +301,8 @@ export type Database = {
           payment_method?: string | null
           provider?: string | null
           raw_webhook?: Json | null
+          refund_id?: string | null
+          refunded_at?: string | null
           rental_session_id?: string | null
           status?: string | null
           stripe_payment_intent_id?: string | null
@@ -314,102 +320,170 @@ export type Database = {
       }
       price_profiles: {
         Row: {
+          active: boolean
           amount: number
+          chargenow_price_id: string | null
           created_at: string
           currency: string | null
           id: string
           is_default: boolean | null
           name: string
           period_label: string | null
+          shop_id: string | null
+          updated_at: string
         }
         Insert: {
+          active?: boolean
           amount?: number
+          chargenow_price_id?: string | null
           created_at?: string
           currency?: string | null
           id?: string
           is_default?: boolean | null
           name: string
           period_label?: string | null
+          shop_id?: string | null
+          updated_at?: string
         }
         Update: {
+          active?: boolean
           amount?: number
+          chargenow_price_id?: string | null
           created_at?: string
           currency?: string | null
           id?: string
           is_default?: boolean | null
           name?: string
           period_label?: string | null
+          shop_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
       rental_sessions: {
         Row: {
           amount: number | null
+          amount_expected: number | null
+          amount_paid: number | null
           apifox_trade_no: string | null
           cabinet_id: string | null
+          cancelled_at: string | null
+          chargenow_order_id: string | null
+          chargenow_status: string | null
           checkout_url: string | null
+          checkout_url_expires_at: string | null
           closed_at: string | null
+          completed_at: string | null
           created_at: string
           currency: string | null
           customer_language: string | null
           ejected_at: string | null
           error_code: string | null
           error_message: string | null
+          failure_code: string | null
+          failure_message: string | null
           id: string
           paid_at: string | null
+          price_profile_id: string | null
+          public_session_code: string | null
+          retry_count: number
           returned_at: string | null
           selected_slot_num: number | null
+          shop_id: string | null
+          started_at: string | null
           state: string
           station_id: string
           stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
           stripe_payment_intent_id: string | null
+          stripe_payment_method_type: string | null
           updated_at: string
         }
         Insert: {
           amount?: number | null
+          amount_expected?: number | null
+          amount_paid?: number | null
           apifox_trade_no?: string | null
           cabinet_id?: string | null
+          cancelled_at?: string | null
+          chargenow_order_id?: string | null
+          chargenow_status?: string | null
           checkout_url?: string | null
+          checkout_url_expires_at?: string | null
           closed_at?: string | null
+          completed_at?: string | null
           created_at?: string
           currency?: string | null
           customer_language?: string | null
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
           paid_at?: string | null
+          price_profile_id?: string | null
+          public_session_code?: string | null
+          retry_count?: number
           returned_at?: string | null
           selected_slot_num?: number | null
+          shop_id?: string | null
+          started_at?: string | null
           state?: string
           station_id: string
           stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_payment_method_type?: string | null
           updated_at?: string
         }
         Update: {
           amount?: number | null
+          amount_expected?: number | null
+          amount_paid?: number | null
           apifox_trade_no?: string | null
           cabinet_id?: string | null
+          cancelled_at?: string | null
+          chargenow_order_id?: string | null
+          chargenow_status?: string | null
           checkout_url?: string | null
+          checkout_url_expires_at?: string | null
           closed_at?: string | null
+          completed_at?: string | null
           created_at?: string
           currency?: string | null
           customer_language?: string | null
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
           id?: string
           paid_at?: string | null
+          price_profile_id?: string | null
+          public_session_code?: string | null
+          retry_count?: number
           returned_at?: string | null
           selected_slot_num?: number | null
+          shop_id?: string | null
+          started_at?: string | null
           state?: string
           station_id?: string
           stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
           stripe_payment_intent_id?: string | null
+          stripe_payment_method_type?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "rental_sessions_price_profile_id_fkey"
+            columns: ["price_profile_id"]
+            isOneToOne: false
+            referencedRelation: "price_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       slots: {
         Row: {
@@ -455,6 +529,7 @@ export type Database = {
           raw_data: Json | null
           rentable_count: number | null
           returnable_count: number | null
+          shop_id: string | null
           signal: number | null
           station_id: string
           status: string | null
@@ -474,6 +549,7 @@ export type Database = {
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
+          shop_id?: string | null
           signal?: number | null
           station_id: string
           status?: string | null
@@ -493,6 +569,7 @@ export type Database = {
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
+          shop_id?: string | null
           signal?: number | null
           station_id?: string
           status?: string | null
@@ -566,7 +643,13 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "staff" | "user"
+      app_role:
+        | "admin"
+        | "staff"
+        | "user"
+        | "viewer"
+        | "operator"
+        | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -694,7 +777,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff", "user"],
+      app_role: ["admin", "staff", "user", "viewer", "operator", "super_admin"],
     },
   },
 } as const
