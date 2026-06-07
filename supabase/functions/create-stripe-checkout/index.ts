@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       },
       success_url: `${base}/pay/${session.id}/success`,
       cancel_url: `${base}/pay/${session.id}/cancel`,
-    }, { idempotencyKey: `checkout_${session.id}` });
+    });
 
     const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();
 
