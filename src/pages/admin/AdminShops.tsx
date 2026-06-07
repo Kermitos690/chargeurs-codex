@@ -15,7 +15,7 @@ export default function AdminShops() {
     setShops(data);
   };
 
-  const records = (shops?.data?.data ?? shops?.data ?? []) as any[];
+  const records = (shops?.data?.data ?? shops?.data ?? []) as Record<string, unknown>[];
 
   return (
     <div className="animate-fade-in space-y-6">

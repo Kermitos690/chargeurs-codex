@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, RefreshCw, Search } from "lucide-react";
 
-type Row = Record<string, any>;
+type Row = Record<string, unknown>;
 
 export default function AdminOrders() {
   const { canWrite, isSuperAdmin } = useAuth();
@@ -17,7 +17,7 @@ export default function AdminOrders() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    let query = supabase.from("rental_sessions").select("*").order("created_at", { ascending: false }).limit(200);
+    const query = supabase.from("rental_sessions").select("*").order("created_at", { ascending: false }).limit(200);
     const { data } = await query;
     setRows((data ?? []) as Row[]);
   }, []);

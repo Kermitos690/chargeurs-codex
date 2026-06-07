@@ -37,7 +37,7 @@ const RULES: { key: string; label: string; money?: boolean }[] = [
 export default function AdminPricingDetail() {
   const { id } = useParams();
   const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [form, setForm] = useState<Record<string, any>>({});
+  const [form, setForm] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [assign, setAssign] = useState({ scope: "station", scope_ref: "" });
   const [sim, setSim] = useState({ minutes: "30", return_state: "normal" });
@@ -51,7 +51,7 @@ export default function AdminPricingDetail() {
 
   if (!data) return <Loader2 className="h-6 w-6 animate-spin" />;
   const p = data.profile;
-  const firstStation = data.assignments.find((a: any) => a.scope === "station" && a.active)?.scope_ref;
+  const firstStation = data.assignments.find((a: Record<string, unknown>) => a.scope === "station" && a.active)?.scope_ref;
 
   const save = async () => {
     setSaving(true);
@@ -128,7 +128,7 @@ export default function AdminPricingDetail() {
       <section className="glass liquid-border rounded-2xl p-5">
         <h2 className="mb-3 font-semibold">Affectations (priorité : borne &gt; station &gt; boutique &gt; défaut)</h2>
         <DataTable columns={["Portée", "Référence", "Active", ""]} empty="Aucune affectation"
-          rows={data.assignments.map((a: any) => [a.scope, a.scope_ref, a.active ? "oui" : "non",
+          rows={data.assignments.map((a: Record<string, unknown>) => [a.scope, a.scope_ref, a.active ? "oui" : "non",
             <Button size="sm" variant="destructive" onClick={() => unassign(a.id)}>retirer</Button>])} />
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="w-36">
@@ -163,19 +163,19 @@ export default function AdminPricingDetail() {
         <section className="glass liquid-border rounded-2xl p-5">
           <h2 className="mb-3 font-semibold">Historique des versions</h2>
           <DataTable columns={["Version", "Prix/période", "Date"]} empty="—"
-            rows={data.versions.map((v: any) => [`v${v.version}`, v.snapshot?.price_per_period_cents != null ? chf(v.snapshot.price_per_period_cents) : "—", new Date(v.created_at).toLocaleString()])} />
+            rows={data.versions.map((v: Record<string, unknown>) => [`v${v.version}`, v.snapshot?.price_per_period_cents != null ? chf(v.snapshot.price_per_period_cents) : "—", new Date(v.created_at).toLocaleString()])} />
         </section>
         <section className="glass liquid-border rounded-2xl p-5">
           <h2 className="mb-3 font-semibold">Locations récentes</h2>
           <DataTable columns={["Station", "État", "Montant", "Date"]} empty="Aucune location"
-            rows={data.rentals.map((r: any) => [r.station_id, <StateChip state={r.state} />, `${Number(r.amount_expected ?? 0).toFixed(2)} ${r.currency}`, new Date(r.created_at).toLocaleDateString()])} />
+            rows={data.rentals.map((r: Record<string, unknown>) => [r.station_id, <StateChip state={r.state} />, `${Number(r.amount_expected ?? 0).toFixed(2)} ${r.currency}`, new Date(r.created_at).toLocaleDateString()])} />
         </section>
       </div>
 
       <section className="glass liquid-border rounded-2xl p-5">
         <h2 className="mb-3 font-semibold">Journal des modifications</h2>
         <DataTable columns={["Action", "Acteur", "Date"]} empty="—"
-          rows={data.logs.map((l: any) => [l.action, l.actor ?? "système", new Date(l.created_at).toLocaleString()])} />
+          rows={data.logs.map((l: Record<string, unknown>) => [l.action, l.actor ?? "système", new Date(l.created_at).toLocaleString()])} />
       </section>
     </div>
   );
