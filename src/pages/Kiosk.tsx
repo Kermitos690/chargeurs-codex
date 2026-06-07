@@ -234,23 +234,21 @@ export default function Kiosk() {
           )}
 
           {phase === "pricing" && (
-            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-2xl flex-col items-center gap-6">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl">Choisissez votre formule</h2>
-              <div className="grid w-full gap-4 sm:grid-cols-2">
-                {profiles.map((p) => (
-                  <button key={p.id} onClick={() => setSelected(p)}
-                    className={`glass liquid-border rounded-2xl p-6 text-left transition-all ${selected?.id === p.id ? "ring-2 ring-primary shadow-glow" : "opacity-80 hover:opacity-100"}`}>
-                    <div className="text-lg font-semibold">{p.name}</div>
-                    <div className="text-sm text-muted-foreground">{p.period_label ?? ""}</div>
-                    <div className="mt-3 text-3xl font-bold text-gradient-cyan">{fmtAmount(p.amount, p.currency)}</div>
-                  </button>
-                ))}
-                {profiles.length === 0 && <p className="text-muted-foreground">Aucune formule disponible.</p>}
-              </div>
+            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-md flex-col items-center gap-6">
+              <h2 className="font-display text-3xl font-bold sm:text-4xl">Confirmez votre location</h2>
+              {quote ? (
+                <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
+                  <div className="text-lg font-semibold">{quote.profile_name}</div>
+                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
+                  <div className="mt-2 text-sm text-muted-foreground">Tarif appliqué automatiquement à cette borne</div>
+                </div>
+              ) : (
+                <p className="text-warning">{quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}</p>
+              )}
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>Retour</Button>
-                <Button onClick={startRental} disabled={!selected} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
-                  Payer {selected ? fmtAmount(selected.amount, selected.currency) : ""}
+                <Button onClick={startRental} disabled={!quote} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
+                  Payer {quote ? fmtAmount(quote.amount, quote.currency) : ""}
                 </Button>
               </div>
             </motion.div>
