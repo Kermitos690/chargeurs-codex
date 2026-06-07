@@ -25,7 +25,15 @@ Deno.serve(async (req) => {
 
     await db.from("rental_sessions").update({ state: "closing_order" }).eq("id", session.id);
 
-    if (isChargeNowConfigured() && session.apifox_trade_no) {
+    let chargenowSkipped = false;
+    let skipReason: string | null = null;
+    if (!isChargeNowConfigured()) {
+      chargenowSkipped = true;
+      skipReason = "CHARGENOW_NOT_CONFIGURED";
+    } else if (!session.apifox_trade_no) {
+      chargenowSkipped = true;
+      skipReason = "NO_TRADE_NO";
+    } else {
       const res = await orderClose({ tradeNo: session.apifox_trade_no, orderId: session.apifox_trade_no });
       await logApi(db, {
         service: "chargenow", endpoint: "/rent/order/close", method: "POST",
@@ -33,11 +41,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (chargenowSkipped) {
+      // Surface that the ChargeNow side was NOT closed — orphaned-order risk.
+      await logApi(db, {
+        service: "chargenow", endpoint: "/rent/order/close", method: "POST",
+        status_code: 0, request: { rentalSessionId, by: adminId }, response: null,
+        error: `CLOSE_SKIPPED:${skipReason}`,
+      });
+    }
+
     await db.from("rental_sessions").update({
       state: "closed", closed_at: new Date().toISOString(),
     }).eq("id", session.id);
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, chargenow_skipped: chargenowSkipped, skip_reason: skipReason }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
