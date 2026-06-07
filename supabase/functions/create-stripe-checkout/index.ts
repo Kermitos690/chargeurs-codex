@@ -49,8 +49,13 @@ Deno.serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
     const base = APP_URL || origin || "";
-    // Price is server-side ONLY.
-    const amount = Number(session.amount_expected ?? session.amount ?? 2.0);
+    // Price is server-side ONLY — never trust the client, never a demo fallback.
+    const resolvedAmount = session.amount_expected ?? session.amount ?? null;
+    if (resolvedAmount == null || Number(resolvedAmount) <= 0) {
+      return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const amount = Number(resolvedAmount);
     const amountCents = Math.round(amount * 100);
     const currency = (session.currency ?? "CHF").toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
