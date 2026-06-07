@@ -21,10 +21,11 @@ export default function Pay() {
   useEffect(() => {
     if (!rentalSessionId) return;
     const load = async () => {
-      const { data } = await supabase.from("rental_sessions")
-        .select("state, checkout_url").eq("id", rentalSessionId).maybeSingle();
-      setState((data as any)?.state ?? "unknown");
-      setCheckoutUrl((data as any)?.checkout_url ?? null);
+      // Safe scoped accessor — rental_sessions is staff-only at the table level.
+      const { data } = await supabase.rpc("kiosk_session_status", { p_id: rentalSessionId });
+      const r = data as { state?: string; checkout_url?: string | null } | null;
+      setState(r?.state ?? "unknown");
+      setCheckoutUrl(r?.checkout_url ?? null);
     };
     load();
     const i = setInterval(load, 2500);
