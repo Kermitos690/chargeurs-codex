@@ -108,6 +108,7 @@ export const cabinetQueryPost = async (deviceId: string): Promise<ApiResult> => 
     const res = await fetch(url.toString(), {
       method: "POST",
       headers: { Authorization: authHeader(), Accept: "application/json" },
+      signal: AbortSignal.timeout(6000),
     });
     const text = await res.text();
     let data: unknown = null;
