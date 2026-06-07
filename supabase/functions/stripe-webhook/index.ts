@@ -16,13 +16,11 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
     .select("*").eq("id", rentalSessionId).maybeSingle();
   if (!session) return;
 
-  // Amount + currency verification.
+  // Amount + currency verification (server-side; client/metadata never trusted).
   const expectedCents = Math.round(Number(session.amount_expected ?? session.amount ?? 0) * 100);
   const paidCents = Number(cs.amount_total ?? 0);
   const expectedCur = (session.currency ?? "CHF").toLowerCase();
   const paidCur = (cs.currency ?? "").toLowerCase();
-  const amountOk = expectedCents === 0 || paidCents === expectedCents;
-  const currencyOk = !paidCur || paidCur === expectedCur;
   const paid = cs.payment_status === "paid";
 
   await db.from("payments").update({
@@ -37,27 +35,31 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
   // ---- Snapshot integrity: never trust client/Stripe metadata blindly. ----
   // Recompute the deterministic hash from the DB-stored snapshot and compare it
   // to both the stored hash and the hash carried in Stripe metadata.
-  let snapshotOk = true;
   let recomputedHash: string | null = null;
+  const storedHash = session.pricing_snapshot_hash ?? null;
+  const metaHash = cs.metadata?.pricing_snapshot_hash ?? null;
   if (session.pricing_snapshot) {
     recomputedHash = await snapshotHash(session.pricing_snapshot);
-    const storedHash = session.pricing_snapshot_hash ?? null;
-    const metaHash = cs.metadata?.pricing_snapshot_hash ?? null;
-    snapshotOk = recomputedHash === storedHash && (!metaHash || metaHash === storedHash);
   }
 
-  if (!amountOk || !currencyOk || !snapshotOk) {
+  const match = evaluatePaymentMatch({
+    expectedCents, paidCents, expectedCurrency: expectedCur, paidCurrency: paidCur,
+    hasSnapshot: Boolean(session.pricing_snapshot),
+    storedHash, recomputedHash, metaHash,
+  });
+
+  if (!match.ok) {
     await db.from("rental_sessions").update({
       state: "needs_support",
-      failure_code: !snapshotOk ? "SNAPSHOT_MISMATCH" : "AMOUNT_MISMATCH",
-      failure_message: !snapshotOk
+      failure_code: match.failureCode,
+      failure_message: !match.snapshotOk
         ? "Incohérence du snapshot tarifaire — vérification manuelle requise."
         : `Montant payé ${paidCents} ${paidCur} ≠ attendu ${expectedCents} ${expectedCur}.`,
     }).eq("id", session.id);
     await auditLog(db, {
       action: "pricing.error", target: session.id,
       data: {
-        code: !snapshotOk ? "SNAPSHOT_MISMATCH" : "PAID_AMOUNT_MISMATCH",
+        code: !match.snapshotOk ? "SNAPSHOT_MISMATCH" : "PAID_AMOUNT_MISMATCH",
         paidCents, expectedCents, paidCur, expectedCur,
         recomputedHash, storedHash: session.pricing_snapshot_hash ?? null,
         metaHash: cs.metadata?.pricing_snapshot_hash ?? null,
