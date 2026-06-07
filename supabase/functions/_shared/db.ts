@@ -118,3 +118,68 @@ function canonicalize(v: unknown): string {
   const o = v as Record<string, unknown>;
   return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalize(o[k])}`).join(",")}}`;
 }
+
+// ---------------------------------------------------------------------------
+// Kiosk device authentication (fail-closed, server-side, station-bound).
+// The kiosk sends its provisioned token in the `X-Kiosk-Token` header ONLY.
+// The token is never accepted from the URL, never logged raw. We hash it
+// (sha-256 hex, matching the DB digest) and look up kiosk_devices. The device
+// must be active, not revoked, not expired, and bound to the requested station.
+// ---------------------------------------------------------------------------
+export async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export type KioskDevice = {
+  id: string;
+  station_id: string;
+  active: boolean;
+  token_revoked: boolean;
+  token_expires_at: string | null;
+  label: string | null;
+};
+
+export type KioskAuthResult =
+  | { ok: true; device: KioskDevice; tokenFingerprint: string }
+  | { ok: false; status: number; error: string };
+
+// Minimum entropy bar for a provisioned kiosk token.
+const KIOSK_TOKEN_MIN_LEN = 24;
+
+export async function verifyKioskDevice(
+  req: Request,
+  db: SupabaseClient,
+  stationId: string,
+): Promise<KioskAuthResult> {
+  const token = (req.headers.get("X-Kiosk-Token") ?? "").trim();
+  if (!token || token.length < KIOSK_TOKEN_MIN_LEN) {
+    return { ok: false, status: 401, error: "KIOSK_AUTH_REQUIRED" };
+  }
+  const hash = await sha256Hex(token);
+  // tokenFingerprint = a NON-secret, short, irreversible id safe for logs.
+  const tokenFingerprint = hash.slice(0, 12);
+
+  const { data: dev } = await db
+    .from("kiosk_devices")
+    .select("id, station_id, active, token_revoked, token_expires_at, label")
+    .eq("token_hash", hash)
+    .maybeSingle();
+
+  if (!dev) return { ok: false, status: 401, error: "KIOSK_AUTH_INVALID" };
+
+  const expired = dev.token_expires_at !== null && new Date(dev.token_expires_at).getTime() < Date.now();
+  if (!dev.active || dev.token_revoked || expired) {
+    return { ok: false, status: 403, error: "KIOSK_DEVICE_DISABLED" };
+  }
+  if (dev.station_id !== stationId) {
+    return { ok: false, status: 403, error: "KIOSK_STATION_MISMATCH" };
+  }
+
+  // Best-effort heartbeat; never blocks auth.
+  db.from("kiosk_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", dev.id)
+    .then(() => {}, () => {});
+
+  return { ok: true, device: dev as KioskDevice, tokenFingerprint };
+}
