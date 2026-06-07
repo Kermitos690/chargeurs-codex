@@ -86,13 +86,13 @@ export default function Kiosk() {
 
   useEffect(() => {
     loadStation();
-    loadProfiles();
+    loadQuote();
     supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
       .then(({ data }) => { setConfigured((data as { configured?: boolean })?.configured ?? false); loadStation(); })
       .catch(() => setConfigured(false));
     const i = setInterval(loadStation, 15000);
     return () => clearInterval(i);
-  }, [stationId, loadStation, loadProfiles]);
+  }, [stationId, loadStation, loadQuote]);
 
   // Tick for the countdown.
   useEffect(() => {
