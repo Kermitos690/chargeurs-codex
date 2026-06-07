@@ -19,6 +19,23 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
 
+  // Optional shared-secret protection. If CHARGENOW_EVENT_SECRET is configured,
+  // every inbound event MUST present it (header x-event-secret or ?secret=).
+  // Until ChargeNow's exact signature scheme is confirmed, this lets us lock
+  // down the endpoint without breaking an unauthenticated live integration.
+  const expectedSecret = Deno.env.get("CHARGENOW_EVENT_SECRET");
+  if (expectedSecret) {
+    const url = new URL(req.url);
+    const provided = req.headers.get("x-event-secret")
+      ?? req.headers.get("x-chargenow-secret")
+      ?? url.searchParams.get("secret")
+      ?? "";
+    if (provided !== expectedSecret) {
+      return new Response(JSON.stringify({ ok: false, error: "INVALID_EVENT_SECRET" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+  }
+
   try {
     const payload = await req.json().catch(() => ({}));
     const eventType: string = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
