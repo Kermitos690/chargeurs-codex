@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "STRIPE_NOT_CONFIGURED" }), { status: 400 });
   }
 
-  const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia" });
+  const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient() });
   let event: Stripe.Event;
   try {
     event = await stripe.webhooks.constructEventAsync(raw, sig!, WEBHOOK_SECRET);
