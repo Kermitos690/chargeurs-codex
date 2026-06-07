@@ -151,6 +151,33 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor: string | null
+          created_at: string
+          data: Json | null
+          id: string
+          target: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          target?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          created_at?: string
+          data?: Json | null
+          id?: string
+          target?: string | null
+        }
+        Relationships: []
+      }
       batteries: {
         Row: {
           battery_id: string
@@ -208,6 +235,72 @@ export type Database = {
           received_at?: string
           severity?: string | null
           station_id?: string | null
+        }
+        Relationships: []
+      }
+      chargenow_callbacks: {
+        Row: {
+          created_at: string
+          id: string
+          idempotency_key: string | null
+          processed: boolean
+          raw: Json | null
+          station_id: string | null
+          status: string | null
+          trade_no: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string | null
+          processed?: boolean
+          raw?: Json | null
+          station_id?: string | null
+          status?: string | null
+          trade_no?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          idempotency_key?: string | null
+          processed?: boolean
+          raw?: Json | null
+          station_id?: string | null
+          status?: string | null
+          trade_no?: string | null
+        }
+        Relationships: []
+      }
+      kiosk_devices: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          label: string | null
+          last_seen_at: string | null
+          station_id: string
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string | null
+          station_id: string
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string | null
+          station_id?: string
+          token_hash?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -360,6 +453,121 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          locale: string | null
+          phone: string | null
+          preferred_language: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          locale?: string | null
+          phone?: string | null
+          preferred_language?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          locale?: string | null
+          phone?: string | null
+          preferred_language?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          id: string
+          reason: string | null
+          rental_session_id: string | null
+          status: string
+          stripe_refund_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          reason?: string | null
+          rental_session_id?: string | null
+          status?: string
+          stripe_refund_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          id?: string
+          reason?: string | null
+          rental_session_id?: string | null
+          status?: string
+          stripe_refund_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refunds_rental_session_id_fkey"
+            columns: ["rental_session_id"]
+            isOneToOne: false
+            referencedRelation: "rental_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rental_events: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          rental_session_id: string | null
+          source: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          rental_session_id?: string | null
+          source?: string | null
+          type: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          rental_session_id?: string | null
+          source?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rental_events_rental_session_id_fkey"
+            columns: ["rental_session_id"]
+            isOneToOne: false
+            referencedRelation: "rental_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rental_sessions: {
         Row: {
           amount: number | null
@@ -485,6 +693,51 @@ export type Database = {
           },
         ]
       }
+      shops: {
+        Row: {
+          active: boolean
+          address: string | null
+          chargenow_shop_id: string | null
+          city: string | null
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          name: string
+          opening_hours: Json | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          address?: string | null
+          chargenow_shop_id?: string | null
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          opening_hours?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          address?: string | null
+          chargenow_shop_id?: string | null
+          city?: string | null
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          opening_hours?: Json | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       slots: {
         Row: {
           battery_id: string | null
@@ -578,6 +831,39 @@ export type Database = {
         }
         Relationships: []
       }
+      system_incidents: {
+        Row: {
+          created_at: string
+          data: Json | null
+          id: string
+          message: string | null
+          resolved: boolean
+          severity: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message?: string | null
+          resolved?: boolean
+          severity?: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json | null
+          id?: string
+          message?: string | null
+          resolved?: boolean
+          severity?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -595,6 +881,121 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallet_ledger: {
+        Row: {
+          amount_cents: number
+          balance_after_cents: number | null
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string | null
+          note: string | null
+          ref_rental_session_id: string | null
+          ref_stripe_id: string | null
+          type: string
+          wallet_id: string
+        }
+        Insert: {
+          amount_cents: number
+          balance_after_cents?: number | null
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string | null
+          note?: string | null
+          ref_rental_session_id?: string | null
+          ref_stripe_id?: string | null
+          type: string
+          wallet_id: string
+        }
+        Update: {
+          amount_cents?: number
+          balance_after_cents?: number | null
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string | null
+          note?: string | null
+          ref_rental_session_id?: string | null
+          ref_stripe_id?: string | null
+          type?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_ledger_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_topups: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          id: string
+          status: string
+          stripe_checkout_session_id: string | null
+          updated_at: string
+          wallet_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency?: string
+          id?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          updated_at?: string
+          wallet_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          status?: string
+          stripe_checkout_session_id?: string | null
+          updated_at?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_topups_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallets: {
+        Row: {
+          created_at: string
+          currency: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
