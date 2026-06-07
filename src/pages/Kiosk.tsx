@@ -156,7 +156,7 @@ export default function Kiosk() {
     setPhase("starting");
     try {
       const { data: sess } = await supabase.functions.invoke("create-rental-session", {
-        body: { stationId, priceProfileId: selected?.id, language: lang },
+        body: { stationId, language: lang },
       });
       if (!(sess as { ok?: boolean })?.ok) { setPhase("error"); return; }
       const rentalSessionId = (sess as { session: { id: string } }).session.id;
