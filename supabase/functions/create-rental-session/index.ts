@@ -1,10 +1,27 @@
 // create-rental-session — starts a rental from the kiosk.
-// SECURITY: the frontend sends ONLY stationId (+ optional kioskDeviceId, language).
-// The price is ALWAYS resolved server-side by the authoritative SQL function
-// public.compute_pricing(). Any amount sent by the client is ignored.
-// The computed pricing is frozen as an immutable snapshot on the session.
+//
+// SECURITY MODEL (fail-closed):
+//  - The caller MUST present a valid kiosk credential in the `X-Kiosk-Token`
+//    header (never in the URL, never logged raw). It is hashed server-side and
+//    matched against kiosk_devices.token_hash.
+//  - The device must be active, not revoked, not expired, and STRICTLY bound to
+//    the requested station (kiosk_devices.station_id == stationId). Local lock,
+//    cabinet id in the URL and localStorage are NEVER an authorization.
+//  - The authoritative station is the one stored on the kiosk_devices record.
+//  - The price/currency/profile/status/payment-state are resolved 100% server
+//    side via public.compute_pricing(). Any amount sent by the client is ignored.
+//  - Rate limiting per (device, station) blocks automated mass creation.
+//  - An idempotency key (header `X-Idempotency-Key`) dedupes double-tap, retries
+//    and concurrent calls (DB unique index enforces single session).
+//  - Stale unpaid sessions are expired lazily (no hardware / no payment effect).
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, auditLog, snapshotHash } from "../_shared/db.ts";
+import { adminClient, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
+
+// Anti-spam: at most N session creations per device+station in WINDOW seconds.
+const RATE_MAX = 6;
+const RATE_WINDOW_SEC = 60;
+// A created/checkout session is considered abandoned after this delay.
+const SESSION_TTL_MIN = 20;
 
 function shortCode(): string {
   const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -15,24 +32,104 @@ function shortCode(): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const startedAt = Date.now();
   const db = adminClient();
+  const correlationId = crypto.randomUUID();
   const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    new Response(JSON.stringify({ ...(body as object), correlationId }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+
+  // Normalized, redacted refusal logger. NEVER logs the raw token.
+  const refuse = async (
+    status: number,
+    error: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    await auditLog(db, {
+      action: "kiosk.rental.refused",
+      target: (extra.station_id as string) ?? null,
+      data: { reason: error, status, correlation_id: correlationId, duration_ms: Date.now() - startedAt, ...extra },
+    });
+    return json({ ok: false, error }, status);
+  };
 
   try {
-    const { stationId, kioskDeviceId, language } = await req.json();
-    if (!stationId) return json({ ok: false, error: "MISSING_STATION" }, 400);
-
-    const { data: station } = await db.from("stations").select("*").eq("station_id", stationId).maybeSingle();
-    if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
-    if (!station.online || station.rentable_count <= 0) {
-      await auditLog(db, { action: "kiosk.rental.refused", target: stationId, data: { reason: "STATION_UNAVAILABLE" } });
-      return json({ ok: false, error: "STATION_UNAVAILABLE" }, 409);
+    let payload: { stationId?: string; language?: string };
+    try {
+      payload = await req.json();
+    } catch {
+      return refuse(400, "MISSING_STATION");
+    }
+    const stationId = typeof payload.stationId === "string" ? payload.stationId.trim() : "";
+    const language = typeof payload.language === "string" ? payload.language.slice(0, 8) : "fr";
+    if (!stationId || !/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) {
+      return refuse(400, "MISSING_STATION");
     }
 
-    // ---- Authoritative server-side pricing (single source of truth) ----
+    // ---- 1. Kiosk authentication + strict station binding (fail-closed) ----
+    const auth = await verifyKioskDevice(req, db, stationId);
+    if (!auth.ok) {
+      return refuse(auth.status, auth.error, { station_id: stationId });
+    }
+    const device = auth.device;
+    const fingerprint = auth.tokenFingerprint;
+
+    // ---- 2. Lazy cleanup of abandoned sessions (no side effects) ----
+    await db.rpc("expire_stale_rental_sessions").then(() => {}, () => {});
+
+    // ---- 3. Idempotency: stable key bound to device + station + intent ----
+    // The key is supplied by the kiosk; same key + same station => same session.
+    const rawIdem = (req.headers.get("X-Idempotency-Key") ?? "").trim();
+    const idempotencyKey = rawIdem && rawIdem.length >= 8 && rawIdem.length <= 128
+      ? `${device.id}:${stationId}:${rawIdem}`
+      : null;
+
+    if (idempotencyKey) {
+      const { data: existing } = await db
+        .from("rental_sessions")
+        .select("*")
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (existing) {
+        if (existing.station_id !== stationId) {
+          return refuse(409, "IDEMPOTENCY_CONFLICT", { station_id: stationId });
+        }
+        await auditLog(db, {
+          action: "kiosk.rental.idempotent_replay",
+          target: existing.id,
+          data: { station_id: stationId, device_id: device.id, correlation_id: correlationId, token_fp: fingerprint },
+        });
+        return json({ ok: true, session: existing, snapshot: existing.pricing_snapshot, idempotent: true });
+      }
+    }
+
+    // ---- 4. Rate limiting per (device, station) ----
+    const sinceIso = new Date(Date.now() - RATE_WINDOW_SEC * 1000).toISOString();
+    const { count: recentCount } = await db
+      .from("rental_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("kiosk_device_id", device.id)
+      .eq("station_id", stationId)
+      .gte("created_at", sinceIso);
+    if ((recentCount ?? 0) >= RATE_MAX) {
+      return refuse(429, "RATE_LIMITED", { station_id: stationId, device_id: device.id, recent: recentCount });
+    }
+
+    // ---- 5. Business validation: station known, active, has stock ----
+    const { data: station } = await db.from("stations").select("*").eq("station_id", stationId).maybeSingle();
+    if (!station) return refuse(404, "STATION_NOT_FOUND", { station_id: stationId });
+    if (station.status === "maintenance") {
+      return refuse(409, "STATION_MAINTENANCE", { station_id: stationId });
+    }
+    if (!station.online || (station.rentable_count ?? 0) <= 0) {
+      return refuse(409, "STATION_UNAVAILABLE", { station_id: stationId });
+    }
+
+    // ---- 6. Authoritative server-side pricing (single source of truth) ----
     const { data: snapshot, error: priceErr } = await db.rpc("compute_pricing", {
-      p_device: kioskDeviceId ?? null,
+      p_device: device.id,
       p_station: stationId,
       p_shop: station.shop_id ?? null,
       p_start: new Date().toISOString(),
@@ -42,31 +139,32 @@ Deno.serve(async (req) => {
       p_currency: station.currency ?? null,
     });
     if (priceErr || !snapshot) {
-      const code = String(priceErr?.message ?? "").includes("PRICING_NOT_CONFIGURED")
+      const msg = String(priceErr?.message ?? "");
+      const code = msg.includes("PRICING_NOT_CONFIGURED")
         ? "PRICING_NOT_CONFIGURED"
-        : String(priceErr?.message ?? "").includes("CURRENCY_MISMATCH")
+        : msg.includes("CURRENCY_MISMATCH")
         ? "CURRENCY_MISMATCH"
         : "PRICING_ERROR";
-      await auditLog(db, { action: "pricing.error", target: stationId, data: { code, detail: priceErr?.message ?? null } });
-      return json({ ok: false, error: code }, 409);
+      return refuse(409, code, { station_id: stationId });
     }
 
     const snap = snapshot as Record<string, unknown>;
     const finalCents = Number(snap.final_cents ?? 0);
     if (!Number.isFinite(finalCents) || finalCents <= 0) {
-      await auditLog(db, { action: "pricing.error", target: stationId, data: { code: "INVALID_AMOUNT", finalCents } });
-      return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
+      return refuse(409, "PRICING_NOT_CONFIGURED", { station_id: stationId });
     }
     const amount = finalCents / 100;
     const currency = String(snap.currency ?? station.currency ?? "CHF");
     const hash = await snapshotHash(snap);
     const cabinetId = station.cabinet_id || station.station_id;
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MIN * 60 * 1000).toISOString();
 
+    // ---- 7. Insert. Unique idempotency index enforces single session ----
     const { data: session, error: insErr } = await db.from("rental_sessions").insert({
       station_id: stationId,
       cabinet_id: cabinetId,
       shop_id: station.shop_id ?? null,
-      kiosk_device_id: kioskDeviceId ?? null,
+      kiosk_device_id: device.id,
       price_profile_id: snap.profile_id ?? null,
       price_profile_version: snap.profile_version ?? null,
       pricing_snapshot: snap,
@@ -76,23 +174,53 @@ Deno.serve(async (req) => {
       amount,
       amount_expected: amount,
       currency,
-      customer_language: language ?? "fr",
+      customer_language: language,
+      idempotency_key: idempotencyKey,
+      expires_at: expiresAt,
     }).select().single();
-    if (insErr || !session) throw insErr ?? new Error("INSERT_FAILED");
+
+    if (insErr) {
+      // 23505 = unique violation on idempotency_key => a concurrent request won.
+      if ((insErr as { code?: string }).code === "23505" && idempotencyKey) {
+        const { data: existing } = await db
+          .from("rental_sessions")
+          .select("*")
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+        if (existing) {
+          return json({ ok: true, session: existing, snapshot: existing.pricing_snapshot, idempotent: true });
+        }
+      }
+      throw insErr;
+    }
+    if (!session) throw new Error("INSERT_FAILED");
 
     await auditLog(db, {
-      action: "kiosk.pricing.computed",
+      action: "kiosk.rental.created",
       target: session.id,
       data: {
-        station_id: stationId, kiosk_device_id: kioskDeviceId ?? null,
-        price_profile_id: snap.profile_id, price_profile_version: snap.profile_version,
-        source: snap.source, final_cents: finalCents, currency, pricing_snapshot_hash: hash,
+        station_id: stationId,
+        device_id: device.id,
+        token_fp: fingerprint,
+        correlation_id: correlationId,
+        idempotency_present: Boolean(idempotencyKey),
+        price_profile_id: snap.profile_id,
+        price_profile_version: snap.profile_version,
+        source: snap.source,
+        final_cents: finalCents,
+        currency,
+        pricing_snapshot_hash: hash,
+        duration_ms: Date.now() - startedAt,
       },
     });
 
-    // The ChargeNow rent order is created AFTER confirmed payment, never before.
+    // The ChargeNow rent order + ejection happen ONLY after confirmed payment.
     return json({ ok: true, session, snapshot: snap });
   } catch (e) {
-    return json({ ok: false, error: String(e) }, 500);
+    await auditLog(db, {
+      action: "kiosk.rental.error",
+      data: { reason: "INTERNAL_ERROR", correlation_id: correlationId, message: String((e as Error)?.message ?? e) },
+    });
+    return json({ ok: false, error: "INTERNAL_ERROR" }, 500);
   }
 });
