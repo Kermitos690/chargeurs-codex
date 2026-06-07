@@ -52,7 +52,7 @@ async function expectSuccess(
 }
 
 // Generic helper: assert every HTTP error status maps to ok=false + HTTP_<n>.
-async function expectHttpErrors(run: () => Promise<cn.ApiResult>) {
+async function expectHttpErrors(run: () => Promise<ApiResult>) {
   for (const status of HTTP_ERRORS) {
     const s = stubFetch(() => jsonResponse({ message: "err" }, status));
     try {
@@ -65,7 +65,7 @@ async function expectHttpErrors(run: () => Promise<cn.ApiResult>) {
 }
 
 // Generic helper: business failure {code:n!=0} and malformed/network handling.
-async function expectResilience(run: () => Promise<cn.ApiResult>) {
+async function expectResilience(run: () => Promise<ApiResult>) {
   // Business error code surfaced.
   let s = stubFetch(() => jsonResponse({ code: 9, msg: "rejected" }));
   try {
