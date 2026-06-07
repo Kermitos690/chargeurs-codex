@@ -4,6 +4,7 @@
 // redirect/success_url. Idempotent via webhook_events(external_id unique).
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
+import { evaluatePaymentMatch } from "../_shared/payments.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
