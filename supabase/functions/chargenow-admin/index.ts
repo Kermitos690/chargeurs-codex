@@ -259,25 +259,64 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: "MAINTENANCE_MODE_REQUIRED", code }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    const correlation = `op-${code}-${Date.now()}`;
+    const cabinetId = String(params.cabinetid ?? params.cabinetId ?? "") || null;
+
     if (dryRun) {
-      return new Response(JSON.stringify({ ok: true, dryRun: true, code, params, wouldCall: true }),
+      // Level C dry-run: prove the call WOULD be built, without firing it.
+      await db.from("test_runs").insert({
+        endpoint_code: code,
+        endpoint_name: MUTATION_META[code]?.name ?? code,
+        level: "C",
+        verdict: isDangerous ? "blocked_by_safety" : "physical_test_required",
+        environment: "staging",
+        cabinet_id: cabinetId,
+        correlation_id: correlation,
+        request_redacted: redactForLog(params),
+        response_redacted: { dryRun: true, wouldCall: true },
+        status_code: null,
+        duration_ms: 0,
+        physical_test_required: true,
+        error: null,
+        performed_by: adminId,
+      });
+      return new Response(JSON.stringify({ ok: true, dryRun: true, code, params, wouldCall: true, correlation }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const t0 = Date.now();
     const res = await dispatch(code, params);
+    const dt = Date.now() - t0;
     await logApi(db, { service: "chargenow", endpoint: `op:${code}`, method: "POST", status_code: res.status, request: params, response: res.data, error: res.error });
     await db.from("api_coverage").update({
       live_test_status: res.ok ? "pass" : "fail",
       live_result: res.data as object, last_error: res.error,
-      proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, dangerous: isDangerous },
+      proof_state: res.ok ? "live_verified" : "unverified",
+      proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, dangerous: isDangerous, correlation },
     }).eq("code", code);
+    await db.from("test_runs").insert({
+      endpoint_code: code,
+      endpoint_name: MUTATION_META[code]?.name ?? code,
+      level: isDangerous ? "C" : "B",
+      verdict: res.ok ? "live_verified" : "failed",
+      environment: "live",
+      cabinet_id: cabinetId,
+      correlation_id: correlation,
+      request_redacted: redactForLog(params),
+      response_redacted: redactForLog(res.data),
+      status_code: res.status,
+      duration_ms: dt,
+      physical_test_required: isDangerous,
+      error: res.error,
+      performed_by: adminId,
+    });
     if (isDangerous) {
       await db.from("maintenance_actions").insert({
-        station_id: String(params.cabinetid ?? params.cabinetId ?? ""), action_type: code,
+        station_id: cabinetId ?? "", action_type: code,
         params, result: res.data ?? { error: res.error }, performed_by: adminId,
       });
     }
-    return new Response(JSON.stringify({ ok: res.ok, code, status: res.status, data: res.data, error: res.error }),
+    return new Response(JSON.stringify({ ok: res.ok, code, status: res.status, data: res.data, error: res.error, correlation }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }),
