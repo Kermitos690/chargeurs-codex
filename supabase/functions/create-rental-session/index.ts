@@ -47,7 +47,15 @@ Deno.serve(async (req) => {
       if (data) profile = data as typeof profile;
     }
 
-    const amount = Number(profile?.amount ?? station.price_per_period ?? 2.0);
+    // NO hardcoded fallback price. The amount MUST come from an active
+    // price profile (or, transitionally, an explicit station price). If none
+    // is configured we refuse the rental rather than charging a demo amount.
+    const resolvedAmount = profile?.amount ?? station.price_per_period ?? null;
+    if (resolvedAmount == null || Number(resolvedAmount) <= 0) {
+      return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const amount = Number(resolvedAmount);
     const currency = profile?.currency ?? station.currency ?? "CHF";
     const cabinetId = station.cabinet_id || station.station_id;
 
