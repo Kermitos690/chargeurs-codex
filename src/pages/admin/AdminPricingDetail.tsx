@@ -44,7 +44,7 @@ export default function AdminPricingDetail() {
   const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(async () => {
-    try { const d = await call("get", { id }); setData(d); setForm({ ...(d as any).profile }); }
+    try { const d = await call("get", { id }); setData(d); setForm({ ...((d as Record<string, Record<string, unknown>>).profile) }); }
     catch (e) { toast.error(String((e as Error).message)); }
   }, [id]);
   useEffect(() => { load(); }, [load]);

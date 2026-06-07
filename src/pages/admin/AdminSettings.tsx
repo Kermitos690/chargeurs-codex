@@ -14,7 +14,7 @@ export default function AdminSettings() {
     supabase.from("price_profiles").select("id,name,price_per_period_cents,period_minutes,currency,is_default,active")
       .order("priority", { ascending: false }).then(({ data }) => setPrices(data ?? []));
     supabase.from("kiosk_settings").select("*").eq("key", "default_language").maybeSingle()
-      .then(({ data }) => setLang((data?.value as any)?.value ?? "fr"));
+      .then(({ data }) => setLang(((data?.value as Record<string, unknown>)?.value as string) ?? "fr"));
   }, []);
 
   const setLanguage = async (l: string) => {

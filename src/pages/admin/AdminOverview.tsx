@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Server, Wifi, BatteryCharging, CreditCard, AlertTriangle, Activity } from "lucide-react";
+import { Server, Wifi, BatteryCharging, CreditCard, AlertTriangle, Activity, type LucideIcon } from "lucide-react";
 
-type Stat = { label: string; value: string | number; icon: any; tone: string };
+type Stat = { label: string; value: string | number; icon: LucideIcon; tone: string };
 
 export default function AdminOverview() {
   const [stats, setStats] = useState<Stat[]>([]);
@@ -16,8 +16,8 @@ export default function AdminOverview() {
         supabase.from("rental_sessions").select("id", { count: "exact", head: true }).in("state", ["eject_failed", "needs_support"]),
       ]);
       const total = stations?.length ?? 0;
-      const online = (stations ?? []).filter((s: any) => s.online).length;
-      const batteries = (stations ?? []).reduce((a: number, s: any) => a + (s.rentable_count ?? 0), 0);
+      const online = (stations ?? []).filter((s: Record<string, unknown>) => s.online).length;
+      const batteries = (stations ?? []).reduce((a: number, s: Record<string, number>) => a + (s.rentable_count ?? 0), 0);
       setStats([
         { label: "Bornes", value: total, icon: Server, tone: "text-primary" },
         { label: "En ligne", value: `${online}/${total}`, icon: Wifi, tone: "text-success" },

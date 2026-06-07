@@ -32,8 +32,8 @@ export default function AdminAuth() {
       await supabase.functions.invoke("claim-admin");
       toast.success("Connecté");
       nav("/admin");
-    } catch (err: any) {
-      toast.error(err.message ?? "Erreur");
+    } catch (err) {
+      toast.error((err as Error).message ?? "Erreur");
     } finally { setLoading(false); }
   };
 
