@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     if (raw.length > MAX_BODY_BYTES) {
       return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
     }
-    let payload: Record<string, any> = {};
+    let payload: EventPayload = {};
     try { payload = raw ? JSON.parse(raw) : {}; } catch { return j({ ok: false, error: "INVALID_JSON" }, 400); }
 
     const eventType: string = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
