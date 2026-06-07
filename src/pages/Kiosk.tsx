@@ -58,7 +58,15 @@ export default function Kiosk() {
 
   const loadStation = useCallback(async () => {
     if (!stationId) return;
-    const { data } = await supabase.from("stations").select("*").eq("station_id", stationId).maybeSingle();
+    // Anonymous kiosk clients can only read operational columns (raw_data is
+    // restricted to the back-office), so we select explicit non-sensitive fields.
+    const { data } = await supabase
+      .from("stations")
+      .select(
+        "id, station_id, cabinet_id, name, location_name, status, online, signal, rentable_count, returnable_count, total_count, currency, price_per_period, last_sync_at, created_at, updated_at, shop_id",
+      )
+      .eq("station_id", stationId)
+      .maybeSingle();
     setStation(data as Station | null);
     setPhase((p) => (p === "loading" ? "idle" : p));
   }, [stationId]);
