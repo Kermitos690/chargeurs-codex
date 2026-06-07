@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 
 export default function Pay() {
   const { rentalSessionId } = useParams();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const sessionCode = new URLSearchParams(search).get("c") ?? "";
   const { t } = useI18n();
   const [state, setState] = useState<string>("loading");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
@@ -19,10 +20,11 @@ export default function Pay() {
   const outcome = pathname.endsWith("/success") ? "success" : pathname.endsWith("/cancel") ? "cancel" : null;
 
   useEffect(() => {
-    if (!rentalSessionId) return;
+    if (!rentalSessionId || !sessionCode) return;
     const load = async () => {
-      // Safe scoped accessor — rental_sessions is staff-only at the table level.
-      const { data } = await supabase.rpc("kiosk_session_status", { p_id: rentalSessionId });
+      // Scoped accessor — requires both the session UUID and its public code
+      // (bearer secret). A guessable/shared UUID alone is not sufficient.
+      const { data } = await supabase.rpc("kiosk_session_status", { p_id: rentalSessionId, p_code: sessionCode });
       const r = data as { state?: string; checkout_url?: string | null } | null;
       setState(r?.state ?? "unknown");
       setCheckoutUrl(r?.checkout_url ?? null);
