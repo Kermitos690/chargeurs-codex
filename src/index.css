@@ -183,3 +183,29 @@
 .animate-blob { animation: blob-float 18s ease-in-out infinite; }
 .animate-pulse-ring { animation: pulse-ring 2s cubic-bezier(0.4,0,0.6,1) infinite; }
 .animate-float-up { animation: float-up 0.6s ease-out both; }
+
+/* ============================================================= */
+/* Kiosk mode — locked-down touch UX for public tablet bornes.   */
+/* Toggled by adding `kiosk-mode` to <html> while on /kiosk/*.    */
+/* ============================================================= */
+html.kiosk-mode,
+html.kiosk-mode body {
+  /* No bounce / pull-to-refresh, no overscroll glow. */
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+  /* Disable double-tap zoom; keep taps/scroll responsive. */
+  touch-action: manipulation;
+  /* No accidental text selection / long-press menus on a public screen. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Inputs (if any) keep selection enabled for usability. */
+html.kiosk-mode input,
+html.kiosk-mode textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
