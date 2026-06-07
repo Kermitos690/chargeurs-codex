@@ -63,6 +63,10 @@ export default function Kiosk() {
   const [showDiag, setShowDiag] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+  // Stable idempotency key for ONE rental intent. Reused across network retries
+  // so a double-tap / reconnection never creates duplicate sessions. Cleared on
+  // reset (new intent gets a fresh key).
+  const idemRef = useRef<string | null>(null);
 
   const net = useOnlineStatus();
   const offline = net === "offline";
