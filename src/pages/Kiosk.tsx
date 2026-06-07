@@ -239,8 +239,18 @@ export default function Kiosk() {
     if (offline) { setStatusMsg({ title: "Connexion indisponible", sub: "Vérifiez la connexion Internet de la borne avant de payer." }); setPhase("error"); return; }
     setPhase("starting");
     try {
+      // Kiosk credential: provisioned per-tablet token, sent ONLY in a header
+      // (never in the URL). The server hashes it and binds it to this station.
+      const kioskToken = localStorage.getItem("kiosk_token");
+      if (!kioskToken) {
+        setStatusMsg({ title: "Borne non activée", sub: "Cette tablette n'est pas appairée. Contactez le support." });
+        setPhase("error");
+        return;
+      }
+      if (!idemRef.current) idemRef.current = crypto.randomUUID();
       const { data: sess } = await supabase.functions.invoke("create-rental-session", {
         body: { stationId, language: lang },
+        headers: { "X-Kiosk-Token": kioskToken, "X-Idempotency-Key": idemRef.current },
       });
       if (!(sess as { ok?: boolean })?.ok) { setPhase("error"); return; }
       const rentalSessionId = (sess as { session: { id: string } }).session.id;
