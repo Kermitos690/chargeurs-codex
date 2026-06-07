@@ -61,6 +61,45 @@ async function dispatch(code: string, p: Record<string, unknown>): Promise<Resul
 // Codes that are safe to run live automatically (non-destructive).
 const SAFE_LIVE = ["O1", "O5", "O6", "O7", "C4", "C5", "C6", "C7", "C8", "S1", "S2", "P1", "P2", "R1", "E2"];
 
+// Mutations that are NON-destructive and may be exercised live (Level B):
+//   O3 — query order status (idempotent read of a trade).
+// All other mutations create/alter/eject and are NOT auto-run live.
+const SAFE_LIVE_MUTATIONS = ["O3"];
+
+// Mutation classification used to seed Level A / Level C verdicts.
+const MUTATION_META: Record<string, { name: string; dangerous: boolean }> = {
+  O2: { name: "Create Rent Order", dangerous: false },
+  O3: { name: "Query Rent Order Status", dangerous: false },
+  O4: { name: "Mark Order Completed", dangerous: false },
+  S3: { name: "Create New Shop", dangerous: false },
+  S4: { name: "Update Shop", dangerous: false },
+  S5: { name: "Delete Shop", dangerous: true },
+  P3: { name: "Create Or Update Price Strategy", dangerous: false },
+  P4: { name: "Delete Price Strategy", dangerous: true },
+  P5: { name: "Shop Bind Price Strategy", dangerous: false },
+  P6: { name: "Shop Unbind Price Strategy", dangerous: false },
+  C1: { name: "Device Operation", dangerous: true },
+  C2: { name: "Eject By Repair", dangerous: true },
+  C3: { name: "Eject By Rent", dangerous: true },
+  E1: { name: "Cabinet Event Push Config", dangerous: true },
+};
+
+// Redact obvious secret-bearing keys before persisting a test_runs row.
+function redactForLog(obj: unknown): unknown {
+  if (!obj || typeof obj !== "object") return obj ?? null;
+  const clone = JSON.parse(JSON.stringify(obj));
+  const secretKeys = ["password", "secret", "authorization", "apikey", "api_key", "token"];
+  const walk = (o: Record<string, unknown>) => {
+    for (const k of Object.keys(o)) {
+      if (secretKeys.some((s) => k.toLowerCase().includes(s))) o[k] = "***";
+      else if (o[k] && typeof o[k] === "object") walk(o[k] as Record<string, unknown>);
+    }
+  };
+  if (typeof clone === "object") walk(clone);
+  return clone;
+}
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
