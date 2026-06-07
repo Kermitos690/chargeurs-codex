@@ -18,8 +18,9 @@ type Station = {
   online: boolean; signal: number | null; rentable_count: number;
   price_per_period: number; currency: string; last_sync_at: string | null;
 };
-type PriceProfile = {
-  id: string; name: string; amount: number; currency: string; period_label: string | null; is_default: boolean;
+type Quote = {
+  amount: number; currency: string; profile_name: string;
+  final_cents: number; profile_id: string; source: string; error?: string;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 
@@ -42,8 +43,8 @@ export default function Kiosk() {
   const { stationId } = useParams();
   const { lang } = useI18n();
   const [station, setStation] = useState<Station | null>(null);
-  const [profiles, setProfiles] = useState<PriceProfile[]>([]);
-  const [selected, setSelected] = useState<PriceProfile | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
@@ -62,22 +63,36 @@ export default function Kiosk() {
     setPhase((p) => (p === "loading" ? "idle" : p));
   }, [stationId]);
 
-  const loadProfiles = useCallback(async () => {
-    const { data } = await supabase.from("price_profiles").select("*").eq("active", true).order("amount");
-    const list = (data as PriceProfile[] | null) ?? [];
-    setProfiles(list);
-    setSelected((s) => s ?? list.find((p) => p.is_default) ?? list[0] ?? null);
-  }, []);
+  const loadQuote = useCallback(async () => {
+    if (!stationId) return;
+    const { data, error } = await supabase.rpc("effective_price", { p_station: stationId, p_device: null });
+    const snap = data as Record<string, unknown> | null;
+    if (error || !snap || snap.error || !snap.final_cents) {
+      setQuote(null);
+      setQuoteError((snap?.error as string) ?? error?.message ?? "PRICING_NOT_CONFIGURED");
+      return;
+    }
+    setQuoteError(null);
+    setQuote({
+      amount: Number(snap.amount),
+      currency: String(snap.currency),
+      profile_name: String(snap.profile_name ?? ""),
+      final_cents: Number(snap.final_cents),
+      profile_id: String(snap.profile_id ?? ""),
+      source: String(snap.source ?? ""),
+    });
+  }, [stationId]);
+
 
   useEffect(() => {
     loadStation();
-    loadProfiles();
+    loadQuote();
     supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
       .then(({ data }) => { setConfigured((data as { configured?: boolean })?.configured ?? false); loadStation(); })
       .catch(() => setConfigured(false));
     const i = setInterval(loadStation, 15000);
     return () => clearInterval(i);
-  }, [stationId, loadStation, loadProfiles]);
+  }, [stationId, loadStation, loadQuote]);
 
   // Tick for the countdown.
   useEffect(() => {
@@ -141,7 +156,7 @@ export default function Kiosk() {
     setPhase("starting");
     try {
       const { data: sess } = await supabase.functions.invoke("create-rental-session", {
-        body: { stationId, priceProfileId: selected?.id, language: lang },
+        body: { stationId, language: lang },
       });
       if (!(sess as { ok?: boolean })?.ok) { setPhase("error"); return; }
       const rentalSessionId = (sess as { session: { id: string } }).session.id;
@@ -219,23 +234,21 @@ export default function Kiosk() {
           )}
 
           {phase === "pricing" && (
-            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-2xl flex-col items-center gap-6">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl">Choisissez votre formule</h2>
-              <div className="grid w-full gap-4 sm:grid-cols-2">
-                {profiles.map((p) => (
-                  <button key={p.id} onClick={() => setSelected(p)}
-                    className={`glass liquid-border rounded-2xl p-6 text-left transition-all ${selected?.id === p.id ? "ring-2 ring-primary shadow-glow" : "opacity-80 hover:opacity-100"}`}>
-                    <div className="text-lg font-semibold">{p.name}</div>
-                    <div className="text-sm text-muted-foreground">{p.period_label ?? ""}</div>
-                    <div className="mt-3 text-3xl font-bold text-gradient-cyan">{fmtAmount(p.amount, p.currency)}</div>
-                  </button>
-                ))}
-                {profiles.length === 0 && <p className="text-muted-foreground">Aucune formule disponible.</p>}
-              </div>
+            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-md flex-col items-center gap-6">
+              <h2 className="font-display text-3xl font-bold sm:text-4xl">Confirmez votre location</h2>
+              {quote ? (
+                <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
+                  <div className="text-lg font-semibold">{quote.profile_name}</div>
+                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
+                  <div className="mt-2 text-sm text-muted-foreground">Tarif appliqué automatiquement à cette borne</div>
+                </div>
+              ) : (
+                <p className="text-warning">{quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}</p>
+              )}
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>Retour</Button>
-                <Button onClick={startRental} disabled={!selected} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
-                  Payer {selected ? fmtAmount(selected.amount, selected.currency) : ""}
+                <Button onClick={startRental} disabled={!quote} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
+                  Payer {quote ? fmtAmount(quote.amount, quote.currency) : ""}
                 </Button>
               </div>
             </motion.div>
@@ -250,10 +263,10 @@ export default function Kiosk() {
 
           {phase === "qr" && checkoutUrl && (
             <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
-              {selected && (
+              {quote && (
                 <div className="text-center">
-                  <div className="text-lg font-semibold">{selected.name}</div>
-                  <div className="text-3xl font-bold text-gradient-cyan">{fmtAmount(selected.amount, selected.currency)}</div>
+                  <div className="text-lg font-semibold">{quote.profile_name}</div>
+                  <div className="text-3xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
                 </div>
               )}
               <h2 className="font-display text-2xl font-bold sm:text-3xl">Scannez ce QR code avec votre téléphone pour payer</h2>

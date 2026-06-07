@@ -22,6 +22,7 @@ import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
 import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
 import AdminOrders from "./pages/admin/AdminOrders.tsx";
 import AdminPricing from "./pages/admin/AdminPricing.tsx";
+import AdminPricingDetail from "./pages/admin/AdminPricingDetail.tsx";
 import AdminShops from "./pages/admin/AdminShops.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="rentals" element={<AdminRentals />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="pricing" element={<AdminPricing />} />
+              <Route path="pricing/:id" element={<AdminPricingDetail />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="events" element={<AdminEvents />} />

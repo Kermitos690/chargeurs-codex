@@ -3,7 +3,7 @@
 // success triggers ChargeNow order + battery ejection. Never ejects on
 // redirect/success_url. Idempotent via webhook_events(external_id unique).
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog } from "../_shared/db.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
@@ -39,6 +39,10 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
       state: "needs_support", failure_code: "AMOUNT_MISMATCH",
       failure_message: `Montant payé ${paidCents} ${paidCur} ≠ attendu ${expectedCents} ${expectedCur}.`,
     }).eq("id", session.id);
+    await auditLog(db, {
+      action: "pricing.error", target: session.id,
+      data: { code: "PAID_AMOUNT_MISMATCH", paidCents, expectedCents, paidCur, expectedCur },
+    });
     return;
   }
 
@@ -51,6 +55,19 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
     amount_paid: paidCents / 100,
     paid_at: new Date().toISOString(),
   }).eq("id", session.id).in("state", ["checkout_created", "created", "payment_processing"]).select();
+
+  if (updated && updated.length > 0) {
+    await auditLog(db, {
+      action: "stripe.payment.succeeded", target: session.id,
+      data: {
+        paid_cents: paidCents, currency: paidCur,
+        price_profile_id: session.price_profile_id, price_profile_version: session.price_profile_version,
+        pricing_snapshot_hash: session.pricing_snapshot_hash ?? cs.metadata?.pricing_snapshot_hash ?? null,
+        stripe_metadata_hash: cs.metadata?.pricing_snapshot_hash ?? null,
+      },
+    });
+  }
+
 
   // Trigger ChargeNow order + ejection ONLY once, after confirmed payment.
   if (updated && updated.length > 0) {
@@ -138,8 +155,11 @@ Deno.serve(async (req) => {
           await db.from("payments").update({
             status: "refunded", refund_id: ch.id, refunded_at: new Date().toISOString(),
           }).eq("stripe_payment_intent_id", piId);
-          await db.from("rental_sessions").update({ state: "refunded" })
-            .eq("stripe_payment_intent_id", piId);
+          const { data: refSessions } = await db.from("rental_sessions").update({ state: "refunded" })
+            .eq("stripe_payment_intent_id", piId).select("id");
+          for (const s of refSessions ?? []) {
+            await auditLog(db, { action: "stripe.refunded", target: s.id, data: { payment_intent: piId, charge: ch.id, amount_refunded: ch.amount_refunded } });
+          }
         }
         break;
       }

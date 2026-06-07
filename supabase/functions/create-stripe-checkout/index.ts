@@ -4,7 +4,7 @@
 // The amount is taken from the server-side rental_session.amount_expected.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
@@ -49,16 +49,41 @@ Deno.serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
     const base = APP_URL || origin || "";
-    // Price is server-side ONLY — never trust the client, never a demo fallback.
-    const resolvedAmount = session.amount_expected ?? session.amount ?? null;
-    if (resolvedAmount == null || Number(resolvedAmount) <= 0) {
+
+    // Price is server-side ONLY — taken from the frozen pricing snapshot.
+    const snap = (session.pricing_snapshot ?? null) as Record<string, unknown> | null;
+    if (!snap || typeof snap !== "object") {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "MISSING_SNAPSHOT" } });
       return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const amount = Number(resolvedAmount);
-    const amountCents = Math.round(amount * 100);
-    const currency = (session.currency ?? "CHF").toLowerCase();
+    // Verify the snapshot was not tampered with (hash must match).
+    const recomputedHash = await snapshotHash(snap);
+    if (session.pricing_snapshot_hash && recomputedHash !== session.pricing_snapshot_hash) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_HASH_MISMATCH" } });
+      return new Response(JSON.stringify({ ok: false, error: "SNAPSHOT_INVALID" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    // Snapshot currency must match the session currency.
+    const snapCurrency = String(snap.currency ?? "").toUpperCase();
+    const sessCurrency = String(session.currency ?? "CHF").toUpperCase();
+    if (snapCurrency && snapCurrency !== sessCurrency) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "CURRENCY_MISMATCH", snapCurrency, sessCurrency } });
+      return new Response(JSON.stringify({ ok: false, error: "CURRENCY_MISMATCH" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const finalCents = Number(snap.final_cents ?? NaN);
+    const expectedCents = Math.round(Number(session.amount_expected ?? 0) * 100);
+    if (!Number.isFinite(finalCents) || finalCents <= 0 || finalCents !== expectedCents) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "AMOUNT_MISMATCH", finalCents, expectedCents } });
+      return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const amount = finalCents / 100;
+    const amountCents = finalCents;
+    const currency = sessCurrency.toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
+
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -78,9 +103,12 @@ Deno.serve(async (req) => {
         rental_session_id: session.id,
         public_session_code: session.public_session_code ?? "",
         station_id: session.station_id,
+        kiosk_device_id: session.kiosk_device_id ?? "",
         cabinet_sn: session.cabinet_id ?? "",
         shop_id: session.shop_id ?? "",
         price_profile_id: session.price_profile_id ?? "",
+        price_profile_version: String(session.price_profile_version ?? ""),
+        pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
         expected_amount: String(amount),
         expected_currency: currency,
       },
@@ -108,6 +136,18 @@ Deno.serve(async (req) => {
       stripe_session_id: checkout.id,
       amount: amount, currency: session.currency, status: "pending",
     }, { onConflict: "stripe_session_id" });
+
+    await auditLog(db, {
+      action: "stripe.checkout.created",
+      target: session.id,
+      data: {
+        stripe_checkout_session_id: checkout.id,
+        station_id: session.station_id, kiosk_device_id: session.kiosk_device_id ?? null,
+        price_profile_id: session.price_profile_id, price_profile_version: session.price_profile_version,
+        amount_cents: amountCents, currency,
+        pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
+      },
+    });
 
     return new Response(JSON.stringify({
       ok: true, checkout_url: checkout.url, checkout_id: checkout.id,
