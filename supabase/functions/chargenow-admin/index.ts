@@ -4,7 +4,7 @@
 //   { confirm:true } is sent.
 // - Records every live result into public.api_coverage as proof.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
+import { adminClient, logApi, requireAdmin, requireSuperAdmin } from "../_shared/db.ts";
 import * as cn from "../_shared/chargenow.ts";
 
 const DANGEROUS = new Set([
