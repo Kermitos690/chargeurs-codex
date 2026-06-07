@@ -20,6 +20,10 @@ import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminMaintenance from "./pages/admin/AdminMaintenance.tsx";
 import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
 import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
+import AdminOrders from "./pages/admin/AdminOrders.tsx";
+import AdminPricing from "./pages/admin/AdminPricing.tsx";
+import AdminShops from "./pages/admin/AdminShops.tsx";
+import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +47,10 @@ const App = () => (
               <Route path="stations/:stationId" element={<AdminStationDetail />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="rentals" element={<AdminRentals />} />
+              <Route path="orders" element={<AdminOrders />} />
+              <Route path="pricing" element={<AdminPricing />} />
+              <Route path="shops" element={<AdminShops />} />
+              <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
