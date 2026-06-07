@@ -91,6 +91,21 @@ export default function Kiosk() {
     if (phase === "qr" && expiresAt && now >= expiresAt) setPhase("expired");
   }, [phase, expiresAt, now]);
 
+  // Auto return to home after success (kiosk loop).
+  useEffect(() => {
+    if (phase !== "success") return;
+    const t = setTimeout(() => reset(), 12000);
+    return () => clearTimeout(t);
+  }, [phase]);
+
+  // Best-effort fullscreen on first user interaction (kiosk tablets).
+  const goFullscreen = useCallback(() => {
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+    if (!document.fullscreenElement) {
+      (el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.())?.catch(() => {});
+    }
+  }, []);
+
   const applyState = useCallback((s: string, slot: number | null) => {
     if (s === "ejected" || s === "active_rental" || s === "battery_taken") {
       setSlotNum(slot); setPhase("success"); return;
@@ -192,7 +207,7 @@ export default function Kiosk() {
                 </div>
               </div>
               {canRent ? (
-                <Button onClick={() => setPhase("pricing")} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
+                <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
                   Louer une batterie
                 </Button>
               ) : (
