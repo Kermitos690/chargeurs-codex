@@ -86,7 +86,6 @@ export default function AdminPartners() {
       legal_name: editing.legal_name.trim(),
       trade_name: editing.trade_name || null,
       partner_type: editing.partner_type || "company",
-      address: (editing as Partner).city ? (editing as any).address ?? null : (editing as any).address ?? null,
       city: editing.city || null,
       country: editing.country || null,
       vat_number: editing.vat_number || null,
