@@ -214,6 +214,7 @@ export type Database = {
       cabinet_events: {
         Row: {
           event_type: string | null
+          external_event_id: string | null
           id: string
           payload: Json | null
           received_at: string
@@ -222,6 +223,7 @@ export type Database = {
         }
         Insert: {
           event_type?: string | null
+          external_event_id?: string | null
           id?: string
           payload?: Json | null
           received_at?: string
@@ -230,6 +232,7 @@ export type Database = {
         }
         Update: {
           event_type?: string | null
+          external_event_id?: string | null
           id?: string
           payload?: Json | null
           received_at?: string
