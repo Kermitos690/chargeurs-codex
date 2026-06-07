@@ -42,7 +42,8 @@ Deno.serve(async (req) => {
 
     // 2. Optionally create ChargeNow rent order (best-effort; tradeNo stored)
     if (isChargeNowConfigured()) {
-      const res = await orderCreate({ cabinetid: cabinetId, deviceId: cabinetId });
+      const callbackURL = `${Deno.env.get("SUPABASE_URL")}/functions/v1/chargenow-rent-callback`;
+      const res = await orderCreate({ deviceId: cabinetId, callbackURL });
       await logApi(db, {
         service: "chargenow", endpoint: "/rent/order/create", method: "POST",
         status_code: res.status, request: { cabinetId }, response: res.data, error: res.error,
