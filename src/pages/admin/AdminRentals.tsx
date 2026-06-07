@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DataTable, StateChip } from "@/components/admin/DataTable";
 
 export default function AdminRentals() {
-  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("rental_sessions").select("*").order("created_at", { ascending: false }).limit(100)
       .then(({ data }) => setRows(data ?? []));

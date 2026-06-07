@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { DataTable } from "@/components/admin/DataTable";
 
 export default function AdminEvents() {
-  const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("cabinet_events").select("*").order("received_at", { ascending: false }).limit(100)
       .then(({ data }) => setRows(data ?? []));

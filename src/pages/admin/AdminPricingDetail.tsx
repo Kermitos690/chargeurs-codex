@@ -9,7 +9,7 @@ import { Loader2, ArrowLeft, Save, FlaskConical, ExternalLink } from "lucide-rea
 
 const chf = (c: number) => (Number(c) / 100).toFixed(2);
 
-async function call(action: string, payload: Record<string, unknown> = {}) {
+async function call(action: string, payload: any = {}) {
   const { data, error } = await supabase.functions.invoke("pricing-admin", { body: { action, ...payload } });
   if (error) throw new Error(error.message);
   if (!(data as { ok?: boolean })?.ok) throw new Error((data as { error?: string })?.error ?? "Erreur");
@@ -36,27 +36,27 @@ const RULES: { key: string; label: string; money?: boolean }[] = [
 
 export default function AdminPricingDetail() {
   const { id } = useParams();
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [form, setForm] = useState<Record<string, unknown>>({});
+  const [data, setData] = useState<any>(null);
+  const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [assign, setAssign] = useState({ scope: "station", scope_ref: "" });
   const [sim, setSim] = useState({ minutes: "30", return_state: "normal" });
-  const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
+  const [simResult, setSimResult] = useState<any>(null);
 
   const load = useCallback(async () => {
-    try { const d = await call("get", { id }); setData(d); setForm({ ...((d as Record<string, Record<string, unknown>>).profile) }); }
+    try { const d = await call("get", { id }); setData(d); setForm({ ...((d as Record<string, any>).profile) }); }
     catch (e) { toast.error(String((e as Error).message)); }
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
   if (!data) return <Loader2 className="h-6 w-6 animate-spin" />;
   const p = data.profile;
-  const firstStation = data.assignments.find((a: Record<string, unknown>) => a.scope === "station" && a.active)?.scope_ref;
+  const firstStation = data.assignments.find((a: any) => a.scope === "station" && a.active)?.scope_ref;
 
   const save = async () => {
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = { id, name: form.name, description: form.description, currency: form.currency, rounding: form.rounding, valid_to: form.valid_to || null, valid_from: form.valid_from || null, priority: Number(form.priority) || 0 };
+      const payload: any = { id, name: form.name, description: form.description, currency: form.currency, rounding: form.rounding, valid_to: form.valid_to || null, valid_from: form.valid_from || null, priority: Number(form.priority) || 0 };
       for (const r of RULES) payload[r.key] = Number(form[r.key]) || 0;
       await call("update", payload);
       toast.success("Tarif mis à jour (nouvelle version)"); load();
@@ -74,7 +74,7 @@ export default function AdminPricingDetail() {
     try {
       const end = new Date(Date.now() + Number(sim.minutes) * 60000).toISOString();
       const d = await call("simulate", { station: firstStation, end, return_state: sim.return_state });
-      setSimResult((d as { snapshot: Record<string, unknown> }).snapshot);
+      setSimResult((d as { snapshot: any }).snapshot);
     } catch (e) { toast.error(String((e as Error).message)); }
   };
 
@@ -128,7 +128,7 @@ export default function AdminPricingDetail() {
       <section className="glass liquid-border rounded-2xl p-5">
         <h2 className="mb-3 font-semibold">Affectations (priorité : borne &gt; station &gt; boutique &gt; défaut)</h2>
         <DataTable columns={["Portée", "Référence", "Active", ""]} empty="Aucune affectation"
-          rows={data.assignments.map((a: Record<string, unknown>) => [a.scope, a.scope_ref, a.active ? "oui" : "non",
+          rows={data.assignments.map((a: any) => [a.scope, a.scope_ref, a.active ? "oui" : "non",
             <Button size="sm" variant="destructive" onClick={() => unassign(a.id)}>retirer</Button>])} />
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="w-36">
@@ -163,19 +163,19 @@ export default function AdminPricingDetail() {
         <section className="glass liquid-border rounded-2xl p-5">
           <h2 className="mb-3 font-semibold">Historique des versions</h2>
           <DataTable columns={["Version", "Prix/période", "Date"]} empty="—"
-            rows={data.versions.map((v: Record<string, unknown>) => [`v${v.version}`, v.snapshot?.price_per_period_cents != null ? chf(v.snapshot.price_per_period_cents) : "—", new Date(v.created_at).toLocaleString()])} />
+            rows={data.versions.map((v: any) => [`v${v.version}`, v.snapshot?.price_per_period_cents != null ? chf(v.snapshot.price_per_period_cents) : "—", new Date(v.created_at).toLocaleString()])} />
         </section>
         <section className="glass liquid-border rounded-2xl p-5">
           <h2 className="mb-3 font-semibold">Locations récentes</h2>
           <DataTable columns={["Station", "État", "Montant", "Date"]} empty="Aucune location"
-            rows={data.rentals.map((r: Record<string, unknown>) => [r.station_id, <StateChip state={r.state} />, `${Number(r.amount_expected ?? 0).toFixed(2)} ${r.currency}`, new Date(r.created_at).toLocaleDateString()])} />
+            rows={data.rentals.map((r: any) => [r.station_id, <StateChip state={r.state} />, `${Number(r.amount_expected ?? 0).toFixed(2)} ${r.currency}`, new Date(r.created_at).toLocaleDateString()])} />
         </section>
       </div>
 
       <section className="glass liquid-border rounded-2xl p-5">
         <h2 className="mb-3 font-semibold">Journal des modifications</h2>
         <DataTable columns={["Action", "Acteur", "Date"]} empty="—"
-          rows={data.logs.map((l: Record<string, unknown>) => [l.action, l.actor ?? "système", new Date(l.created_at).toLocaleString()])} />
+          rows={data.logs.map((l: any) => [l.action, l.actor ?? "système", new Date(l.created_at).toLocaleString()])} />
       </section>
     </div>
   );

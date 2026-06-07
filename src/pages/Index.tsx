@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, MonitorSmartphone, ShieldCheck, Zap } from "lucide-react";
 
 export default function Index() {
-  const [stations, setStations] = useState<Record<string, unknown>[]>([]);
+  const [stations, setStations] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("stations").select("station_id, name, online").order("station_id").then(({ data }) => setStations(data ?? []));
   }, []);

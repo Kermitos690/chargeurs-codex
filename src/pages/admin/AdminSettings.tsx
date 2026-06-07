@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Loader2, ArrowRight } from "lucide-react";
 
 export default function AdminSettings() {
-  const [prices, setPrices] = useState<Record<string, unknown>[]>([]);
+  const [prices, setPrices] = useState<any[]>([]);
   const [lang, setLang] = useState("fr");
   const [saving, setSaving] = useState(false);
 
@@ -14,7 +14,7 @@ export default function AdminSettings() {
     supabase.from("price_profiles").select("id,name,price_per_period_cents,period_minutes,currency,is_default,active")
       .order("priority", { ascending: false }).then(({ data }) => setPrices(data ?? []));
     supabase.from("kiosk_settings").select("*").eq("key", "default_language").maybeSingle()
-      .then(({ data }) => setLang(((data?.value as Record<string, unknown>)?.value as string) ?? "fr"));
+      .then(({ data }) => setLang((data?.value as any)?.value ?? "fr"));
   }, []);
 
   const setLanguage = async (l: string) => {
@@ -25,9 +25,9 @@ export default function AdminSettings() {
       body: { actionType: "set_default_language", language: l },
     });
     setSaving(false);
-    if (error || !(data as Record<string, unknown>)?.ok) {
+    if (error || !(data as any)?.ok) {
       setLang(prev);
-      toast.error((data as Record<string, unknown>)?.error ?? "Échec de la mise à jour");
+      toast.error((data as any)?.error ?? "Échec de la mise à jour");
     } else {
       toast.success("Langue par défaut : " + l.toUpperCase());
     }

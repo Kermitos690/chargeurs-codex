@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils";
 
 export default function AdminStationDetail() {
   const { stationId } = useParams();
-  const [station, setStation] = useState<Record<string, unknown> | null>(null);
-  const [slots, setSlots] = useState<Record<string, unknown>[]>([]);
-  const [events, setEvents] = useState<Record<string, unknown>[]>([]);
-  const [rental, setRental] = useState<Record<string, unknown> | null>(null);
+  const [station, setStation] = useState<any>(null);
+  const [slots, setSlots] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [rental, setRental] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
@@ -28,7 +28,7 @@ export default function AdminStationDetail() {
   const sync = async () => {
     setSyncing(true);
     const { data } = await supabase.functions.invoke("sync-cabinet-status", { body: { stationId } });
-    if ((data as Record<string, unknown>)?.configured === false) toast.error("API ChargeNow non configurée");
+    if ((data as any)?.configured === false) toast.error("API ChargeNow non configurée");
     else toast.success("Synchronisé");
     await load(); setSyncing(false);
   };

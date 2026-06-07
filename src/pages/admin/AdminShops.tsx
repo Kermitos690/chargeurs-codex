@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw } from "lucide-react";
 
 export default function AdminShops() {
-  const [shops, setShops] = useState<Record<string, unknown> | null>(null);
+  const [shops, setShops] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
@@ -15,7 +15,7 @@ export default function AdminShops() {
     setShops(data);
   };
 
-  const records = (shops?.data?.data ?? shops?.data ?? []) as Record<string, unknown>[];
+  const records = (shops?.data?.data ?? shops?.data ?? []) as any[];
 
   return (
     <div className="animate-fade-in space-y-6">
