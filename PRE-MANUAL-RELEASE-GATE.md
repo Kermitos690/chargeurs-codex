@@ -117,3 +117,46 @@ configuration externe — couverts par MANUAL-VALIDATION-PLAN.md.
 
 ## Verdict
 NO-GO POUR PHASE MANUELLE — tant que les catégories automatisables ci-dessus ne sont pas couvertes par des tests reproductibles. Les deux blocants durs (accès statut par UUID seul ; anti-rejeu non atomique) sont désormais corrigés et prouvés.
+
+---
+
+# CONTRÔLE CONTRADICTOIRE v2 (2026-06-07) — tests d'autorisation exécutés
+
+## Matrice de rôles (exécutée avec utilisateurs isolés créés+supprimés, 0 token loggé)
+| endpoint | anon | norole | viewer | staff | operator | admin | super_admin |
+|---|---|---|---|---|---|---|---|
+| sync-cabinet-status | 403 | 403 | 403 | 403 | 403 | 200 | 200 |
+| admin-maintenance-action | 403 | 403 | 403 | 403 | 403 | 400(business) | 400 |
+| rental-admin-action | 403 | 403 | 403 | 403 | 400(business) | 400 | 400 |
+| close-rental-order | 403 | 403 | 403 | 403 | 403 | 404(business) | 404 |
+| chargenow-admin | 403 | 403 | 403 | 403 | 403 | 400(business) | 400 |
+| kiosk-admin | 403 | 403 | 403 | 403 | 403 | 400(business) | 400 |
+| pricing-admin | 403 | 403 | 403 | 403 | 403 | 400(business) | 400 |
+| create-rental-session | 404(station) — flux kiosk public, station bidon | idem toutes lignes |
+| create-stripe-checkout | 404(session) — id bidon, aucun appel Stripe réel | idem toutes lignes |
+
+Correction appliquée: `rental-admin-action` validait les params AVANT l'autorisation (non-admins recevaient 400 au lieu de 403). Ajout d'un gate `isOperator` précoce → les non-opérateurs reçoivent désormais 403. Refund reste réservé super_admin.
+
+## Kiosk (kiosk_quote, négatifs exécutés)
+- token null/court → KIOSK_AUTH_REQUIRED ; token bidon (longueur ok) → KIOSK_AUTH_INVALID.
+- kiosk_session_status: UUID seul INSUFFISANT (réponse `null`) ; UUID+public_session_code requis (bearer secret). L'UUID est désormais un identifiant, PAS un mécanisme d'autorisation.
+
+## Callback fail-closed + idempotence atomique (exécuté)
+- Sans secret: normal / oversize(70KB) / JSON invalide → tous 503 (gate avant parsing). Les autres branches (timestamp/dedup signé) sont inatteignables tant que CHARGENOW_EVENT_SECRET n'est pas configuré (blocant config externe).
+- Idempotence ATOMIQUE prouvée: 2 INSERT avec même external_event_id → 2e rejeté (23505), 1 seule ligne. Fixture supprimée (count cabinet_events = 1 baseline).
+
+## Stripe (négatif exécuté, aucun paiement réel)
+- stripe-webhook signature invalide → 400 INVALID_SIGNATURE avant tout effet de bord.
+- Remboursement: idempotence prouvée par code (garde `status=refunded` + Stripe `idempotencyKey=refund_<id>`) → deux remboursements concurrents dédupliqués par Stripe.
+
+## Quality gates (exécuté)
+- tsc --noEmit: exit 0. vitest: 14/14 PASS. psql test:db: ALL PASSED. eslint: 48 erreurs (no-explicit-any) — non bloquant fonctionnel.
+
+## Catégories automatisables encore NON couvertes (raison du verdict)
+- Suite Stripe simulée complète (checkout réussi/expiré, webhook signé valide, dup, hors-ordre, montant/devise, hash snapshot, remboursement partiel) : nécessite un harnais de mock signé non construit (clé Stripe LIVE → interdit de simuler en réel).
+- Mock contractuel ChargeNow (auth, online/offline, éjection, BATTERY_IN/OUT, tradeNo, giveback, orphelin) : non construit.
+- Tests de résilience (timeouts, réponse non-JSON, callback perdu, interruption après écriture, refresh pendant paiement/éjection) : non construits.
+- Branches signées du callback (bon secret, fenêtre de rejeu) : bloquées par config externe (CHARGENOW_EVENT_SECRET absent).
+
+## Verdict v2
+NO-GO POUR PHASE MANUELLE — tous les blocants de sécurité durs sont fermés et prouvés ; le NO-GO subsiste uniquement par manque de couverture de tests automatisés (mocks Stripe/ChargeNow + résilience), pas par défaut exploitable connu.
