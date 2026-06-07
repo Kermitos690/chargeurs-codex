@@ -48,6 +48,7 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
     stripe_payment_intent_id: cs.payment_intent as string,
     stripe_customer_id: (cs.customer as string) ?? null,
     stripe_payment_method_type: (cs.payment_method_types ?? [])[0] ?? null,
+    amount_paid: paidCents / 100,
     paid_at: new Date().toISOString(),
   }).eq("id", session.id).in("state", ["checkout_created", "created", "payment_processing"]).select();
 
