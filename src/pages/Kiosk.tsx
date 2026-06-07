@@ -207,7 +207,7 @@ export default function Kiosk() {
                 </div>
               </div>
               {canRent ? (
-                <Button onClick={() => setPhase("pricing")} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
+                <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
                   Louer une batterie
                 </Button>
               ) : (
