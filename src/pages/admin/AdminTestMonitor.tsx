@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Download, FileJson, FileText, Search } from "lucide-react";
+import MutationTestMonitor from "@/components/admin/MutationTestMonitor";
 
 // ---------------------------------------------------------------------------
 // Staging manual-validation monitor.
