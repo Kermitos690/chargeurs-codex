@@ -87,23 +87,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ---- Best-effort idempotency (skip duplicates by event id) ----
+    // ---- Atomic idempotency via a UNIQUE DB constraint ----
+    // We rely on the partial UNIQUE index cabinet_events_external_event_id_uniq.
+    // Two simultaneous duplicate callbacks race on the INSERT; exactly one wins,
+    // the other gets a unique-violation (23505) and is treated as a no-op.
     const idKey = ["messageId", "eventId", "msgId", "id"].find((k) => payload[k] != null) ?? null;
     const eventId = idKey ? String(payload[idKey]) : null;
-    if (eventId) {
-      const { data: dup } = await db.from("cabinet_events")
-        .select("id").filter(`payload->>${idKey}`, "eq", eventId).limit(1);
-      if (dup && dup[0]) {
-        return j({ received: true, deduplicated: true }, 200);
-      }
-    }
 
-    await db.from("cabinet_events").insert({
+    const { error: insErr } = await db.from("cabinet_events").insert({
       station_id: stationId,
       event_type: eventType,
       severity: SEVERITY[eventType] ?? "info",
       payload,
+      external_event_id: eventId,
     });
+    if (insErr) {
+      // 23505 = unique_violation → duplicate event already processed.
+      if ((insErr as { code?: string }).code === "23505") {
+        return j({ received: true, deduplicated: true }, 200);
+      }
+      return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
+    }
 
     if (stationId) {
       if (eventType === "CABINET_ONLINE") {
