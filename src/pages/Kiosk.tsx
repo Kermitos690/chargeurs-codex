@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw,
+  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
@@ -12,6 +12,10 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { useKioskPwa } from "@/pwa/useKioskPwa";
+import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/kioskLock";
+import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -54,6 +58,29 @@ export default function Kiosk() {
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
+  const [lockedStation, setLockedStation] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
+
+  const net = useOnlineStatus();
+  const offline = net === "offline";
+  const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
+
+  // A payment / rental is in progress — block reloads, back navigation and
+  // disruptive auto-updates during these phases.
+  const busy = ["pricing", "starting", "qr", "waitpay"].includes(phase);
+
+  // Hidden diagnostics trigger: 5 quick taps on the logo.
+  const onLogoTap = useCallback(() => {
+    const nowMs = Date.now();
+    const r = tapRef.current;
+    r.n = nowMs - r.t < 600 ? r.n + 1 : 1;
+    r.t = nowMs;
+    if (r.n >= 5) { r.n = 0; setShowDiag(true); }
+  }, []);
+
+
   
 
   const loadStation = useCallback(async () => {
@@ -100,8 +127,52 @@ export default function Kiosk() {
     });
   }, [stationId]);
 
+  // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
+  // different cabinet id in the URL is treated as a mismatch (no silent switch).
+  useEffect(() => {
+    if (!isValidStationId(stationId)) { setMismatch(false); setLockedStation(getLockedStation()); return; }
+    const effective = lockStationIfUnset(stationId);
+    setLockedStation(effective);
+    setMismatch(!!effective && effective !== stationId);
+  }, [stationId]);
+
+  // Enable kiosk-mode (no zoom / select / pull-to-refresh) on the document.
+  useEffect(() => {
+    document.documentElement.classList.add("kiosk-mode");
+    const blockGesture = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", blockGesture);
+    document.addEventListener("contextmenu", blockGesture);
+    return () => {
+      document.documentElement.classList.remove("kiosk-mode");
+      document.removeEventListener("gesturestart", blockGesture);
+      document.removeEventListener("contextmenu", blockGesture);
+    };
+  }, []);
+
+  // Prevent accidental back / reload during an active payment or rental.
+  useEffect(() => {
+    if (!busy) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const onPopState = () => { window.history.pushState(null, "", window.location.href); };
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [busy]);
+
+  // Auto-apply a pending app update only when idle (no rental / payment).
+  useEffect(() => {
+    if (needRefresh && !busy && (phase === "idle" || phase === "loading")) {
+      const t = setTimeout(() => { applyUpdate(); }, 4000);
+      return () => clearTimeout(t);
+    }
+  }, [needRefresh, busy, phase, applyUpdate]);
 
   useEffect(() => {
+
     loadStation();
     loadQuote();
     supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
@@ -159,6 +230,8 @@ export default function Kiosk() {
   }, [sessionId, publicCode, phase, applyState]);
 
   const startRental = async () => {
+    // Never create a rental/payment without a confirmed connection.
+    if (offline) { setStatusMsg({ title: "Connexion indisponible", sub: "Vérifiez la connexion Internet de la borne avant de payer." }); setPhase("error"); return; }
     setPhase("starting");
     try {
       const { data: sess } = await supabase.functions.invoke("create-rental-session", {
@@ -186,19 +259,76 @@ export default function Kiosk() {
   };
 
   const available = station?.rentable_count ?? 0;
-  const canRent = station?.online && available > 0 && configured;
+  const canRent = station?.online && available > 0 && configured && !offline;
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
 
+  // Cabinet mismatch: this tablet is locked to another borne. Refuse to operate
+  // and offer to return to the locked cabinet (no silent cross-borne switch).
+  if (mismatch && lockedStation) {
+    return (
+      <div className="relative grid min-h-screen place-items-center px-6 text-center">
+        <LiquidBackground />
+        <div className="glass-strong liquid-border flex max-w-md flex-col items-center gap-5 rounded-3xl p-8">
+          <div className="grid h-20 w-20 place-items-center rounded-full bg-warning/20"><Lock className="h-10 w-10 text-warning" /></div>
+          <h1 className="font-display text-2xl font-bold">Borne verrouillée</h1>
+          <p className="text-muted-foreground">
+            Cette tablette est configurée pour la borne <span className="font-mono text-foreground">{lockedStation}</span>,
+            mais l'URL demande <span className="font-mono text-foreground">{stationId}</span>.
+          </p>
+          <Button onClick={() => { window.location.href = `/kiosk/${lockedStation}`; }} className="rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
+            Revenir à la borne {lockedStation}
+          </Button>
+          <button onClick={onLogoTap} className="text-xs text-muted-foreground/60">·</button>
+        </div>
+      </div>
+    );
+  }
+
+
   return (
     <div className="relative min-h-screen overflow-hidden px-6 py-8 sm:px-12">
       <LiquidBackground />
+
+      {/* Connectivity banner — blocks confidence in payment when offline. */}
+      {offline && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive/90 py-2 text-sm font-semibold text-destructive-foreground">
+          <WifiOff className="h-4 w-4" />Connexion Internet indisponible — paiement temporairement impossible
+        </div>
+      )}
+
+      {/* Discreet update status: only auto-applies when idle. */}
+      {needRefresh && !offline && (
+        <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-center gap-2 bg-primary/80 py-1.5 text-xs font-medium text-primary-foreground">
+          <RefreshCw className="h-3.5 w-3.5" />
+          {busy ? "Mise à jour en attente (appliquée à la fin de l'opération)" : "Mise à jour en cours…"}
+        </div>
+      )}
+
+      {showDiag && (
+        <KioskDiagnostics
+          stationId={stationId}
+          lockedStation={lockedStation}
+          lastSync={station?.last_sync_at ?? null}
+          net={net}
+          chargenowConfigured={configured}
+          stationOnline={station?.online ?? null}
+          swUrl={swUrl}
+          needRefresh={needRefresh}
+          onApplyUpdate={applyUpdate}
+          onClose={() => setShowDiag(false)}
+        />
+      )}
+
       <header className="flex items-center justify-between">
-        <BrandLogo size="md" />
+        <button onClick={onLogoTap} aria-label="Chargeurs.ch" className="cursor-default">
+          <BrandLogo size="md" />
+        </button>
         <LanguageSwitcher />
       </header>
+
 
       <main className="mx-auto flex min-h-[80vh] max-w-5xl flex-col items-center justify-center text-center">
         <AnimatePresence mode="wait">
@@ -233,7 +363,7 @@ export default function Kiosk() {
                 </Button>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {!configured ? "API non configurée" : !station.online ? "Borne hors ligne" : "Aucune batterie disponible"}
+                  {offline ? "Connexion indisponible" : !configured ? "API non configurée" : !station.online ? "Borne hors ligne" : "Aucune batterie disponible"}
                 </div>
               )}
             </motion.div>

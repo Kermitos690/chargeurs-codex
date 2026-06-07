@@ -7,6 +7,7 @@ import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Kiosk from "./pages/Kiosk.tsx";
+import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import AdminLayout from "./pages/admin/AdminLayout.tsx";
@@ -38,6 +39,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
             <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
