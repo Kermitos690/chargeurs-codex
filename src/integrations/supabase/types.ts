@@ -850,9 +850,11 @@ export type Database = {
           ejected_at: string | null
           error_code: string | null
           error_message: string | null
+          expires_at: string | null
           failure_code: string | null
           failure_message: string | null
           id: string
+          idempotency_key: string | null
           kiosk_device_id: string | null
           paid_at: string | null
           price_profile_id: string | null
@@ -892,9 +894,11 @@ export type Database = {
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          expires_at?: string | null
           failure_code?: string | null
           failure_message?: string | null
           id?: string
+          idempotency_key?: string | null
           kiosk_device_id?: string | null
           paid_at?: string | null
           price_profile_id?: string | null
@@ -934,9 +938,11 @@ export type Database = {
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null
+          expires_at?: string | null
           failure_code?: string | null
           failure_message?: string | null
           id?: string
+          idempotency_key?: string | null
           kiosk_device_id?: string | null
           paid_at?: string | null
           price_profile_id?: string | null
@@ -1405,6 +1411,7 @@ export type Database = {
         Args: { p_device: string; p_station: string }
         Returns: Json
       }
+      expire_stale_rental_sessions: { Args: never; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
