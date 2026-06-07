@@ -58,18 +58,23 @@ function j(body: unknown, status: number) {
   });
 }
 
-Deno.serve(async (req) => {
+// Core request handler — exported and dependency-injected so the full signed
+// branch (secret gate, replay window, size cap, atomic dedup, state machine)
+// can be exercised by the automated integration harness with a fake db and a
+// temporary in-process secret. Production wires it to the real admin client.
+export async function handleEvent(
+  req: Request,
+  db: SupabaseClient,
+  env: (k: string) => string | undefined = (k) => Deno.env.get(k),
+): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  const db = adminClient();
 
-  const expectedSecret = Deno.env.get("CHARGENOW_EVENT_SECRET");
-  const allowUnsigned = unsignedAllowed();
+  const expectedSecret = env("CHARGENOW_EVENT_SECRET");
+  const allowUnsigned = unsignedAllowed(env);
 
   // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
     if (!allowUnsigned) {
-      // No secret AND unsigned mode not explicitly enabled in a NON-production
-      // runtime → refuse everything (in production this is always the case).
       return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "CHARGENOW_EVENT_SECRET not configured" }, 503);
     }
     // else: explicit dev override in a non-production runtime — proceed unauthenticated.
@@ -155,4 +160,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     return j({ ok: false, error: String(e) }, 500);
   }
-});
+}
+
+Deno.serve((req) => handleEvent(req, adminClient()));
