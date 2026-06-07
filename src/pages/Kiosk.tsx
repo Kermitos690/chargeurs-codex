@@ -268,6 +268,7 @@ export default function Kiosk() {
   };
 
   const reset = () => {
+    idemRef.current = null;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null);
     loadStation();
