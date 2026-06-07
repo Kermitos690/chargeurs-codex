@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { actionType, stationId, slotNum, eventPushUrl } = await req.json();
+    const { actionType, stationId, slotNum, eventPushUrl, language } = await req.json();
 
     // Real backend health probe (no secrets exposed, only booleans).
     if (actionType === "health_check") {
@@ -34,6 +34,20 @@ Deno.serve(async (req) => {
         health: { stripe, webhook, webhookSecret, chargenow, webhookEvents: webhookEvents ?? 0 },
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // Default kiosk language — admin-gated + audited (no longer a direct client write).
+    if (actionType === "set_default_language") {
+      const lang = String(language ?? "").toLowerCase();
+      if (!["fr", "en", "de"].includes(lang)) {
+        return new Response(JSON.stringify({ ok: false, error: "INVALID_LANGUAGE" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      await db.from("kiosk_settings").update({ value: { value: lang } }).eq("key", "default_language");
+      await logApi(db, { service: "admin", endpoint: "set_default_language", method: "POST", status_code: 200, request: { lang, by: adminId } });
+      return new Response(JSON.stringify({ ok: true, language: lang }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
 
     if (!isChargeNowConfigured() && actionType !== "test_auth") {
       return new Response(JSON.stringify({ ok: false, error: "CHARGENOW_NOT_CONFIGURED" }),
