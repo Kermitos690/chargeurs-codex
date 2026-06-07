@@ -17,12 +17,21 @@ export type Database = {
       api_coverage: {
         Row: {
           backend_fn: string | null
+          business_function: string | null
+          category: string | null
           code: string
+          consumer: string | null
           dangerous: boolean
+          has_test: boolean
           http_method: string
+          idempotent: boolean | null
+          integration_state: string | null
+          internal_route: string | null
           last_error: string | null
           live_result: Json | null
           live_test_status: string
+          logging: string | null
+          missing_test: string | null
           mock_supported: boolean
           mock_test_status: string
           module: string
@@ -30,19 +39,32 @@ export type Database = {
           params: string | null
           path: string
           proof: Json | null
+          proof_state: string | null
+          retry_policy: string | null
+          risk: string | null
           seq: number
+          test_ref: string | null
           ui_page: string | null
           updated_at: string
           validation: string | null
         }
         Insert: {
           backend_fn?: string | null
+          business_function?: string | null
+          category?: string | null
           code: string
+          consumer?: string | null
           dangerous?: boolean
+          has_test?: boolean
           http_method: string
+          idempotent?: boolean | null
+          integration_state?: string | null
+          internal_route?: string | null
           last_error?: string | null
           live_result?: Json | null
           live_test_status?: string
+          logging?: string | null
+          missing_test?: string | null
           mock_supported?: boolean
           mock_test_status?: string
           module: string
@@ -50,19 +72,32 @@ export type Database = {
           params?: string | null
           path: string
           proof?: Json | null
+          proof_state?: string | null
+          retry_policy?: string | null
+          risk?: string | null
           seq?: number
+          test_ref?: string | null
           ui_page?: string | null
           updated_at?: string
           validation?: string | null
         }
         Update: {
           backend_fn?: string | null
+          business_function?: string | null
+          category?: string | null
           code?: string
+          consumer?: string | null
           dangerous?: boolean
+          has_test?: boolean
           http_method?: string
+          idempotent?: boolean | null
+          integration_state?: string | null
+          internal_route?: string | null
           last_error?: string | null
           live_result?: Json | null
           live_test_status?: string
+          logging?: string | null
+          missing_test?: string | null
           mock_supported?: boolean
           mock_test_status?: string
           module?: string
@@ -70,7 +105,11 @@ export type Database = {
           params?: string | null
           path?: string
           proof?: Json | null
+          proof_state?: string | null
+          retry_policy?: string | null
+          risk?: string | null
           seq?: number
+          test_ref?: string | null
           ui_page?: string | null
           updated_at?: string
           validation?: string | null
