@@ -252,7 +252,11 @@ export default function Kiosk() {
                   <div className="mt-2 text-sm text-muted-foreground">Tarif appliqué automatiquement à cette borne</div>
                 </div>
               ) : (
-                <p className="text-warning">{quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}</p>
+                <p className="text-warning">
+                  {quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID"
+                    ? "Borne non authentifiée — contactez l'exploitant."
+                    : quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}
+                </p>
               )}
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>Retour</Button>
