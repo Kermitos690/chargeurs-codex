@@ -1,7 +1,25 @@
 import { useState } from "react";
-import { X, RefreshCw, Lock, LogOut } from "lucide-react";
+import { X, RefreshCw, Lock, LogOut, KeyRound, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
+
+const KIOSK_TOKEN_KEY = "kiosk_token";
+
+function readToken(): string {
+  try {
+    return localStorage.getItem(KIOSK_TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Non-secret masked preview: prefix + length only (never the full token).
+function maskToken(t: string): string {
+  if (!t) return "aucun token enregistré";
+  const head = t.slice(0, 10);
+  return `${head}… (${t.length} car.)`;
+}
 
 type Props = {
   stationId: string | undefined;
