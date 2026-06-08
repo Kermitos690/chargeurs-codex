@@ -99,6 +99,35 @@ export function KioskDiagnostics(props: Props) {
         />
         <Row label="Borne physique" value={stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
+        <Row label="Token kiosk" value={maskToken(savedToken)} tone={savedToken.length >= 24 ? "ok" : "bad"} />
+
+        <div className="mt-5 rounded-2xl border border-border/40 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <KeyRound className="h-4 w-4" />
+            {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette
+            tablette et ne quitte jamais l'appareil en clair.
+          </p>
+          <Input
+            type="password"
+            inputMode="text"
+            autoComplete="off"
+            placeholder="kt_…"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            className="font-mono text-sm"
+          />
+          <Button
+            onClick={saveToken}
+            disabled={tokenInput.trim().length < 24}
+            className="mt-3 w-full gap-2 rounded-full bg-gradient-primary"
+          >
+            {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
+          </Button>
+        </div>
+
 
         <div className="mt-5 flex flex-col gap-2">
           {needRefresh && (
