@@ -1,7 +1,25 @@
 import { useState } from "react";
-import { X, RefreshCw, Lock, LogOut } from "lucide-react";
+import { X, RefreshCw, Lock, LogOut, KeyRound, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
+
+const KIOSK_TOKEN_KEY = "kiosk_token";
+
+function readToken(): string {
+  try {
+    return localStorage.getItem(KIOSK_TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Non-secret masked preview: prefix + length only (never the full token).
+function maskToken(t: string): string {
+  if (!t) return "aucun token enregistré";
+  const head = t.slice(0, 10);
+  return `${head}… (${t.length} car.)`;
+}
 
 type Props = {
   stationId: string | undefined;
@@ -31,6 +49,9 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 export function KioskDiagnostics(props: Props) {
   const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [savedToken, setSavedToken] = useState(readToken());
+  const [tokenSaved, setTokenSaved] = useState(false);
 
   const relock = () => {
     if (stationId) {
@@ -39,9 +60,23 @@ export function KioskDiagnostics(props: Props) {
     }
   };
 
+  const saveToken = () => {
+    const t = tokenInput.trim();
+    if (t.length < 24) return;
+    try {
+      localStorage.setItem(KIOSK_TOKEN_KEY, t);
+      setSavedToken(t);
+      setTokenInput("");
+      setTokenSaved(true);
+      setTimeout(() => setTokenSaved(false), 2500);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-background/90 p-6 backdrop-blur-xl">
-      <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-6">
+      <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-bold">Diagnostic borne</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
@@ -64,6 +99,35 @@ export function KioskDiagnostics(props: Props) {
         />
         <Row label="Borne physique" value={stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
+        <Row label="Token kiosk" value={maskToken(savedToken)} tone={savedToken.length >= 24 ? "ok" : "bad"} />
+
+        <div className="mt-5 rounded-2xl border border-border/40 p-4">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <KeyRound className="h-4 w-4" />
+            {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette
+            tablette et ne quitte jamais l'appareil en clair.
+          </p>
+          <Input
+            type="password"
+            inputMode="text"
+            autoComplete="off"
+            placeholder="kt_…"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            className="font-mono text-sm"
+          />
+          <Button
+            onClick={saveToken}
+            disabled={tokenInput.trim().length < 24}
+            className="mt-3 w-full gap-2 rounded-full bg-gradient-primary"
+          >
+            {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
+          </Button>
+        </div>
+
 
         <div className="mt-5 flex flex-col gap-2">
           {needRefresh && (
