@@ -49,6 +49,9 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 export function KioskDiagnostics(props: Props) {
   const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [savedToken, setSavedToken] = useState(readToken());
+  const [tokenSaved, setTokenSaved] = useState(false);
 
   const relock = () => {
     if (stationId) {
@@ -57,9 +60,23 @@ export function KioskDiagnostics(props: Props) {
     }
   };
 
+  const saveToken = () => {
+    const t = tokenInput.trim();
+    if (t.length < 24) return;
+    try {
+      localStorage.setItem(KIOSK_TOKEN_KEY, t);
+      setSavedToken(t);
+      setTokenInput("");
+      setTokenSaved(true);
+      setTimeout(() => setTokenSaved(false), 2500);
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-background/90 p-6 backdrop-blur-xl">
-      <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-6">
+      <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-bold">Diagnostic borne</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
