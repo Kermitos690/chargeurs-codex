@@ -53,6 +53,9 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   },
   {
     label: "Configuration",
-    items: [{ to: "/admin/settings", icon: Settings, label: "Réglages" }],
+    items: [
+      { to: "/admin/users", icon: Users, label: "Utilisateurs & rôles" },
+      { to: "/admin/settings", icon: Settings, label: "Réglages" },
+    ],
   },
 ];
