@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+type Mode = "login" | "signup" | "forgot";
+
 export default function AdminAuth() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,6 +21,15 @@ export default function AdminAuth() {
     e.preventDefault();
     setLoading(true);
     try {
+      if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/admin/reset-password`,
+        });
+        if (error) throw error;
+        toast.success("Email de réinitialisation envoyé (si le compte existe).");
+        setMode("login");
+        return;
+      }
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email, password, options: { emailRedirectTo: `${window.location.origin}/admin` },
@@ -37,23 +48,42 @@ export default function AdminAuth() {
     } finally { setLoading(false); }
   };
 
+  const title = mode === "forgot" ? "Mot de passe oublié" : "Admin";
+  const subtitle =
+    mode === "login" ? "Connectez-vous au tableau de bord"
+    : mode === "signup" ? "Créer le premier compte admin"
+    : "Recevez un lien pour réinitialiser votre mot de passe";
+
   return (
     <div className="relative grid min-h-screen place-items-center px-5">
       <LiquidBackground />
       <form onSubmit={submit} className="glass-strong liquid-border w-full max-w-md rounded-3xl p-8">
         <div className="mb-8 flex justify-center"><BrandLogo /></div>
-        <h1 className="mb-1 text-center font-display text-2xl font-bold">Admin</h1>
-        <p className="mb-6 text-center text-sm text-muted-foreground">
-          {mode === "login" ? "Connectez-vous au tableau de bord" : "Créer le premier compte admin"}
-        </p>
+        <h1 className="mb-1 text-center font-display text-2xl font-bold">{title}</h1>
+        <p className="mb-6 text-center text-sm text-muted-foreground">{subtitle}</p>
         <div className="space-y-3">
           <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <Input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+          {mode !== "forgot" && (
+            <Input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+          )}
         </div>
         <Button type="submit" disabled={loading} className="mt-6 w-full rounded-full bg-gradient-primary py-6 text-lg font-bold shadow-glow">
-          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === "login" ? "Se connecter" : "Créer le compte"}
+          {loading ? <Loader2 className="h-5 w-5 animate-spin" />
+            : mode === "login" ? "Se connecter"
+            : mode === "signup" ? "Créer le compte"
+            : "Envoyer le lien"}
         </Button>
-        <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")} className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground">
+
+        {mode === "login" && (
+          <button type="button" onClick={() => setMode("forgot")} className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground">
+            Mot de passe oublié ?
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setMode(mode === "login" ? "signup" : "login")}
+          className="mt-2 w-full text-center text-sm text-muted-foreground hover:text-foreground"
+        >
           {mode === "login" ? "Créer un compte admin" : "J'ai déjà un compte"}
         </button>
       </form>
