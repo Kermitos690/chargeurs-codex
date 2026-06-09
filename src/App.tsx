@@ -65,6 +65,7 @@ const App = () => (
               <Route path="test-monitor" element={<AdminTestMonitor />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="users" element={<AdminUsers />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
