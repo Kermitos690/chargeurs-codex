@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2,
+  Building2, Users,
   type LucideIcon,
 } from "lucide-react";
 
