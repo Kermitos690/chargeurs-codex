@@ -10,6 +10,8 @@ import Kiosk from "./pages/Kiosk.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
+import ResetPassword from "./pages/admin/ResetPassword.tsx";
+import AdminUsers from "./pages/admin/AdminUsers.tsx";
 import AdminLayout from "./pages/admin/AdminLayout.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
 import AdminStations from "./pages/admin/AdminStations.tsx";
@@ -47,6 +49,7 @@ const App = () => (
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
             <Route path="/admin/login" element={<AdminAuth />} />
+            <Route path="/admin/reset-password" element={<ResetPassword />} />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />
@@ -62,6 +65,7 @@ const App = () => (
               <Route path="test-monitor" element={<AdminTestMonitor />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
+              <Route path="users" element={<AdminUsers />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
