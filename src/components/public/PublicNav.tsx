@@ -42,7 +42,7 @@ export function PublicNav() {
         ))}
       </nav>
 
-      <div class="" className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <a
           href="/compte"
           className="hidden rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow sm:inline-flex"
