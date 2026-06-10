@@ -846,7 +846,9 @@ export type Database = {
           completed_at: string | null
           created_at: string
           currency: string | null
+          customer_email: string | null
           customer_language: string | null
+          customer_user_id: string | null
           ejected_at: string | null
           error_code: string | null
           error_message: string | null
@@ -890,7 +892,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           currency?: string | null
+          customer_email?: string | null
           customer_language?: string | null
+          customer_user_id?: string | null
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null
@@ -934,7 +938,9 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           currency?: string | null
+          customer_email?: string | null
           customer_language?: string | null
+          customer_user_id?: string | null
           ejected_at?: string | null
           error_code?: string | null
           error_message?: string | null

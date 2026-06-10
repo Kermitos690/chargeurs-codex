@@ -9,6 +9,10 @@ import NotFound from "./pages/NotFound.tsx";
 import Kiosk from "./pages/Kiosk.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
+import AccountAuth from "./pages/account/AccountAuth.tsx";
+import AccountLayout from "./pages/account/AccountLayout.tsx";
+import AccountDashboard from "./pages/account/AccountDashboard.tsx";
+import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
@@ -48,8 +52,14 @@ const App = () => (
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
+            <Route path="/compte/login" element={<AccountAuth />} />
+            <Route path="/compte/reset-password" element={<AccountResetPassword />} />
+            <Route path="/compte" element={<AccountLayout />}>
+              <Route index element={<AccountDashboard />} />
+            </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />
+
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />

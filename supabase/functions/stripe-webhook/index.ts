@@ -69,12 +69,17 @@ async function fulfil(db: ReturnType<typeof adminClient>, cs: Stripe.Checkout.Se
     return;
   }
 
+  // Capture the renter's email so they can later retrieve this rental from
+  // their customer account (linked by verified email, see RLS policy).
+  const customerEmail = cs.customer_details?.email ?? cs.customer_email ?? null;
+
   // Idempotent transition to payment_succeeded.
   const { data: updated } = await db.from("rental_sessions").update({
     state: "payment_succeeded",
     stripe_payment_intent_id: cs.payment_intent as string,
     stripe_customer_id: (cs.customer as string) ?? null,
     stripe_payment_method_type: (cs.payment_method_types ?? [])[0] ?? null,
+    customer_email: customerEmail,
     amount_paid: paidCents / 100,
     paid_at: new Date().toISOString(),
   }).eq("id", session.id).in("state", ["checkout_created", "created", "payment_processing"]).select();

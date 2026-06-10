@@ -43,7 +43,14 @@ export function PublicNav() {
       </nav>
 
       <div className="flex items-center gap-2">
+        <a
+          href="/compte"
+          className="hidden rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow sm:inline-flex"
+        >
+          Mon compte
+        </a>
         <div className="hidden sm:block"><LanguageSwitcher /></div>
+
 
         {/* Mobile / tablet hamburger */}
         <Sheet open={open} onOpenChange={setOpen}>
@@ -65,7 +72,15 @@ export function PublicNav() {
                   {l.label}
                 </a>
               ))}
+              <a
+                href="/compte"
+                onClick={() => setOpen(false)}
+                className="mt-2 rounded-xl bg-gradient-primary px-4 py-3 text-base font-semibold text-primary-foreground shadow-glow"
+              >
+                Mon compte
+              </a>
             </nav>
+
             <div className="mt-auto"><LanguageSwitcher /></div>
           </SheetContent>
         </Sheet>
