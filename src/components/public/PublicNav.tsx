@@ -42,8 +42,15 @@ export function PublicNav() {
         ))}
       </nav>
 
-      <div className="flex items-center gap-2">
+      <div class="" className="flex items-center gap-2">
+        <a
+          href="/compte"
+          className="hidden rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow sm:inline-flex"
+        >
+          Mon compte
+        </a>
         <div className="hidden sm:block"><LanguageSwitcher /></div>
+
 
         {/* Mobile / tablet hamburger */}
         <Sheet open={open} onOpenChange={setOpen}>
