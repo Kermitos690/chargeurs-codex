@@ -72,7 +72,15 @@ export function PublicNav() {
                   {l.label}
                 </a>
               ))}
+              <a
+                href="/compte"
+                onClick={() => setOpen(false)}
+                className="mt-2 rounded-xl bg-gradient-primary px-4 py-3 text-base font-semibold text-primary-foreground shadow-glow"
+              >
+                Mon compte
+              </a>
             </nav>
+
             <div className="mt-auto"><LanguageSwitcher /></div>
           </SheetContent>
         </Sheet>
