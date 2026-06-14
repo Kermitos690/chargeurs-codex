@@ -16,6 +16,7 @@ import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
+import AdminKioskDevices from "./pages/admin/AdminKioskDevices.tsx";
 import AdminLayout from "./pages/admin/AdminLayout.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
 import AdminStations from "./pages/admin/AdminStations.tsx";
