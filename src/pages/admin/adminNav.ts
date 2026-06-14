@@ -19,6 +19,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Exploitation",
     items: [
       { to: "/admin/stations", icon: Server, label: "Bornes" },
+      { to: "/admin/kiosk-devices", icon: TabletSmartphone, label: "Tablettes kiosque" },
       { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes" },
       { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)" },
     ],
