@@ -17,6 +17,27 @@ export default function AccountAuth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const signInWithGoogle = async () => {
+    setGoogleLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/compte`,
+      });
+      if (result.error) {
+        toast.error("Connexion Google indisponible. Réessayez.");
+        setGoogleLoading(false);
+        return;
+      }
+      if (result.redirected) return;
+      nav("/compte");
+    } catch {
+      toast.error("Connexion Google indisponible. Réessayez.");
+      setGoogleLoading(false);
+    }
+  };
+
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
