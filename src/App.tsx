@@ -77,6 +77,7 @@ const App = () => (
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="kiosk-devices" element={<AdminKioskDevices />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
