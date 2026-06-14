@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users,
+  Building2, Users, TabletSmartphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +19,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Exploitation",
     items: [
       { to: "/admin/stations", icon: Server, label: "Bornes" },
+      { to: "/admin/kiosk-devices", icon: TabletSmartphone, label: "Tablettes kiosque" },
       { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes" },
       { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)" },
     ],
