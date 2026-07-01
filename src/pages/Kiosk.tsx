@@ -19,7 +19,7 @@ import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
-  online: boolean; signal: number | null; rentable_count: number;
+  online: boolean; rentable_count: number;
   price_per_period: number; currency: string; last_sync_at: string | null;
 };
 type Quote = {
@@ -95,7 +95,7 @@ export default function Kiosk() {
     const { data } = await supabase
       .from("stations")
       .select(
-        "id, station_id, cabinet_id, name, location_name, status, online, signal, rentable_count, returnable_count, total_count, currency, price_per_period, last_sync_at, created_at, updated_at, shop_id",
+        "id, station_id, name, location_name, status, online, rentable_count, returnable_count, total_count, currency, price_per_period, last_sync_at, created_at, updated_at, shop_id",
       )
       .eq("station_id", stationId)
       .maybeSingle();
