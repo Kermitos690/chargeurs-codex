@@ -1,14 +1,9 @@
-// cabinet-event-push — receiver for ChargeNow hardware events.
-// Stores raw events, classifies severity, updates station state and closes
-// rentals on battery return. Public endpoint (called by ChargeNow servers).
-//
-// SECURITY: this endpoint MUTATES business state (station status, rental
-// returns), so it is FAIL-CLOSED by default. Without CHARGENOW_EVENT_SECRET it
-// rejects every request (503) unless ALLOW_UNSIGNED_CHARGENOW_EVENTS=true is
-// explicitly set (dev only). With the secret set, the request must present a
-// matching token (constant-time compare). Replay/oversize requests are dropped.
+// ChargeNow hardware event receiver. Stores events, updates station state and
+// queues a return settlement only when the rental can be correlated safely.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
+import { markReturnAndEnqueue } from "../_shared/returnSettlement.ts";
+import { parseReturnIdentity } from "../_shared/returnCorrelation.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SEVERITY: Record<string, string> = {
@@ -22,35 +17,28 @@ const SEVERITY: Record<string, string> = {
   POS_INFO_STATUS: "info",
 };
 
-const MAX_BODY_BYTES = 64 * 1024; // 64 KB cap on the inbound payload.
-const REPLAY_WINDOW_MS = 5 * 60 * 1000; // accept events at most 5 min old/future.
+const MAX_BODY_BYTES = 64 * 1024;
+const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
-// Tolerant typed view of an inbound ChargeNow hardware event payload.
 export interface EventPayload {
   eventType?: string; type?: string; event?: string;
   deviceId?: string; cabinetid?: string; cabinetId?: string; stationId?: string;
   timestamp?: string | number; ts?: string | number; eventTime?: string | number; time?: string | number;
   messageId?: string | number; eventId?: string | number; msgId?: string | number; id?: string | number;
-  [k: string]: unknown;
+  [key: string]: unknown;
 }
 
-// Production safety: the unsigned dev override is ONLY honored when the runtime
-// is EXPLICITLY marked as a non-production environment. If ENVIRONMENT is unset
-// or anything other than development/test/local, we treat the runtime as
-// production and the unsigned override has NO effect (fail-closed by default).
-export function unsignedAllowed(env: (k: string) => string | undefined = (k) => Deno.env.get(k)): boolean {
+export function unsignedAllowed(env: (key: string) => string | undefined = (key) => Deno.env.get(key)): boolean {
   const allow = env("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
   const mode = (env("ENVIRONMENT") ?? env("DENO_ENV") ?? "production").toLowerCase();
-  const nonProd = mode === "development" || mode === "test" || mode === "local";
-  return allow && nonProd;
+  return allow && ["development", "test", "local"].includes(mode);
 }
 
-// Constant-time string comparison (avoids timing side-channels).
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return r === 0;
+  let result = 0;
+  for (let i = 0; i < a.length; i += 1) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
 }
 
 function j(body: unknown, status: number) {
@@ -59,107 +47,83 @@ function j(body: unknown, status: number) {
   });
 }
 
-// Core request handler — exported and dependency-injected so the full signed
-// branch (secret gate, replay window, size cap, atomic dedup, state machine)
-// can be exercised by the automated integration harness with a fake db and a
-// temporary in-process secret. Production wires it to the real admin client.
+function fallbackEventId(eventType: string, identity: ReturnType<typeof parseReturnIdentity>, timestamp: unknown): string {
+  return [eventType, identity.stationId ?? "unknown", identity.batteryId ?? "unknown", identity.slotNum ?? "unknown", String(timestamp ?? "none")].join(":");
+}
+
 export async function handleEvent(
   req: Request,
   db: SupabaseClient,
-  env: (k: string) => string | undefined = (k) => Deno.env.get(k),
+  env: (key: string) => string | undefined = (key) => Deno.env.get(key),
 ): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const expectedSecret = env("CHARGENOW_EVENT_SECRET");
-  const allowUnsigned = unsignedAllowed(env);
-
-  // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
-    if (!allowUnsigned) {
+    if (!unsignedAllowed(env)) {
       return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "CHARGENOW_EVENT_SECRET not configured" }, 503);
     }
-    // else: explicit dev override in a non-production runtime — proceed unauthenticated.
   } else {
     const url = new URL(req.url);
     const provided = req.headers.get("x-event-secret")
       ?? req.headers.get("x-chargenow-secret")
       ?? url.searchParams.get("secret")
       ?? "";
-    if (!safeEqual(provided, expectedSecret)) {
-      return j({ ok: false, error: "INVALID_EVENT_SECRET" }, 401);
-    }
+    if (!safeEqual(provided, expectedSecret)) return j({ ok: false, error: "INVALID_EVENT_SECRET" }, 401);
   }
 
   try {
-    // ---- Size guard ----
     const raw = await req.text();
-    if (raw.length > MAX_BODY_BYTES) {
-      return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
-    }
+    if (raw.length > MAX_BODY_BYTES) return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
     let payload: EventPayload = {};
-    try { payload = raw ? JSON.parse(raw) : {}; } catch { return j({ ok: false, error: "INVALID_JSON" }, 400); }
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      return j({ ok: false, error: "INVALID_JSON" }, 400);
+    }
 
-    const eventType: string = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
-    const stationId: string | null =
-      payload.deviceId ?? payload.cabinetid ?? payload.cabinetId ?? payload.stationId ?? null;
-
-    // ---- Replay window (only enforced when a timestamp is present) ----
-    const tsRaw = payload.timestamp ?? payload.ts ?? payload.eventTime ?? payload.time ?? null;
-    if (tsRaw != null) {
-      const tsMs = typeof tsRaw === "number"
-        ? (tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) // seconds vs ms
-        : Date.parse(String(tsRaw));
-      if (!Number.isNaN(tsMs) && Math.abs(Date.now() - tsMs) > REPLAY_WINDOW_MS) {
+    const eventType = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
+    const identity = parseReturnIdentity(payload);
+    const stationId = identity.stationId;
+    const timestamp = payload.timestamp ?? payload.ts ?? payload.eventTime ?? payload.time ?? null;
+    if (timestamp != null) {
+      const parsed = typeof timestamp === "number"
+        ? (timestamp < 1e12 ? timestamp * 1000 : timestamp)
+        : Date.parse(String(timestamp));
+      if (!Number.isNaN(parsed) && Math.abs(Date.now() - parsed) > REPLAY_WINDOW_MS) {
         return j({ ok: false, error: "STALE_EVENT" }, 408);
       }
     }
 
-    // ---- Atomic idempotency via a UNIQUE DB constraint ----
-    // We rely on the partial UNIQUE index cabinet_events_external_event_id_uniq.
-    // Two simultaneous duplicate callbacks race on the INSERT; exactly one wins,
-    // the other gets a unique-violation (23505) and is treated as a no-op.
-    const idKey = ["messageId", "eventId", "msgId", "id"].find((k) => payload[k] != null) ?? null;
-    const eventId = idKey ? String(payload[idKey]) : null;
-
-    const { error: insErr } = await db.from("cabinet_events").insert({
+    const externalEventId = identity.eventId ?? fallbackEventId(eventType, identity, timestamp);
+    const { error: insertError } = await db.from("cabinet_events").insert({
       station_id: stationId,
       event_type: eventType,
       severity: SEVERITY[eventType] ?? "info",
       payload,
-      external_event_id: eventId,
+      external_event_id: externalEventId,
     });
-    if (insErr) {
-      // 23505 = unique_violation → duplicate event already processed.
-      if ((insErr as { code?: string }).code === "23505") {
-        return j({ received: true, deduplicated: true }, 200);
-      }
-      return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
+    if (insertError) {
+      if ((insertError as { code?: string }).code === "23505") return j({ received: true, deduplicated: true }, 200);
+      return j({ ok: false, error: "INSERT_FAILED", detail: insertError.message }, 500);
     }
 
-    if (stationId) {
-      if (eventType === "CABINET_ONLINE") {
-        await db.from("stations").update({ online: true, status: "online" }).eq("station_id", stationId);
-      } else if (eventType === "CABINET_OFFLINE") {
-        await db.from("stations").update({ online: false, status: "offline" }).eq("station_id", stationId);
-      } else if (eventType === "BATTERY_IN") {
-        // Battery physically returned — advance the most recent active rental.
-        // Idempotent: the state filter prevents re-processing already-returned
-        // or terminal sessions (closed/refunded/manual_review/needs_support).
-        const { data: active } = await db.from("rental_sessions")
-          .select("id").eq("station_id", stationId)
-          .in("state", ["active_rental", "battery_taken", "ejected"])
-          .order("created_at", { ascending: false }).limit(1);
-        if (active && active[0]) {
-          await db.from("rental_sessions").update({
-            state: "battery_returned", returned_at: new Date().toISOString(),
-          }).eq("id", active[0].id);
-        }
-      }
+    if (stationId && eventType === "CABINET_ONLINE") {
+      await db.from("stations").update({ online: true, status: "online" }).eq("station_id", stationId);
+    } else if (stationId && eventType === "CABINET_OFFLINE") {
+      await db.from("stations").update({ online: false, status: "offline" }).eq("station_id", stationId);
+    } else if (eventType === "BATTERY_IN") {
+      const result = await markReturnAndEnqueue(db, {
+        source: "cabinet_event",
+        payload,
+        externalEventId,
+      });
+      return j({ received: true, return: result }, result.ok ? 200 : 202);
     }
 
     return j({ received: true }, 200);
-  } catch (e) {
-    return j({ ok: false, error: String(e) }, 500);
+  } catch (error) {
+    return j({ ok: false, error: String(error) }, 500);
   }
 }
 
