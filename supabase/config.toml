@@ -20,3 +20,8 @@ verify_jwt = false
 
 [functions.chargenow-rent-callback]
 verify_jwt = false
+
+# JWT verification is disabled at the gateway because the function authenticates
+# the exact service-role bearer token in constant time before any action.
+[functions.settle-rental-payment]
+verify_jwt = false
