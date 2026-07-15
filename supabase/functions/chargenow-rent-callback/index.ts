@@ -170,7 +170,7 @@ async function applyReleaseSuccess(
 
   let batteryId = String(session.battery_id ?? "").trim() || null;
   let slotNum = session.selected_slot_num == null ? null : Number(session.selected_slot_num);
-  const stationId = identity.stationId ?? String(session.station_id ?? "") || null;
+  const stationId = identity.stationId ?? (String(session.station_id ?? "").trim() || null);
 
   if (state === "release_requested") {
     if (!identity.batteryId || identity.slotNum == null) {
@@ -332,10 +332,17 @@ Deno.serve(async (req) => {
           "ChargeNow annonce un échec de sortie incompatible avec l'état local.",
           { tradeNo: identity.tradeNo, orchestratorState: state },
         );
+        await finishExternalEvent(db, externalEventId, false, "RELEASE_FAILURE_STATE_CONFLICT");
+        return json({
+          received: true,
+          ignored: true,
+          reason: "RELEASE_FAILURE_STATE_CONFLICT",
+        }, 202);
       }
+
       // Do not terminalize the orchestrator and do not refund automatically.
-      // The explicit provider failure makes a controlled retry or super-admin
-      // refund possible, while preserving the payment evidence.
+      // The explicit provider failure permits a controlled retry or super-admin
+      // refund while preserving the payment evidence.
       const { error } = await db.from("rental_sessions").update({
         state: "eject_failed",
         chargenow_status: "release_failed",
