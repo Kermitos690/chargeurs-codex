@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildKioskAwareRequestInit, isKioskCabinetSyncRequest } from "@/lib/kioskFetch";
+import {
+  buildKioskAwareRequestInit,
+  isKioskCabinetSyncRequest,
+  isKioskQuoteRequest,
+  isSafeKioskQuote,
+} from "@/lib/kioskFetch";
 
 describe("kiosk-aware Edge Function transport", () => {
   const syncUrl = "https://example.supabase.co/functions/v1/sync-cabinet-status";
@@ -35,5 +40,36 @@ describe("kiosk-aware Edge Function transport", () => {
   it("stays fail-closed when no token is available", () => {
     const init = buildKioskAwareRequestInit(syncUrl, { method: "POST" }, () => null);
     expect(new Headers(init.headers).has("X-Kiosk-Token")).toBe(false);
+  });
+});
+
+describe("kiosk quote safety guard", () => {
+  const quoteUrl = "https://example.supabase.co/rest/v1/rpc/kiosk_quote";
+
+  it("recognizes only the kiosk quote RPC", () => {
+    expect(isKioskQuoteRequest(quoteUrl)).toBe(true);
+    expect(isKioskQuoteRequest("https://example.supabase.co/rest/v1/rpc/compute_pricing")).toBe(false);
+  });
+
+  it("accepts the confirmed beta upfront quote", () => {
+    expect(isSafeKioskQuote({
+      currency: "CHF",
+      period_minutes: 30,
+      duration_cents: 75,
+      final_cents: 75,
+      deposit_cents: 3_000,
+    })).toBe(true);
+  });
+
+  it("rejects the legacy 0.50 CHF quote and incomplete profiles", () => {
+    expect(isSafeKioskQuote({
+      currency: "CHF",
+      period_minutes: 30,
+      duration_cents: 50,
+      final_cents: 50,
+      deposit_cents: 0,
+    })).toBe(false);
+    expect(isSafeKioskQuote({ error: "PRICING_NOT_CONFIGURED" })).toBe(false);
+    expect(isSafeKioskQuote(null)).toBe(false);
   });
 });
