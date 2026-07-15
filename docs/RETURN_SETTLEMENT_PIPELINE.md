@@ -101,12 +101,17 @@ Le worker :
 5. alimente le Rental Orchestrator ;
 6. refuse tout débit automatique d’un ancien flux Checkout ;
 7. appelle le cycle Stripe manuel pour les locations `manual_authorization` ;
-8. clôture l’ordre ChargeNow ;
-9. marque la location `completed` ou crée un incident explicite.
+8. capture, annule ou rembourse selon le plan calculé ;
+9. clôture l’ordre ChargeNow ;
+10. marque la location `completed` ou crée un incident explicite.
 
 ## Anciens paiements Checkout
 
 Une location sans `payment_flow = manual_authorization` passe en `manual_review`. Le pipeline ne crée jamais un nouveau débit sur une ancienne location capturée immédiatement.
+
+## Trop-perçu
+
+Lorsque le montant net capturé est supérieur au prix final, `stripe-payment-lifecycle` crée un remboursement Stripe idempotent du trop-perçu et met à jour `refunded_amount_cents`.
 
 ## Complément de paiement
 
@@ -164,7 +169,7 @@ Aucune valeur ne doit être enregistrée dans GitHub.
 
 - aucun retour ambigu n’est automatiquement attribué ;
 - un événement dupliqué ne crée pas deux jobs ;
-- un job ne capture jamais deux fois ;
+- un job ne capture ou ne rembourse jamais deux fois ;
 - le montant provient uniquement de `compute_pricing` ;
 - une location legacy ne produit aucun nouveau débit ;
 - l’échec de clôture ChargeNow crée un incident ;
