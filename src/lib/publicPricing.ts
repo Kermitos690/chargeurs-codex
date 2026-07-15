@@ -1,11 +1,16 @@
 export const PUBLIC_PRICING = {
   currency: "CHF",
   deposit: 30,
+  depositChf: 30,
   hourlyRate: 1.5,
+  hourlyRateChf: 1.5,
   incrementMinutes: 30,
+  billingStepMinutes: 30,
   incrementPrice: 0.75,
   dailyCap: 18,
+  dailyCapChf: 18,
   nonReturnTotal: 99,
+  nonReturnTotalChf: 99,
   nonReturnBalanceAfterDeposit: 69,
 } as const;
 
@@ -22,3 +27,6 @@ export function estimateRentalPrice(minutes: number) {
   const increments = Math.ceil(minutes / PUBLIC_PRICING.incrementMinutes);
   return Math.min(increments * PUBLIC_PRICING.incrementPrice, PUBLIC_PRICING.dailyCap);
 }
+
+export const priceForMinutes = estimateRentalPrice;
+export const quotePublicRental = estimateRentalPrice;
