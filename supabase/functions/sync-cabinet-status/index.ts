@@ -1,8 +1,12 @@
 // sync-cabinet-status — pulls REAL cabinet/slot/battery state from ChargeNow
 // and updates the database. No mock data: if the API is not configured or a
 // station is unreachable, the station is marked unknown/offline.
+//
+// Authorization:
+// - admins may synchronize one station or all stations;
+// - a provisioned kiosk may synchronize only the station bound to its token.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
+import { adminClient, logApi, requireAdmin, verifyKioskDevice } from "../_shared/db.ts";
 import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
 
 // Typed (tolerant) view of the documented ChargeNow "Get Device Info" payload.
@@ -20,34 +24,43 @@ interface CabinetPayload {
   cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
 }
 
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, "Content-Type": "application/json" },
+});
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
 
-  // Admin-gated: this endpoint performs live ChargeNow calls and overwrites
-  // stations/slots/batteries. It must never be reachable anonymously.
-  const adminId = await requireAdmin(req, db);
-  if (!adminId) {
-    return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-
   try {
     const body = await req.json().catch(() => ({}));
-    const stationId: string | undefined = body.stationId;
+    const stationId = typeof body.stationId === "string" ? body.stationId.trim() : undefined;
+
+    const adminId = await requireAdmin(req, db);
+    if (!adminId) {
+      // Kiosks are fail-closed and station-bound. A kiosk can never request the
+      // all-stations branch and cannot impersonate another cabinet.
+      if (!stationId) return json({ ok: false, error: "KIOSK_STATION_REQUIRED" }, 400);
+      const auth = await verifyKioskDevice(req, db, stationId);
+      if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+    }
 
     if (!isChargeNowConfigured()) {
-      return new Response(
-        JSON.stringify({ ok: false, configured: false, error: "CHARGENOW_NOT_CONFIGURED" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return json({ ok: false, configured: false, error: "CHARGENOW_NOT_CONFIGURED" });
     }
 
     const query = db.from("stations").select("station_id, cabinet_id");
-    const { data: stations } = stationId
+    const { data: stations, error: stationError } = stationId
       ? await query.eq("station_id", stationId)
       : await query;
+
+    if (stationError) return json({ ok: false, configured: true, error: "STATION_QUERY_FAILED" }, 500);
+    if (stationId && !(stations ?? []).length) {
+      return json({ ok: false, configured: true, error: "STATION_NOT_FOUND" }, 404);
+    }
 
     const results: Array<Record<string, unknown>> = [];
 
@@ -63,7 +76,7 @@ Deno.serve(async (req) => {
         await db.from("stations").update({
           status: "unknown", online: false, last_sync_at: new Date().toISOString(),
         }).eq("station_id", st.station_id);
-        results.push({ stationId: st.station_id, ok: false, error: res.error });
+        results.push({ stationId: st.station_id, ok: false, error: res.error ?? "CHARGENOW_UNREACHABLE" });
         continue;
       }
 
@@ -84,13 +97,11 @@ Deno.serve(async (req) => {
             (s: BatteryInfo) => s.batteryId || s.sn || s.bid,
           );
 
-
       // total = number of physical slots; emptySlots = returnable capacity.
       const total = Number(cab.slots ?? cab.slotNum ?? cab.totalSlots ?? 0);
       const rentable = batteries.length;
-      const returnable = Number(
-        cab.emptySlots ?? (total ? total - batteries.length : 0),
-      );
+      const returnable = Number(cab.emptySlots ?? (total ? total - batteries.length : 0));
+      const syncedAt = new Date().toISOString();
 
       await db.from("stations").update({
         status: online ? "online" : "offline",
@@ -99,7 +110,7 @@ Deno.serve(async (req) => {
         rentable_count: rentable,
         returnable_count: returnable,
         total_count: total,
-        last_sync_at: new Date().toISOString(),
+        last_sync_at: syncedAt,
         raw_data: payload,
       }).eq("station_id", st.station_id);
 
@@ -129,15 +140,20 @@ Deno.serve(async (req) => {
         }
       }
 
-      results.push({ stationId: st.station_id, ok: true, online });
+      results.push({
+        stationId: st.station_id,
+        ok: true,
+        online,
+        rentableCount: rentable,
+        returnableCount: returnable,
+        totalCount: total,
+        syncedAt,
+      });
     }
 
-    return new Response(JSON.stringify({ ok: true, configured: true, results }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ ok: true, configured: true, results });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("sync-cabinet-status failed", e instanceof Error ? e.message : "UNKNOWN_ERROR");
+    return json({ ok: false, error: "INTERNAL_ERROR" }, 500);
   }
 });
