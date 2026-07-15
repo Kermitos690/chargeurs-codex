@@ -1,5 +1,5 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "chargeurs-ch",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -22,12 +22,12 @@
     "test:concurrency": "deno test --allow-net --allow-env --no-check supabase/functions/tests/concurrency.test.ts",
     "test:resilience": "deno test --allow-net --allow-env --no-check supabase/functions/tests/resilience.test.ts",
     "test:security": "deno test --allow-net --allow-env --no-check supabase/functions/tests/security.test.ts",
+    "test:wallet": "deno test --allow-env --allow-read --no-check supabase/functions/tests/apple_wallet.test.ts",
     "test:integration": "deno test --allow-net --allow-env --no-check supabase/functions/tests/",
     "test:all": "vitest run && psql -f supabase/tests/db-tests.sql && deno test --allow-net --allow-env --no-check supabase/functions/tests/"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
-    "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -95,7 +95,6 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
-    "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
