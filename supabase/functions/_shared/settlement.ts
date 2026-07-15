@@ -15,7 +15,8 @@ export type SettlementAction =
   | "none";
 
 export interface SettlementPlanInput {
-  strategy: SettlementStrategy;
+  // Values can originate from PostgreSQL; validate rather than trusting a cast.
+  strategy: unknown;
   finalAmountCents: number;
   depositAmountCents: number;
   amountCapturableCents?: number;
@@ -41,6 +42,11 @@ function cents(value: number | undefined, field: string): number {
   return normalized;
 }
 
+export function parseSettlementStrategy(value: unknown): SettlementStrategy {
+  if (value === "manual_capture" || value === "prepaid_refund") return value;
+  throw new Error("INVALID_SETTLEMENT_STRATEGY");
+}
+
 export function resolveSettlementStrategy(args: {
   paymentMethodType?: string | null;
   captureMethod?: string | null;
@@ -51,6 +57,7 @@ export function resolveSettlementStrategy(args: {
 }
 
 export function planSettlement(input: SettlementPlanInput): SettlementPlan {
+  const strategy = parseSettlementStrategy(input.strategy);
   const finalAmountCents = cents(input.finalAmountCents, "final_amount_cents");
   const depositAmountCents = cents(input.depositAmountCents, "deposit_amount_cents");
   const amountAlreadyRefundedCents = cents(input.amountAlreadyRefundedCents, "already_refunded_cents");
@@ -60,7 +67,7 @@ export function planSettlement(input: SettlementPlanInput): SettlementPlan {
   let refundCents = 0;
   let supplementalCents = 0;
 
-  if (input.strategy === "manual_capture") {
+  if (strategy === "manual_capture") {
     const capturable = cents(input.amountCapturableCents ?? depositAmountCents, "capturable_cents");
     captureCents = Math.min(finalAmountCents, capturable);
     cancelAuthorization = captureCents === 0 && capturable > 0;
@@ -80,7 +87,7 @@ export function planSettlement(input: SettlementPlanInput): SettlementPlan {
   if (actions.length === 0) actions.push("none");
 
   return {
-    strategy: input.strategy,
+    strategy,
     finalAmountCents,
     captureCents,
     cancelAuthorization,
