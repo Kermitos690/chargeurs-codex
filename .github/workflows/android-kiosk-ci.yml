@@ -1,0 +1,73 @@
+name: Chargeurs.ch Android Kiosk CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android-kiosk/**"
+      - ".github/workflows/android-kiosk-ci.yml"
+  push:
+    branches: ["feat/android-kiosk-wrapper"]
+    paths:
+      - "android-kiosk/**"
+      - ".github/workflows/android-kiosk-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-kiosk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.4.1"
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Unit tests, lint and debug APK
+        working-directory: android-kiosk
+        run: |
+          gradle --no-daemon --stacktrace \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleDebug
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-kiosk-test-reports
+          path: |
+            android-kiosk/app/build/reports/tests/
+            android-kiosk/app/build/reports/lint-results-debug.html
+            android-kiosk/app/build/reports/lint-results-debug.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload unsigned debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-debug-apk
+          path: android-kiosk/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
