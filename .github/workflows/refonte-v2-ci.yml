@@ -60,3 +60,16 @@ jobs:
           test "${{ steps.typecheck.outcome }}" = success
           test "${{ steps.tests.outcome }}" = success
           test "${{ steps.build.outcome }}" = success
+
+  kiosk-edge-function:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check kiosk cabinet synchronization
+        run: deno check supabase/functions/sync-cabinet-status/index.ts
+      - name: Test kiosk synchronization authorization contract
+        run: deno test --allow-read supabase/functions/tests/kiosk_sync_auth_contract.test.ts
