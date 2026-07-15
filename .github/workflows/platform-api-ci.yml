@@ -24,6 +24,7 @@ on:
       - "supabase/migrations/20260715110000_platform_api_v1.sql"
       - "supabase/migrations/20260715123000_platform_api_mutations.sql"
       - "supabase/migrations/20260715133000_platform_api_webhooks.sql"
+      - "supabase/migrations/20260715133500_platform_api_webhook_resilience.sql"
       - "docs/API_V1.md"
       - "docs/API_WEBHOOKS_V1.md"
       - "docs/openapi/chargeurs-api-v1.yaml"
