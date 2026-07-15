@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Chargeurs.ch Kiosk</string>
+    <string name="provision_title">Activation de la borne</string>
+    <string name="provision_help">Saisissez l’identifiant de la station, le token kiosk fourni par l’administration et le domaine HTTPS autorisé.</string>
+    <string name="station_id">Identifiant de la station</string>
+    <string name="kiosk_token">Token kiosk</string>
+    <string name="base_url">Domaine Chargeurs.ch</string>
+    <string name="activate">Activer cette borne</string>
+    <string name="invalid_station">Identifiant de station invalide.</string>
+    <string name="invalid_token">Token kiosk invalide ou trop court.</string>
+    <string name="invalid_url">Le domaine doit utiliser HTTPS et ne contenir ni identifiant ni fragment.</string>
+    <string name="loading">Connexion à Chargeurs.ch…</string>
+    <string name="network_unavailable">Connexion Internet indisponible</string>
+</resources>
