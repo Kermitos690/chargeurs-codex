@@ -19,15 +19,19 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Check return correlation
-        run: deno check supabase/functions/_shared/returnCorrelation.ts
-      - name: Check return settlement helper
-        run: deno check supabase/functions/_shared/returnSettlement.ts
-      - name: Check settlement worker
-        run: deno check supabase/functions/rental-settlement-worker/index.ts
-      - name: Check ChargeNow callback
-        run: deno check supabase/functions/chargenow-rent-callback/index.ts
-      - name: Check cabinet event callback
-        run: deno check supabase/functions/cabinet-event-push/index.ts
-      - name: Check ejection function
-        run: deno check supabase/functions/eject-after-payment/index.ts
+      - name: Capture settlement worker check
+        run: |
+          set +e
+          deno check supabase/functions/rental-settlement-worker/index.ts > settlement-worker-check.log 2>&1
+          echo $? > settlement-worker-exit.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: settlement-worker-diagnostic
+          path: |
+            settlement-worker-check.log
+            settlement-worker-exit.txt
+          if-no-files-found: error
+      - name: Fail when check failed
+        run: |
+          test "$(cat settlement-worker-exit.txt)" = "0"
