@@ -32,3 +32,7 @@ verify_jwt = false
 # Public opaque-token resolver; personal data is returned only to the owning JWT.
 [functions.wallet-link]
 verify_jwt = false
+
+# Admin JWT and roles are validated explicitly in the function.
+[functions.wallet-admin]
+verify_jwt = false
