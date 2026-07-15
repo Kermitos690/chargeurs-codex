@@ -51,8 +51,7 @@ describe("rentalOrchestrator", () => {
     const snapshot = createRentalSnapshot("rental-1");
     const result = applyRentalEvent(snapshot, event("rental_completed", 1));
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("INVALID_TRANSITION");
+    expect("code" in result ? result.code : null).toBe("INVALID_TRANSITION");
   });
 
   it("rejoue sans effet un événement idempotent identique", () => {
@@ -77,8 +76,7 @@ describe("rentalOrchestrator", () => {
     const conflicting = { ...event("rental_failed", 2), idempotencyKey: firstEvent.idempotencyKey };
     const result = applyRentalEvent(first.snapshot, conflicting);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("DUPLICATE_EVENT");
+    expect("code" in result ? result.code : null).toBe("DUPLICATE_EVENT");
   });
 
   it("prépare une compensation après autorisation sans batterie délivrée", () => {
