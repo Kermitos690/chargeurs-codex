@@ -71,7 +71,7 @@ export function calculateStationHealth(input: StationHealthInput): StationHealth
   let status: StationHealthStatus = "healthy";
   if (!input.online) status = "offline";
   else if (score < 45) status = "critical";
-  else if (score < 80) status = "degraded";
+  else if (score < 80 || reasons.length > 0) status = "degraded";
 
   if (reasons.length === 0) reasons.push("Aucune anomalie détectée");
 
