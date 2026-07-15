@@ -1,6 +1,6 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, requireAdmin, requireSuperAdmin, sha256Hex } from "../_shared/db.ts";
-import { encryptToken, walletConfig } from "../_shared/appleWallet.ts";
+import { encryptToken } from "../_shared/appleWallet.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -10,6 +10,12 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 function randomQrToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return `wq_${btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+
+function walletEncryptionKey(): string {
+  const key = Deno.env.get("WALLET_TOKEN_ENCRYPTION_KEY")?.trim();
+  if (!key) throw new Error("WALLET_TOKEN_ENCRYPTION_KEY_MISSING");
+  return key;
 }
 
 Deno.serve(async (req) => {
@@ -25,7 +31,7 @@ Deno.serve(async (req) => {
     const names = [
       "APPLE_PASS_TYPE_IDENTIFIER", "APPLE_TEAM_IDENTIFIER", "APPLE_PASS_WEB_SERVICE_URL",
       "APPLE_PASS_SIGNER_CERTIFICATE_BASE64", "APPLE_PASS_SIGNER_KEY_BASE64",
-      "APPLE_WWDR_CERTIFICATE_BASE64", "WALLET_TOKEN_ENCRYPTION_KEY",
+      "APPLE_WWDR_CERTIFICATE_BASE64", "WALLET_TOKEN_ENCRYPTION_KEY", "PUBLIC_APP_URL",
     ];
     return json({ ok: true, configured: Object.fromEntries(names.map((name) => [name, Boolean(Deno.env.get(name))])) });
   }
@@ -40,7 +46,7 @@ Deno.serve(async (req) => {
     const passes = passesResult.data ?? [];
     const userIds = [...new Set(passes.map((pass) => pass.user_id))];
     const profilesResult = userIds.length
-      ? await db.from("profiles").select("id,member_number,display_name,full_name,first_name").in("id", userIds)
+      ? await db.from("profiles").select("id,member_number,display_name,email,account_status").in("id", userIds)
       : { data: [], error: null };
     if (profilesResult.error) return json({ error: profilesResult.error.message }, 400);
     const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
@@ -49,7 +55,7 @@ Deno.serve(async (req) => {
     const filtered = query
       ? merged.filter((pass) => {
           const profile = pass.profile as Record<string, unknown> | null;
-          return [pass.serial_number, profile?.member_number, profile?.display_name, profile?.full_name, profile?.first_name]
+          return [pass.serial_number, profile?.member_number, profile?.display_name, profile?.email]
             .some((value) => typeof value === "string" && value.toLowerCase().includes(query));
         })
       : merged;
@@ -82,13 +88,12 @@ Deno.serve(async (req) => {
   if (action === "rotate_qr") {
     const superId = await requireSuperAdmin(req, db);
     if (!superId) return json({ error: "SUPER_ADMIN_REQUIRED" }, 403);
-    const config = walletConfig();
     const token = randomQrToken();
     const now = new Date().toISOString();
     const nextVersion = passResult.data.pass_version + 1;
     const update = await db.from("wallet_passes").update({
       qr_token_hash: await sha256Hex(token),
-      qr_token_ciphertext: await encryptToken(token, config.encryptionKey),
+      qr_token_ciphertext: await encryptToken(token, walletEncryptionKey()),
       qr_token_last_four: token.slice(-4),
       status: "active",
       revoked_at: null,
