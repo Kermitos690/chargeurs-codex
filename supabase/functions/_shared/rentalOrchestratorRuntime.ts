@@ -4,10 +4,10 @@
 // function. Browser, kiosk and provider payloads must never write final states
 // directly.
 
-type DB = {
-  from: (table: string) => any;
-  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: any }>;
-};
+// Supabase query builders are PromiseLike rather than plain Promises. Keeping
+// this boundary structural would incorrectly reject the official client type,
+// so the runtime accepts the service-role client and validates returned data.
+type DB = any;
 
 export type RentalState =
   | "created"
@@ -142,7 +142,6 @@ export async function ensureRentalSnapshot(
     return snapshot;
   }
 
-  // A concurrent initializer may have won the unique-key race.
   if (insertError.code === "23505") {
     const { data: raced, error: raceReadError } = await db
       .from("rental_orchestrator_snapshots")
