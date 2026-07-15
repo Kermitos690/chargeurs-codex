@@ -95,22 +95,32 @@ jobs:
 
   payment-settlement-core:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Install dependencies required by npm imports
+        run: npm install --no-audit --no-fund --silent
       - name: Check canonical settlement planner
         run: deno check supabase/functions/_shared/settlement.ts
+      - name: Check canonical Stripe Checkout
+        run: deno check supabase/functions/create-stripe-checkout/index.ts
       - name: Test canonical settlement planner
         run: deno test supabase/functions/tests/settlement.test.ts
-      - name: Assert legacy rentals cannot be auto-settled
+      - name: Assert settlement and Checkout remain fail-closed
         shell: bash
         run: |
           set -euo pipefail
           schema="supabase/migrations/20260715200000_payment_settlement_strategy.sql"
           inbox="supabase/migrations/20260715201000_retryable_stripe_webhook_inbox.sql"
+          checkout="supabase/functions/create-stripe-checkout/index.ts"
+          kiosk="src/pages/Kiosk.tsx"
           grep -F "set settlement_status = 'legacy'" "$schema"
           grep -F "'legacy','pending','authorized','prepaid','settling','settled'" "$schema"
           grep -F "and settlement_status in (" "$schema"
@@ -119,7 +129,14 @@ jobs:
           grep -F "grant execute on function public.claim_rental_settlement" "$schema"
           grep -F "where provider = 'stripe'" "$inbox"
           grep -F "grant execute on function public.claim_stripe_webhook_event" "$inbox"
-          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$schema" "$inbox"
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$checkout"
+          grep -F "const REQUIRED_DEPOSIT_CENTS = 3_000" "$checkout"
+          grep -F 'capture_method: "manual"' "$checkout"
+          grep -F 'twint: {' "$checkout"
+          grep -F "verifyKioskDevice" "$checkout"
+          grep -F 'headers: { "X-Kiosk-Token": kioskToken }' "$kiosk"
+          ! grep -F "KIOSK_COMPATIBILITY_WINDOW" "$checkout"
+          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$schema" "$inbox" "$checkout" "$kiosk"
 
   kiosk-edge-function:
     runs-on: ubuntu-latest
