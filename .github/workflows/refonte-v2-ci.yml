@@ -58,6 +58,7 @@ jobs:
             supabase/functions/stripe-webhook/index.ts \
             supabase/functions/settle-rental-payment/index.ts \
             supabase/functions/chargenow-rent-callback/index.ts \
+            supabase/functions/rental-admin-action/index.ts \
             > edge-check.log 2>&1
 
       - name: Edge Function integration tests
