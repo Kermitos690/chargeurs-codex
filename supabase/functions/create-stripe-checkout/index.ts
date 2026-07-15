@@ -1,6 +1,6 @@
 // create-stripe-checkout — creates or reuses a hosted Stripe Checkout Session.
-// A kiosk request must present its station-bound X-Kiosk-Token. Internal callers
-// (Platform API / trusted Edge Functions) must use the service-role bearer token.
+// Preferred authentication is a station-bound X-Kiosk-Token. Internal callers
+// (Platform API / trusted Edge Functions) use the service-role bearer token.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import {
@@ -14,6 +14,7 @@ import {
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
 const EXPIRY_MINUTES = 30;
+const KIOSK_COMPATIBILITY_WINDOW_MS = 2 * 60 * 1000;
 
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -64,17 +65,39 @@ Deno.serve(async (req) => {
       .select("*").eq("id", rentalSessionId).maybeSingle();
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
+    const base = appBase(body.origin);
+    if (!base) return json({ ok: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
+
     if (!isInternalServiceRequest(req)) {
-      const auth = await verifyKioskDevice(req, db, String(session.station_id));
-      if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
-      if (!session.kiosk_device_id || auth.device.id !== session.kiosk_device_id) {
-        return json({ ok: false, error: "KIOSK_SESSION_MISMATCH" }, 403);
+      const hasKioskToken = Boolean((req.headers.get("x-kiosk-token") ?? "").trim());
+      if (hasKioskToken) {
+        const auth = await verifyKioskDevice(req, db, String(session.station_id));
+        if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
+        if (!session.kiosk_device_id || auth.device.id !== session.kiosk_device_id) {
+          return json({ ok: false, error: "KIOSK_SESSION_MISMATCH" }, 403);
+        }
+      } else {
+        // Temporary compatibility for the already-deployed kiosk bundle: only a
+        // freshly created, station-bound kiosk session may create its first
+        // checkout. The next frontend release must send X-Kiosk-Token and this
+        // fallback can then be removed without interrupting physical stations.
+        const ageMs = Date.now() - new Date(String(session.created_at)).getTime();
+        const compatible = Boolean(
+          session.kiosk_device_id &&
+          session.state === "created" &&
+          !session.stripe_checkout_session_id &&
+          ageMs >= 0 && ageMs <= KIOSK_COMPATIBILITY_WINDOW_MS
+        );
+        if (!compatible) return json({ ok: false, error: "KIOSK_AUTH_REQUIRED" }, 401);
+        await auditLog(db, {
+          action: "stripe.checkout.compatibility_auth",
+          target: session.id,
+          data: { station_id: session.station_id, age_ms: ageMs },
+        });
       }
     }
 
     if (!STRIPE_KEY) return json({ ok: false, configured: false, error: "STRIPE_NOT_CONFIGURED" }, 503);
-    const base = appBase(body.origin);
-    if (!base) return json({ ok: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
 
     if (
       session.checkout_url &&
