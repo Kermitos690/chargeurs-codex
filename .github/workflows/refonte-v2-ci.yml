@@ -103,9 +103,9 @@ jobs:
           test "${{ steps.deno_check.outcome }}" = success
           test "${{ steps.deno_test.outcome }}" = success
 
-  settlement-edge-functions:
+  rental-lifecycle-edge-functions:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -117,52 +117,74 @@ jobs:
           deno-version: v2.x
       - name: Install dependencies required by npm imports
         run: npm install --no-audit --no-fund --silent
-      - name: Check settlement entrypoint and shared runtime
-        id: settlement_check
+      - name: Check integrated payment and hardware functions
+        id: lifecycle_check
         continue-on-error: true
         run: |
-          deno check supabase/functions/settle-rental-payment/index.ts \
-            > settlement-check.log 2>&1
-      - name: Test settlement planning
-        id: settlement_test
+          set -euo pipefail
+          for file in \
+            supabase/functions/create-stripe-checkout/index.ts \
+            supabase/functions/stripe-webhook/index.ts \
+            supabase/functions/eject-after-payment/index.ts \
+            supabase/functions/chargenow-rent-callback/index.ts \
+            supabase/functions/settle-rental-payment/index.ts; do
+            echo "Checking $file"
+            deno check "$file"
+          done > lifecycle-check.log 2>&1
+      - name: Test settlement and orchestrator rules
+        id: lifecycle_test
         continue-on-error: true
         run: |
-          deno test supabase/functions/tests/settlement.test.ts \
-            > settlement-test.log 2>&1
-      - name: Reject raw public settlement exceptions
-        id: settlement_security
+          deno test --allow-env \
+            supabase/functions/tests/settlement.test.ts \
+            supabase/functions/tests/orchestrator_runtime.test.ts \
+            supabase/functions/tests/chargenow_callback_auth.test.ts \
+            > lifecycle-test.log 2>&1
+      - name: Reject raw public exceptions and global query secrets
+        id: lifecycle_security
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          if grep -R 'return json({ ok: false, error: String(error)' \
-            supabase/functions/_shared/settlementRuntime.ts \
-            supabase/functions/settle-rental-payment/index.ts; then
-            echo "Raw exception response found" >&2
+          files=(
+            supabase/functions/create-stripe-checkout/index.ts
+            supabase/functions/stripe-webhook/index.ts
+            supabase/functions/eject-after-payment/index.ts
+            supabase/functions/chargenow-rent-callback/index.ts
+            supabase/functions/settle-rental-payment/index.ts
+            supabase/functions/_shared/settlementRuntime.ts
+          )
+          if grep -nE 'error:[[:space:]]*String\(|detail:[[:space:]]*String\(' "${files[@]}"; then
+            echo "Raw public exception response found" >&2
             exit 1
           fi
-          echo "No raw public settlement exception response found" \
-            > settlement-security.log
-      - name: Upload settlement diagnostics
+          if grep -nE 'searchParams\.get\("secret"\)' \
+            supabase/functions/chargenow-rent-callback/index.ts \
+            supabase/functions/_shared/chargenowCallbackAuth.ts; then
+            echo "Global secret accepted from callback query string" >&2
+            exit 1
+          fi
+          echo "Lifecycle public error and callback-secret checks passed" > lifecycle-security.log
+      - name: Upload lifecycle diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: settlement-deno-logs
+          name: rental-lifecycle-deno-logs
           path: |
-            settlement-check.log
-            settlement-test.log
-            settlement-security.log
+            lifecycle-check.log
+            lifecycle-test.log
+            lifecycle-security.log
           if-no-files-found: ignore
           retention-days: 3
-      - name: Fail on settlement errors
+      - name: Fail on lifecycle errors
         if: always()
         run: |
-          echo "settlement_check=${{ steps.settlement_check.outcome }}"
-          echo "settlement_test=${{ steps.settlement_test.outcome }}"
-          echo "settlement_security=${{ steps.settlement_security.outcome }}"
-          test "${{ steps.settlement_check.outcome }}" = success
-          test "${{ steps.settlement_test.outcome }}" = success
-          test "${{ steps.settlement_security.outcome }}" = success
+          echo "lifecycle_check=${{ steps.lifecycle_check.outcome }}"
+          echo "lifecycle_test=${{ steps.lifecycle_test.outcome }}"
+          echo "lifecycle_security=${{ steps.lifecycle_security.outcome }}"
+          test "${{ steps.lifecycle_check.outcome }}" = success
+          test "${{ steps.lifecycle_test.outcome }}" = success
+          test "${{ steps.lifecycle_security.outcome }}" = success
 
   kiosk-beta-release-gate:
     runs-on: ubuntu-latest
