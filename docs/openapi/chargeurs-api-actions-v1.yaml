@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: Chargeurs.ch Platform API Actions
+  version: 1.1.0
+  description: Idempotent rental, Checkout and non-destructive station synchronization operations. Physical hardware commands are excluded.
+servers:
+  - url: https://{projectRef}.supabase.co/functions/v1
+    variables:
+      projectRef:
+        default: project-ref
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+tags:
+  - name: Rentals
+  - name: Stations
+paths:
+  /platform-api-rentals/v1/rentals:
+    get:
+      operationId: listPartnerRentals
+      tags: [Rentals]
+      summary: List rentals owned by the API client
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - name: before
+          in: query
+          schema: { type: string, format: date-time }
+        - name: state
+          in: query
+          schema: { type: string }
+        - name: stationId
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createPartnerRental
+      tags: [Rentals]
+      summary: Create a server-priced rental
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRentalRequest'
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /platform-api-rentals/v1/rentals/{rentalIdOrCode}:
+    get:
+      operationId: getPartnerRental
+      tags: [Rentals]
+      summary: Read a rental by UUID or public code
+      parameters:
+        - $ref: '#/components/parameters/RentalIdOrCode'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /platform-api-rentals/v1/rentals/{rentalIdOrCode}/events:
+    get:
+      operationId: listPartnerRentalEvents
+      tags: [Rentals]
+      summary: Read orchestrator and legacy rental events
+      parameters:
+        - $ref: '#/components/parameters/RentalIdOrCode'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /platform-api-rentals/v1/rentals/{rentalIdOrCode}/checkout:
+    post:
+      operationId: createPartnerCheckout
+      tags: [Rentals]
+      summary: Create or reuse Stripe Checkout for an unpaid rental
+      parameters:
+        - $ref: '#/components/parameters/RentalIdOrCode'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /platform-api-rentals/v1/rentals/{rentalIdOrCode}/cancel:
+    post:
+      operationId: cancelPartnerRental
+      tags: [Rentals]
+      summary: Cancel an unpaid rental
+      parameters:
+        - $ref: '#/components/parameters/RentalIdOrCode'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /platform-api-stations/v1/stations/{stationId}/sync:
+    post:
+      operationId: synchronizeStationState
+      tags: [Stations]
+      summary: Refresh station, slot and battery state from ChargeNow
+      parameters:
+        - name: stationId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$'
+    RentalIdOrCode:
+      name: rentalIdOrCode
+      in: path
+      required: true
+      schema: { type: string, minLength: 10 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+  schemas:
+    CreateRentalRequest:
+      type: object
+      required: [stationId]
+      additionalProperties: false
+      properties:
+        stationId: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$' }
+        language: { type: string, enum: [fr, en, de, it, es], default: fr }
+        customerEmail: { type: string, format: email, maxLength: 320 }
+        externalReference: { type: string, maxLength: 200 }
+    Meta:
+      type: object
+      required: [requestId, apiVersion]
+      properties:
+        requestId: { type: string, format: uuid }
+        apiVersion: { type: string }
+    SuccessEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    ErrorEnvelope:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+  responses:
+    Success:
+      description: Successful operation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessEnvelope' }
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
