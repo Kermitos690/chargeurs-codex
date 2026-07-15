@@ -22,6 +22,13 @@ Deno.serve(async (req) => {
   const caller = await getCaller(req, db);
   if (!caller.userId) return json({ error: "AUTHENTICATION_REQUIRED" }, 401);
 
+  const rate = await db.rpc("claim_wallet_rate_limit", {
+    p_rate_key: `wallet-pass:${caller.userId}`,
+    p_limit: 8,
+    p_window_seconds: 60,
+  });
+  if (rate.error || rate.data !== true) return json({ error: "RATE_LIMITED" }, 429);
+
   try {
     const authHeader = req.headers.get("Authorization")!;
     const jwt = authHeader.replace(/^Bearer\s+/i, "");
@@ -34,13 +41,14 @@ Deno.serve(async (req) => {
     const visible = await resolveVisibleData(db, caller.userId, authData.user.email ?? null);
     const nextHash = await visibleDataHash(visible);
     if (passRow.visible_data_hash && passRow.visible_data_hash !== nextHash) {
-      await db.rpc("touch_wallet_pass", {
+      const touched = await db.rpc("touch_wallet_pass", {
         p_pass_id: passRow.id,
         p_reason: "visible_data_changed_on_download",
         p_visible_data_hash: nextHash,
       });
-      passRow.pass_version += 1;
+      if (!touched.error && typeof touched.data === "number") passRow.pass_version = touched.data;
       passRow.visible_data_hash = nextHash;
+      passRow.last_updated_at = new Date().toISOString();
     }
 
     const bytes = await buildSignedPass(passRow, visible);
