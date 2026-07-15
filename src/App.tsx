@@ -21,6 +21,7 @@ import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
 import AdminKioskDevices from "./pages/admin/AdminKioskDevices.tsx";
+import AdminWalletPasses from "./pages/admin/AdminWalletPasses.tsx";
 import AdminLayout from "./pages/admin/AdminLayout.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
 import AdminStations from "./pages/admin/AdminStations.tsx";
@@ -86,6 +87,7 @@ const App = () => (
               <Route path="settings" element={<AdminSettings />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="kiosk-devices" element={<AdminKioskDevices />} />
+              <Route path="wallet-passes" element={<AdminWalletPasses />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
