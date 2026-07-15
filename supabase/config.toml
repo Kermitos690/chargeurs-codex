@@ -36,3 +36,7 @@ verify_jwt = false
 # Admin JWT and roles are validated explicitly in the function.
 [functions.wallet-admin]
 verify_jwt = false
+
+# Called only by the GitHub scheduled worker with WALLET_PUSH_JOB_SECRET.
+[functions.wallet-push-updates]
+verify_jwt = false
