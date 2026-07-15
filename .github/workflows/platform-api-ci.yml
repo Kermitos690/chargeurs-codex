@@ -8,11 +8,15 @@ on:
       - "supabase/functions/platform-api-rentals/**"
       - "supabase/functions/platform-api-stations/**"
       - "supabase/functions/platform-api-webhook-worker/**"
+      - "supabase/functions/rental-settlement-worker/**"
       - "supabase/functions/api-key-admin/**"
       - "supabase/functions/api-webhook-admin/**"
       - "supabase/functions/create-stripe-checkout/**"
       - "supabase/functions/stripe-payment-lifecycle/**"
       - "supabase/functions/sync-cabinet-status/**"
+      - "supabase/functions/eject-after-payment/**"
+      - "supabase/functions/chargenow-rent-callback/**"
+      - "supabase/functions/cabinet-event-push/**"
       - "supabase/functions/_shared/platformApi.ts"
       - "supabase/functions/_shared/platformApiMutations.ts"
       - "supabase/functions/_shared/platformApiRouting.ts"
@@ -20,18 +24,23 @@ on:
       - "supabase/functions/_shared/platformWebhooks.ts"
       - "supabase/functions/_shared/stationSync.ts"
       - "supabase/functions/_shared/paymentLifecycle.ts"
+      - "supabase/functions/_shared/returnCorrelation.ts"
+      - "supabase/functions/_shared/returnSettlement.ts"
       - "supabase/functions/tests/platform_api*.test.ts"
       - "supabase/functions/tests/platform_webhooks.test.ts"
       - "supabase/functions/tests/station_sync.test.ts"
       - "supabase/functions/tests/payment_lifecycle.test.ts"
+      - "supabase/functions/tests/return_correlation.test.ts"
       - "supabase/migrations/20260715110000_platform_api_v1.sql"
       - "supabase/migrations/20260715123000_platform_api_mutations.sql"
       - "supabase/migrations/20260715133000_platform_api_webhooks.sql"
       - "supabase/migrations/20260715133500_platform_api_webhook_resilience.sql"
       - "supabase/migrations/20260715170000_payment_authorization_lifecycle.sql"
+      - "supabase/migrations/20260715182000_return_settlement_pipeline.sql"
       - "docs/API_V1.md"
       - "docs/API_WEBHOOKS_V1.md"
       - "docs/PAYMENT_AUTHORIZATION_FLOW.md"
+      - "docs/RETURN_SETTLEMENT_PIPELINE.md"
       - "docs/openapi/chargeurs-api-v1.yaml"
       - "docs/openapi/chargeurs-api-actions-v1.yaml"
       - ".github/workflows/platform-api-ci.yml"
@@ -79,6 +88,7 @@ jobs:
           deno test --allow-env --no-check supabase/functions/tests/platform_webhooks.test.ts
           deno test --allow-env --no-check supabase/functions/tests/station_sync.test.ts
           deno test --allow-env --no-check supabase/functions/tests/payment_lifecycle.test.ts
+          deno test --allow-env --no-check supabase/functions/tests/return_correlation.test.ts
 
       - name: Check Platform API functions
         run: |
@@ -86,11 +96,15 @@ jobs:
           deno check supabase/functions/platform-api-rentals/index.ts
           deno check supabase/functions/platform-api-stations/index.ts
           deno check supabase/functions/platform-api-webhook-worker/index.ts
+          deno check supabase/functions/rental-settlement-worker/index.ts
           deno check supabase/functions/api-key-admin/index.ts
           deno check supabase/functions/api-webhook-admin/index.ts
           deno check supabase/functions/create-stripe-checkout/index.ts
           deno check supabase/functions/stripe-payment-lifecycle/index.ts
           deno check supabase/functions/sync-cabinet-status/index.ts
+          deno check supabase/functions/eject-after-payment/index.ts
+          deno check supabase/functions/chargenow-rent-callback/index.ts
+          deno check supabase/functions/cabinet-event-push/index.ts
 
       - name: Validate OpenAPI contracts
         run: |
