@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-export const PUBLIC_LINKS: { href: string; label: string }[] = [
-  { href: "/#accueil", label: "Accueil" },
-  { href: "/#bornes", label: "Bornes" },
-  { href: "/#comment", label: "Comment ça marche" },
-  { href: "/#tarifs", label: "Tarifs" },
-  { href: "/partenaires", label: "Partenaires" },
-  { href: "/support", label: "Support" },
+export const PUBLIC_LINKS: { to: string; label: string }[] = [
+  { to: "/?section=accueil", label: "Accueil" },
+  { to: "/?section=bornes", label: "Bornes" },
+  { to: "/?section=comment", label: "Comment ça marche" },
+  { to: "/?section=tarifs", label: "Tarifs" },
+  { to: "/partenaires", label: "Partenaires" },
+  { to: "/support", label: "Support" },
 ];
 
 export function PublicNav() {
@@ -24,27 +25,27 @@ export function PublicNav() {
       animate={{ opacity: 1, y: 0 }}
       className="glass-strong fixed inset-x-0 top-0 z-40 mx-auto flex max-w-7xl items-center justify-between gap-4 rounded-b-2xl px-4 py-3 sm:px-6"
     >
-      <a href="/#accueil" aria-label="Chargeurs.ch — accueil"><BrandLogo /></a>
+      <Link to="/?section=accueil" aria-label="Chargeurs.ch — accueil"><BrandLogo /></Link>
 
       <nav className="hidden items-center gap-1 lg:flex">
         {PUBLIC_LINKS.map((link) => (
-          <a
-            key={link.href}
-            href={link.href}
+          <Link
+            key={link.to}
+            to={link.to}
             className="rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </nav>
 
       <div className="flex items-center gap-2">
-        <a
-          href="/compte"
+        <Link
+          to="/compte"
           className="hidden rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow sm:inline-flex"
         >
           Mon compte
-        </a>
+        </Link>
         <div className="hidden sm:block"><LanguageSwitcher /></div>
 
         <Sheet open={open} onOpenChange={setOpen}>
@@ -57,22 +58,22 @@ export function PublicNav() {
             <BrandLogo />
             <nav className="flex flex-col gap-1">
               {PUBLIC_LINKS.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
+                <Link
+                  key={link.to}
+                  to={link.to}
                   onClick={() => setOpen(false)}
                   className="rounded-xl px-4 py-3 text-base font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   {link.label}
-                </a>
+                </Link>
               ))}
-              <a
-                href="/compte"
+              <Link
+                to="/compte"
                 onClick={() => setOpen(false)}
                 className="mt-2 rounded-xl bg-gradient-primary px-4 py-3 text-base font-semibold text-primary-foreground shadow-glow"
               >
                 Mon compte
-              </a>
+              </Link>
             </nav>
             <div className="mt-auto"><LanguageSwitcher /></div>
           </SheetContent>
