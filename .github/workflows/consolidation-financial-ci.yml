@@ -1,100 +1,13 @@
-name: Chargeurs.ch Canonical Financial CI
+name: Chargeurs.ch Canonical Financial CI (paused obsolete PR14)
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/pages/Kiosk.tsx"
-      - "supabase/config.toml"
-      - "supabase/functions/create-stripe-checkout/**"
-      - "supabase/functions/stripe-webhook/**"
-      - "supabase/functions/settle-rental-payment/**"
-      - "supabase/functions/_shared/settlement.ts"
-      - "supabase/functions/_shared/settlementRuntime.ts"
-      - "supabase/functions/tests/settlement.test.ts"
-      - "supabase/migrations/2026071520*.sql"
-      - ".github/workflows/consolidation-financial-ci.yml"
-  push:
-    branches: [integration/chargeurs-beta-platform]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  canonical-financial-flow:
+  paused:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Install dependencies required by npm imports
-        run: npm install --no-audit --no-fund --silent
-      - name: Check canonical financial functions
-        run: |
-          deno check supabase/functions/_shared/settlement.ts
-          deno check supabase/functions/_shared/settlementRuntime.ts
-          deno check supabase/functions/create-stripe-checkout/index.ts
-          deno check supabase/functions/stripe-webhook/index.ts
-          deno check supabase/functions/settle-rental-payment/index.ts
-      - name: Test settlement planner
-        run: deno test supabase/functions/tests/settlement.test.ts
-      - name: Assert canonical financial safety boundaries
-        shell: bash
-        run: |
-          set -euo pipefail
-          schema="supabase/migrations/20260715200000_payment_settlement_strategy.sql"
-          inbox="supabase/migrations/20260715201000_retryable_stripe_webhook_inbox.sql"
-          checkout="supabase/functions/create-stripe-checkout/index.ts"
-          webhook="supabase/functions/stripe-webhook/index.ts"
-          runtime="supabase/functions/_shared/settlementRuntime.ts"
-          endpoint="supabase/functions/settle-rental-payment/index.ts"
-          kiosk="src/pages/Kiosk.tsx"
-          config="supabase/config.toml"
-
-          grep -F "set settlement_status = 'legacy'" "$schema"
-          grep -F "revoke all on function public.claim_rental_settlement" "$schema"
-          grep -F "where provider = 'stripe'" "$inbox"
-          grep -F "grant execute on function public.claim_stripe_webhook_event" "$inbox"
-
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$checkout"
-          grep -F "const REQUIRED_DEPOSIT_CENTS = 3_000" "$checkout"
-          grep -F 'capture_method: "manual"' "$checkout"
-          grep -F 'twint: {' "$checkout"
-          grep -F "verifyKioskDevice" "$checkout"
-          ! grep -F "KIOSK_COMPATIBILITY_WINDOW" "$checkout"
-          grep -F 'headers: { "X-Kiosk-Token": kioskToken }' "$kiosk"
-
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$webhook"
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_LIVE" "$webhook"
-          grep -F "constructEventAsync" "$webhook"
-          grep -F "claim_stripe_webhook_event" "$webhook"
-          grep -F 'settlement_status: "authorized"' "$webhook"
-          grep -F 'settlement_status: authorized ? "authorized" : "prepaid"' "$webhook"
-          grep -F "triggerEjection" "$webhook"
-          grep -F 'return response({ error: "WEBHOOK_PROCESSING_FAILED" }, 500)' "$webhook"
-          grep -F '.neq("settlement_status", "legacy")' "$webhook"
-
-          grep -F "authorizedInternalCaller" "$runtime"
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$runtime"
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_LIVE" "$runtime"
-          grep -F "LEGACY_RENTAL_NOT_SETTLEABLE" "$runtime"
-          grep -F "RETURN_NOT_CONFIRMED" "$runtime"
-          grep -F "SUPPLEMENTAL_PAYMENT_REQUIRED" "$runtime"
-          grep -F "claim_rental_settlement" "$runtime"
-          grep -F "payment_intents.capture" "$runtime"
-          grep -F "payment_intents.cancel" "$runtime"
-          grep -F "refunds.create" "$runtime"
-          ! grep -F "off_session: true" "$runtime"
-          ! grep -F "paymentIntents.create" "$runtime"
-          grep -F "handleSettlementRequest" "$endpoint"
-          grep -F "[functions.settle-rental-payment]" "$config"
-          grep -F "verify_jwt = false" "$config"
-
-          ! grep -Eiq "(sk_live_[A-Za-z0-9]{12,}|sk_test_[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{20,})" \
-            "$schema" "$inbox" "$checkout" "$webhook" "$runtime" "$endpoint" "$kiosk" "$config"
+      - run: echo "PR #14 is obsolete and superseded by PR #16."
