@@ -1,8 +1,9 @@
 // Per-rental authentication for ChargeNow callback URLs.
 //
-// The raw signing key remains in the Edge Function environment. The callback URL
-// receives only an HMAC token scoped to one rental. A leaked callback URL cannot
-// authenticate callbacks for another rental.
+// The raw signing key remains in the Edge Function environment. New callback
+// URLs receive only an HMAC token scoped to one rental. A legacy provider setup
+// may instead send the global event secret in a header; global secrets are never
+// accepted from query parameters.
 
 const encoder = new TextEncoder();
 
@@ -60,6 +61,12 @@ export async function verifyChargeNowCallback(
   req: Request,
   rentalId: string,
 ): Promise<boolean> {
+  const legacySecret = Deno.env.get("CHARGENOW_EVENT_SECRET") ?? "";
+  const legacyHeader = req.headers.get("x-event-secret")
+    ?? req.headers.get("x-chargenow-secret")
+    ?? "";
+  if (legacySecret && safeEqual(legacyHeader, legacySecret)) return true;
+
   const url = new URL(req.url);
   const provided = req.headers.get("x-chargenow-callback-token")
     ?? url.searchParams.get("token")
