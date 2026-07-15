@@ -135,10 +135,11 @@ jobs:
         id: lifecycle_test
         continue-on-error: true
         run: |
-          deno test --allow-env \
+          deno test --allow-env --allow-read \
             supabase/functions/tests/settlement.test.ts \
             supabase/functions/tests/orchestrator_runtime.test.ts \
             supabase/functions/tests/chargenow_callback_auth.test.ts \
+            supabase/functions/tests/settlement_retry_contract.test.ts \
             > lifecycle-test.log 2>&1
       - name: Reject raw public exceptions and global query secrets
         id: lifecycle_security
