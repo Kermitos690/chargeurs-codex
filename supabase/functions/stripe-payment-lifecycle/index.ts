@@ -63,6 +63,19 @@ async function claimOperation(
   return { replay: false, operation: data };
 }
 
+async function failOperation(
+  db: ReturnType<typeof adminClient>,
+  operationId: string | undefined,
+  error: unknown,
+) {
+  if (!operationId) return;
+  await db.from("payment_lifecycle_operations").update({
+    status: "failed",
+    error_code: "STRIPE_OPERATION_FAILED",
+    error_message: String((error as Error)?.message ?? error).slice(0, 1000),
+  }).eq("id", operationId).then(() => {}, () => {});
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok");
   if (!internal(req)) return json({ ok: false, error: "FORBIDDEN" }, 403);
@@ -100,34 +113,39 @@ Deno.serve(async (req) => {
         return json({ ok: true, replayed: true, paymentIntentId: claim.operation.provider_object_id });
       }
 
-      const intent = await stripe.paymentIntents.create({
-        amount: amountCents,
-        currency: String(session.currency ?? "CHF").toLowerCase(),
-        capture_method: "manual",
-        automatic_payment_methods: { enabled: true },
-        metadata: {
-          rental_session_id: session.id,
-          station_id: session.station_id,
+      try {
+        const intent = await stripe.paymentIntents.create({
+          amount: amountCents,
+          currency: String(session.currency ?? "CHF").toLowerCase(),
+          capture_method: "manual",
+          automatic_payment_methods: { enabled: true },
+          metadata: {
+            rental_session_id: session.id,
+            station_id: session.station_id,
+            payment_flow: "manual_authorization",
+          },
+        }, { idempotencyKey: `chargeurs:authorize:${session.id}:${idempotencyKey}` });
+
+        await db.from("payment_lifecycle_operations").update({
+          status: "succeeded",
+          provider_object_id: intent.id,
+          response_summary: { status: intent.status, amount: intent.amount, currency: intent.currency },
+        }).eq("id", claim.operation.id);
+
+        await db.from("rental_sessions").update({
           payment_flow: "manual_authorization",
-        },
-      }, { idempotencyKey: `chargeurs:authorize:${session.id}:${idempotencyKey}` });
+          stripe_payment_intent_id: intent.id,
+          authorized_amount_cents: intent.amount,
+          payment_finalization_status: "not_started",
+          state: "payment_processing",
+        }).eq("id", session.id);
 
-      await db.from("payment_lifecycle_operations").update({
-        status: "succeeded",
-        provider_object_id: intent.id,
-        response_summary: { status: intent.status, amount: intent.amount, currency: intent.currency },
-      }).eq("id", claim.operation.id);
-
-      await db.from("rental_sessions").update({
-        payment_flow: "manual_authorization",
-        stripe_payment_intent_id: intent.id,
-        authorized_amount_cents: intent.amount,
-        payment_finalization_status: "not_started",
-        state: "payment_processing",
-      }).eq("id", session.id);
-
-      await auditLog(db, { actor: "system", action: "stripe.authorization.created", target: session.id, data: { payment_intent: intent.id, amount_cents: amountCents, mode } });
-      return json({ ok: true, paymentIntentId: intent.id, clientSecret: intent.client_secret, status: intent.status, amountCents });
+        await auditLog(db, { actor: "system", action: "stripe.authorization.created", target: session.id, data: { payment_intent: intent.id, amount_cents: amountCents, mode } });
+        return json({ ok: true, paymentIntentId: intent.id, clientSecret: intent.client_secret, status: intent.status, amountCents });
+      } catch (error) {
+        await failOperation(db, claim.operation?.id, error);
+        throw error;
+      }
     }
 
     if (action === "settle") {
@@ -136,12 +154,14 @@ Deno.serve(async (req) => {
       if (!session.stripe_payment_intent_id) return json({ ok: false, error: "PAYMENT_INTENT_MISSING" }, 409);
 
       const calculatedRentalCents = Number(body.calculatedRentalCents ?? session.final_amount_cents ?? 0);
+      const capturedBefore = Number(session.captured_amount_cents ?? 0);
+      const refundedBefore = Number(session.refunded_amount_cents ?? 0);
       const plan = planSettlement({
         reason,
         authorizedCents: Number(session.authorized_amount_cents ?? 0),
         calculatedRentalCents,
-        capturedCents: Number(session.captured_amount_cents ?? 0),
-        refundedCents: Number(session.refunded_amount_cents ?? 0),
+        capturedCents: capturedBefore,
+        refundedCents: refundedBefore,
       });
       if (!plan.valid) return json({ ok: false, error: plan.error }, 409);
 
@@ -153,35 +173,97 @@ Deno.serve(async (req) => {
 
       if (plan.cancelAuthorization) {
         const claim = await claimOperation(db, session.id, "cancel_authorization", idempotencyKey, 0);
-        if (!(claim.replay && claim.operation.status === "succeeded")) {
-          const intent = await stripe.paymentIntents.cancel(session.stripe_payment_intent_id, {}, {
-            idempotencyKey: `chargeurs:cancel:${session.id}:${idempotencyKey}`,
-          });
-          await db.from("payment_lifecycle_operations").update({ status: "succeeded", provider_object_id: intent.id, response_summary: { status: intent.status } }).eq("id", claim.operation.id);
+        try {
+          if (!(claim.replay && claim.operation.status === "succeeded")) {
+            const intent = await stripe.paymentIntents.cancel(session.stripe_payment_intent_id, {}, {
+              idempotencyKey: `chargeurs:cancel:${session.id}:${idempotencyKey}`,
+            });
+            await db.from("payment_lifecycle_operations").update({
+              status: "succeeded", provider_object_id: intent.id, response_summary: { status: intent.status },
+            }).eq("id", claim.operation.id);
+          }
+          await db.from("rental_sessions").update({
+            payment_finalization_status: "cancelled",
+            payment_finalized_at: new Date().toISOString(),
+          }).eq("id", session.id);
+          return json({ ok: true, plan, status: "cancelled" });
+        } catch (error) {
+          await failOperation(db, claim.operation?.id, error);
+          throw error;
         }
-        await db.from("rental_sessions").update({ payment_finalization_status: "cancelled", payment_finalized_at: new Date().toISOString() }).eq("id", session.id);
-        return json({ ok: true, plan, status: "cancelled" });
       }
 
+      let capturedDelta = 0;
       if (plan.captureFromAuthorizationCents > 0) {
         const claim = await claimOperation(db, session.id, "capture", idempotencyKey, plan.captureFromAuthorizationCents);
-        if (!(claim.replay && claim.operation.status === "succeeded")) {
-          const intent = await stripe.paymentIntents.capture(session.stripe_payment_intent_id, {
-            amount_to_capture: plan.captureFromAuthorizationCents,
-          }, { idempotencyKey: `chargeurs:capture:${session.id}:${idempotencyKey}` });
-          await db.from("payment_lifecycle_operations").update({ status: "succeeded", provider_object_id: intent.id, response_summary: { status: intent.status, amount_received: intent.amount_received } }).eq("id", claim.operation.id);
+        try {
+          if (!(claim.replay && claim.operation.status === "succeeded")) {
+            const intent = await stripe.paymentIntents.capture(session.stripe_payment_intent_id, {
+              amount_to_capture: plan.captureFromAuthorizationCents,
+            }, { idempotencyKey: `chargeurs:capture:${session.id}:${idempotencyKey}` });
+            await db.from("payment_lifecycle_operations").update({
+              status: "succeeded",
+              provider_object_id: intent.id,
+              response_summary: { status: intent.status, amount_received: intent.amount_received },
+            }).eq("id", claim.operation.id);
+          }
+          capturedDelta = plan.captureFromAuthorizationCents;
+        } catch (error) {
+          await failOperation(db, claim.operation?.id, error);
+          throw error;
         }
       }
 
-      const finalStatus = plan.additionalChargeCents > 0 ? "additional_payment_required" : "captured";
+      let refundedDelta = 0;
+      if (plan.refundCents > 0) {
+        const claim = await claimOperation(db, session.id, "refund", idempotencyKey, plan.refundCents);
+        try {
+          if (!(claim.replay && claim.operation.status === "succeeded")) {
+            const refund = await stripe.refunds.create({
+              payment_intent: session.stripe_payment_intent_id,
+              amount: plan.refundCents,
+              reason: "requested_by_customer",
+              metadata: { rental_session_id: session.id, settlement_reason: reason },
+            }, { idempotencyKey: `chargeurs:refund:${session.id}:${idempotencyKey}` });
+            await db.from("payment_lifecycle_operations").update({
+              status: "succeeded",
+              provider_object_id: refund.id,
+              response_summary: { status: refund.status, amount: refund.amount },
+            }).eq("id", claim.operation.id);
+          }
+          refundedDelta = plan.refundCents;
+        } catch (error) {
+          await failOperation(db, claim.operation?.id, error);
+          throw error;
+        }
+      }
+
+      const finalStatus = plan.additionalChargeCents > 0
+        ? "additional_payment_required"
+        : refundedDelta > 0
+        ? "refunded"
+        : "captured";
       await db.from("rental_sessions").update({
-        captured_amount_cents: Number(session.captured_amount_cents ?? 0) + plan.captureFromAuthorizationCents,
+        captured_amount_cents: capturedBefore + capturedDelta,
+        refunded_amount_cents: refundedBefore + refundedDelta,
         payment_finalization_status: finalStatus,
         payment_finalized_at: plan.additionalChargeCents > 0 ? null : new Date().toISOString(),
       }).eq("id", session.id);
 
-      await auditLog(db, { actor: "system", action: "stripe.authorization.settled", target: session.id, data: { reason, plan, mode } });
-      return json({ ok: true, plan, status: finalStatus });
+      if (refundedDelta > 0) {
+        await db.from("payments").update({
+          status: "refunded",
+          refunded_at: new Date().toISOString(),
+        }).eq("stripe_payment_intent_id", session.stripe_payment_intent_id).then(() => {}, () => {});
+      }
+
+      await auditLog(db, {
+        actor: "system",
+        action: "stripe.authorization.settled",
+        target: session.id,
+        data: { reason, plan, mode, captured_delta_cents: capturedDelta, refunded_delta_cents: refundedDelta },
+      });
+      return json({ ok: true, plan, status: finalStatus, capturedDeltaCents: capturedDelta, refundedDeltaCents: refundedDelta });
     }
 
     return json({ ok: false, error: "UNKNOWN_ACTION" }, 400);
