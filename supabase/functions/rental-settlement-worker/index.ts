@@ -102,7 +102,7 @@ async function closeChargeNowOrder(
   if (!isChargeNowConfigured()) return { ok: false, skipped: "CHARGENOW_NOT_CONFIGURED" };
   if (!tradeNo) return { ok: false, skipped: "NO_TRADE_NO" };
 
-  const response = await orderClose({ tradeNo, orderId: tradeNo });
+  const response = await orderClose({ tradeNo });
   await logApi(db, {
     service: "chargenow",
     endpoint: "/rent/order/close",
