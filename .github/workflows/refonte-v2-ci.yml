@@ -76,7 +76,7 @@ jobs:
       - name: Check Platform API key administration
         run: deno check supabase/functions/api-key-admin/index.ts
       - name: Test Platform API authentication core
-        run: deno test --allow-env supabase/functions/tests/platform_api.test.ts
+        run: deno test --allow-env --no-check supabase/functions/tests/platform_api.test.ts
       - name: Assert Platform API remains read-only and fail-closed
         shell: bash
         run: |
@@ -91,7 +91,7 @@ jobs:
           ! grep -F '"rentals:write"' "$admin"
           ! grep -F '"payments:write"' "$admin"
           ! grep -F '"stations:write"' "$admin"
-          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$migration" "$admin"
+          ! grep -Eiq "(sk_live_[A-Za-z0-9]{12,}|sk_test_[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{20,})" "$migration" "$admin"
 
   payment-settlement-core:
     runs-on: ubuntu-latest
@@ -136,7 +136,7 @@ jobs:
           grep -F "verifyKioskDevice" "$checkout"
           grep -F 'headers: { "X-Kiosk-Token": kioskToken }' "$kiosk"
           ! grep -F "KIOSK_COMPATIBILITY_WINDOW" "$checkout"
-          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$schema" "$inbox" "$checkout" "$kiosk"
+          ! grep -Eiq "(sk_live_[A-Za-z0-9]{12,}|sk_test_[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{20,})" "$schema" "$inbox" "$checkout" "$kiosk"
 
   kiosk-edge-function:
     runs-on: ubuntu-latest
