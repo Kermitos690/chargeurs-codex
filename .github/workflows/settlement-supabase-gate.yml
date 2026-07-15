@@ -14,7 +14,7 @@ on:
         default: false
         type: boolean
       deploy_functions:
-        description: "Deploy the reviewed settlement Edge Functions"
+        description: "Deploy the reviewed rental lifecycle Edge Functions"
         required: true
         default: false
         type: boolean
@@ -57,9 +57,7 @@ jobs:
 
           missing=()
           for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_REF PRODUCTION_SUPABASE_PROJECT_REF; do
-            if [ -z "${!name:-}" ]; then
-              missing+=("$name")
-            fi
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
           done
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "Missing required encrypted configuration: ${missing[*]}" >&2
@@ -72,7 +70,6 @@ jobs:
             echo "STAGING_IDENTITY_VALID=false" >> settlement-gate-report.txt
             exit 1
           fi
-
           if [ "$SUPABASE_PROJECT_REF" = "$HISTORICAL_AMBIGUOUS_PROJECT_REF" ]; then
             echo "The selected project is the historical ambiguous project and is forbidden." >&2
             echo "STAGING_IDENTITY_VALID=false" >> settlement-gate-report.txt
@@ -96,9 +93,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          supabase link \
-            --project-ref "$SUPABASE_PROJECT_REF" \
-            --password "$SUPABASE_DB_PASSWORD"
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           echo "PROJECT_LINKED=true" >> settlement-gate-report.txt
 
       - name: Inspect migration history
@@ -140,10 +135,14 @@ jobs:
           set -euo pipefail
           supabase migration list --linked --password "$SUPABASE_DB_PASSWORD" \
             | tee migration-list-after.txt
-          grep -q "20260715033000" migration-list-after.txt
-          grep -q "20260715170500" migration-list-after.txt
-          grep -q "20260715041000" migration-list-after.txt
-          grep -q "20260715042000" migration-list-after.txt
+          for version in \
+            20260715033000 \
+            20260715170500 \
+            20260715041000 \
+            20260715042000 \
+            20260715210000; do
+            grep -q "$version" migration-list-after.txt
+          done
           echo "REQUIRED_MIGRATIONS_PRESENT=true" >> settlement-gate-report.txt
 
       - name: Lint linked public schema
@@ -159,21 +158,42 @@ jobs:
             | tee database-lint.txt
           echo "DATABASE_LINT_PASSED=true" >> settlement-gate-report.txt
 
-      - name: Deploy reviewed settlement Edge Functions
+      - name: Verify required staging secret names
+        if: inputs.deploy_functions == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" | tee staging-secret-names.txt
+          for name in PUBLIC_APP_URL STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
+            grep -q "$name" staging-secret-names.txt
+          done
+          if ! grep -q "CHARGENOW_BASIC_AUTH" staging-secret-names.txt; then
+            grep -q "CHARGENOW_BASIC_USERNAME" staging-secret-names.txt
+            grep -q "CHARGENOW_BASIC_PASSWORD" staging-secret-names.txt
+          fi
+          if ! grep -q "CHARGENOW_CALLBACK_SIGNING_KEY" staging-secret-names.txt; then
+            grep -q "CHARGENOW_EVENT_SECRET" staging-secret-names.txt
+          fi
+          echo "REQUIRED_SECRET_NAMES_PRESENT=true" >> settlement-gate-report.txt
+
+      - name: Deploy reviewed rental lifecycle Edge Functions
         if: inputs.deploy_functions == true
         shell: bash
         run: |
           set -euo pipefail
           for function_name in \
+            create-rental-session \
             create-stripe-checkout \
             stripe-webhook \
-            settle-rental-payment \
-            chargenow-rent-callback; do
+            eject-after-payment \
+            sync-cabinet-status \
+            chargenow-rent-callback \
+            settle-rental-payment; do
             supabase functions deploy "$function_name" \
               --project-ref "$SUPABASE_PROJECT_REF" \
               --use-api
           done
-          echo "SETTLEMENT_FUNCTIONS_DEPLOYED=true" >> settlement-gate-report.txt
+          echo "RENTAL_LIFECYCLE_FUNCTIONS_DEPLOYED=true" >> settlement-gate-report.txt
 
       - name: Upload sanitized diagnostics
         if: always()
@@ -187,5 +207,6 @@ jobs:
             migration-push.txt
             migration-list-after.txt
             database-lint.txt
+            staging-secret-names.txt
           if-no-files-found: ignore
           retention-days: 7
