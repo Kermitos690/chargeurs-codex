@@ -42,6 +42,7 @@ import GitHubReview from "./pages/review/GitHubReview.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
+const isReviewBuild = import.meta.env.VITE_REVIEW_BUILD === "true";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -51,7 +52,7 @@ const App = () => (
         <Sonner />
         <Router>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={isReviewBuild ? <GitHubReview /> : <Index />} />
             <Route path="/review" element={<GitHubReview />} />
             <Route path="/review/:section" element={<GitHubReview />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
