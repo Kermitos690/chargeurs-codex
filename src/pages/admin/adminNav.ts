@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users, TabletSmartphone,
+  Building2, Users, TabletSmartphone, KeyRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +56,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Configuration",
     items: [
       { to: "/admin/users", icon: Users, label: "Utilisateurs & rôles" },
+      { to: "/admin/api-clients", icon: KeyRound, label: "API personnelle" },
       { to: "/admin/settings", icon: Settings, label: "Réglages" },
     ],
   },
