@@ -1,0 +1,61 @@
+name: Chargeurs.ch Platform API CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/platform-api/**"
+      - "supabase/functions/api-key-admin/**"
+      - "supabase/functions/_shared/platformApi.ts"
+      - "supabase/functions/tests/platform_api.test.ts"
+      - "supabase/migrations/20260715110000_platform_api_v1.sql"
+      - "docs/API_V1.md"
+      - "docs/openapi/chargeurs-api-v1.yaml"
+      - ".github/workflows/platform-api-ci.yml"
+  push:
+    branches: [feat/chargeurs-platform-api-v1]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint application
+        run: npm run lint -- --quiet
+
+      - name: Typecheck application
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Platform API helper tests
+        run: deno test --allow-env --no-check supabase/functions/tests/platform_api.test.ts
+
+      - name: Check Platform API functions
+        run: |
+          deno check supabase/functions/platform-api/index.ts
+          deno check supabase/functions/api-key-admin/index.ts
+
+      - name: Validate OpenAPI contract
+        run: npx --yes @redocly/cli@1.27.2 lint docs/openapi/chargeurs-api-v1.yaml
