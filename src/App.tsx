@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound.tsx";
 import Kiosk from "./pages/Kiosk.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
+import CityPowerbank from "./pages/CityPowerbank.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
 import AccountLayout from "./pages/account/AccountLayout.tsx";
 import AccountDashboard from "./pages/account/AccountDashboard.tsx";
@@ -47,6 +48,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
             <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
@@ -82,7 +84,6 @@ const App = () => (
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
             </Route>
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
