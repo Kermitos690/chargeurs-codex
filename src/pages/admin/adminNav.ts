@@ -1,15 +1,13 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users, TabletSmartphone,
+  Building2, Users, TabletSmartphone, WalletCards,
   type LucideIcon,
 } from "lucide-react";
 
 export type AdminNavItem = { to: string; icon: LucideIcon; label: string; end?: boolean };
 export type AdminNavGroup = { label: string; items: AdminNavItem[] };
 
-// Grouped back-office navigation. Shared by the desktop sidebar and the
-// mobile hamburger sheet so labels and order stay perfectly in sync.
 export const ADMIN_NAV: AdminNavGroup[] = [
   {
     label: "Pilotage",
@@ -56,6 +54,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     label: "Configuration",
     items: [
       { to: "/admin/users", icon: Users, label: "Utilisateurs & rôles" },
+      { to: "/admin/wallet-passes", icon: WalletCards, label: "Apple Wallet" },
       { to: "/admin/settings", icon: Settings, label: "Réglages" },
     ],
   },
