@@ -6,15 +6,23 @@ import { VitePWA } from "vite-plugin-pwa";
 
 function vendorChunk(id: string): string | undefined {
   if (!id.includes("node_modules")) return undefined;
-  if (id.includes("react") || id.includes("scheduler")) return "vendor-react";
+
+  // Match specific ecosystems before React core: packages such as
+  // react-router-dom, lucide-react and react-hook-form also contain "react".
   if (id.includes("react-router")) return "vendor-router";
-  if (id.includes("@supabase")) return "vendor-supabase";
   if (id.includes("@tanstack")) return "vendor-query";
+  if (id.includes("@supabase")) return "vendor-supabase";
   if (id.includes("@radix-ui") || id.includes("cmdk") || id.includes("vaul")) return "vendor-ui";
   if (id.includes("lucide-react")) return "vendor-icons";
   if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
   if (id.includes("zod") || id.includes("react-hook-form") || id.includes("@hookform")) return "vendor-forms";
   if (id.includes("qrcode") || id.includes("html5-qrcode")) return "vendor-qr";
+  if (
+    id.includes("/node_modules/react/") ||
+    id.includes("/node_modules/react-dom/") ||
+    id.includes("/node_modules/scheduler/")
+  ) return "vendor-react";
+
   return "vendor-misc";
 }
 
