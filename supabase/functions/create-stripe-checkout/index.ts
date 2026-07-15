@@ -38,14 +38,15 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Reuse a still-valid checkout instead of creating a duplicate.
     if (session.checkout_url && session.checkout_url_expires_at &&
         new Date(session.checkout_url_expires_at).getTime() > Date.now() &&
         ["checkout_created", "created"].includes(session.state)) {
       return new Response(JSON.stringify({
-        ok: true, checkout_url: session.checkout_url,
+        ok: true,
+        checkout_url: session.checkout_url,
         public_session_code: session.public_session_code,
-        expires_at: session.checkout_url_expires_at, status: "awaiting_payment",
+        expires_at: session.checkout_url_expires_at,
+        status: "awaiting_payment",
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -72,13 +73,15 @@ Deno.serve(async (req) => {
     const snapCurrency = String(snap.currency ?? "").toUpperCase();
     const sessCurrency = String(session.currency ?? "CHF").toUpperCase();
     if (snapCurrency && snapCurrency !== sessCurrency) {
-      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "CURRENCY_MISMATCH", snapCurrency, sessCurrency } });
+      await auditLog(db, {
+        action: "pricing.error",
+        target: session.id,
+        data: { code: "CURRENCY_MISMATCH", snapCurrency, sessCurrency },
+      });
       return new Response(JSON.stringify({ ok: false, error: "CURRENCY_MISMATCH" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // The initial transaction is the deposit, not the final rental price.
-    // compute_pricing is the only source allowed to provide this amount.
     const depositCents = Number(snap.deposit_cents ?? NaN);
     if (!Number.isInteger(depositCents) || depositCents <= 0) {
       await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "DEPOSIT_NOT_CONFIGURED" } });
@@ -89,12 +92,33 @@ Deno.serve(async (req) => {
     const amount = depositCents / 100;
     const currency = sessCurrency.toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
+    const pricingHash = session.pricing_snapshot_hash ?? recomputedHash;
+
+    const metadata: Record<string, string> = {
+      rental_session_id: String(session.id),
+      public_session_code: String(session.public_session_code ?? ""),
+      station_id: String(session.station_id ?? ""),
+      kiosk_device_id: String(session.kiosk_device_id ?? ""),
+      cabinet_sn: String(session.cabinet_id ?? ""),
+      shop_id: String(session.shop_id ?? ""),
+      price_profile_id: String(session.price_profile_id ?? ""),
+      price_profile_version: String(session.price_profile_version ?? ""),
+      pricing_snapshot_hash: String(pricingHash),
+      deposit_amount_cents: String(depositCents),
+      expected_currency: currency,
+      payment_purpose: "rental_deposit",
+    };
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
+      client_reference_id: String(session.id),
       customer_creation: "always",
-      // Keep Dashboard-managed dynamic methods. Card is overridden to manual
-      // capture; TWINT remains automatic because it cannot be captured later.
+      payment_intent_data: {
+        description: "Chargeurs.ch — caution de location",
+        metadata,
+      },
+      // Dashboard-managed dynamic payment methods remain active. Card is
+      // overridden to manual capture; TWINT stays automatically captured.
       payment_method_options: {
         card: {
           capture_method: "manual",
@@ -117,19 +141,7 @@ Deno.serve(async (req) => {
         },
         quantity: 1,
       }],
-      metadata: {
-        rental_session_id: session.id,
-        public_session_code: session.public_session_code ?? "",
-        station_id: session.station_id,
-        kiosk_device_id: session.kiosk_device_id ?? "",
-        cabinet_sn: session.cabinet_id ?? "",
-        shop_id: session.shop_id ?? "",
-        price_profile_id: session.price_profile_id ?? "",
-        price_profile_version: String(session.price_profile_version ?? ""),
-        pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
-        deposit_amount_cents: String(depositCents),
-        expected_currency: currency,
-      },
+      metadata,
       success_url: `${base}/pay/${session.id}/success?c=${encodeURIComponent(session.public_session_code ?? "")}`,
       cancel_url: `${base}/pay/${session.id}/cancel?c=${encodeURIComponent(session.public_session_code ?? "")}`,
     });
@@ -137,9 +149,13 @@ Deno.serve(async (req) => {
     const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();
 
     await logApi(db, {
-      service: "stripe", endpoint: "checkout.sessions.create", method: "POST",
-      status_code: 200, request: { rentalSessionId, depositCents },
-      response: { id: checkout.id }, error: null,
+      service: "stripe",
+      endpoint: "checkout.sessions.create",
+      method: "POST",
+      status_code: 200,
+      request: { rentalSessionId, depositCents },
+      response: { id: checkout.id },
+      error: null,
     });
 
     await db.from("rental_sessions").update({
@@ -147,7 +163,7 @@ Deno.serve(async (req) => {
       checkout_url: checkout.url,
       checkout_url_expires_at: expiresAtIso,
       state: "checkout_created",
-      amount: amount,
+      amount,
       amount_expected: amount,
       deposit_amount_cents: depositCents,
       settlement_status: "pending",
@@ -176,21 +192,25 @@ Deno.serve(async (req) => {
         price_profile_version: session.price_profile_version,
         deposit_cents: depositCents,
         currency,
-        pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
+        pricing_snapshot_hash: pricingHash,
         card_capture: "manual",
         twint_capture: "automatic",
       },
     });
 
     return new Response(JSON.stringify({
-      ok: true, checkout_url: checkout.url, checkout_id: checkout.id,
+      ok: true,
+      checkout_url: checkout.url,
+      checkout_id: checkout.id,
       public_session_code: session.public_session_code,
-      expires_at: expiresAtIso, status: "awaiting_payment",
+      expires_at: expiresAtIso,
+      status: "awaiting_payment",
       deposit_cents: depositCents,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  } catch (error) {
+    return new Response(JSON.stringify({ ok: false, error: String(error) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
