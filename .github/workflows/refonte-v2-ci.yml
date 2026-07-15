@@ -100,3 +100,31 @@ jobs:
           echo "deno_test=${{ steps.deno_test.outcome }}"
           test "${{ steps.deno_check.outcome }}" = success
           test "${{ steps.deno_test.outcome }}" = success
+
+  kiosk-beta-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: chargeurs_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chargeurs_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: chargeurs_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate fail-closed kiosk beta release gate
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/kiosk-beta-release-gate.sql
