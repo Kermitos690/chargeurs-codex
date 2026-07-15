@@ -14,12 +14,14 @@ const isKioskSurface =
   window.location.pathname.startsWith("/kiosk/") ||
   hashPath === "/kiosk" ||
   hashPath.startsWith("/kiosk/");
+const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
 
-if (isKioskSurface) {
+if (isKioskSurface && !isStaticHashPreview) {
   initKioskPwa();
 } else if ("serviceWorker" in navigator) {
-  // Remove kiosk service workers from non-kiosk pages. This is intentionally
-  // best-effort and does not block rendering when the browser denies access.
+  // Remove kiosk service workers from non-kiosk pages and static previews.
+  // This is intentionally best-effort and does not block rendering when the
+  // browser denies access.
   navigator.serviceWorker
     .getRegistrations()
     .then((registrations) =>
