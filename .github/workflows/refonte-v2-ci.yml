@@ -22,38 +22,41 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --silent
       - name: Lint
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run lint -- --quiet > lint.log 2>&1 || {
-            echo "===== ESLint errors ====="
-            tail -n 250 lint.log
-            exit 1
-          }
+        id: lint
+        continue-on-error: true
+        run: npm run lint -- --quiet > lint.log 2>&1
       - name: Typecheck
-        shell: bash
-        run: |
-          set -o pipefail
-          npm run typecheck > typecheck.log 2>&1 || {
-            echo "===== TypeScript errors ====="
-            tail -n 250 typecheck.log
-            exit 1
-          }
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > typecheck.log 2>&1
       - name: Unit tests
-        shell: bash
-        run: |
-          set -o pipefail
-          npm test > tests.log 2>&1 || {
-            echo "===== Test failures ====="
-            tail -n 250 tests.log
-            exit 1
-          }
+        id: tests
+        continue-on-error: true
+        run: npm test > tests.log 2>&1
       - name: Production build
-        shell: bash
+        id: build
+        continue-on-error: true
+        run: npm run build > build.log 2>&1
+      - name: Upload quality logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-logs
+          path: |
+            lint.log
+            typecheck.log
+            tests.log
+            build.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Fail on quality errors
+        if: always()
         run: |
-          set -o pipefail
-          npm run build > build.log 2>&1 || {
-            echo "===== Build errors ====="
-            tail -n 250 build.log
-            exit 1
-          }
+          echo "lint=${{ steps.lint.outcome }}"
+          echo "typecheck=${{ steps.typecheck.outcome }}"
+          echo "tests=${{ steps.tests.outcome }}"
+          echo "build=${{ steps.build.outcome }}"
+          test "${{ steps.lint.outcome }}" = success
+          test "${{ steps.typecheck.outcome }}" = success
+          test "${{ steps.tests.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
