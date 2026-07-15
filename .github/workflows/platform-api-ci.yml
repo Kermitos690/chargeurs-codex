@@ -5,10 +5,20 @@ on:
     branches: [main]
     paths:
       - "supabase/functions/platform-api/**"
+      - "supabase/functions/platform-api-rentals/**"
+      - "supabase/functions/platform-api-stations/**"
       - "supabase/functions/api-key-admin/**"
+      - "supabase/functions/create-stripe-checkout/**"
+      - "supabase/functions/sync-cabinet-status/**"
       - "supabase/functions/_shared/platformApi.ts"
-      - "supabase/functions/tests/platform_api.test.ts"
+      - "supabase/functions/_shared/platformApiMutations.ts"
+      - "supabase/functions/_shared/platformApiRouting.ts"
+      - "supabase/functions/_shared/platformRentalApi.ts"
+      - "supabase/functions/_shared/stationSync.ts"
+      - "supabase/functions/tests/platform_api*.test.ts"
+      - "supabase/functions/tests/station_sync.test.ts"
       - "supabase/migrations/20260715110000_platform_api_v1.sql"
+      - "supabase/migrations/20260715123000_platform_api_mutations.sql"
       - "docs/API_V1.md"
       - "docs/openapi/chargeurs-api-v1.yaml"
       - ".github/workflows/platform-api-ci.yml"
@@ -50,12 +60,19 @@ jobs:
           deno-version: v2.x
 
       - name: Platform API helper tests
-        run: deno test --allow-env --no-check supabase/functions/tests/platform_api.test.ts
+        run: |
+          deno test --allow-env --no-check supabase/functions/tests/platform_api.test.ts
+          deno test --allow-env --no-check supabase/functions/tests/platform_api_mutations.test.ts
+          deno test --allow-env --no-check supabase/functions/tests/station_sync.test.ts
 
       - name: Check Platform API functions
         run: |
           deno check supabase/functions/platform-api/index.ts
+          deno check supabase/functions/platform-api-rentals/index.ts
+          deno check supabase/functions/platform-api-stations/index.ts
           deno check supabase/functions/api-key-admin/index.ts
+          deno check supabase/functions/create-stripe-checkout/index.ts
+          deno check supabase/functions/sync-cabinet-status/index.ts
 
       - name: Validate OpenAPI contract
         run: npx --yes @redocly/cli@1.27.2 lint docs/openapi/chargeurs-api-v1.yaml
