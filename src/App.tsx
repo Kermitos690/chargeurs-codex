@@ -38,7 +38,7 @@ import AdminShops from "./pages/admin/AdminShops.tsx";
 import AdminPartners from "./pages/admin/AdminPartners.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
-import ReviewPortal from "./pages/review/ReviewPortal.tsx";
+import GitHubReview from "./pages/review/GitHubReview.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
@@ -52,8 +52,8 @@ const App = () => (
         <Router>
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/review" element={<ReviewPortal />} />
-            <Route path="/review/:section" element={<ReviewPortal />} />
+            <Route path="/review" element={<GitHubReview />} />
+            <Route path="/review/:section" element={<GitHubReview />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
             <Route path="/support" element={<Support />} />
@@ -70,7 +70,6 @@ const App = () => (
             </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />
-
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />
