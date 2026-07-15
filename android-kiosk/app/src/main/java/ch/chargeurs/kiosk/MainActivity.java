@@ -1,0 +1,390 @@
+package ch.chargeurs.kiosk;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.KeyguardManager;
+import android.app.admin.DevicePolicyManager;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
+import android.net.http.SslError;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.webkit.GeolocationPermissions;
+import android.webkit.PermissionRequest;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.SafeBrowsingResponse;
+import android.webkit.SslErrorHandler;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import org.json.JSONObject;
+
+public final class MainActivity extends Activity {
+    private static final long WATCHDOG_INTERVAL_MS = 30_000L;
+    private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private WebView webView;
+    private ProgressBar progress;
+    private TextView networkBanner;
+    private KioskConfig config;
+    private boolean credentialsInjected;
+    private boolean heartbeatPending;
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
+
+    private final Runnable watchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (webView != null && isNetworkAvailable()) {
+                heartbeatPending = true;
+                webView.evaluateJavascript("(function(){return 'chargeurs-ok';})()", value -> heartbeatPending = false);
+                handler.postDelayed(() -> {
+                    if (heartbeatPending && !isFinishing()) recreateWebView();
+                }, WATCHDOG_TIMEOUT_MS);
+            }
+            handler.postDelayed(this, WATCHDOG_INTERVAL_MS);
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        config = new SecureConfigStore(this).load();
+        if (config == null) {
+            startActivity(new Intent(this, ProvisioningActivity.class));
+            finish();
+            return;
+        }
+
+        getWindow().addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                | WindowManager.LayoutParams.FLAG_SECURE
+                | WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
+        enterImmersiveMode();
+        setContentView(buildRoot());
+        registerConnectivityMonitoring();
+        createWebView();
+        handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
+    }
+
+    private FrameLayout buildRoot() {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.rgb(8, 17, 38));
+
+        progress = new ProgressBar(this);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(56), dp(56));
+        progressParams.gravity = Gravity.CENTER;
+        root.addView(progress, progressParams);
+
+        networkBanner = new TextView(this);
+        networkBanner.setText(R.string.network_unavailable);
+        networkBanner.setTextColor(Color.WHITE);
+        networkBanner.setTextSize(15);
+        networkBanner.setGravity(Gravity.CENTER);
+        networkBanner.setBackgroundColor(Color.rgb(165, 46, 46));
+        networkBanner.setPadding(dp(12), dp(8), dp(12), dp(8));
+        networkBanner.setVisibility(View.GONE);
+        FrameLayout.LayoutParams bannerParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        bannerParams.gravity = Gravity.TOP;
+        root.addView(networkBanner, bannerParams);
+        return root;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void createWebView() {
+        FrameLayout root = (FrameLayout) findViewById(android.R.id.content).getRootView();
+        if (!(root.getChildAt(0) instanceof FrameLayout)) return;
+        FrameLayout container = (FrameLayout) root.getChildAt(0);
+
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(8, 17, 38));
+        webView.setVisibility(View.INVISIBLE);
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+
+        webView.getSettings().setJavaScriptEnabled(true);
+        webView.getSettings().setDomStorageEnabled(true);
+        webView.getSettings().setAllowFileAccess(false);
+        webView.getSettings().setAllowContentAccess(false);
+        webView.getSettings().setAllowFileAccessFromFileURLs(false);
+        webView.getSettings().setAllowUniversalAccessFromFileURLs(false);
+        webView.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        webView.getSettings().setGeolocationEnabled(false);
+        webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
+        webView.getSettings().setSupportMultipleWindows(false);
+        webView.getSettings().setMediaPlaybackRequiresUserGesture(true);
+        webView.getSettings().setSaveFormData(false);
+        webView.getSettings().setUserAgentString(
+            webView.getSettings().getUserAgentString()
+                + " ChargeursKiosk/"
+                + BuildConfig.VERSION_NAME
+        );
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.getSettings().setSafeBrowsingEnabled(true);
+        }
+
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
+            Toast.makeText(this, "Téléchargement bloqué en mode kiosk.", Toast.LENGTH_SHORT).show()
+        );
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                progress.setVisibility(newProgress < 100 || !credentialsInjected ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                request.deny();
+            }
+
+            @Override
+            public void onGeolocationPermissionsShowPrompt(
+                String origin,
+                GeolocationPermissions.Callback callback
+            ) {
+                callback.invoke(origin, false, false);
+            }
+        });
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return !KioskConfigValidator.isAllowedUrl(request.getUrl().toString(), config.baseUrl());
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (!KioskConfigValidator.isAllowedUrl(url, config.baseUrl())) {
+                    showBlockedNavigation();
+                    return;
+                }
+
+                if (!credentialsInjected) {
+                    injectCredentialsAndReload(view);
+                    return;
+                }
+
+                progress.setVisibility(View.GONE);
+                webView.setVisibility(View.VISIBLE);
+                heartbeatPending = false;
+            }
+
+            @Override
+            public void onReceivedSslError(
+                WebView view,
+                SslErrorHandler handler,
+                SslError error
+            ) {
+                handler.cancel();
+                showBlockedNavigation();
+            }
+
+            @Override
+            public void onReceivedError(
+                WebView view,
+                WebResourceRequest request,
+                WebResourceError error
+            ) {
+                if (request.isForMainFrame()) {
+                    networkBanner.setVisibility(View.VISIBLE);
+                    progress.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onSafeBrowsingHit(
+                WebView view,
+                WebResourceRequest request,
+                int threatType,
+                SafeBrowsingResponse callback
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    callback.backToSafety(true);
+                }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                recreateWebView();
+                return true;
+            }
+        });
+
+        FrameLayout.LayoutParams webParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        );
+        container.addView(webView, 0, webParams);
+        webView.loadUrl(config.kioskUrl());
+    }
+
+    private void injectCredentialsAndReload(WebView view) {
+        String script = "(function(){"
+            + "localStorage.setItem('kiosk_locked_station'," + JSONObject.quote(config.stationId()) + ");"
+            + "localStorage.setItem('kiosk_token'," + JSONObject.quote(config.kioskToken()) + ");"
+            + "localStorage.setItem('chargeurs_native_wrapper'," + JSONObject.quote(BuildConfig.VERSION_NAME) + ");"
+            + "return true;})()";
+        view.evaluateJavascript(script, result -> {
+            credentialsInjected = true;
+            view.loadUrl(config.kioskUrl());
+        });
+    }
+
+    private void recreateWebView() {
+        heartbeatPending = false;
+        credentialsInjected = false;
+        if (webView != null) {
+            ((ViewGroup) webView.getParent()).removeView(webView);
+            webView.stopLoading();
+            webView.loadUrl("about:blank");
+            webView.clearHistory();
+            webView.removeAllViews();
+            webView.destroy();
+            webView = null;
+        }
+        progress.setVisibility(View.VISIBLE);
+        handler.postDelayed(this::createWebView, 750L);
+    }
+
+    private void showBlockedNavigation() {
+        if (isFinishing()) return;
+        new AlertDialog.Builder(this)
+            .setTitle("Navigation bloquée")
+            .setMessage("Le kiosk a refusé une page hors du domaine Chargeurs.ch ou une connexion non sécurisée.")
+            .setCancelable(false)
+            .setPositiveButton("Recharger", (dialog, which) -> recreateWebView())
+            .show();
+    }
+
+    private void registerConnectivityMonitoring() {
+        connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                runOnUiThread(() -> {
+                    networkBanner.setVisibility(View.GONE);
+                    if (webView == null || webView.getUrl() == null) recreateWebView();
+                });
+            }
+
+            @Override
+            public void onLost(Network network) {
+                runOnUiThread(() -> networkBanner.setVisibility(View.VISIBLE));
+            }
+        };
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                connectivityManager.registerDefaultNetworkCallback(networkCallback);
+            } else {
+                NetworkRequest request = new NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build();
+                connectivityManager.registerNetworkCallback(request, networkCallback);
+            }
+        } catch (RuntimeException ignored) {
+            networkBanner.setVisibility(isNetworkAvailable() ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    private boolean isNetworkAvailable() {
+        if (connectivityManager == null) return false;
+        Network active = connectivityManager.getActiveNetwork();
+        if (active == null) return false;
+        NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(active);
+        return capabilities != null
+            && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        enterImmersiveMode();
+        DevicePolicyManager policy = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+        if (policy != null
+            && keyguard != null
+            && !keyguard.isKeyguardLocked()
+            && policy.isLockTaskPermitted(getPackageName())) {
+            try {
+                startLockTask();
+            } catch (IllegalStateException ignored) {
+                // The device policy controller decides whether true lock-task mode is available.
+            }
+        }
+    }
+
+    private void enterImmersiveMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                );
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            );
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        if (connectivityManager != null && networkCallback != null) {
+            try {
+                connectivityManager.unregisterNetworkCallback(networkCallback);
+            } catch (RuntimeException ignored) {
+                // Already unregistered.
+            }
+        }
+        if (webView != null) {
+            webView.stopLoading();
+            webView.destroy();
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        // Back navigation is disabled in kiosk mode.
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+}
