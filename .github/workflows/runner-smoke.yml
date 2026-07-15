@@ -1,6 +1,9 @@
 name: Runner smoke
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - feat/chargeurs-platform-api-v1
