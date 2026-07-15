@@ -1,13 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
 
-createRoot(document.getElementById("root")!).render(<App />);
-
-// The service worker belongs to the kiosk surface only. Registering it from the
-// public website, customer account or administration can leave those pages on
-// an obsolete cached app shell after a new Lovable publication.
+// The service worker and runtime recovery guards belong to the kiosk surface
+// only. Public, account and administration pages keep their normal behavior.
 const hashPath = window.location.hash.replace(/^#/, "");
 const isKioskSurface =
   window.location.pathname === "/kiosk" ||
@@ -16,6 +14,20 @@ const isKioskSurface =
   hashPath.startsWith("/kiosk/");
 const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
 
+createRoot(document.getElementById("root")!).render(
+  isKioskSurface ? (
+    <KioskErrorBoundary>
+      <App />
+      <KioskBlankScreenGuard />
+    </KioskErrorBoundary>
+  ) : (
+    <App />
+  ),
+);
+
+// Register the PWA only on kiosk routes. Registering it from the public website,
+// customer account or administration can leave those pages on an obsolete app
+// shell after a new publication.
 if (isKioskSurface && !isStaticHashPreview) {
   initKioskPwa();
 } else if ("serviceWorker" in navigator) {
