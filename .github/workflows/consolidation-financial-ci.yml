@@ -5,9 +5,12 @@ on:
     branches: [main]
     paths:
       - "src/pages/Kiosk.tsx"
+      - "supabase/config.toml"
       - "supabase/functions/create-stripe-checkout/**"
       - "supabase/functions/stripe-webhook/**"
+      - "supabase/functions/settle-rental-payment/**"
       - "supabase/functions/_shared/settlement.ts"
+      - "supabase/functions/_shared/settlementRuntime.ts"
       - "supabase/functions/tests/settlement.test.ts"
       - "supabase/migrations/2026071520*.sql"
       - ".github/workflows/consolidation-financial-ci.yml"
@@ -35,8 +38,10 @@ jobs:
       - name: Check canonical financial functions
         run: |
           deno check supabase/functions/_shared/settlement.ts
+          deno check supabase/functions/_shared/settlementRuntime.ts
           deno check supabase/functions/create-stripe-checkout/index.ts
           deno check supabase/functions/stripe-webhook/index.ts
+          deno check supabase/functions/settle-rental-payment/index.ts
       - name: Test settlement planner
         run: deno test supabase/functions/tests/settlement.test.ts
       - name: Assert canonical financial safety boundaries
@@ -47,7 +52,10 @@ jobs:
           inbox="supabase/migrations/20260715201000_retryable_stripe_webhook_inbox.sql"
           checkout="supabase/functions/create-stripe-checkout/index.ts"
           webhook="supabase/functions/stripe-webhook/index.ts"
+          runtime="supabase/functions/_shared/settlementRuntime.ts"
+          endpoint="supabase/functions/settle-rental-payment/index.ts"
           kiosk="src/pages/Kiosk.tsx"
+          config="supabase/config.toml"
 
           grep -F "set settlement_status = 'legacy'" "$schema"
           grep -F "revoke all on function public.claim_rental_settlement" "$schema"
@@ -72,5 +80,21 @@ jobs:
           grep -F 'return response({ error: "WEBHOOK_PROCESSING_FAILED" }, 500)' "$webhook"
           grep -F '.neq("settlement_status", "legacy")' "$webhook"
 
+          grep -F "authorizedInternalCaller" "$runtime"
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$runtime"
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_LIVE" "$runtime"
+          grep -F "LEGACY_RENTAL_NOT_SETTLEABLE" "$runtime"
+          grep -F "RETURN_NOT_CONFIRMED" "$runtime"
+          grep -F "SUPPLEMENTAL_PAYMENT_REQUIRED" "$runtime"
+          grep -F "claim_rental_settlement" "$runtime"
+          grep -F "payment_intents.capture" "$runtime"
+          grep -F "payment_intents.cancel" "$runtime"
+          grep -F "refunds.create" "$runtime"
+          ! grep -F "off_session: true" "$runtime"
+          ! grep -F "paymentIntents.create" "$runtime"
+          grep -F "handleSettlementRequest" "$endpoint"
+          grep -F "[functions.settle-rental-payment]" "$config"
+          grep -F "verify_jwt = false" "$config"
+
           ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" \
-            "$schema" "$inbox" "$checkout" "$webhook" "$kiosk"
+            "$schema" "$inbox" "$checkout" "$webhook" "$runtime" "$endpoint" "$kiosk" "$config"
