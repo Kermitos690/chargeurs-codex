@@ -10,6 +10,8 @@ import Kiosk from "./pages/Kiosk.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
+import Partners from "./pages/Partners.tsx";
+import Support from "./pages/Support.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
 import AccountLayout from "./pages/account/AccountLayout.tsx";
 import AccountDashboard from "./pages/account/AccountDashboard.tsx";
@@ -49,6 +51,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
+            <Route path="/partenaires" element={<Partners />} />
+            <Route path="/support" element={<Support />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
             <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
