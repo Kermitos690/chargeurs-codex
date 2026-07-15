@@ -35,6 +35,7 @@ import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONObject;
 
@@ -82,6 +83,7 @@ public final class MainActivity extends Activity {
                 | WindowManager.LayoutParams.FLAG_SECURE
                 | WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
+        registerBackBlocking();
         enterImmersiveMode();
         setContentView(buildRoot());
         registerConnectivityMonitoring();
@@ -146,7 +148,7 @@ public final class MainActivity extends Activity {
         }
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
-            Toast.makeText(this, "Téléchargement bloqué en mode kiosk.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_SHORT).show()
         );
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -255,10 +257,10 @@ public final class MainActivity extends Activity {
     private void showBlockedNavigation() {
         if (isFinishing()) return;
         new AlertDialog.Builder(this)
-            .setTitle("Navigation bloquée")
-            .setMessage("Le kiosk a refusé une page hors du domaine Chargeurs.ch ou une connexion non sécurisée.")
+            .setTitle(R.string.navigation_blocked_title)
+            .setMessage(R.string.navigation_blocked_message)
             .setCancelable(false)
-            .setPositiveButton("Recharger", (dialog, which) -> recreateWebView())
+            .setPositiveButton(R.string.reload, (dialog, which) -> recreateWebView())
             .show();
     }
 
@@ -317,6 +319,15 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void registerBackBlocking() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                () -> { /* Back is disabled in kiosk mode. */ }
+            );
+        }
+    }
+
     private void enterImmersiveMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = getWindow().getInsetsController();
@@ -356,9 +367,11 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    @SuppressLint("GestureBackNavigation")
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        // Back navigation is disabled in kiosk mode.
+        // Legacy back button is disabled on Android 12 and earlier. Android 13+
+        // uses the registered OnBackInvoked callback above.
     }
 
     private int dp(int value) {
