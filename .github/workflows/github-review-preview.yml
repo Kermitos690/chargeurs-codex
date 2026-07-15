@@ -55,7 +55,7 @@ jobs:
           ! grep -F 'lovable-tagger' vite.config.ts package.json
           ! grep -F '@lovable.dev/cloud-auth-js' package.json
           ! grep -Eiq '(sk_live_|sk_test_|service_role_key[[:space:]]*=|CHARGENOW_APP_SECRET[[:space:]]*=)' \
-            src/pages/review/ReviewPortal.tsx .github/workflows/github-review-preview.yml
+            src/pages/review/GitHubReview.tsx .github/workflows/github-review-preview.yml
 
       - name: Lint
         run: npm run lint -- --quiet
