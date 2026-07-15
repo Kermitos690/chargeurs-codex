@@ -21,6 +21,7 @@ on:
       - "supabase/migrations/20260715123000_platform_api_mutations.sql"
       - "docs/API_V1.md"
       - "docs/openapi/chargeurs-api-v1.yaml"
+      - "docs/openapi/chargeurs-api-actions-v1.yaml"
       - ".github/workflows/platform-api-ci.yml"
   push:
     branches: [feat/chargeurs-platform-api-v1]
@@ -74,5 +75,7 @@ jobs:
           deno check supabase/functions/create-stripe-checkout/index.ts
           deno check supabase/functions/sync-cabinet-status/index.ts
 
-      - name: Validate OpenAPI contract
-        run: npx --yes @redocly/cli@1.27.2 lint docs/openapi/chargeurs-api-v1.yaml
+      - name: Validate OpenAPI contracts
+        run: |
+          npx --yes @redocly/cli@1.27.2 lint docs/openapi/chargeurs-api-v1.yaml
+          npx --yes @redocly/cli@1.27.2 lint docs/openapi/chargeurs-api-actions-v1.yaml
