@@ -1,0 +1,26 @@
+name: Chargeurs.ch Refonte V2 CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/refonte-chargeurs-v2]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
