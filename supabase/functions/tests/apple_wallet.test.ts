@@ -1,5 +1,11 @@
 import { assert, assertEquals, assertNotEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { decryptToken, encryptToken, visibleDataHash } from "../_shared/appleWallet.ts";
+import {
+  decryptToken,
+  encryptToken,
+  stableWalletSerial,
+  visibleDataHash,
+  walletUrlForToken,
+} from "../_shared/appleWallet.ts";
 import { sha256Hex } from "../_shared/db.ts";
 
 const KEY = btoa(String.fromCharCode(...new Uint8Array(32).map((_, i) => i + 1)));
@@ -23,6 +29,13 @@ Deno.test("Wallet token encryption uses a fresh nonce", async () => {
 
 Deno.test("Invalid Wallet encryption key is rejected", async () => {
   await assertRejects(() => encryptToken("secret", btoa("short")), Error, "exactly 32 bytes");
+});
+
+Deno.test("Wallet serial number is stable for one account and distinct across accounts", () => {
+  const first = stableWalletSerial("11111111-2222-4333-8444-555555555555");
+  assertEquals(first, stableWalletSerial("11111111-2222-4333-8444-555555555555"));
+  assertNotEquals(first, stableWalletSerial("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"));
+  assertEquals(first, "CHG-11111111222243338444555555555555");
 });
 
 Deno.test("Visible pass hash changes only when visible data changes", async () => {
@@ -50,4 +63,13 @@ Deno.test("Opaque QR hash does not expose account data", async () => {
   assert(!hash.includes("@"));
   assert(!hash.includes("CHG-"));
   assert(!hash.includes("wq_"));
+});
+
+Deno.test("Wallet link contains only the public app origin and opaque token", () => {
+  const token = "wq_z2cJwEJeHDQbHGdGfQvKKfVw4uY3hBNQ_HjPKKJJJ6M";
+  const url = walletUrlForToken("https://app.chargeurs.ch/", token);
+  assertEquals(url, `https://app.chargeurs.ch/wallet/${token}`);
+  assert(!url.includes("user@example.com"));
+  assert(!url.includes("11111111-2222-4333-8444-555555555555"));
+  assert(!url.includes("eyJ"));
 });
