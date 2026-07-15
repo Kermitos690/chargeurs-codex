@@ -186,7 +186,7 @@ jobs:
           test "${{ steps.lifecycle_test.outcome }}" = success
           test "${{ steps.lifecycle_security.outcome }}" = success
 
-  kiosk-beta-release-gate:
+  database-gates:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -213,3 +213,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate fail-closed kiosk beta release gate
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/kiosk-beta-release-gate.sql
+      - name: Validate retryable ChargeNow return inbox
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/chargenow-return-inbox.sql
