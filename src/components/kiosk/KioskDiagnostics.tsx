@@ -14,7 +14,6 @@ function readToken(): string {
   }
 }
 
-// Non-secret masked preview: prefix + length only (never the full token).
 function maskToken(t: string): string {
   if (!t) return "aucun token enregistré";
   const head = t.slice(0, 10);
@@ -44,8 +43,6 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
   );
 }
 
-// Protected diagnostics overlay. Reached only via the hidden trigger (5 taps on
-// the logo). Shows operational state — never any secret or admin token.
 export function KioskDiagnostics(props: Props) {
   const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
@@ -70,8 +67,18 @@ export function KioskDiagnostics(props: Props) {
       setTokenSaved(true);
       setTimeout(() => setTokenSaved(false), 2500);
     } catch {
-      /* ignore */
+      // Local storage can be unavailable in restricted kiosk mode.
     }
+  };
+
+  const exitFullscreen = async () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      await document.exitFullscreen();
+    } else {
+      const legacyDocument = document as Document & { webkitExitFullscreen?: () => void };
+      legacyDocument.webkitExitFullscreen?.();
+    }
+    onClose();
   };
 
   return (
@@ -107,8 +114,7 @@ export function KioskDiagnostics(props: Props) {
             {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette
-            tablette et ne quitte jamais l'appareil en clair.
+            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette tablette et ne quitte jamais l'appareil en clair.
           </p>
           <Input
             type="password"
@@ -128,7 +134,6 @@ export function KioskDiagnostics(props: Props) {
           </Button>
         </div>
 
-
         <div className="mt-5 flex flex-col gap-2">
           {needRefresh && (
             <Button onClick={onApplyUpdate} className="gap-2 rounded-full bg-gradient-primary">
@@ -138,15 +143,7 @@ export function KioskDiagnostics(props: Props) {
           <Button variant="outline" onClick={relock} className="gap-2 rounded-full">
             <Lock className="h-4 w-4" />{relocked ? "Borne verrouillée ✓" : `Verrouiller sur ${stationId ?? "—"}`}
           </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              const d = document as Document & { webkitExitFullscreen?: () => void };
-              if (document.fullscreenElement) (document.exitFullscreen?.() ?? d.webkitExitFullscreen?.());
-              onClose();
-            }}
-            className="gap-2 rounded-full text-muted-foreground"
-          >
+          <Button variant="ghost" onClick={exitFullscreen} className="gap-2 rounded-full text-muted-foreground">
             <LogOut className="h-4 w-4" />Quitter le plein écran
           </Button>
         </div>

@@ -1,0 +1,62 @@
+name: Chargeurs.ch Refonte V2 CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/refonte-chargeurs-v2]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --silent
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint -- --quiet > lint.log 2>&1
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > typecheck.log 2>&1
+      - name: Unit tests
+        id: tests
+        continue-on-error: true
+        run: npm test > tests.log 2>&1
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build > build.log 2>&1
+      - name: Upload quality logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-logs
+          path: |
+            lint.log
+            typecheck.log
+            tests.log
+            build.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Fail on quality errors
+        if: always()
+        run: |
+          echo "lint=${{ steps.lint.outcome }}"
+          echo "typecheck=${{ steps.typecheck.outcome }}"
+          echo "tests=${{ steps.tests.outcome }}"
+          echo "build=${{ steps.build.outcome }}"
+          test "${{ steps.lint.outcome }}" = success
+          test "${{ steps.typecheck.outcome }}" = success
+          test "${{ steps.tests.outcome }}" = success
+          test "${{ steps.build.outcome }}" = success
