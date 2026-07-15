@@ -12,6 +12,17 @@ on:
       - "package-lock.json"
       - "vite.config.ts"
       - ".github/workflows/github-review-preview.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - ".github/workflows/github-review-preview.yml"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +44,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'integration/chargeurs-beta-platform'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -78,6 +90,7 @@ jobs:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'integration/chargeurs-beta-platform'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
