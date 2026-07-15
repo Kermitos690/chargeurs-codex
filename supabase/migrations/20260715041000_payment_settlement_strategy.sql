@@ -28,6 +28,18 @@ alter table public.payments
   add column if not exists stripe_payment_method_id text,
   add column if not exists stripe_customer_id text;
 
+-- Existing webhook rows were successfully handled by the legacy webhook and
+-- must not be replayed after this migration. New rows start as received.
+alter table public.webhook_events
+  add column if not exists processing_status text not null default 'processed',
+  add column if not exists processing_started_at timestamptz,
+  add column if not exists processed_at timestamptz,
+  add column if not exists processing_error text,
+  add column if not exists attempt_count integer not null default 0;
+
+alter table public.webhook_events
+  alter column processing_status set default 'received';
+
 do $$
 begin
   if not exists (
@@ -85,15 +97,66 @@ begin
         amount_refunded_cents >= 0
       );
   end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'webhook_events_processing_status_check'
+  ) then
+    alter table public.webhook_events add constraint webhook_events_processing_status_check
+      check (processing_status in ('received','processing','processed','failed','ignored'));
+  end if;
 end $$;
 
 create index if not exists rental_sessions_settlement_pending_idx
   on public.rental_sessions(settlement_status, returned_at)
-  where settlement_status in ('pending','authorized','prepaid','failed','supplemental_required');
+  where settlement_status in ('pending','authorized','prepaid','settling','failed','supplemental_required');
 
 create unique index if not exists rental_sessions_supplemental_payment_intent_uidx
   on public.rental_sessions(stripe_supplemental_payment_intent_id)
   where stripe_supplemental_payment_intent_id is not null;
+
+create index if not exists webhook_events_retry_idx
+  on public.webhook_events(processing_status, processing_started_at)
+  where processing_status in ('received','processing','failed');
+
+-- Atomic claim with stale-lock recovery. Concurrent callbacks cannot settle the
+-- same rental twice; a worker that dies can be safely retried after the TTL.
+create or replace function public.claim_rental_settlement(
+  p_rental_id uuid,
+  p_lock_ttl_minutes integer default 10
+)
+returns public.rental_sessions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_session public.rental_sessions;
+begin
+  if p_lock_ttl_minutes < 1 or p_lock_ttl_minutes > 120 then
+    raise exception using errcode = '22023', message = 'INVALID_LOCK_TTL';
+  end if;
+
+  update public.rental_sessions
+  set settlement_status = 'settling',
+      settlement_locked_at = now(),
+      settlement_attempts = settlement_attempts + 1
+  where id = p_rental_id
+    and settlement_status <> 'settled'
+    and (
+      settlement_locked_at is null
+      or settlement_locked_at < now() - make_interval(mins => p_lock_ttl_minutes)
+    )
+    and settlement_status in (
+      'pending','authorized','prepaid','settling','failed','supplemental_required'
+    )
+  returning * into v_session;
+
+  return v_session;
+end;
+$$;
+
+revoke all on function public.claim_rental_settlement(uuid, integer) from public, anon, authenticated;
+grant execute on function public.claim_rental_settlement(uuid, integer) to service_role;
 
 comment on column public.rental_sessions.settlement_strategy is
   'manual_capture for eligible cards; prepaid_refund for TWINT and automatically captured methods.';
@@ -101,3 +164,5 @@ comment on column public.rental_sessions.deposit_amount_cents is
   'Initial deposit/authorization amount in integer cents; MVP target is 3000 CHF cents.';
 comment on column public.rental_sessions.final_amount_cents is
   'Authoritative final price returned by compute_pricing at return or non-return.';
+comment on function public.claim_rental_settlement(uuid, integer) is
+  'Atomically claims one rental for final payment settlement with stale-lock recovery; service_role only.';
