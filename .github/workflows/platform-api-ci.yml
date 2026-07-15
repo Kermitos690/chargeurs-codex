@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "supabase/config.toml"
       - "supabase/functions/platform-api/**"
       - "supabase/functions/platform-api-rentals/**"
       - "supabase/functions/platform-api-stations/**"
@@ -41,9 +42,11 @@ on:
       - "docs/API_WEBHOOKS_V1.md"
       - "docs/PAYMENT_AUTHORIZATION_FLOW.md"
       - "docs/RETURN_SETTLEMENT_PIPELINE.md"
+      - "docs/STAGING_DEPLOYMENT.md"
       - "docs/openapi/chargeurs-api-v1.yaml"
       - "docs/openapi/chargeurs-api-actions-v1.yaml"
       - ".github/workflows/platform-api-ci.yml"
+      - ".github/workflows/deploy-supabase-staging.yml"
   push:
     branches: [feat/chargeurs-platform-api-v1]
 
@@ -64,6 +67,33 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Validate deployment YAML formatting
+        run: |
+          npx --yes prettier@3.6.2 --check \
+            .github/workflows/platform-api-ci.yml \
+            .github/workflows/deploy-supabase-staging.yml
+
+      - name: Assert staging workflow safety defaults
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const workflow = fs.readFileSync('.github/workflows/deploy-supabase-staging.yml', 'utf8');
+          const required = [
+            'environment: staging',
+            'DEPLOY-CHARGEURS-STAGING',
+            'PLATFORM_API_LIVE_MUTATIONS_ENABLED=false',
+            'PLATFORM_API_HARDWARE_MUTATIONS_ENABLED=false',
+            'ENABLE_MANUAL_AUTHORIZATION_LIVE=false',
+            'ENABLE_RETURN_SETTLEMENT_WORKER=false',
+            'supabase db push --linked --dry-run',
+          ];
+          const missing = required.filter((value) => !workflow.includes(value));
+          if (missing.length) {
+            console.error('Unsafe or incomplete staging workflow:', missing);
+            process.exit(1);
+          }
+          NODE
 
       - name: Lint application
         run: npm run lint -- --quiet
