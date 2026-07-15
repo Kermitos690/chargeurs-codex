@@ -5,8 +5,8 @@
     <string name="provision_help">Saisissez l’identifiant de la station, le token kiosk fourni par l’administration et le domaine HTTPS autorisé.</string>
     <string name="station_id">Identifiant de la station</string>
     <string name="kiosk_token">Token kiosk</string>
-    <string name="base_url">Domaine Chargeurs.ch</string>
-    <string name="default_base_url" translatable="false">https://chargeurs.ch</string>
+    <string name="base_url">Domaine de l’application</string>
+    <string name="default_base_url" translatable="false">https://chargeurs-codex.lovable.app</string>
     <string name="activate">Activer cette borne</string>
     <string name="invalid_station">Identifiant de station invalide.</string>
     <string name="invalid_token">Token kiosk invalide ou trop court.</string>
@@ -16,6 +16,6 @@
     <string name="network_unavailable">Connexion Internet indisponible</string>
     <string name="download_blocked">Téléchargement bloqué en mode kiosk.</string>
     <string name="navigation_blocked_title">Navigation bloquée</string>
-    <string name="navigation_blocked_message">Le kiosk a refusé une page hors du domaine Chargeurs.ch ou une connexion non sécurisée.</string>
+    <string name="navigation_blocked_message">Le kiosk a refusé une page hors du domaine autorisé ou une connexion non sécurisée.</string>
     <string name="reload">Recharger</string>
 </resources>
