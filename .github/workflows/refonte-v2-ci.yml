@@ -1,100 +1,14 @@
-name: Chargeurs.ch Refonte V2 CI
+name: Chargeurs.ch Refonte V2 CI (superseded branch)
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: ["feat/**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  quality:
+  notice:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund --silent
-
-      - name: Lint
-        id: lint
-        continue-on-error: true
-        run: npm run lint -- --quiet > lint.log 2>&1
-
-      - name: Typecheck frontend
-        id: typecheck
-        continue-on-error: true
-        run: npm run typecheck > typecheck.log 2>&1
-
-      - name: Unit tests
-        id: tests
-        continue-on-error: true
-        run: npm test > tests.log 2>&1
-
-      - name: Production build
-        id: build
-        continue-on-error: true
-        run: npm run build > build.log 2>&1
-
-      - name: Check settlement Edge Functions
-        id: edge_check
-        continue-on-error: true
-        run: |
-          deno check \
-            supabase/functions/_shared/settlement.ts \
-            supabase/functions/create-stripe-checkout/index.ts \
-            supabase/functions/stripe-webhook/index.ts \
-            supabase/functions/settle-rental-payment/index.ts \
-            supabase/functions/chargenow-rent-callback/index.ts \
-            supabase/functions/rental-admin-action/index.ts \
-            > edge-check.log 2>&1
-
-      - name: Edge Function integration tests
-        id: edge_tests
-        continue-on-error: true
-        run: |
-          deno test --allow-read --allow-net --allow-env --no-check supabase/functions/tests/ \
-            > edge-tests.log 2>&1
-
-      - name: Upload quality logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-logs
-          path: |
-            lint.log
-            typecheck.log
-            tests.log
-            build.log
-            edge-check.log
-            edge-tests.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Fail on quality errors
-        if: always()
-        run: |
-          echo "lint=${{ steps.lint.outcome }}"
-          echo "typecheck=${{ steps.typecheck.outcome }}"
-          echo "tests=${{ steps.tests.outcome }}"
-          echo "build=${{ steps.build.outcome }}"
-          echo "edge_check=${{ steps.edge_check.outcome }}"
-          echo "edge_tests=${{ steps.edge_tests.outcome }}"
-          test "${{ steps.lint.outcome }}" = success
-          test "${{ steps.typecheck.outcome }}" = success
-          test "${{ steps.tests.outcome }}" = success
-          test "${{ steps.build.outcome }}" = success
-          test "${{ steps.edge_check.outcome }}" = success
-          test "${{ steps.edge_tests.outcome }}" = success
+      - run: echo "This superseded branch is manual-only. Use PR #16 for canonical settlement work."
