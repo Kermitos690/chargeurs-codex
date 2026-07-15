@@ -1,0 +1,246 @@
+name: Deploy Chargeurs.ch Supabase staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEPLOY-CHARGEURS-STAGING"
+        required: true
+        type: string
+      apply_migrations:
+        description: "Apply pending database migrations after dry-run"
+        required: true
+        default: false
+        type: boolean
+      sync_function_secrets:
+        description: "Synchronize staging Edge Function secrets"
+        required: true
+        default: false
+        type: boolean
+      deploy_functions:
+        description: "Deploy the staging Edge Functions"
+        required: true
+        default: true
+        type: boolean
+      run_smoke_tests:
+        description: "Run non-destructive staging smoke tests"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargeurs-supabase-staging
+  cancel-in-progress: false
+
+env:
+  # Historical project reference present in supabase/config.toml. It is blocked
+  # here until explicitly classified, to prevent accidental deployment to it.
+  HISTORICAL_PROJECT_REF: zoybkzkvvsbnqqarlaii
+
+jobs:
+  deploy:
+    name: Guarded staging release
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
+      STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+      PRODUCTION_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
+      STAGING_ANON_KEY: ${{ secrets.SUPABASE_STAGING_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "DEPLOY-CHARGEURS-STAGING" || {
+            echo "Invalid confirmation phrase." >&2
+            exit 1
+          }
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "SUPABASE_ACCESS_TOKEN is missing." >&2; exit 1; }
+          test -n "$SUPABASE_DB_PASSWORD" || { echo "SUPABASE_STAGING_DB_PASSWORD is missing." >&2; exit 1; }
+          test -n "$STAGING_PROJECT_REF" || { echo "SUPABASE_STAGING_PROJECT_REF is missing." >&2; exit 1; }
+          [[ "$STAGING_PROJECT_REF" =~ ^[a-z0-9]{20}$ ]] || {
+            echo "The staging project reference has an invalid format." >&2
+            exit 1
+          }
+          test "$STAGING_PROJECT_REF" != "$HISTORICAL_PROJECT_REF" || {
+            echo "Deployment blocked: staging matches the historical project reference." >&2
+            exit 1
+          }
+          if [ -n "${PRODUCTION_PROJECT_REF:-}" ] && [ "$STAGING_PROJECT_REF" = "$PRODUCTION_PROJECT_REF" ]; then
+            echo "Deployment blocked: staging and production project references are identical." >&2
+            exit 1
+          fi
+          echo "Staging target guardrails passed."
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.84.2
+
+      - name: Link staging project
+        shell: bash
+        run: supabase link --project-ref "$STAGING_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Record migration state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-evidence
+          supabase migration list --linked > release-evidence/migrations-before.txt
+          supabase db push --linked --dry-run --password "$SUPABASE_DB_PASSWORD" > release-evidence/db-push-dry-run.txt
+
+      - name: Apply database migrations
+        if: ${{ inputs.apply_migrations }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --yes
+          supabase migration list --linked > release-evidence/migrations-after.txt
+          supabase db lint --linked --level error > release-evidence/db-lint.txt
+
+      - name: Build temporary staging secrets file
+        if: ${{ inputs.sync_function_secrets }}
+        shell: bash
+        env:
+          STRIPE_SECRET_KEY_VALUE: ${{ secrets.STAGING_STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET_VALUE: ${{ secrets.STAGING_STRIPE_WEBHOOK_SECRET }}
+          PUBLIC_APP_URL_VALUE: ${{ vars.STAGING_PUBLIC_APP_URL }}
+          CHARGENOW_BASIC_AUTH_VALUE: ${{ secrets.STAGING_CHARGENOW_BASIC_AUTH }}
+          CHARGENOW_EVENT_SECRET_VALUE: ${{ secrets.STAGING_CHARGENOW_EVENT_SECRET }}
+          API_LOG_HASH_SALT_VALUE: ${{ secrets.STAGING_API_LOG_HASH_SALT }}
+          WEBHOOK_MASTER_SECRET_VALUE: ${{ secrets.STAGING_PLATFORM_API_WEBHOOK_MASTER_SECRET }}
+          WEBHOOK_WORKER_TOKEN_VALUE: ${{ secrets.STAGING_PLATFORM_API_WEBHOOK_WORKER_TOKEN }}
+          SETTLEMENT_WORKER_TOKEN_VALUE: ${{ secrets.STAGING_RENTAL_SETTLEMENT_WORKER_TOKEN }}
+        run: |
+          set -euo pipefail
+          required=(
+            STRIPE_SECRET_KEY_VALUE STRIPE_WEBHOOK_SECRET_VALUE PUBLIC_APP_URL_VALUE
+            CHARGENOW_BASIC_AUTH_VALUE CHARGENOW_EVENT_SECRET_VALUE API_LOG_HASH_SALT_VALUE
+            WEBHOOK_MASTER_SECRET_VALUE WEBHOOK_WORKER_TOKEN_VALUE SETTLEMENT_WORKER_TOKEN_VALUE
+          )
+          for variable in "${required[@]}"; do
+            test -n "${!variable:-}" || { echo "$variable is missing." >&2; exit 1; }
+          done
+          case "$STRIPE_SECRET_KEY_VALUE" in
+            sk_test_*) ;;
+            *) echo "Staging requires a Stripe test secret key." >&2; exit 1 ;;
+          esac
+          secrets_file="$RUNNER_TEMP/chargeurs-staging-functions.env"
+          umask 077
+          {
+            printf 'STRIPE_SECRET_KEY=%s\n' "$STRIPE_SECRET_KEY_VALUE"
+            printf 'STRIPE_WEBHOOK_SECRET=%s\n' "$STRIPE_WEBHOOK_SECRET_VALUE"
+            printf 'PUBLIC_APP_URL=%s\n' "$PUBLIC_APP_URL_VALUE"
+            printf 'CHARGENOW_BASIC_AUTH=%s\n' "$CHARGENOW_BASIC_AUTH_VALUE"
+            printf 'CHARGENOW_EVENT_SECRET=%s\n' "$CHARGENOW_EVENT_SECRET_VALUE"
+            printf 'API_LOG_HASH_SALT=%s\n' "$API_LOG_HASH_SALT_VALUE"
+            printf 'PLATFORM_API_WEBHOOK_MASTER_SECRET=%s\n' "$WEBHOOK_MASTER_SECRET_VALUE"
+            printf 'PLATFORM_API_WEBHOOK_WORKER_TOKEN=%s\n' "$WEBHOOK_WORKER_TOKEN_VALUE"
+            printf 'RENTAL_SETTLEMENT_WORKER_TOKEN=%s\n' "$SETTLEMENT_WORKER_TOKEN_VALUE"
+            printf 'PLATFORM_API_MUTATIONS_ENABLED=false\n'
+            printf 'PLATFORM_API_LIVE_MUTATIONS_ENABLED=false\n'
+            printf 'PLATFORM_API_HARDWARE_MUTATIONS_ENABLED=false\n'
+            printf 'ENABLE_MANUAL_AUTHORIZATION_FLOW=false\n'
+            printf 'ENABLE_MANUAL_AUTHORIZATION_LIVE=false\n'
+            printf 'ENABLE_RETURN_SETTLEMENT_WORKER=false\n'
+            printf 'ALLOW_UNSIGNED_CHARGENOW_EVENTS=false\n'
+            printf 'ENVIRONMENT=staging\n'
+          } > "$secrets_file"
+          echo "FUNCTION_SECRETS_FILE=$secrets_file" >> "$GITHUB_ENV"
+
+      - name: Synchronize Edge Function secrets
+        if: ${{ inputs.sync_function_secrets }}
+        shell: bash
+        run: supabase secrets set --project-ref "$STAGING_PROJECT_REF" --env-file "$FUNCTION_SECRETS_FILE"
+
+      - name: Deploy custom-auth functions
+        if: ${{ inputs.deploy_functions }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          functions=(
+            platform-api
+            platform-api-rentals
+            platform-api-stations
+            platform-api-webhook-worker
+            rental-settlement-worker
+            stripe-webhook
+            cabinet-event-push
+            create-rental-session
+            create-stripe-checkout
+            eject-after-payment
+            chargenow-rent-callback
+            sync-cabinet-status
+          )
+          for function_name in "${functions[@]}"; do
+            supabase functions deploy "$function_name" \
+              --project-ref "$STAGING_PROJECT_REF" \
+              --use-api \
+              --no-verify-jwt
+          done
+
+      - name: Deploy JWT-protected functions
+        if: ${{ inputs.deploy_functions }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          functions=(api-key-admin api-webhook-admin stripe-payment-lifecycle)
+          for function_name in "${functions[@]}"; do
+            supabase functions deploy "$function_name" --project-ref "$STAGING_PROJECT_REF" --use-api
+          done
+          supabase functions list --project-ref "$STAGING_PROJECT_REF" > release-evidence/functions-after.txt
+
+      - name: Run non-destructive smoke tests
+        if: ${{ inputs.run_smoke_tests }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_ANON_KEY" || { echo "SUPABASE_STAGING_ANON_KEY is missing." >&2; exit 1; }
+          base="https://${STAGING_PROJECT_REF}.supabase.co/functions/v1"
+          mkdir -p release-evidence
+
+          curl --fail --silent --show-error \
+            -H "apikey: $STAGING_ANON_KEY" \
+            "$base/platform-api/v1/health" \
+            | tee release-evidence/platform-api-health.json \
+            | jq -e '.data.ok == true and .data.service == "chargeurs-platform-api"' >/dev/null
+
+          status="$(curl --silent --output release-evidence/rentals-unauthorized.json --write-out '%{http_code}' \
+            -H "apikey: $STAGING_ANON_KEY" \
+            "$base/platform-api-rentals/v1/rentals")"
+          test "$status" = "401" || { echo "Expected 401 from rentals API, received $status." >&2; exit 1; }
+
+          status="$(curl --silent --output release-evidence/settlement-worker-disabled.json --write-out '%{http_code}' \
+            -X POST \
+            -H "apikey: $STAGING_ANON_KEY" \
+            -H "Authorization: Bearer ${{ secrets.STAGING_RENTAL_SETTLEMENT_WORKER_TOKEN }}" \
+            -H 'Content-Type: application/json' \
+            --data '{"limit":1}' \
+            "$base/rental-settlement-worker")"
+          test "$status" = "503" || { echo "Expected disabled settlement worker (503), received $status." >&2; exit 1; }
+          jq -e '.error == "RETURN_SETTLEMENT_WORKER_DISABLED"' release-evidence/settlement-worker-disabled.json >/dev/null
+
+      - name: Remove temporary secret material
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [ -n "${FUNCTION_SECRETS_FILE:-}" ] && [ -f "$FUNCTION_SECRETS_FILE" ]; then
+            chmod 600 "$FUNCTION_SECRETS_FILE"
+            shred -u "$FUNCTION_SECRETS_FILE" 2>/dev/null || rm -f "$FUNCTION_SECRETS_FILE"
+          fi
+
+      - name: Upload staging release evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-staging-release-${{ github.run_id }}
+          path: release-evidence
+          if-no-files-found: warn
+          retention-days: 30
