@@ -19,9 +19,11 @@ function json(body: unknown, status = 200) {
 
 function safeEqual(a: string, b: string): boolean {
   if (!a || !b || a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return result === 0;
+  let mismatch = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return mismatch === 0;
 }
 
 function authorizedInternalCaller(req: Request): boolean {
@@ -31,24 +33,30 @@ function authorizedInternalCaller(req: Request): boolean {
 }
 
 function cents(value: unknown): number {
-  const result = Math.round(Number(value ?? 0));
-  if (!Number.isFinite(result) || result < 0) throw new Error("INVALID_AMOUNT");
-  return result;
+  const normalized = Math.round(Number(value ?? 0));
+  if (!Number.isFinite(normalized) || normalized < 0) throw new Error("INVALID_AMOUNT");
+  return normalized;
 }
 
 function safeErrorCode(error: unknown): string {
   if (error instanceof OrchestratorError) return error.code;
-  if (error instanceof Error && /^[A-Z0-9_:-]+$/.test(error.message)) return error.message.slice(0, 120);
+  if (error instanceof Error && /^[A-Z0-9_:-]+$/.test(error.message)) {
+    return error.message.slice(0, 120);
+  }
   return error instanceof Error ? error.name : "UNKNOWN_ERROR";
 }
 
 async function paymentMethodType(stripe: Stripe, intent: Stripe.PaymentIntent): Promise<string> {
-  const id = typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id;
+  const id = typeof intent.payment_method === "string"
+    ? intent.payment_method
+    : intent.payment_method?.id;
   if (id) {
     try {
       const method = await stripe.paymentMethods.retrieve(id);
       if (method.type) return method.type;
-    } catch (_) { /* PaymentIntent fallback */ }
+    } catch (_) {
+      // Fall back to the PaymentIntent-declared method type.
+    }
   }
   return intent.payment_method_types?.[0] ?? "unknown";
 }
@@ -69,7 +77,7 @@ async function openIncident(
   message: string,
   details: Record<string, unknown> = {},
 ) {
-  await db.from("system_incidents").insert({
+  const { error: incidentError } = await db.from("system_incidents").insert({
     type: "payment_settlement",
     severity: code === "SUPPLEMENTAL_PAYMENT_REQUIRED" ? "warning" : "high",
     message,
@@ -81,6 +89,8 @@ async function openIncident(
     },
     resolved: false,
   });
+  if (incidentError) throw incidentError;
+
   await auditLog(db, {
     action: "settlement.incident.opened",
     target: String(session.id),
@@ -88,43 +98,35 @@ async function openIncident(
   });
 }
 
-async function failSettlement(
+/**
+ * Records a retryable settlement problem without terminalizing the rental.
+ *
+ * Payment-provider, database and orchestration persistence errors can occur
+ * after a Stripe side effect has already succeeded. Moving the orchestrator to
+ * `failed` would make safe replay impossible. The durable Stripe idempotency
+ * keys and the settlement lock allow the operator/worker to reconcile and retry
+ * while the business lifecycle remains at return_detected/pricing_finalized.
+ */
+async function recordRetryableSettlementFailure(
   db: DB,
   session: Session,
   code: string,
   message: string,
   details: Record<string, unknown> = {},
 ) {
-  try {
-    const state = await orchestratorState(db, String(session.id));
-    if (state && !["completed", "failed"].includes(state)) {
-      await appendRentalEvent(db, {
-        rentalId: String(session.id),
-        eventType: "rental_failed",
-        idempotencyKey: `settlement_failed:${session.id}:${code}`,
-        paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-        stationId: String(session.station_id ?? "") || null,
-        failureReason: code,
-        metadata: { code },
-      });
-    }
-  } catch (error) {
-    await auditLog(db, {
-      action: "orchestrator.settlement_failure_append_failed",
-      target: String(session.id),
-      data: { code, orchestrator_error: safeErrorCode(error) },
-    });
-  }
-
-  await db.from("rental_sessions").update({
+  const { error: updateError } = await db.from("rental_sessions").update({
     settlement_status: "failed",
     settlement_error: code,
     settlement_locked_at: null,
-    state: "needs_support",
     failure_code: code,
     failure_message: message,
   }).eq("id", session.id);
-  await openIncident(db, session, code, message, details);
+  if (updateError) throw updateError;
+
+  await openIncident(db, session, code, message, {
+    retryable: true,
+    ...details,
+  });
 }
 
 async function claimSettlement(db: DB, rentalSessionId: string): Promise<Session | null> {
@@ -151,7 +153,7 @@ async function saveSupplementalRequired(
     errorCode?: string;
   },
 ) {
-  await db.from("rental_sessions").update({
+  const { error } = await db.from("rental_sessions").update({
     final_amount_cents: input.finalAmountCents,
     captured_amount_cents: input.capturedCents,
     refunded_amount_cents: input.refundedCents,
@@ -163,11 +165,13 @@ async function saveSupplementalRequired(
     settlement_locked_at: null,
     state: "needs_support",
   }).eq("id", session.id);
+  if (error) throw error;
 
   await openIncident(db, session, "SUPPLEMENTAL_PAYMENT_REQUIRED", input.message, {
     supplemental_cents: input.supplementalCents,
     settlement_error: input.code,
     provider_error_code: input.errorCode ?? null,
+    retryable: true,
   });
 }
 
@@ -180,7 +184,14 @@ async function appendPricingFinalized(
 ) {
   const state = await orchestratorState(db, String(session.id));
   if (!state) throw new OrchestratorError("ORCHESTRATOR_SNAPSHOT_MISSING");
-  if (!["return_detected", "non_return", "pricing_finalized", "payment_captured", "refunded", "completed"].includes(state)) {
+  if (![
+    "return_detected",
+    "non_return",
+    "pricing_finalized",
+    "payment_captured",
+    "refunded",
+    "completed",
+  ].includes(state)) {
     throw new OrchestratorError("SETTLEMENT_STATE_NOT_READY", `Settlement refused from ${state}`);
   }
 
@@ -253,6 +264,25 @@ async function appendFinancialCompletion(
   });
 }
 
+async function persistFinancialProgress(
+  db: DB,
+  session: Session,
+  input: {
+    capturedCents: number;
+    refundedCents: number;
+    supplementalCents: number;
+    supplementalPaymentIntentId?: string | null;
+  },
+) {
+  const { error } = await db.from("rental_sessions").update({
+    captured_amount_cents: input.capturedCents,
+    refunded_amount_cents: input.refundedCents,
+    supplemental_amount_cents: input.supplementalCents,
+    stripe_supplemental_payment_intent_id: input.supplementalPaymentIntentId ?? null,
+  }).eq("id", session.id);
+  if (error) throw error;
+}
+
 async function settle(
   db: DB,
   stripe: Stripe,
@@ -275,24 +305,40 @@ async function settle(
   });
 
   if (pricingError || !pricing) {
-    await failSettlement(db, session, "FINAL_PRICING_ERROR", "Le tarif final n'a pas pu être calculé automatiquement.", {
-      pricing_error_code: pricingError?.code ?? null,
-    });
+    await recordRetryableSettlementFailure(
+      db,
+      session,
+      "FINAL_PRICING_ERROR",
+      "Le tarif final n'a pas pu être calculé automatiquement.",
+      { pricing_error_code: pricingError?.code ?? null },
+    );
     return json({ ok: false, error: "FINAL_PRICING_ERROR" }, 409);
   }
 
   const pricingRow = pricing as Record<string, unknown>;
   const finalAmountCents = cents(pricingRow.final_cents);
   const initialSnapshot = session.pricing_snapshot as Record<string, unknown> | null;
-  const depositAmountCents = cents(session.deposit_amount_cents ?? initialSnapshot?.deposit_cents ?? 0);
+  const depositAmountCents = cents(
+    session.deposit_amount_cents ?? initialSnapshot?.deposit_cents ?? 0,
+  );
   if (depositAmountCents <= 0) {
-    await failSettlement(db, session, "DEPOSIT_NOT_CONFIGURED", "La caution de la location est introuvable.");
+    await recordRetryableSettlementFailure(
+      db,
+      session,
+      "DEPOSIT_NOT_CONFIGURED",
+      "La caution de la location est introuvable.",
+    );
     return json({ ok: false, error: "DEPOSIT_NOT_CONFIGURED" }, 409);
   }
 
   const paymentIntentId = String(session.stripe_payment_intent_id ?? "");
   if (!paymentIntentId) {
-    await failSettlement(db, session, "PAYMENT_INTENT_MISSING", "Le paiement initial de la location est introuvable.");
+    await recordRetryableSettlementFailure(
+      db,
+      session,
+      "PAYMENT_INTENT_MISSING",
+      "Le paiement initial de la location est introuvable.",
+    );
     return json({ ok: false, error: "PAYMENT_INTENT_MISSING" }, 409);
   }
 
@@ -300,23 +346,19 @@ async function settle(
     await appendPricingFinalized(db, session, returnState, finalAmountCents, pricingRow);
   } catch (error) {
     const code = safeErrorCode(error);
-    await openIncident(
+    await recordRetryableSettlementFailure(
       db,
       session,
       code,
       "Le règlement a été bloqué car le cycle de location n'est pas prêt pour la tarification finale.",
     );
-    await db.from("rental_sessions").update({
-      settlement_status: "failed",
-      settlement_error: code,
-      settlement_locked_at: null,
-    }).eq("id", session.id);
     return json({ ok: false, error: code }, 409);
   }
 
   let intent = await stripe.paymentIntents.retrieve(paymentIntentId);
   const methodType = await paymentMethodType(stripe, intent);
-  const storedStrategy = session.settlement_strategy === "manual_capture" || session.settlement_strategy === "prepaid_refund"
+  const storedStrategy = session.settlement_strategy === "manual_capture" ||
+      session.settlement_strategy === "prepaid_refund"
     ? String(session.settlement_strategy)
     : null;
   const strategy = storedStrategy ?? resolveSettlementStrategy({
@@ -324,8 +366,14 @@ async function settle(
     captureMethod: intent.capture_method,
   });
 
-  const alreadyCapturedCents = Math.max(cents(session.captured_amount_cents), cents(intent.amount_received));
+  const alreadyCapturedCents = Math.max(
+    cents(session.captured_amount_cents),
+    cents(intent.amount_received),
+  );
   const alreadyRefundedCents = cents(session.refunded_amount_cents);
+
+  // A previous attempt may have captured the manual PaymentIntent before local
+  // persistence failed. Treat the captured intent as prepaid on replay.
   const planningStrategy = strategy === "manual_capture" && intent.status !== "requires_capture"
     ? "prepaid_refund"
     : strategy;
@@ -342,7 +390,9 @@ async function settle(
   let capturedCents = alreadyCapturedCents;
   let refundedCents = alreadyRefundedCents;
   let supplementalCapturedCents = 0;
-  let supplementalPaymentIntentId = String(session.stripe_supplemental_payment_intent_id ?? "") || null;
+  let supplementalPaymentIntentId = String(
+    session.stripe_supplemental_payment_intent_id ?? "",
+  ) || null;
   let canceledAuthorization = false;
 
   if (plan.cancelAuthorization && intent.status === "requires_capture") {
@@ -369,6 +419,12 @@ async function settle(
       { idempotencyKey: `settlement_capture_${session.id}_${plan.captureCents}` },
     );
     capturedCents = cents(intent.amount_received || plan.captureCents);
+    await persistFinancialProgress(db, session, {
+      capturedCents,
+      refundedCents,
+      supplementalCents: plan.supplementalCents,
+      supplementalPaymentIntentId,
+    });
     await logApi(db, {
       service: "stripe",
       endpoint: "payment_intents.capture",
@@ -385,6 +441,12 @@ async function settle(
       { idempotencyKey: `settlement_refund_${session.id}_${plan.refundCents}` },
     );
     refundedCents = alreadyRefundedCents + plan.refundCents;
+    await persistFinancialProgress(db, session, {
+      capturedCents,
+      refundedCents,
+      supplementalCents: plan.supplementalCents,
+      supplementalPaymentIntentId,
+    });
     await logApi(db, {
       service: "stripe",
       endpoint: "refunds.create",
@@ -432,13 +494,23 @@ async function settle(
           final_amount_cents: String(finalAmountCents),
           deposit_amount_cents: String(depositAmountCents),
         },
-      }, { idempotencyKey: `settlement_supplemental_${session.id}_${plan.supplementalCents}` });
+      }, {
+        idempotencyKey: `settlement_supplemental_${session.id}_${plan.supplementalCents}`,
+      });
 
       supplementalPaymentIntentId = supplemental.id;
       if (supplemental.status !== "succeeded") {
         throw new Error(`SUPPLEMENTAL_${supplemental.status.toUpperCase()}`);
       }
-      supplementalCapturedCents = cents(supplemental.amount_received || plan.supplementalCents);
+      supplementalCapturedCents = cents(
+        supplemental.amount_received || plan.supplementalCents,
+      );
+      await persistFinancialProgress(db, session, {
+        capturedCents: capturedCents + supplementalCapturedCents,
+        refundedCents,
+        supplementalCents: plan.supplementalCents,
+        supplementalPaymentIntentId,
+      });
     } catch (error) {
       await saveSupplementalRequired(db, session, {
         finalAmountCents,
@@ -464,15 +536,33 @@ async function settle(
   const netPaidCents = Math.max(0, totalCapturedCents - refundedCents);
   const completedAt = new Date().toISOString();
 
-  await appendFinancialCompletion(db, session, {
-    returnState,
-    strategy,
-    finalAmountCents,
-    capturedCents: totalCapturedCents,
-    refundedCents,
-    supplementalCents: plan.supplementalCents,
-    canceledAuthorization,
-  });
+  try {
+    await appendFinancialCompletion(db, session, {
+      returnState,
+      strategy,
+      finalAmountCents,
+      capturedCents: totalCapturedCents,
+      refundedCents,
+      supplementalCents: plan.supplementalCents,
+      canceledAuthorization,
+    });
+  } catch (error) {
+    const code = "ORCHESTRATOR_FINANCIAL_COMMIT_RETRY_REQUIRED";
+    await recordRetryableSettlementFailure(
+      db,
+      session,
+      code,
+      "Les opérations Stripe ont été exécutées, mais leur confirmation locale doit être rejouée.",
+      {
+        orchestrator_error: safeErrorCode(error),
+        final_amount_cents: finalAmountCents,
+        captured_amount_cents: totalCapturedCents,
+        refunded_amount_cents: refundedCents,
+        supplemental_amount_cents: plan.supplementalCents,
+      },
+    );
+    return json({ ok: false, error: code }, 500);
+  }
 
   const { error: paymentUpdateError } = await db.from("payments").update({
     status: refundedCents > 0
@@ -501,6 +591,8 @@ async function settle(
     settled_at: completedAt,
     state: "completed",
     closed_at: completedAt,
+    failure_code: null,
+    failure_message: null,
   }).eq("id", session.id);
   if (sessionUpdateError) throw sessionUpdateError;
 
@@ -542,9 +634,11 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
   let rentalSessionId = "";
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
-    const returnState: ReturnState = body.returnState === "not_returned" ? "not_returned" : "normal";
+    const returnState: ReturnState = body.returnState === "not_returned"
+      ? "not_returned"
+      : "normal";
     const finalAt = typeof body.finalAt === "string" && Number.isFinite(Date.parse(body.finalAt))
       ? body.finalAt
       : new Date().toISOString();
@@ -552,7 +646,9 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
     if (!rentalSessionId) return json({ ok: false, error: "MISSING_SESSION" }, 400);
 
     const { data: existing, error: existingError } = await db.from("rental_sessions")
-      .select("*").eq("id", rentalSessionId).maybeSingle();
+      .select("*")
+      .eq("id", rentalSessionId)
+      .maybeSingle();
     if (existingError) throw existingError;
     if (!existing) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
@@ -574,14 +670,28 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
     });
     return await settle(db, stripe, session, returnState, finalAt);
   } catch (error) {
-    const code = safeErrorCode(error);
+    const underlyingCode = safeErrorCode(error);
     if (rentalSessionId) {
-      const { data: session } = await db.from("rental_sessions")
-        .select("*").eq("id", rentalSessionId).maybeSingle();
-      if (session) {
-        await failSettlement(db, session, "SETTLEMENT_INTERNAL_ERROR", "Le règlement final a échoué et doit être réconcilié.", {
-          error_code: code,
-        });
+      try {
+        const { data: session } = await db.from("rental_sessions")
+          .select("*")
+          .eq("id", rentalSessionId)
+          .maybeSingle();
+        if (session) {
+          await recordRetryableSettlementFailure(
+            db,
+            session,
+            "SETTLEMENT_INTERNAL_ERROR",
+            "Le règlement final a échoué et doit être réconcilié.",
+            { error_code: underlyingCode },
+          );
+        }
+      } catch (recordError) {
+        console.error(
+          "settlement failure persistence failed",
+          safeErrorCode(recordError),
+          rentalSessionId,
+        );
       }
     }
     return json({ ok: false, error: "SETTLEMENT_INTERNAL_ERROR" }, 500);
