@@ -3,10 +3,21 @@ name: Chargeurs.ch Refonte V2 CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
   push:
-    branches:
-      - feat/refonte-chargeurs-v2
-      - integration/settlement-main
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/ISSUE_TEMPLATE/**"
+  workflow_dispatch:
+
+concurrency:
+  group: refonte-v2-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,7 +25,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,48 +33,38 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install dependencies
-        run: npm install --no-audit --no-fund --silent
+        run: npm ci --no-audit --no-fund --prefer-offline
       - name: Lint
-        id: lint
-        continue-on-error: true
-        run: npm run lint -- --quiet > lint.log 2>&1
+        run: npm run lint -- --quiet
       - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: npm run typecheck > typecheck.log 2>&1
+        run: npm run typecheck
       - name: Unit tests
-        id: tests
-        continue-on-error: true
-        run: npm test > tests.log 2>&1
+        run: npm test
       - name: Production build
-        id: build
-        continue-on-error: true
-        run: npm run build > build.log 2>&1
-      - name: Upload quality logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-logs
-          path: |
-            lint.log
-            typecheck.log
-            tests.log
-            build.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Fail on quality errors
-        if: always()
-        run: |
-          echo "lint=${{ steps.lint.outcome }}"
-          echo "typecheck=${{ steps.typecheck.outcome }}"
-          echo "tests=${{ steps.tests.outcome }}"
-          echo "build=${{ steps.build.outcome }}"
-          test "${{ steps.lint.outcome }}" = success
-          test "${{ steps.typecheck.outcome }}" = success
-          test "${{ steps.tests.outcome }}" = success
-          test "${{ steps.build.outcome }}" = success
+        run: npm run build
 
   kiosk-edge-function:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install dependencies required by npm imports
+        run: npm ci --no-audit --no-fund --prefer-offline
+      - name: Check kiosk cabinet synchronization
+        run: deno check supabase/functions/sync-cabinet-status/index.ts
+      - name: Test kiosk synchronization authorization contract
+        run: deno test --allow-read supabase/functions/tests/kiosk_sync_auth_contract.test.ts
+
+  rental-lifecycle-edge-functions:
+    needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -76,50 +77,9 @@ jobs:
         with:
           deno-version: v2.x
       - name: Install dependencies required by npm imports
-        run: npm install --no-audit --no-fund --silent
-      - name: Check kiosk cabinet synchronization
-        id: deno_check
-        continue-on-error: true
-        run: deno check supabase/functions/sync-cabinet-status/index.ts > deno-check.log 2>&1
-      - name: Test kiosk synchronization authorization contract
-        id: deno_test
-        continue-on-error: true
-        run: deno test --allow-read supabase/functions/tests/kiosk_sync_auth_contract.test.ts > deno-test.log 2>&1
-      - name: Upload Deno diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kiosk-deno-logs
-          path: |
-            deno-check.log
-            deno-test.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Fail on Deno errors
-        if: always()
-        run: |
-          echo "deno_check=${{ steps.deno_check.outcome }}"
-          echo "deno_test=${{ steps.deno_test.outcome }}"
-          test "${{ steps.deno_check.outcome }}" = success
-          test "${{ steps.deno_test.outcome }}" = success
-
-  rental-lifecycle-edge-functions:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Install dependencies required by npm imports
-        run: npm install --no-audit --no-fund --silent
+        run: npm ci --no-audit --no-fund --prefer-offline
       - name: Check integrated payment and hardware functions
-        id: lifecycle_check
-        continue-on-error: true
+        shell: bash
         run: |
           set -euo pipefail
           for file in \
@@ -128,22 +88,16 @@ jobs:
             supabase/functions/eject-after-payment/index.ts \
             supabase/functions/chargenow-rent-callback/index.ts \
             supabase/functions/settle-rental-payment/index.ts; do
-            echo "Checking $file"
             deno check "$file"
-          done > lifecycle-check.log 2>&1
+          done
       - name: Test settlement and orchestrator rules
-        id: lifecycle_test
-        continue-on-error: true
         run: |
           deno test --allow-env --allow-read \
             supabase/functions/tests/settlement.test.ts \
             supabase/functions/tests/orchestrator_runtime.test.ts \
             supabase/functions/tests/chargenow_callback_auth.test.ts \
-            supabase/functions/tests/settlement_retry_contract.test.ts \
-            > lifecycle-test.log 2>&1
+            supabase/functions/tests/settlement_retry_contract.test.ts
       - name: Reject raw public exceptions and global query secrets
-        id: lifecycle_security
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -155,41 +109,15 @@ jobs:
             supabase/functions/settle-rental-payment/index.ts
             supabase/functions/_shared/settlementRuntime.ts
           )
-          if grep -nE 'error:[[:space:]]*String\(|detail:[[:space:]]*String\(' "${files[@]}"; then
-            echo "Raw public exception response found" >&2
-            exit 1
-          fi
-          if grep -nE 'searchParams\.get\("secret"\)' \
+          ! grep -nE 'error:[[:space:]]*String\(|detail:[[:space:]]*String\(' "${files[@]}"
+          ! grep -nE 'searchParams\.get\("secret"\)' \
             supabase/functions/chargenow-rent-callback/index.ts \
-            supabase/functions/_shared/chargenowCallbackAuth.ts; then
-            echo "Global secret accepted from callback query string" >&2
-            exit 1
-          fi
-          echo "Lifecycle public error and callback-secret checks passed" > lifecycle-security.log
-      - name: Upload lifecycle diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rental-lifecycle-deno-logs
-          path: |
-            lifecycle-check.log
-            lifecycle-test.log
-            lifecycle-security.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Fail on lifecycle errors
-        if: always()
-        run: |
-          echo "lifecycle_check=${{ steps.lifecycle_check.outcome }}"
-          echo "lifecycle_test=${{ steps.lifecycle_test.outcome }}"
-          echo "lifecycle_security=${{ steps.lifecycle_security.outcome }}"
-          test "${{ steps.lifecycle_check.outcome }}" = success
-          test "${{ steps.lifecycle_test.outcome }}" = success
-          test "${{ steps.lifecycle_security.outcome }}" = success
+            supabase/functions/_shared/chargenowCallbackAuth.ts
 
   database-gates:
+    needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     services:
       postgres:
         image: postgres:16-alpine
