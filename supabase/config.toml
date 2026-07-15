@@ -20,3 +20,15 @@ verify_jwt = false
 
 [functions.chargenow-rent-callback]
 verify_jwt = false
+
+# JWT is validated explicitly because this endpoint returns a binary pkpass.
+[functions.apple-wallet-pass]
+verify_jwt = false
+
+# Apple's Wallet daemon authenticates with the ApplePass token, not a Supabase JWT.
+[functions.apple-wallet-web-service]
+verify_jwt = false
+
+# Public opaque-token resolver; personal data is returned only to the owning JWT.
+[functions.wallet-link]
+verify_jwt = false
