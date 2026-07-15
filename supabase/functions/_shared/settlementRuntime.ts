@@ -2,12 +2,13 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, logApi } from "./db.ts";
 import { planSettlement, resolveSettlementStrategy } from "./settlement.ts";
+import { appendRentalEvent, OrchestratorError } from "./rentalOrchestratorRuntime.ts";
 
 const LOCK_TTL_MINUTES = 10;
 
 type DB = ReturnType<typeof adminClient>;
 type ReturnState = "normal" | "not_returned";
-type Session = Record<string, unknown>;
+type Session = Record<string, any>;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -36,6 +37,7 @@ function cents(value: unknown): number {
 }
 
 function safeErrorCode(error: unknown): string {
+  if (error instanceof OrchestratorError) return error.code;
   if (error instanceof Error && /^[A-Z0-9_:-]+$/.test(error.message)) return error.message.slice(0, 120);
   return error instanceof Error ? error.name : "UNKNOWN_ERROR";
 }
@@ -49,6 +51,15 @@ async function paymentMethodType(stripe: Stripe, intent: Stripe.PaymentIntent): 
     } catch (_) { /* PaymentIntent fallback */ }
   }
   return intent.payment_method_types?.[0] ?? "unknown";
+}
+
+async function orchestratorState(db: DB, rentalId: string): Promise<string | null> {
+  const { data, error } = await db.from("rental_orchestrator_snapshots")
+    .select("state")
+    .eq("rental_id", rentalId)
+    .maybeSingle();
+  if (error) throw error;
+  return typeof data?.state === "string" ? data.state : null;
 }
 
 async function openIncident(
@@ -84,8 +95,27 @@ async function failSettlement(
   message: string,
   details: Record<string, unknown> = {},
 ) {
-  // Compatibility projection only. The integration must also append the
-  // corresponding canonical Rental Orchestrator event before this PR can merge.
+  try {
+    const state = await orchestratorState(db, String(session.id));
+    if (state && !["completed", "failed"].includes(state)) {
+      await appendRentalEvent(db, {
+        rentalId: String(session.id),
+        eventType: "rental_failed",
+        idempotencyKey: `settlement_failed:${session.id}:${code}`,
+        paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+        stationId: String(session.station_id ?? "") || null,
+        failureReason: code,
+        metadata: { code },
+      });
+    }
+  } catch (error) {
+    await auditLog(db, {
+      action: "orchestrator.settlement_failure_append_failed",
+      target: String(session.id),
+      data: { code, orchestrator_error: safeErrorCode(error) },
+    });
+  }
+
   await db.from("rental_sessions").update({
     settlement_status: "failed",
     settlement_error: code,
@@ -141,6 +171,88 @@ async function saveSupplementalRequired(
   });
 }
 
+async function appendPricingFinalized(
+  db: DB,
+  session: Session,
+  returnState: ReturnState,
+  finalAmountCents: number,
+  pricing: Record<string, unknown>,
+) {
+  const state = await orchestratorState(db, String(session.id));
+  if (!state) throw new OrchestratorError("ORCHESTRATOR_SNAPSHOT_MISSING");
+  if (!["return_detected", "non_return", "pricing_finalized", "payment_captured", "refunded", "completed"].includes(state)) {
+    throw new OrchestratorError("SETTLEMENT_STATE_NOT_READY", `Settlement refused from ${state}`);
+  }
+
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "pricing_finalized",
+    idempotencyKey: `pricing_finalized:${session.id}:${returnState}:${finalAmountCents}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    batteryId: String(session.battery_id ?? "") || null,
+    finalAmountChf: finalAmountCents / 100,
+    metadata: {
+      returnState,
+      finalAmountCents,
+      pricingSnapshot: pricing,
+    },
+  });
+}
+
+async function appendFinancialCompletion(
+  db: DB,
+  session: Session,
+  input: {
+    returnState: ReturnState;
+    strategy: string;
+    finalAmountCents: number;
+    capturedCents: number;
+    refundedCents: number;
+    supplementalCents: number;
+    canceledAuthorization: boolean;
+  },
+) {
+  const refundedPath = input.refundedCents > 0 || input.canceledAuthorization;
+  const eventType = refundedPath ? "payment_refunded" : "payment_captured";
+  const financialKey = refundedPath
+    ? `payment_refunded:settlement:${session.id}:${input.refundedCents}:${input.canceledAuthorization}`
+    : `payment_captured:settlement:${session.id}:${input.capturedCents}`;
+
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType,
+    idempotencyKey: financialKey,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    batteryId: String(session.battery_id ?? "") || null,
+    finalAmountChf: input.finalAmountCents / 100,
+    metadata: {
+      returnState: input.returnState,
+      strategy: input.strategy,
+      capturedCents: input.capturedCents,
+      refundedCents: input.refundedCents,
+      supplementalCents: input.supplementalCents,
+      canceledAuthorization: input.canceledAuthorization,
+    },
+  });
+
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "rental_completed",
+    idempotencyKey: `rental_completed:settlement:${session.id}:${input.finalAmountCents}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    batteryId: String(session.battery_id ?? "") || null,
+    finalAmountChf: input.finalAmountCents / 100,
+    metadata: {
+      returnState: input.returnState,
+      strategy: input.strategy,
+      netPaidCents: Math.max(0, input.capturedCents - input.refundedCents),
+    },
+  });
+}
+
 async function settle(
   db: DB,
   stripe: Stripe,
@@ -169,7 +281,8 @@ async function settle(
     return json({ ok: false, error: "FINAL_PRICING_ERROR" }, 409);
   }
 
-  const finalAmountCents = cents((pricing as Record<string, unknown>).final_cents);
+  const pricingRow = pricing as Record<string, unknown>;
+  const finalAmountCents = cents(pricingRow.final_cents);
   const initialSnapshot = session.pricing_snapshot as Record<string, unknown> | null;
   const depositAmountCents = cents(session.deposit_amount_cents ?? initialSnapshot?.deposit_cents ?? 0);
   if (depositAmountCents <= 0) {
@@ -181,6 +294,24 @@ async function settle(
   if (!paymentIntentId) {
     await failSettlement(db, session, "PAYMENT_INTENT_MISSING", "Le paiement initial de la location est introuvable.");
     return json({ ok: false, error: "PAYMENT_INTENT_MISSING" }, 409);
+  }
+
+  try {
+    await appendPricingFinalized(db, session, returnState, finalAmountCents, pricingRow);
+  } catch (error) {
+    const code = safeErrorCode(error);
+    await openIncident(
+      db,
+      session,
+      code,
+      "Le règlement a été bloqué car le cycle de location n'est pas prêt pour la tarification finale.",
+    );
+    await db.from("rental_sessions").update({
+      settlement_status: "failed",
+      settlement_error: code,
+      settlement_locked_at: null,
+    }).eq("id", session.id);
+    return json({ ok: false, error: code }, 409);
   }
 
   let intent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -195,9 +326,6 @@ async function settle(
 
   const alreadyCapturedCents = Math.max(cents(session.captured_amount_cents), cents(intent.amount_received));
   const alreadyRefundedCents = cents(session.refunded_amount_cents);
-
-  // If a previous attempt captured the manual PaymentIntent but failed before
-  // committing locally, treat it as captured and never capture it again.
   const planningStrategy = strategy === "manual_capture" && intent.status !== "requires_capture"
     ? "prepaid_refund"
     : strategy;
@@ -215,6 +343,7 @@ async function settle(
   let refundedCents = alreadyRefundedCents;
   let supplementalCapturedCents = 0;
   let supplementalPaymentIntentId = String(session.stripe_supplemental_payment_intent_id ?? "") || null;
+  let canceledAuthorization = false;
 
   if (plan.cancelAuthorization && intent.status === "requires_capture") {
     intent = await stripe.paymentIntents.cancel(
@@ -222,6 +351,7 @@ async function settle(
       {},
       { idempotencyKey: `settlement_cancel_${session.id}` },
     );
+    canceledAuthorization = true;
     await logApi(db, {
       service: "stripe",
       endpoint: "payment_intents.cancel",
@@ -334,18 +464,28 @@ async function settle(
   const netPaidCents = Math.max(0, totalCapturedCents - refundedCents);
   const completedAt = new Date().toISOString();
 
+  await appendFinancialCompletion(db, session, {
+    returnState,
+    strategy,
+    finalAmountCents,
+    capturedCents: totalCapturedCents,
+    refundedCents,
+    supplementalCents: plan.supplementalCents,
+    canceledAuthorization,
+  });
+
   const { error: paymentUpdateError } = await db.from("payments").update({
     status: refundedCents > 0
       ? (refundedCents >= totalCapturedCents ? "refunded" : "partially_refunded")
-      : "succeeded",
+      : canceledAuthorization
+        ? "canceled"
+        : "succeeded",
     settlement_strategy: strategy,
     amount_captured_cents: totalCapturedCents,
     amount_refunded_cents: refundedCents,
   }).eq("rental_session_id", session.id);
   if (paymentUpdateError) throw paymentUpdateError;
 
-  // Compatibility projection only. Canonical orchestrator events are added in
-  // the next integration step before this PR can be marked ready.
   const { error: sessionUpdateError } = await db.from("rental_sessions").update({
     final_amount_cents: finalAmountCents,
     amount: finalAmountCents / 100,
@@ -375,6 +515,7 @@ async function settle(
       captured_amount_cents: totalCapturedCents,
       refunded_amount_cents: refundedCents,
       supplemental_amount_cents: plan.supplementalCents,
+      canceled_authorization: canceledAuthorization,
     },
   });
 
@@ -433,12 +574,13 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
     });
     return await settle(db, stripe, session, returnState, finalAt);
   } catch (error) {
+    const code = safeErrorCode(error);
     if (rentalSessionId) {
       const { data: session } = await db.from("rental_sessions")
         .select("*").eq("id", rentalSessionId).maybeSingle();
       if (session) {
         await failSettlement(db, session, "SETTLEMENT_INTERNAL_ERROR", "Le règlement final a échoué et doit être réconcilié.", {
-          error_code: safeErrorCode(error),
+          error_code: code,
         });
       }
     }
