@@ -51,10 +51,10 @@ export default function CityPowerbank() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild className="rounded-full bg-gradient-primary px-7 py-6 text-base font-bold shadow-glow">
-              <Link to="/#bornes">Voir les bornes disponibles</Link>
+              <Link to="/?section=bornes">Voir les bornes disponibles</Link>
             </Button>
             <Button asChild variant="ghost" className="rounded-full border border-border px-7 py-6 text-base">
-              <Link to="/#contact">Contacter Chargeurs.ch</Link>
+              <Link to="/?section=contact">Contacter Chargeurs.ch</Link>
             </Button>
           </div>
         </section>

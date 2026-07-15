@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
@@ -49,6 +49,8 @@ function Section({ id, children, className = "" }: { id: string; children: React
 export default function Index() {
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(true);
+  const [searchParams] = useSearchParams();
+  const requestedSection = searchParams.get("section");
 
   useEffect(() => {
     supabase
@@ -60,6 +62,14 @@ export default function Index() {
         setLoadingStations(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      document.getElementById(requestedSection)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [requestedSection]);
 
   const visibleStations = useMemo(() => stations.length ? stations : DEMO_STATIONS, [stations]);
 
@@ -75,7 +85,7 @@ export default function Index() {
             <h1 className="mx-auto mt-6 max-w-5xl font-display text-5xl font-extrabold leading-tight sm:text-7xl">Votre natel n'a plus de batterie ?<br /><span className="text-gradient">Trouvez une powerbank près de vous.</span></h1>
             <p className="mx-auto mt-6 max-w-3xl text-xl text-muted-foreground">Chargeurs.ch déploie des bornes self-service dans les bars, restaurants, hôtels, clubs et événements. Scannez, payez, rechargez et rendez la batterie dans une borne compatible.</p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Button asChild className="h-auto rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold shadow-glow"><a href="#bornes">Trouver une borne <ArrowRight className="ml-2 h-5 w-5" /></a></Button>
+              <Button asChild className="h-auto rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold shadow-glow"><Link to="/?section=bornes">Trouver une borne <ArrowRight className="ml-2 h-5 w-5" /></Link></Button>
               <Button asChild variant="ghost" className="h-auto rounded-full border border-border px-8 py-5 text-lg"><Link to="/partenaires"><Building2 className="mr-2 h-5 w-5" />Devenir partenaire</Link></Button>
             </div>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
