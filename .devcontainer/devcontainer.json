@@ -1,0 +1,21 @@
+{
+  "name": "Chargeurs.ch GitHub Review",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "forwardPorts": [8080],
+  "postCreateCommand": "npm install --no-audit --no-fund",
+  "postAttachCommand": "VITE_REVIEW_BUILD=true VITE_ROUTER_MODE=hash VITE_SUPABASE_URL=https://review.invalid.supabase.co VITE_SUPABASE_PUBLISHABLE_KEY=review-only-no-access npm run dev -- --host 0.0.0.0",
+  "portsAttributes": {
+    "8080": {
+      "label": "Chargeurs.ch — revue GitHub",
+      "onAutoForward": "openPreview",
+      "protocol": "http"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
