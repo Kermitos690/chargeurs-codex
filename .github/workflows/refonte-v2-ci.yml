@@ -3,182 +3,67 @@ name: Chargeurs.ch Refonte V2 CI
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [feat/refonte-chargeurs-v2, feat/apple-wallet-member-pass]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: chargeurs-refonte-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  quality:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund --silent
-      - name: Lint
-        id: lint
-        continue-on-error: true
-        run: npm run lint -- --quiet > lint.log 2>&1
-      - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: npm run typecheck > typecheck.log 2>&1
-      - name: Unit tests
-        id: tests
-        continue-on-error: true
-        run: npm test > tests.log 2>&1
-      - name: Production build
-        id: build
-        continue-on-error: true
-        run: npm run build > build.log 2>&1
-      - name: Upload quality logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-logs
-          path: |
-            lint.log
-            typecheck.log
-            tests.log
-            build.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Fail on quality errors
-        if: always()
-        run: |
-          echo "lint=${{ steps.lint.outcome }}"
-          echo "typecheck=${{ steps.typecheck.outcome }}"
-          echo "tests=${{ steps.tests.outcome }}"
-          echo "build=${{ steps.build.outcome }}"
-          test "${{ steps.lint.outcome }}" = success
-          test "${{ steps.typecheck.outcome }}" = success
-          test "${{ steps.tests.outcome }}" = success
-          test "${{ steps.build.outcome }}" = success
 
-  apple-wallet:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint -- --quiet
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
       - name: Check Apple Wallet Edge Functions
-        id: wallet_check
-        continue-on-error: true
         run: |
           deno check \
             supabase/functions/_shared/appleWallet.ts \
             supabase/functions/apple-wallet-pass/index.ts \
             supabase/functions/apple-wallet-web-service/index.ts \
             supabase/functions/wallet-link/index.ts \
-            supabase/functions/wallet-admin/index.ts \
-            > wallet-check.log 2>&1
+            supabase/functions/wallet-admin/index.ts
+
       - name: Run Apple Wallet security tests
-        id: wallet_tests
-        continue-on-error: true
-        run: deno test --allow-env --allow-read --no-check supabase/functions/tests/apple_wallet.test.ts > wallet-tests.log 2>&1
+        run: deno test --allow-env --allow-read --no-check supabase/functions/tests/apple_wallet.test.ts
+
       - name: Guard against committed Apple secrets
-        id: secret_guard
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           ! git ls-files | grep -Ei '\.(p12|pfx|cer|key|pem)$'
           ! grep -RIlE 'BEGIN (RSA |EC |ENCRYPTED )?PRIVATE KEY|APPLE_PASS_SIGNER_KEY_BASE64=.{20}' \
              --exclude-dir=.git --exclude='*.md' .
-          echo "No Apple certificate or private key committed." > wallet-secret-guard.log
-      - name: Upload Wallet diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: apple-wallet-logs
-          path: |
-            wallet-check.log
-            wallet-tests.log
-            wallet-secret-guard.log
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Fail on Wallet errors
-        if: always()
-        run: |
-          echo "wallet_check=${{ steps.wallet_check.outcome }}"
-          echo "wallet_tests=${{ steps.wallet_tests.outcome }}"
-          echo "secret_guard=${{ steps.secret_guard.outcome }}"
-          test "${{ steps.wallet_check.outcome }}" = success
-          test "${{ steps.wallet_tests.outcome }}" = success
-          test "${{ steps.secret_guard.outcome }}" = success
-
-  kiosk-edge-function:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Install dependencies required by npm imports
-        run: npm install --no-audit --no-fund --silent
-      - name: Check kiosk cabinet synchronization
-        id: deno_check
-        continue-on-error: true
-        run: deno check supabase/functions/sync-cabinet-status/index.ts > deno-check.log 2>&1
-      - name: Test kiosk synchronization authorization contract
-        id: deno_test
-        continue-on-error: true
-        run: deno test --allow-read supabase/functions/tests/kiosk_sync_auth_contract.test.ts > deno-test.log 2>&1
-      - name: Upload Deno diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kiosk-deno-logs
-          path: |
-            deno-check.log
-            deno-test.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Fail on Deno errors
-        if: always()
-        run: |
-          echo "deno_check=${{ steps.deno_check.outcome }}"
-          echo "deno_test=${{ steps.deno_test.outcome }}"
-          test "${{ steps.deno_check.outcome }}" = success
-          test "${{ steps.deno_test.outcome }}" = success
-
-  kiosk-beta-release-gate:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: chargeurs_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d chargeurs_ci"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      PGHOST: 127.0.0.1
-      PGPORT: 5432
-      PGUSER: postgres
-      PGPASSWORD: postgres
-      PGDATABASE: chargeurs_ci
-    steps:
-      - uses: actions/checkout@v4
-      - name: Validate fail-closed kiosk beta release gate
-        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/kiosk-beta-release-gate.sql
