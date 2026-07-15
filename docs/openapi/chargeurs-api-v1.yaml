@@ -1,0 +1,277 @@
+openapi: 3.1.0
+info:
+  title: Chargeurs.ch Platform API
+  version: 1.0.0
+  description: |
+    Versioned API for Chargeurs.ch stations, inventory, authoritative pricing and rental state.
+    Raw Stripe, Supabase and ChargeNow credentials are never exposed. Payment and hardware
+    mutation routes remain internal until the staging safety gate has passed.
+servers:
+  - url: https://{project}.supabase.co/functions/v1/platform-api
+    description: Supabase Edge Function
+    variables:
+      project:
+        default: replace-with-project-ref
+security:
+  - bearerApiKey: []
+tags:
+  - name: Health
+  - name: Stations
+  - name: Pricing
+  - name: Rentals
+paths:
+  /v1/health:
+    get:
+      tags: [Health]
+      security: []
+      summary: Public liveness probe
+      operationId: getHealth
+      responses:
+        '200':
+          description: API is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+  /v1/health/details:
+    get:
+      tags: [Health]
+      summary: Check dependency configuration without exposing secrets
+      operationId: getHealthDetails
+      x-required-scope: health:read
+      responses:
+        '200':
+          description: Dependency status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/me:
+    get:
+      tags: [Health]
+      summary: Describe the authenticated API client
+      operationId: getCurrentApiClient
+      responses:
+        '200':
+          description: API client and granted scopes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/stations:
+    get:
+      tags: [Stations]
+      summary: List stations
+      operationId: listStations
+      x-required-scope: stations:read
+      parameters:
+        - in: query
+          name: online
+          schema: { type: boolean }
+        - in: query
+          name: shopId
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Safe operational station fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/stations/{stationId}:
+    get:
+      tags: [Stations]
+      summary: Get one station
+      operationId: getStation
+      x-required-scope: stations:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Station
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/stations/{stationId}/availability:
+    get:
+      tags: [Stations]
+      summary: Get public availability and slot occupancy
+      operationId: getStationAvailability
+      x-required-scope: stations:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Availability
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/stations/{stationId}/inventory:
+    get:
+      tags: [Stations]
+      summary: Get operational battery and slot inventory
+      operationId: getStationInventory
+      x-required-scope: inventory:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/pricing/quote:
+    post:
+      tags: [Pricing]
+      summary: Compute an authoritative pricing snapshot
+      operationId: createPricingQuote
+      x-required-scope: pricing:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                deviceId: { type: string }
+                stationId: { type: string }
+                shopId: { type: string }
+                startedAt: { type: string, format: date-time }
+                endedAt: { type: [string, 'null'], format: date-time }
+                rentalState: { type: string, default: active }
+                returnState: { type: string, default: normal }
+                currency: { type: string, example: CHF }
+      responses:
+        '200':
+          description: Frozen server-side pricing snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '409':
+          description: Pricing is not configured or cannot be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /v1/rentals/{rentalIdOrCode}:
+    get:
+      tags: [Rentals]
+      summary: Get a sanitized rental state
+      operationId: getRental
+      x-required-scope: rentals:read
+      parameters:
+        - in: path
+          name: rentalIdOrCode
+          required: true
+          schema: { type: string }
+          description: Rental UUID or public code such as CHG-ABC123
+      responses:
+        '200':
+          description: Rental state without raw provider payloads or secrets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/rentals/{rentalId}/events:
+    get:
+      tags: [Rentals]
+      summary: Read the immutable Rental Orchestrator event timeline
+      operationId: getRentalEvents
+      x-required-scope: rentals:read
+      parameters:
+        - in: path
+          name: rentalId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Orchestrator events in resulting-version order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessEnvelope'
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: chg_test_xxx or chg_live_xxx
+      description: API key returned once by the super-admin key manager. X-API-Key is also accepted.
+  parameters:
+    StationId:
+      in: path
+      name: stationId
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{4,32}$'
+      example: DTA21269
+  schemas:
+    Meta:
+      type: object
+      required: [requestId, apiVersion]
+      properties:
+        requestId: { type: string, format: uuid }
+        apiVersion: { type: string, example: 1.0.0 }
+    SuccessEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta: { $ref: '#/components/schemas/Meta' }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    ErrorEnvelope:
+      type: object
+      required: [error, meta]
+      properties:
+        error: { $ref: '#/components/schemas/Error' }
+        meta: { $ref: '#/components/schemas/Meta' }
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Key disabled or required scope missing
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: Per-key quota exceeded
+      headers:
+        X-RateLimit-Limit: { schema: { type: integer } }
+        X-RateLimit-Remaining: { schema: { type: integer } }
+        X-RateLimit-Reset: { schema: { type: string, format: date-time } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
