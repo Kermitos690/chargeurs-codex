@@ -3,8 +3,7 @@
 alter table public.rental_sessions
   add column if not exists return_station_id text,
   add column if not exists returned_slot_num integer,
-  add column if not exists return_external_event_id text,
-  add column if not exists chargenow_callback_token_hash text;
+  add column if not exists return_external_event_id text;
 
 create unique index if not exists rental_sessions_return_external_event_uidx
   on public.rental_sessions(return_external_event_id)
@@ -140,7 +139,5 @@ grant execute on function public.claim_rental_external_event(text, text, uuid, t
 grant execute on function public.finish_rental_external_event(text, text, boolean, text)
   to service_role;
 
-comment on column public.rental_sessions.chargenow_callback_token_hash is
-  'SHA-256 hash of a per-rental ChargeNow callback token; never store the raw token.';
 comment on function public.claim_rental_external_event(text, text, uuid, text, jsonb, integer) is
   'Claims an orchestrator external event once while allowing failed/stale retries; service_role only.';
