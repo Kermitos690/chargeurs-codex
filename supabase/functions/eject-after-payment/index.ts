@@ -1,204 +1,227 @@
-// eject-after-payment — runs ONLY after a confirmed Stripe payment (called by
-// stripe-webhook) or by an admin tool. State machine (release lifecycle):
-//   payment_succeeded → ejecting (release_requested) → ejected (release_confirmed)
-//   on failure → chargenow_failed / eject_failed (release_failed) → refund_pending → refunded
-// (1) creates the ChargeNow rent order (O2), then (2) ejects the battery (C3).
-// Idempotent and guarded against double order / double ejection. On unrecoverable
-// failure after payment it triggers an IDEMPOTENT refund (never exceeding the
-// captured amount), opens an incident, and logs a full audit trail.
-import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
+// eject-after-payment — trusted release command after a validated 30 CHF deposit.
+//
+// Service-role/admin only. The canonical financial and hardware flows must both
+// be enabled. Definitive delivery failures cancel an uncaptured card hold or
+// refund a captured TWINT deposit through the shared compensation adapter.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi, auditLog } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
 import { ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
+import { compensateFailedRelease } from "../_shared/depositCompensation.ts";
+import { extractEjectedBattery } from "../_shared/returnCorrelation.ts";
 
 const MAX_RETRIES = 3;
+const FINANCIAL_FLOW_ENABLED = (Deno.env.get("ENABLE_CANONICAL_SETTLEMENT_FLOW") ?? "false").toLowerCase() === "true";
+const HARDWARE_FLOW_ENABLED = (Deno.env.get("ENABLE_CANONICAL_HARDWARE_FLOW") ?? "false").toLowerCase() === "true";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type DB = ReturnType<typeof adminClient>;
+type Session = Record<string, unknown>;
 
-// Idempotent refund (or wallet credit) after a post-payment failure.
-// Never refunds twice and never exceeds the captured amount.
-async function refundOnFailure(db: DB, session: Record<string, unknown>, code: string) {
-  const sessionId = session.id as string;
-  // 1. Idempotency guard — a refund row already exists for this session.
-  const { data: existing } = await db.from("refunds")
-    .select("id,status").eq("rental_session_id", sessionId)
-    .in("status", ["pending", "succeeded", "processing"]).maybeSingle();
-  if (existing) {
-    await auditLog(db, { action: "refund.skipped.duplicate", target: sessionId, data: { code } });
-    return;
-  }
-
-  // 2. Always open an incident for human follow-up.
-  await db.from("system_incidents").insert({
-    type: "eject_failed_after_payment", severity: "high",
-    message: `Échec post-paiement (${code}) — remboursement automatique déclenché.`,
-    data: { rental_session_id: sessionId, code, station_id: session.station_id },
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
 
-  const pi = session.stripe_payment_intent_id as string | null;
-  const capturedCents = Math.round(Number(session.amount_paid ?? session.amount_expected ?? 0) * 100);
-  if (!pi || capturedCents <= 0) {
-    // Nothing captured yet — mark for manual review, no money to refund.
-    await db.from("rental_sessions").update({ state: "needs_support" }).eq("id", sessionId);
-    await auditLog(db, { action: "refund.not_applicable", target: sessionId, data: { code, capturedCents } });
-    return;
-  }
+function safeEqual(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < a.length; index += 1) mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  return mismatch === 0;
+}
 
-  await db.from("rental_sessions").update({ state: "refund_pending" }).eq("id", sessionId);
-  const { data: refundRow } = await db.from("refunds").insert({
-    rental_session_id: sessionId, amount: capturedCents / 100,
-    currency: session.currency ?? "CHF", status: "pending",
-    reason: code, created_by: "system",
-  }).select().single();
+async function authorizeCaller(req: Request, db: DB): Promise<{ ok: true; actor: string } | { ok: false }> {
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (safeEqual(token, serviceRole)) return { ok: true, actor: "service_role" };
+  const adminId = await requireAdmin(req, db);
+  return adminId ? { ok: true, actor: adminId } : { ok: false };
+}
 
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-  if (!stripeKey) {
-    await auditLog(db, { action: "refund.error", target: sessionId, data: { code: "STRIPE_NOT_CONFIGURED" } });
-    return;
-  }
-  const stripe = new Stripe(stripeKey, { apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient() });
+function configuredCallbackUrl(): string | null {
+  const raw = Deno.env.get("CHARGENOW_CALLBACK_URL") ?? "";
   try {
-    // Stripe refund without an explicit amount = full captured amount → cannot exceed it.
-    // Idempotency key bound to the session prevents accidental double refunds.
-    const refund = await stripe.refunds.create(
-      { payment_intent: pi, reason: "requested_by_customer" },
-      { idempotencyKey: `refund_${sessionId}` },
-    );
-    await db.from("refunds").update({
-      status: refund.status === "succeeded" ? "succeeded" : "processing",
-      stripe_refund_id: refund.id,
-    }).eq("id", refundRow?.id);
-    await db.from("payments").update({
-      status: "refunded", refund_id: refund.id, refunded_at: new Date().toISOString(),
-    }).eq("stripe_payment_intent_id", pi);
-    await db.from("rental_sessions").update({
-      state: refund.status === "succeeded" ? "refunded" : "refund_pending",
-    }).eq("id", sessionId);
-    await auditLog(db, {
-      action: "refund.issued", target: sessionId,
-      data: { code, stripe_refund_id: refund.id, amount_cents: capturedCents, status: refund.status },
-    });
-  } catch (e) {
-    await db.from("refunds").update({ status: "error" }).eq("id", refundRow?.id);
-    await auditLog(db, { action: "refund.error", target: sessionId, data: { code, error: String(e) } });
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (!url.pathname.endsWith("/chargenow-rent-callback")) return null;
+    return url.toString();
+  } catch {
+    return null;
   }
+}
+
+async function failAndCompensate(db: DB, session: Session, code: string, message: string) {
+  await db.from("rental_sessions").update({
+    state: "eject_failed",
+    failure_code: code,
+    failure_message: message,
+  }).eq("id", session.id).neq("settlement_status", "legacy");
+  const { data: fresh } = await db.from("rental_sessions").select("*").eq("id", session.id).maybeSingle();
+  return await compensateFailedRelease(db, (fresh ?? session) as Session, code);
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+  if (!FINANCIAL_FLOW_ENABLED) return json({ ok: false, error: "CANONICAL_SETTLEMENT_FLOW_DISABLED" }, 503);
+  if (!HARDWARE_FLOW_ENABLED) return json({ ok: false, error: "CANONICAL_HARDWARE_FLOW_DISABLED" }, 503);
+
   const db = adminClient();
-  const ok = (b: unknown, s = 200) =>
-    new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  const caller = await authorizeCaller(req, db);
+  if (!caller.ok) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
   try {
-    const { rentalSessionId } = await req.json();
-    const { data: session } = await db.from("rental_sessions")
-      .select("*").eq("id", rentalSessionId).maybeSingle();
-    if (!session) return ok({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+    const body = await req.json().catch(() => ({}));
+    const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId.trim() : "";
+    if (!UUID_RE.test(rentalSessionId)) return json({ ok: false, error: "INVALID_SESSION" }, 400);
 
-    // Already released — idempotent success.
-    if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed"].includes(session.state)) {
-      return ok({ ok: true, alreadyDone: true });
+    const { data: session, error: sessionError } = await db.from("rental_sessions")
+      .select("*").eq("id", rentalSessionId).maybeSingle();
+    if (sessionError) throw sessionError;
+    if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+    if (session.settlement_status === "legacy") return json({ ok: false, error: "LEGACY_RENTAL_NOT_RELEASABLE" }, 409);
+
+    if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed", "non_return"].includes(session.state)) {
+      return json({ ok: true, alreadyDone: true, state: session.state });
     }
-    // Already refunded / refunding — do not re-eject.
     if (["refund_pending", "refunded"].includes(session.state)) {
-      return ok({ ok: true, refunded: true, state: session.state });
+      return json({ ok: true, compensated: true, state: session.state });
     }
-    // Must be paid (defence in depth).
+    if (!["authorized", "prepaid"].includes(String(session.settlement_status))) {
+      return json({ ok: false, error: "DEPOSIT_NOT_READY", settlement_status: session.settlement_status }, 409);
+    }
     if (!["payment_succeeded", "ejecting", "chargenow_failed", "eject_failed"].includes(session.state)) {
-      return ok({ ok: false, error: "NOT_PAID", state: session.state }, 409);
+      return json({ ok: false, error: "INVALID_RELEASE_STATE", state: session.state }, 409);
     }
 
     if (!isChargeNowConfigured()) {
-      await db.from("rental_sessions").update({
-        state: "chargenow_failed", failure_code: "CHARGENOW_NOT_CONFIGURED",
-        failure_message: "API ChargeNow non configurée — éjection impossible.",
-      }).eq("id", session.id);
-      await refundOnFailure(db, session, "CHARGENOW_NOT_CONFIGURED");
-      return ok({ ok: false, error: "CHARGENOW_NOT_CONFIGURED" });
+      const compensation = await failAndCompensate(db, session, "CHARGENOW_NOT_CONFIGURED", "API ChargeNow non configurée — délivrance impossible.");
+      return json({ ok: false, error: "CHARGENOW_NOT_CONFIGURED", compensation }, 503);
+    }
+
+    const callbackURL = configuredCallbackUrl();
+    if (!callbackURL) {
+      const compensation = await failAndCompensate(db, session, "CHARGENOW_CALLBACK_NOT_CONFIGURED", "Le callback ChargeNow sécurisé n'est pas configuré.");
+      return json({ ok: false, error: "CHARGENOW_CALLBACK_NOT_CONFIGURED", compensation }, 503);
     }
 
     const retry = Number(session.retry_count ?? 0);
-    if (retry >= MAX_RETRIES) {
-      await db.from("rental_sessions").update({
-        state: "eject_failed", failure_code: "MAX_RETRIES",
-        failure_message: "Nombre maximal de tentatives atteint.",
-      }).eq("id", session.id);
-      await refundOnFailure(db, session, "MAX_RETRIES");
-      return ok({ ok: false, error: "MAX_RETRIES" });
+    if (!Number.isInteger(retry) || retry >= MAX_RETRIES) {
+      const compensation = await failAndCompensate(db, session, "MAX_RELEASE_RETRIES", "Nombre maximal de tentatives de délivrance atteint.");
+      return json({ ok: false, error: "MAX_RELEASE_RETRIES", compensation }, 409);
     }
 
-    // Lock the row into "ejecting" (release_requested) atomically — guards double ejection.
-    const { data: locked } = await db.from("rental_sessions")
+    const { data: locked, error: lockError } = await db.from("rental_sessions")
       .update({ state: "ejecting", retry_count: retry + 1 })
       .eq("id", session.id)
       .in("state", ["payment_succeeded", "chargenow_failed", "eject_failed"])
-      .select();
-    if (!locked || locked.length === 0) {
-      // Someone else already moved it (e.g. concurrent ejecting). No double ejection.
-      return ok({ ok: true, alreadyInProgress: true });
-    }
+      .in("settlement_status", ["authorized", "prepaid"])
+      .select("id");
+    if (lockError) throw lockError;
+    if (!locked?.length) return json({ ok: true, alreadyInProgress: true });
 
-    const cabinetId = session.cabinet_id || session.station_id;
+    const cabinetId = String(session.cabinet_id ?? session.station_id ?? "").trim();
+    if (!cabinetId) throw new Error("CABINET_ID_MISSING");
 
-    // ---- Step 1: create ChargeNow rent order (O2) if not already created ----
-    let tradeNo: string | null = session.apifox_trade_no ?? null;
+    let tradeNo = typeof session.apifox_trade_no === "string" ? session.apifox_trade_no : null;
     if (!tradeNo) {
-      const callbackURL = `${Deno.env.get("SUPABASE_URL")}/functions/v1/chargenow-rent-callback`;
-      const ord = await orderCreate({ deviceId: cabinetId, callbackURL });
+      const order = await orderCreate({ deviceId: cabinetId, callbackURL });
       await logApi(db, {
-        service: "chargenow", endpoint: "/rent/order/create", method: "POST",
-        status_code: ord.status, request: { cabinetId }, response: ord.data, error: ord.error,
+        service: "chargenow",
+        endpoint: "/rent/order/create",
+        method: "POST",
+        status_code: order.status,
+        request: { cabinetId },
+        response: order.data,
+        error: order.error,
       });
-      const d = ord.data as { data?: { tradeNo?: string; orderId?: string }; tradeNo?: string } | null;
-      tradeNo = d?.data?.tradeNo ?? d?.tradeNo ?? null;
-      const orderId = d?.data?.orderId ?? null;
+
+      const orderData = order.data as { data?: { tradeNo?: string; orderId?: string }; tradeNo?: string } | null;
+      tradeNo = orderData?.data?.tradeNo ?? orderData?.tradeNo ?? null;
+      const orderId = orderData?.data?.orderId ?? null;
 
       await db.from("apifox_orders").upsert({
-        rental_session_id: session.id, trade_no: tradeNo,
-        request: { cabinetId }, response: ord.data, status: ord.ok ? "created" : "error",
+        rental_session_id: session.id,
+        trade_no: tradeNo,
+        request: { cabinetId },
+        response: order.data,
+        status: order.ok ? "created" : "error",
       }, { onConflict: "rental_session_id" });
 
-      if (!ord.ok || !tradeNo) {
-        await db.from("rental_sessions").update({
-          state: "chargenow_failed", failure_code: ord.error ?? "ORDER_FAILED",
-          failure_message: "Paiement reçu mais commande ChargeNow impossible — remboursement en cours.",
-        }).eq("id", session.id);
-        await refundOnFailure(db, session, ord.error ?? "ORDER_FAILED");
-        return ok({ ok: false, error: ord.error ?? "ORDER_FAILED" });
+      if (!order.ok || !tradeNo) {
+        const compensation = await failAndCompensate(db, session, order.error ?? "ORDER_CREATE_FAILED", "La commande ChargeNow n'a pas pu être créée.");
+        return json({ ok: false, error: "ORDER_CREATE_FAILED", compensation }, 502);
       }
+
       await db.from("rental_sessions").update({
-        apifox_trade_no: tradeNo, chargenow_order_id: orderId, chargenow_status: "created",
+        apifox_trade_no: tradeNo,
+        chargenow_order_id: orderId,
+        chargenow_status: "created",
       }).eq("id", session.id);
     }
 
-    // ---- Step 2: eject the battery (C3) ----
-    const slotNum = session.selected_slot_num ?? 0;
-    const res = await ejectByRent(cabinetId, slotNum, tradeNo ?? undefined);
+    const configuredSlot = Number(session.selected_slot_num ?? 0);
+    const slotNum = Number.isInteger(configuredSlot) && configuredSlot >= 0 ? configuredSlot : 0;
+    const ejection = await ejectByRent(cabinetId, slotNum, tradeNo);
     await logApi(db, {
-      service: "chargenow", endpoint: "/cabinet/ejectByRent", method: "POST",
-      status_code: res.status, request: { cabinetId, slotNum }, response: res.data, error: res.error,
+      service: "chargenow",
+      endpoint: "/cabinet/ejectByRent",
+      method: "POST",
+      status_code: ejection.status,
+      request: { cabinetId, slotNum, tradeNoFingerprint: tradeNo.slice(-8) },
+      response: ejection.data,
+      error: ejection.error,
     });
 
-    if (res.ok) {
-      // release_confirmed — rental activated only now.
-      await db.from("rental_sessions").update({
-        state: "ejected", ejected_at: new Date().toISOString(),
-        chargenow_status: "ejected", started_at: new Date().toISOString(),
-      }).eq("id", session.id);
-      await auditLog(db, { action: "rental.released", target: session.id, data: { cabinetId, slotNum, tradeNo } });
-      return ok({ ok: true, slotNum });
+    if (!ejection.ok) {
+      const compensation = await failAndCompensate(db, session, ejection.error ?? "EJECTION_FAILED", "La batterie n'a pas été délivrée par la borne.");
+      return json({ ok: false, error: "EJECTION_FAILED", compensation }, 502);
     }
 
-    // release_failed — money captured but no battery → refund.
-    await db.from("rental_sessions").update({
-      state: "eject_failed", failure_code: res.error,
-      failure_message: "Éjection échouée après paiement — remboursement automatique en cours.",
-    }).eq("id", session.id);
-    const { data: fresh } = await db.from("rental_sessions").select("*").eq("id", session.id).maybeSingle();
-    await refundOnFailure(db, fresh ?? session, res.error ?? "EJECT_FAILED");
-    return ok({ ok: false, error: res.error });
-  } catch (e) {
-    return ok({ ok: false, error: String(e) }, 500);
+    const identity = extractEjectedBattery(ejection.data);
+    const releasedAt = new Date().toISOString();
+    const releasePatch: Record<string, unknown> = {
+      state: "ejected",
+      ejected_at: releasedAt,
+      started_at: releasedAt,
+      chargenow_status: "ejected",
+      apifox_trade_no: tradeNo,
+    };
+    if (identity.batteryId) releasePatch.battery_id = identity.batteryId;
+    if (identity.slotNum != null) releasePatch.selected_slot_num = identity.slotNum;
+
+    const { error: releaseError } = await db.from("rental_sessions")
+      .update(releasePatch)
+      .eq("id", session.id)
+      .eq("state", "ejecting");
+    if (releaseError) throw releaseError;
+
+    await auditLog(db, {
+      actor: caller.actor,
+      action: "rental.released",
+      target: session.id,
+      data: {
+        cabinet_id: cabinetId,
+        slot_num: identity.slotNum ?? slotNum,
+        battery_id: identity.batteryId,
+        trade_no_fingerprint: tradeNo.slice(-8),
+      },
+    });
+
+    return json({
+      ok: true,
+      slotNum: identity.slotNum ?? slotNum,
+      batteryIdentified: Boolean(identity.batteryId),
+    });
+  } catch (error) {
+    await logApi(db, {
+      service: "chargenow",
+      endpoint: "eject-after-payment:handle",
+      method: "POST",
+      status_code: 500,
+      error: error instanceof Error ? error.message : "RELEASE_INTERNAL_ERROR",
+    }).catch(() => {});
+    return json({ ok: false, error: "RELEASE_INTERNAL_ERROR" }, 500);
   }
 });
