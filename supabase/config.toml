@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.chargenow-rent-callback]
 verify_jwt = false
+
+[functions.settle-rental-payment]
+verify_jwt = false
