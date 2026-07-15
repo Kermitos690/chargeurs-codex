@@ -1,143 +1,56 @@
-// sync-cabinet-status — pulls REAL cabinet/slot/battery state from ChargeNow
-// and updates the database. No mock data: if the API is not configured or a
-// station is unreachable, the station is marked unknown/offline.
+// sync-cabinet-status — admin-gated synchronization of real ChargeNow state.
+// Parsing and persistence are centralized in _shared/stationSync.ts so the
+// back-office and Platform API cannot drift into different inventory logic.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
-import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
-
-// Typed (tolerant) view of the documented ChargeNow "Get Device Info" payload.
-interface CabinetInfo {
-  online?: boolean; onlineStatus?: number; status?: string;
-  slots?: number; slotNum?: number; totalSlots?: number; emptySlots?: number;
-  signal?: number; signalStrength?: number;
-}
-interface BatteryInfo {
-  slotNum?: number; slot?: number; slotId?: number;
-  batteryId?: string; sn?: string; bid?: string;
-  vol?: number; batteryCapacity?: number; power?: number; electricity?: number;
-}
-interface CabinetPayload {
-  cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
-}
+import { adminClient, requireAdmin } from "../_shared/db.ts";
+import { isChargeNowConfigured } from "../_shared/chargenow.ts";
+import { syncStationFromChargeNow } from "../_shared/stationSync.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
   const db = adminClient();
 
-  // Admin-gated: this endpoint performs live ChargeNow calls and overwrites
-  // stations/slots/batteries. It must never be reachable anonymously.
   const adminId = await requireAdmin(req, db);
   if (!adminId) {
-    return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN" }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
     const body = await req.json().catch(() => ({}));
-    const stationId: string | undefined = body.stationId;
+    const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
 
     if (!isChargeNowConfigured()) {
-      return new Response(
-        JSON.stringify({ ok: false, configured: false, error: "CHARGENOW_NOT_CONFIGURED" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({
+        ok: false,
+        configured: false,
+        error: "CHARGENOW_NOT_CONFIGURED",
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const query = db.from("stations").select("station_id, cabinet_id");
-    const { data: stations } = stationId
-      ? await query.eq("station_id", stationId)
-      : await query;
+    let query = db.from("stations").select("station_id,cabinet_id").order("station_id");
+    if (stationId) query = query.eq("station_id", stationId);
+    const { data: stations, error } = await query;
+    if (error) throw error;
 
-    const results: Array<Record<string, unknown>> = [];
-
-    for (const st of stations ?? []) {
-      const deviceId = (st.cabinet_id as string) || (st.station_id as string);
-      const res = await cabinetQuery(deviceId);
-      await logApi(db, {
-        service: "chargenow", endpoint: "/rent/cabinet/query", method: "GET",
-        status_code: res.status, request: { deviceId }, response: res.data, error: res.error,
-      });
-
-      if (!res.ok || !res.data) {
-        await db.from("stations").update({
-          status: "unknown", online: false, last_sync_at: new Date().toISOString(),
-        }).eq("station_id", st.station_id);
-        results.push({ stationId: st.station_id, ok: false, error: res.error });
-        continue;
-      }
-
-      // Tolerant parsing of the documented response shape.
-      const d = (res.data ?? {}) as CabinetPayload;
-      const payload = (d.data ?? d) as CabinetPayload;
-      // Documented response shape (Apifox "1.Get Device Info" — GET /rent/cabinet/query):
-      //   data.cabinet  : { online, slots (total), emptySlots, busySlots, signal, qrCode, id, shopId, ... }
-      //   data.batteries: [{ slotNum, vol, batteryId }]  (batteries currently present & rentable)
-      //   data.priceStrategy / data.shop
-      const cab = (payload.cabinet ?? payload) as CabinetInfo;
-      const online = cab.online === true || cab.onlineStatus === 1 || cab.status === "online";
-
-      // Batteries available to rent come from data.batteries[].
-      const batteries: BatteryInfo[] = Array.isArray(payload.batteries)
-        ? payload.batteries
-        : (Array.isArray(payload.slots) ? payload.slots : []).filter(
-            (s: BatteryInfo) => s.batteryId || s.sn || s.bid,
-          );
-
-
-      // total = number of physical slots; emptySlots = returnable capacity.
-      const total = Number(cab.slots ?? cab.slotNum ?? cab.totalSlots ?? 0);
-      const rentable = batteries.length;
-      const returnable = Number(
-        cab.emptySlots ?? (total ? total - batteries.length : 0),
-      );
-
-      await db.from("stations").update({
-        status: online ? "online" : "offline",
-        online,
-        signal: cab.signal ?? cab.signalStrength ?? null,
-        rentable_count: rentable,
-        returnable_count: returnable,
-        total_count: total,
-        last_sync_at: new Date().toISOString(),
-        raw_data: payload,
-      }).eq("station_id", st.station_id);
-
-      // Upsert one slot row per battery currently present.
-      for (const b of batteries) {
-        const slotNum = b.slotNum ?? b.slot ?? b.slotId;
-        if (slotNum == null) continue;
-        const bid = b.batteryId ?? b.sn ?? b.bid ?? null;
-        await db.from("slots").upsert({
-          station_id: st.station_id,
-          slot_num: Number(slotNum),
-          status: bid ? "occupied" : "empty",
-          battery_id: bid,
-          raw_data: b,
-        }, { onConflict: "station_id,slot_num" });
-
-        if (bid) {
-          await db.from("batteries").upsert({
-            battery_id: bid,
-            station_id: st.station_id,
-            slot_num: Number(slotNum),
-            status: "in_station",
-            // "vol" is the documented battery voltage/charge field.
-            power_level: b.vol ?? b.batteryCapacity ?? b.power ?? b.electricity ?? null,
-            raw_data: b,
-          }, { onConflict: "battery_id" });
-        }
-      }
-
-      results.push({ stationId: st.station_id, ok: true, online });
+    const results = [];
+    for (const station of stations ?? []) {
+      results.push(await syncStationFromChargeNow(db, station));
     }
 
     return new Response(JSON.stringify({ ok: true, configured: true, results }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  } catch (error) {
+    return new Response(JSON.stringify({ ok: false, error: String(error) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
