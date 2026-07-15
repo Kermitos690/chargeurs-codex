@@ -67,7 +67,7 @@ public final class ProvisioningActivity extends Activity {
         baseUrlInput = field(getString(R.string.base_url));
         baseUrlInput.setSingleLine(true);
         baseUrlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        baseUrlInput.setText("https://chargeurs.ch");
+        baseUrlInput.setText(R.string.default_base_url);
         content.addView(baseUrlInput, matchWrap(0, dp(24)));
 
         Button activate = new Button(this);
@@ -81,7 +81,7 @@ public final class ProvisioningActivity extends Activity {
         ));
 
         TextView warning = text(
-            "Après activation, la configuration n’est plus accessible depuis l’écran public. Pour changer de borne, l’opérateur doit effacer les données de l’application ou la reprovisionner avec les outils de gestion du terminal.",
+            getString(R.string.reprovision_warning),
             13,
             Color.rgb(148, 163, 192)
         );
@@ -110,7 +110,7 @@ public final class ProvisioningActivity extends Activity {
         }
 
         if (!store.save(new KioskConfig(station, token, baseUrl))) {
-            Toast.makeText(this, "Le stockage chiffré a échoué.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, R.string.storage_failed, Toast.LENGTH_LONG).show();
             return;
         }
 
