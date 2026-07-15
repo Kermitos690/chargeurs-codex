@@ -1,0 +1,87 @@
+name: Chargeurs.ch GitHub Review Preview
+
+on:
+  push:
+    branches:
+      - integration/chargeurs-beta-platform
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - ".github/workflows/github-review-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: chargeurs-github-review-preview
+  cancel-in-progress: true
+
+env:
+  VITE_REVIEW_BUILD: "true"
+  VITE_ROUTER_MODE: "hash"
+  VITE_BASE_PATH: "/chargeurs-codex/"
+  # Deliberately inert values. The review portal never calls Supabase, Stripe or ChargeNow.
+  VITE_SUPABASE_URL: "https://review.invalid.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY: "review-only-no-access"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --silent
+
+      - name: Assert GitHub-only review boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'path="/review"' src/App.tsx
+          grep -F 'VITE_REVIEW_BUILD' vite.config.ts
+          ! grep -F 'lovable-tagger' vite.config.ts package.json
+          ! grep -F '@lovable.dev/cloud-auth-js' package.json
+          ! grep -Eiq '(sk_live_|sk_test_|service_role_key[[:space:]]*=|CHARGENOW_APP_SECRET[[:space:]]*=)' \
+            src/pages/review/ReviewPortal.tsx .github/workflows/github-review-preview.yml
+
+      - name: Lint
+        run: npm run lint -- --quiet
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build read-only review
+        run: npm run build
+
+      - name: Add GitHub Pages marker
+        run: touch dist/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
