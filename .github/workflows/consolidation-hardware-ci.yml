@@ -1,84 +1,13 @@
-name: Chargeurs.ch Canonical Hardware CI
+name: Chargeurs.ch Canonical Hardware CI (paused obsolete PR14)
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "supabase/functions/eject-after-payment/**"
-      - "supabase/functions/chargenow-rent-callback/**"
-      - "supabase/functions/_shared/depositCompensation*.ts"
-      - "supabase/functions/_shared/returnCorrelation.ts"
-      - "supabase/functions/tests/deposit_compensation.test.ts"
-      - "supabase/functions/tests/return_correlation.test.ts"
-      - ".github/workflows/consolidation-hardware-ci.yml"
-  push:
-    branches: [integration/chargeurs-beta-platform]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  canonical-hardware-flow:
+  paused:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Install dependencies required by npm imports
-        run: npm install --no-audit --no-fund --silent
-      - name: Check hardware and compensation functions
-        run: |
-          deno check supabase/functions/_shared/depositCompensationPlan.ts
-          deno check supabase/functions/_shared/depositCompensation.ts
-          deno check supabase/functions/_shared/returnCorrelation.ts
-          deno check supabase/functions/eject-after-payment/index.ts
-          deno check supabase/functions/chargenow-rent-callback/index.ts
-      - name: Test compensation and strict correlation
-        run: |
-          deno test supabase/functions/tests/deposit_compensation.test.ts
-          deno test supabase/functions/tests/return_correlation.test.ts
-      - name: Assert hardware flow remains fail-closed
-        shell: bash
-        run: |
-          set -euo pipefail
-          eject="supabase/functions/eject-after-payment/index.ts"
-          compensation="supabase/functions/_shared/depositCompensation.ts"
-          planner="supabase/functions/_shared/depositCompensationPlan.ts"
-          correlation="supabase/functions/_shared/returnCorrelation.ts"
-          callback="supabase/functions/chargenow-rent-callback/index.ts"
-
-          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$eject"
-          grep -F "ENABLE_CANONICAL_HARDWARE_FLOW" "$eject"
-          grep -F "authorizeCaller" "$eject"
-          grep -F "requireAdmin" "$eject"
-          grep -F "CHARGENOW_CALLBACK_URL" "$eject"
-          grep -F "compensateFailedRelease" "$eject"
-          grep -F "extractEjectedBattery" "$eject"
-          grep -F 'settlement_status === "legacy"' "$eject"
-          ! grep -F "refundOnFailure" "$eject"
-          ! grep -F "?secret=" "$eject"
-
-          grep -F "PAYMENT_INTENT_OWNERSHIP_MISMATCH" "$compensation"
-          grep -F "DEPOSIT_AMOUNT_MISMATCH" "$compensation"
-          grep -F "paymentIntents.cancel" "$compensation"
-          grep -F "refunds.create" "$compensation"
-          grep -F "planFailedReleaseCompensation" "$planner"
-
-          grep -F "NO_IDENTITY" "$correlation"
-          grep -F 'matchedBy: "trade_no"' "$correlation"
-          grep -F 'matchedBy: "battery_id"' "$correlation"
-          ! grep -F "single_station_candidate" "$correlation"
-
-          grep -F '.eq("apifox_trade_no", tradeNo)' "$callback"
-          grep -F '.limit(2)' "$callback"
-          grep -F "RETURN_BATTERY_MISMATCH" "$callback"
-          grep -F "triggerSettlement" "$callback"
-
-          ! grep -Eiq "(sk_live_[A-Za-z0-9]{12,}|sk_test_[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{20,})" \
-            "$eject" "$compensation" "$planner" "$correlation" "$callback"
+      - run: echo "PR #14 is obsolete and superseded by PR #16."
