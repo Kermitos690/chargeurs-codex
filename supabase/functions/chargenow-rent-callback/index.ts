@@ -5,9 +5,9 @@
 //   1 = rent/release succeeded
 //   2 = battery returned
 //
-// Returns are accepted only when trade number, battery, destination station and
-// destination slot are sufficiently correlated. A callback never assigns the
-// return to the latest rental merely because it came from the same station.
+// Release and return transitions require exact provider identity. A callback
+// never assigns an event to the latest rental merely because it came from the
+// same station.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, logApi } from "../_shared/db.ts";
 import { verifyChargeNowCallback } from "../_shared/chargenowCallbackAuth.ts";
@@ -48,9 +48,16 @@ function parsePayload(payload: Record<string, unknown>) {
     status: firstString(merged, ["status", "rentStatus"]) ?? "",
     tradeNo: firstString(merged, ["tradeNo", "trade_no", "orderNo"]) ?? "",
     eventId: firstString(merged, ["messageId", "eventId", "msgId", "id"]),
-    stationId: firstString(merged, ["deviceId", "cabinetid", "cabinetId", "stationId", "cabinetSn"]),
-    batteryId: firstString(merged, ["batteryId", "batterySN", "batterySn", "batteryCode", "sn", "bid"]),
-    slotNum: firstInteger(merged, ["slotNum", "slot", "slotId", "position"]),
+    stationId: firstString(merged, [
+      "deviceId", "cabinetid", "cabinetId", "stationId", "cabinetSn",
+      "givebackDeviceId", "returnDeviceId", "returnStationId",
+    ]),
+    batteryId: firstString(merged, [
+      "batteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
+    ]),
+    slotNum: firstInteger(merged, [
+      "slotNum", "slot", "slotId", "position", "givebackSlot", "returnSlot",
+    ]),
   };
 }
 
@@ -76,23 +83,26 @@ async function openIncident(
   message: string,
   details: Record<string, unknown> = {},
 ) {
-  await db.from("system_incidents").insert({
+  const { error } = await db.from("system_incidents").insert({
     type: "chargenow_callback",
     severity: "high",
     message,
-    data: {
-      rental_session_id: session.id,
-      station_id: session.station_id,
-      code,
-      ...details,
-    },
+    data: { rental_session_id: session.id, station_id: session.station_id, code, ...details },
     resolved: false,
   });
+  if (error) throw error;
   await auditLog(db, {
     action: "chargenow.callback.incident",
     target: String(session.id),
     data: { code, ...details },
   });
+}
+
+async function snapshotState(db: DB, rentalId: string): Promise<string | null> {
+  const { data, error } = await db.from("rental_orchestrator_snapshots")
+    .select("state").eq("rental_id", rentalId).maybeSingle();
+  if (error) throw error;
+  return typeof data?.state === "string" ? data.state : null;
 }
 
 async function claimExternalEvent(
@@ -132,22 +142,112 @@ async function finishExternalEvent(
 async function triggerSettlement(rentalSessionId: string, returnedAt: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!supabaseUrl || !serviceRole) return { ok: false, status: 0, error: "SUPABASE_INTERNAL_CONFIG_MISSING" };
-
+  if (!supabaseUrl || !serviceRole) {
+    return { ok: false, status: 0, result: null, error: "SUPABASE_INTERNAL_CONFIG_MISSING" };
+  }
   const response = await fetch(`${supabaseUrl}/functions/v1/settle-rental-payment`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${serviceRole}`,
-    },
-    body: JSON.stringify({
-      rentalSessionId,
-      returnState: "normal",
-      finalAt: returnedAt,
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceRole}` },
+    body: JSON.stringify({ rentalSessionId, returnState: "normal", finalAt: returnedAt }),
   });
   const result = await response.json().catch(() => null);
-  return { ok: response.ok, status: response.status, result, error: response.ok ? null : "SETTLEMENT_NOT_COMPLETED" };
+  return {
+    ok: response.ok,
+    status: response.status,
+    result,
+    error: response.ok ? null : "SETTLEMENT_NOT_COMPLETED",
+  };
+}
+
+async function applyReleaseSuccess(
+  db: DB,
+  session: Session,
+  identity: ReturnType<typeof parsePayload>,
+) {
+  const state = await snapshotState(db, String(session.id));
+  if (!state) throw new OrchestratorError("ORCHESTRATOR_SNAPSHOT_MISSING");
+  if (state === "active") return { state: "active", idempotent: true };
+
+  let batteryId = String(session.battery_id ?? "").trim() || null;
+  let slotNum = session.selected_slot_num == null ? null : Number(session.selected_slot_num);
+  const stationId = identity.stationId ?? String(session.station_id ?? "") || null;
+
+  if (state === "release_requested") {
+    if (!identity.batteryId || identity.slotNum == null) {
+      await openIncident(
+        db,
+        session,
+        "RELEASE_IDENTITY_INCOMPLETE",
+        "ChargeNow confirme la sortie, mais l'identifiant de batterie ou le slot manque.",
+        { tradeNo: identity.tradeNo, stationId: identity.stationId },
+      );
+      throw new OrchestratorError("RELEASE_IDENTITY_INCOMPLETE");
+    }
+    batteryId = identity.batteryId;
+    slotNum = identity.slotNum;
+    const releasedAt = new Date().toISOString();
+    await appendRentalEvent(db, {
+      rentalId: String(session.id),
+      eventType: "battery_released",
+      idempotencyKey: `battery_released:callback:${identity.tradeNo}:${batteryId}`,
+      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+      stationId,
+      batteryId,
+      occurredAt: releasedAt,
+      metadata: { tradeNo: identity.tradeNo, slotNum, source: "chargenow_callback" },
+    });
+    const { error } = await db.from("rental_sessions").update({
+      state: "ejected",
+      ejected_at: session.ejected_at ?? releasedAt,
+      started_at: session.started_at ?? releasedAt,
+      chargenow_status: "ejected",
+      selected_slot_num: slotNum,
+      battery_id: batteryId,
+      failure_code: null,
+      failure_message: null,
+    }).eq("id", session.id);
+    if (error) throw error;
+  } else if (state !== "released") {
+    await openIncident(
+      db,
+      session,
+      "RELEASE_STATE_CONFLICT",
+      "ChargeNow confirme une sortie incompatible avec l'état local de la location.",
+      { tradeNo: identity.tradeNo, orchestratorState: state },
+    );
+    throw new OrchestratorError("RELEASE_STATE_CONFLICT");
+  }
+
+  if (!batteryId) {
+    await openIncident(
+      db,
+      session,
+      "BATTERY_ID_MISSING",
+      "La location ne peut pas devenir active sans identifiant de batterie.",
+      { tradeNo: identity.tradeNo },
+    );
+    throw new OrchestratorError("BATTERY_ID_MISSING");
+  }
+
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "rental_activated",
+    idempotencyKey: `rental_activated:callback:${identity.tradeNo}:${batteryId}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId,
+    batteryId,
+    metadata: { tradeNo: identity.tradeNo, slotNum, source: "chargenow_callback" },
+  });
+  const { error } = await db.from("rental_sessions").update({
+    state: "active_rental",
+    chargenow_status: "active",
+    battery_id: batteryId,
+    selected_slot_num: slotNum,
+    failure_code: null,
+    failure_message: null,
+  }).eq("id", session.id);
+  if (error) throw error;
+  return { state: "active", batteryId, slotNum };
 }
 
 Deno.serve(async (req) => {
@@ -164,10 +264,8 @@ Deno.serve(async (req) => {
     if (!identity.tradeNo) return json({ received: true, ignored: true, reason: "TRADE_NO_MISSING" });
 
     const { data, error: sessionError } = await db.from("rental_sessions")
-      .select("*")
-      .eq("apifox_trade_no", identity.tradeNo)
-      .order("created_at", { ascending: false })
-      .limit(2);
+      .select("*").eq("apifox_trade_no", identity.tradeNo)
+      .order("created_at", { ascending: false }).limit(2);
     if (sessionError) throw sessionError;
     if (!data || data.length === 0) {
       await auditLog(db, {
@@ -186,14 +284,10 @@ Deno.serve(async (req) => {
     }
 
     externalEventId = `rent-callback:${identity.tradeNo}:${identity.status}:${identity.eventId ?? identity.batteryId ?? identity.slotNum ?? "default"}`;
-    const eventType = identity.status === "2"
-      ? "return"
-      : identity.status === "1"
-        ? "release_success"
-        : identity.status === "0"
-          ? "release_failed"
-          : "unknown";
-
+    const eventType = identity.status === "2" ? "return"
+      : identity.status === "1" ? "release_success"
+      : identity.status === "0" ? "release_failed"
+      : "unknown";
     const sanitizedPayload = {
       status: identity.status,
       tradeNo: identity.tradeNo,
@@ -218,61 +312,46 @@ Deno.serve(async (req) => {
     });
 
     if (identity.status === "1") {
-      const { data: snapshot, error: snapshotError } = await db.from("rental_orchestrator_snapshots")
-        .select("state")
-        .eq("rental_id", session.id)
-        .maybeSingle();
-      if (snapshotError) throw snapshotError;
-      if (snapshot?.state === "released") {
-        await appendRentalEvent(db, {
-          rentalId: String(session.id),
-          eventType: "rental_activated",
-          idempotencyKey: `rental_activated:callback:${identity.tradeNo}`,
-          paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-          stationId: String(session.station_id ?? "") || null,
-          batteryId: String(session.battery_id ?? "") || null,
-          metadata: { tradeNo: identity.tradeNo, source: "chargenow_callback" },
-        });
-      }
-      await db.from("rental_sessions").update({ state: "active_rental" })
-        .eq("id", session.id)
-        .in("state", ["ejected", "battery_taken"]);
-      await auditLog(db, { action: "chargenow.rental.active", target: session.id });
+      const result = await applyReleaseSuccess(db, session, identity);
+      await auditLog(db, {
+        action: "chargenow.rental.active",
+        target: session.id,
+        data: { tradeNo: identity.tradeNo, batteryId: result.batteryId ?? null },
+      });
       await finishExternalEvent(db, externalEventId, true);
-      return json({ received: true, state: "active_rental" });
+      return json({ received: true, state: "active_rental", ...result });
     }
 
     if (identity.status === "0") {
-      const { data: snapshot, error: snapshotError } = await db.from("rental_orchestrator_snapshots")
-        .select("state")
-        .eq("rental_id", session.id)
-        .maybeSingle();
-      if (snapshotError) throw snapshotError;
-      if (snapshot?.state === "release_requested") {
-        await appendRentalEvent(db, {
-          rentalId: String(session.id),
-          eventType: "rental_failed",
-          idempotencyKey: `release_failed:callback:${identity.tradeNo}`,
-          paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-          stationId: String(session.station_id ?? "") || null,
-          failureReason: "CHARGENOW_RENT_FAILED",
-          metadata: { tradeNo: identity.tradeNo },
-        });
+      const state = await snapshotState(db, String(session.id));
+      if (!["release_requested", "authorized"].includes(String(state))) {
+        await openIncident(
+          db,
+          session,
+          "RELEASE_FAILURE_STATE_CONFLICT",
+          "ChargeNow annonce un échec de sortie incompatible avec l'état local.",
+          { tradeNo: identity.tradeNo, orchestratorState: state },
+        );
       }
-      await db.from("rental_sessions").update({
-        state: "needs_support",
+      // Do not terminalize the orchestrator and do not refund automatically.
+      // The explicit provider failure makes a controlled retry or super-admin
+      // refund possible, while preserving the payment evidence.
+      const { error } = await db.from("rental_sessions").update({
+        state: "eject_failed",
+        chargenow_status: "release_failed",
         failure_code: "CHARGENOW_RENT_FAILED",
-        failure_message: "ChargeNow a signalé un échec de location.",
+        failure_message: "ChargeNow a signalé un échec de location. Retry ou remboursement contrôlé requis.",
       }).eq("id", session.id);
+      if (error) throw error;
       await openIncident(
         db,
         session,
         "CHARGENOW_RENT_FAILED",
-        "ChargeNow a signalé un échec après création de la commande. Vérifier le matériel et la compensation financière.",
-        { tradeNo: identity.tradeNo },
+        "ChargeNow a confirmé l'échec de la sortie. Aucun débit supplémentaire ni nouvelle éjection n'est automatique.",
+        { tradeNo: identity.tradeNo, retryable: true },
       );
       await finishExternalEvent(db, externalEventId, true);
-      return json({ received: true, state: "needs_support" });
+      return json({ received: true, state: "eject_failed", operator_action_required: true });
     }
 
     if (identity.status === "2") {
@@ -316,7 +395,6 @@ Deno.serve(async (req) => {
           externalEventId,
         },
       });
-
       const { error: returnUpdateError } = await db.from("rental_sessions").update({
         state: "battery_returned",
         returned_at: returnedAt,
@@ -345,7 +423,6 @@ Deno.serve(async (req) => {
           { settlementStatus: settlement.status, externalEventId },
         );
       }
-
       await finishExternalEvent(db, externalEventId, true);
       return json({
         received: true,
