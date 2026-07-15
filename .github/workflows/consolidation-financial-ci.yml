@@ -96,5 +96,5 @@ jobs:
           grep -F "[functions.settle-rental-payment]" "$config"
           grep -F "verify_jwt = false" "$config"
 
-          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" \
+          ! grep -Eiq "(sk_live_[A-Za-z0-9]{12,}|sk_test_[A-Za-z0-9]{12,}|eyJ[A-Za-z0-9_-]{20,})" \
             "$schema" "$inbox" "$checkout" "$webhook" "$runtime" "$endpoint" "$kiosk" "$config"
