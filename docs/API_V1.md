@@ -1,57 +1,84 @@
 # Chargeurs.ch Platform API v1
 
-## Purpose
+## Objectif
 
-The Platform API is the stable interface owned by Chargeurs.ch. It prevents kiosks, partner dashboards and future mobile applications from depending directly on Stripe, Supabase table layouts or ChargeNow/Bajie routes.
+La Platform API est l’interface stable détenue par Chargeurs.ch. Les kiosques, applications partenaires, futurs portails mobiles et outils de supervision ne doivent pas dépendre directement du schéma Supabase, des routes Stripe ou de l’API Bajie/ChargeNow.
 
-The first release is deliberately **read-first**. It exposes operational data and authoritative pricing while payment and hardware mutations remain behind the existing internal Edge Functions. Public write routes must not be enabled until the staging payment/hardware gate has passed.
+La version actuelle comporte :
 
-## Base URL
+- une façade de lecture ;
+- une façade de gestion des locations et du Checkout ;
+- une façade de synchronisation non destructive des stations ;
+- des clés séparées `test` et `live` ;
+- des scopes, quotas, journaux et protections d’idempotence ;
+- des interrupteurs de déploiement qui maintiennent toute mutation désactivée par défaut.
+
+Aucune route publique d’éjection, redémarrage ou maintenance matérielle n’est exposée.
+
+## Points d’entrée
+
+### Lecture et tarification
 
 ```text
 https://<SUPABASE_PROJECT_REF>.supabase.co/functions/v1/platform-api
 ```
 
-Versioned routes start with `/v1`.
+### Locations et paiement
 
-## Authentication
+```text
+https://<SUPABASE_PROJECT_REF>.supabase.co/functions/v1/platform-api-rentals
+```
 
-Use either header:
+### Synchronisation des stations
+
+```text
+https://<SUPABASE_PROJECT_REF>.supabase.co/functions/v1/platform-api-stations
+```
+
+Toutes les routes sont préfixées par `/v1`. Un futur domaine `api.chargeurs.ch` pourra réunir ces fonctions derrière un gateway sans modifier le contrat métier.
+
+## Authentification
+
+Utiliser l’un des en-têtes suivants :
 
 ```http
 Authorization: Bearer chg_test_...
 ```
 
-or:
+ou :
 
 ```http
 X-API-Key: chg_test_...
 ```
 
-Raw keys are returned once by `api-key-admin`. Only their SHA-256 hash is stored. Never place an API key in a URL, QR code, client-side source bundle, screenshot or Git commit.
+Les clés brutes sont affichées une seule fois lors de leur création. Seul leur hash SHA-256 est conservé. Une clé ne doit jamais être ajoutée dans une URL, un QR code, le bundle frontend, une capture ou un commit.
 
-### Environments
+### Environnements
 
-- `chg_test_...`: test/staging client.
-- `chg_live_...`: production client.
+- `chg_test_...` : intégration test/staging ;
+- `chg_live_...` : intégration production.
 
-Test and live clients are separate database records. A key cannot be converted from one environment to the other.
+Une clé test ne peut pas utiliser une clé Stripe LIVE. Une clé LIVE ne peut pas utiliser une clé Stripe test. Les mutations LIVE nécessitent un interrupteur supplémentaire explicite.
 
 ## Scopes
 
-| Scope | Access |
+| Scope | Accès |
 |---|---|
-| `health:read` | Detailed dependency configuration flags |
-| `stations:read` | Station list, detail and public availability |
-| `inventory:read` | Battery identifiers, slots and charge levels |
-| `pricing:read` | Authoritative server-side pricing snapshots |
-| `rentals:read` | Sanitized rental state and orchestrator events |
-| `rentals:write` | Reserved for the future rental-command API |
-| `payments:write` | Reserved for the future payment-command API |
-| `stations:write` | Reserved for controlled operational commands |
-| `*` | All scopes; super-admin integrations only |
+| `health:read` | État de configuration des dépendances |
+| `stations:read` | Liste, détail et disponibilité publique |
+| `stations:write` | Synchronisation contrôlée de l’état fournisseur |
+| `inventory:read` | Slots, batteries et niveaux de charge |
+| `pricing:read` | Snapshots tarifaires calculés côté serveur |
+| `rentals:read` | Locations appartenant au client API |
+| `rentals:write` | Création et annulation de ses locations |
+| `payments:write` | Création du Checkout de ses locations |
+| `*` | Tous les scopes ; intégrations super-administrateur uniquement |
 
-## Current routes
+Le code prend aussi en charge `rentals:read:any` et `rentals:write:any` pour une future supervision multi-clients. Ces scopes ne doivent pas être attribués à un partenaire ordinaire.
+
+## Routes de lecture
+
+Base `platform-api` :
 
 ```text
 GET  /v1/health
@@ -66,48 +93,129 @@ GET  /v1/rentals/:rentalIdOrCode
 GET  /v1/rentals/:rentalId/events
 ```
 
-The complete contract is in `docs/openapi/chargeurs-api-v1.yaml`.
+## Routes de location et paiement
 
-## API client administration
+Base `platform-api-rentals` :
 
-`api-key-admin` is an internal Supabase Edge Function. It accepts only an authenticated `super_admin` user.
+```text
+GET  /v1/rentals
+POST /v1/rentals
+GET  /v1/rentals/:rentalIdOrCode
+GET  /v1/rentals/:rentalIdOrCode/events
+POST /v1/rentals/:rentalIdOrCode/checkout
+POST /v1/rentals/:rentalIdOrCode/cancel
+```
 
-Supported actions:
+### Créer une location
 
-- `list`
-- `create_client`
-- `set_client_active`
-- `create_key`
-- `revoke_key`
+Scope : `rentals:write`.
 
-Example request body for a test client:
+En-tête obligatoire :
+
+```http
+X-Idempotency-Key: partner-order-2026-0001
+```
+
+Exemple :
 
 ```json
 {
-  "action": "create_client",
-  "name": "Kiosk staging",
-  "environment": "test",
-  "description": "Integration test client"
+  "stationId": "DTA21269",
+  "language": "fr",
+  "customerEmail": "client@example.ch",
+  "externalReference": "partner-order-2026-0001"
 }
 ```
 
-Example key creation body:
+Le serveur :
 
-```json
-{
-  "action": "create_key",
-  "clientId": "<uuid>",
-  "name": "Staging operator key",
-  "scopes": ["health:read", "stations:read", "inventory:read", "pricing:read", "rentals:read"],
-  "rateLimitPerMinute": 120
-}
+1. vérifie la station et le stock ;
+2. calcule le tarif avec `compute_pricing` ;
+3. fige et hash le snapshot ;
+4. crée la session avec l’identité du client API ;
+5. initialise le snapshot du Rental Orchestrator ;
+6. enregistre l’événement externe API.
+
+Le montant fourni par le client n’est jamais accepté.
+
+### Créer le Checkout
+
+Scope : `payments:write`.
+
+```http
+POST /v1/rentals/:id/checkout
+X-Idempotency-Key: partner-checkout-2026-0001
 ```
 
-The response contains `secret` exactly once. Store it immediately in the target service secret manager.
+La route réutilise le Checkout actif lorsqu’il existe. La création Stripe utilise aussi une clé d’idempotence liée à la location. Après création, le Rental Orchestrator reçoit `payment_started` et passe à `payment_pending`.
+
+Le flux actuel reste un Stripe Checkout en mode paiement. Le futur modèle d’autorisation manuelle de 30 CHF et capture finale n’est pas déclaré comme opérationnel tant qu’il n’est pas validé en staging.
+
+### Annuler une location
+
+Scope : `rentals:write`.
+
+```http
+POST /v1/rentals/:id/cancel
+X-Idempotency-Key: partner-cancel-2026-0001
+Content-Type: application/json
+
+{"reason":"Client parti avant paiement"}
+```
+
+Seules les locations non payées peuvent être annulées. Un Checkout Stripe encore ouvert est expiré avant la transition locale. Une location payée, active, retournée ou terminée est refusée.
+
+## Route de synchronisation
+
+Base `platform-api-stations` :
+
+```text
+POST /v1/stations/:stationId/sync
+```
+
+Scope : `stations:write`.
+
+Cette route effectue seulement :
+
+- `GET /rent/cabinet/query` chez ChargeNow ;
+- mise à jour de la station ;
+- reconstruction des slots ;
+- mise à jour des batteries présentes ;
+- marquage des batteries disparues comme `out_of_station`.
+
+Elle n’éjecte aucune batterie et n’exécute aucune commande matérielle.
+
+## Idempotence
+
+Toute mutation nécessite `X-Idempotency-Key` :
+
+- 8 à 128 caractères ;
+- lettres, chiffres, `.`, `_`, `:`, `-` ;
+- unique par clé API pendant la durée de rétention.
+
+Le serveur conserve :
+
+- le hash canonique de la requête ;
+- le statut de traitement ;
+- la réponse sérialisée ;
+- la ressource créée ;
+- la date d’expiration.
+
+Comportements :
+
+- même clé et même requête terminée : réponse rejouée, avec `Idempotency-Replayed: true` ;
+- même clé et contenu différent : `409 IDEMPOTENCY_CONFLICT` ;
+- requête identique encore en cours : `409 IDEMPOTENCY_IN_PROGRESS`.
+
+## Propriété et isolation des locations
+
+Par défaut, une clé API ne lit et ne modifie que les locations créées par son propre `api_client_id`. Les locations kiosk historiques ne deviennent pas visibles automatiquement pour un partenaire.
+
+Les réponses sont nettoyées : aucun PaymentIntent, secret, URL interne fournisseur, payload brut ou token kiosk n’est exposé.
 
 ## Rate limiting
 
-Each key has its own requests-per-minute limit. The API returns:
+Chaque clé possède sa limite par minute. Les réponses incluent :
 
 ```text
 X-RateLimit-Limit
@@ -115,88 +223,141 @@ X-RateLimit-Remaining
 X-RateLimit-Reset
 ```
 
-Rate-limit counters are updated atomically by `consume_platform_api_quota`.
+Le compteur est mis à jour atomiquement par `consume_platform_api_quota`.
 
-## Logging and privacy
+## Journalisation et confidentialité
 
-Every authenticated request creates a redacted row in `api_request_logs`:
+Chaque appel authentifié crée une ligne expurgée dans `api_request_logs` :
 
-- request ID;
-- API client and key IDs;
-- method and path;
-- status;
-- duration;
-- optional salted IP hash;
-- user agent;
-- non-sensitive metadata.
+- identifiant de requête ;
+- client et clé API ;
+- méthode et route ;
+- statut ;
+- durée ;
+- code d’erreur ;
+- hash IP salé facultatif ;
+- user agent ;
+- métadonnées non sensibles.
 
-Authorization headers, raw API keys, Stripe secrets, ChargeNow credentials, kiosk tokens and payment payloads must never be stored.
+Les en-têtes Authorization, clés brutes, secrets Stripe, identifiants ChargeNow, tokens kiosk et payloads bancaires ne doivent jamais être stockés.
 
-Configure `API_LOG_HASH_SALT` to enable irreversible IP hashing. If it is absent, no IP-derived value is stored.
+Configurer `API_LOG_HASH_SALT` pour activer le hash IP irréversible. Sans cette variable, aucune donnée dérivée de l’adresse IP n’est enregistrée.
 
-## Database migration
+## Administration des clients API
 
-Apply:
+La fonction interne `api-key-admin` est réservée au rôle `super_admin`.
 
-```text
-supabase/migrations/20260715110000_platform_api_v1.sql
+Actions :
+
+- `list` ;
+- `create_client` ;
+- `set_client_active` ;
+- `create_key` ;
+- `revoke_key`.
+
+Exemple de création d’une clé partenaire test :
+
+```json
+{
+  "action": "create_key",
+  "clientId": "<uuid>",
+  "name": "Application partenaire staging",
+  "scopes": [
+    "health:read",
+    "stations:read",
+    "inventory:read",
+    "pricing:read",
+    "rentals:read",
+    "rentals:write",
+    "payments:write"
+  ],
+  "rateLimitPerMinute": 120
+}
 ```
 
-It creates:
+La réponse contient `secret` une seule fois.
 
-- `api_clients`
-- `api_keys`
-- `api_rate_limit_windows`
-- `api_request_logs`
-- `consume_platform_api_quota`
-- `prune_platform_api_operational_data`
+## Migrations
 
-All tables have RLS enabled and direct `anon`/`authenticated` access revoked. Only server-side `service_role` operations are permitted.
+Appliquer dans cet ordre :
 
-## Required environment variables
+```text
+supabase/migrations/20260715033000_rental_orchestrator_storage.sql
+supabase/migrations/20260715110000_platform_api_v1.sql
+supabase/migrations/20260715123000_platform_api_mutations.sql
+```
 
-Existing backend variables:
+La dernière migration ajoute notamment :
+
+- l’identité API sur `rental_sessions` ;
+- `api_idempotency_records` ;
+- la création transactionnelle d’une session API ;
+- l’initialisation du Rental Orchestrator ;
+- le nettoyage des données d’idempotence expirées.
+
+Les tables API ont RLS activé et aucun accès direct `anon` ou `authenticated`.
+
+## Variables d’environnement
+
+Variables existantes :
 
 ```text
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
+PUBLIC_APP_URL
+ALLOWED_APP_ORIGINS
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
-CHARGENOW_BASIC_AUTH or CHARGENOW_BASIC_USERNAME + CHARGENOW_BASIC_PASSWORD
+CHARGENOW_BASIC_AUTH
+# ou CHARGENOW_BASIC_USERNAME + CHARGENOW_BASIC_PASSWORD
 CHARGENOW_EVENT_SECRET
-```
-
-New variable:
-
-```text
 API_LOG_HASH_SALT
 ```
 
-No value belongs in the repository.
+Interrupteurs de mutation, tous désactivés par défaut :
 
-## Deployment order
+```text
+PLATFORM_API_MUTATIONS_ENABLED
+PLATFORM_API_LIVE_MUTATIONS_ENABLED
+PLATFORM_API_HARDWARE_MUTATIONS_ENABLED
+```
 
-1. Create a dedicated Supabase staging project or confirm the existing staging boundary.
-2. Apply the Rental Orchestrator storage migration.
-3. Apply the Platform API migration.
-4. Deploy `platform-api` and `api-key-admin`.
-5. Create a test API client and a least-privilege test key.
-6. Run health, station, inventory, pricing and rental read tests.
-7. Verify request logs contain no raw credentials.
-8. Run rate-limit and revoked-key tests.
-9. Only then design the write-command API around the Rental Orchestrator.
+Configuration staging recommandée :
 
-## Gate before write routes
+```text
+PLATFORM_API_MUTATIONS_ENABLED=true
+PLATFORM_API_LIVE_MUTATIONS_ENABLED=false
+PLATFORM_API_HARDWARE_MUTATIONS_ENABLED=false
+```
 
-The following must all be true before exposing rental, payment or hardware commands through the Platform API:
+La Platform API n’expose actuellement aucune route matérielle, même si l’interrupteur matériel existe pour les développements ultérieurs.
 
-- Rental Orchestrator migration applied and tested;
-- all Stripe and ChargeNow events recorded before processing;
-- compensation worker operational;
-- periodic reconciliation operational;
-- true 30 CHF authorization/capture model validated in Stripe test mode;
-- exact battery-to-rental return correlation;
-- one-station physical test complete;
-- three-station physical test complete;
-- credential rotation complete;
-- CI, security review and staging deployment green.
+## Ordre de déploiement staging
+
+1. Appliquer la migration Rental Orchestrator.
+2. Appliquer les deux migrations Platform API.
+3. Déployer `platform-api`, `platform-api-rentals`, `platform-api-stations`, `api-key-admin`.
+4. Déployer les versions durcies de `create-stripe-checkout` et `sync-cabinet-status`.
+5. Configurer `PUBLIC_APP_URL` et les origines autorisées.
+6. Activer uniquement `PLATFORM_API_MUTATIONS_ENABLED`.
+7. Créer un client `test` et une clé de moindre privilège.
+8. Tester lecture, création, replay, conflit, Checkout et annulation.
+9. Vérifier les journaux et la propriété des locations.
+10. Tester la synchronisation sur une borne réservée.
+11. Ne pas activer les mutations LIVE avant validation financière et matérielle.
+
+## Éléments toujours bloqués avant production
+
+- modèle Stripe d’autorisation de 30 CHF et capture finale ;
+- complément de non-retour jusqu’à 99 CHF ;
+- corrélation exacte batterie-location au retour ;
+- worker de compensation ;
+- réconciliation périodique ;
+- test physique sur une borne puis trois bornes ;
+- rotation des anciens credentials ;
+- validation de l’APK wrapper.
+
+## Contrats OpenAPI
+
+- lecture : `docs/openapi/chargeurs-api-v1.yaml` ;
+- actions : `docs/openapi/chargeurs-api-actions-v1.yaml`.
