@@ -31,6 +31,7 @@ import AdminSettings from "./pages/admin/AdminSettings.tsx";
 import AdminMaintenance from "./pages/admin/AdminMaintenance.tsx";
 import AdminApiHealth from "./pages/admin/AdminApiHealth.tsx";
 import AdminApiCoverage from "./pages/admin/AdminApiCoverage.tsx";
+import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
 import AdminOrders from "./pages/admin/AdminOrders.tsx";
 import AdminPricing from "./pages/admin/AdminPricing.tsx";
 import AdminPricingDetail from "./pages/admin/AdminPricingDetail.tsx";
@@ -84,6 +85,7 @@ const App = () => (
               <Route path="settings" element={<AdminSettings />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="kiosk-devices" element={<AdminKioskDevices />} />
+              <Route path="api-clients" element={<AdminApiClients />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
