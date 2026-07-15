@@ -64,7 +64,7 @@ jobs:
         id: edge_tests
         continue-on-error: true
         run: |
-          deno test --allow-net --allow-env --no-check supabase/functions/tests/ \
+          deno test --allow-read --allow-net --allow-env --no-check supabase/functions/tests/ \
             > edge-tests.log 2>&1
 
       - name: Upload quality logs
