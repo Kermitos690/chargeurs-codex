@@ -1,0 +1,76 @@
+name: Chargeurs.ch Canonical Financial CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/pages/Kiosk.tsx"
+      - "supabase/functions/create-stripe-checkout/**"
+      - "supabase/functions/stripe-webhook/**"
+      - "supabase/functions/_shared/settlement.ts"
+      - "supabase/functions/tests/settlement.test.ts"
+      - "supabase/migrations/2026071520*.sql"
+      - ".github/workflows/consolidation-financial-ci.yml"
+  push:
+    branches: [integration/chargeurs-beta-platform]
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-financial-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install dependencies required by npm imports
+        run: npm install --no-audit --no-fund --silent
+      - name: Check canonical financial functions
+        run: |
+          deno check supabase/functions/_shared/settlement.ts
+          deno check supabase/functions/create-stripe-checkout/index.ts
+          deno check supabase/functions/stripe-webhook/index.ts
+      - name: Test settlement planner
+        run: deno test supabase/functions/tests/settlement.test.ts
+      - name: Assert canonical financial safety boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          schema="supabase/migrations/20260715200000_payment_settlement_strategy.sql"
+          inbox="supabase/migrations/20260715201000_retryable_stripe_webhook_inbox.sql"
+          checkout="supabase/functions/create-stripe-checkout/index.ts"
+          webhook="supabase/functions/stripe-webhook/index.ts"
+          kiosk="src/pages/Kiosk.tsx"
+
+          grep -F "set settlement_status = 'legacy'" "$schema"
+          grep -F "revoke all on function public.claim_rental_settlement" "$schema"
+          grep -F "where provider = 'stripe'" "$inbox"
+          grep -F "grant execute on function public.claim_stripe_webhook_event" "$inbox"
+
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$checkout"
+          grep -F "const REQUIRED_DEPOSIT_CENTS = 3_000" "$checkout"
+          grep -F 'capture_method: "manual"' "$checkout"
+          grep -F 'twint: {' "$checkout"
+          grep -F "verifyKioskDevice" "$checkout"
+          ! grep -F "KIOSK_COMPATIBILITY_WINDOW" "$checkout"
+          grep -F 'headers: { "X-Kiosk-Token": kioskToken }' "$kiosk"
+
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_FLOW" "$webhook"
+          grep -F "ENABLE_CANONICAL_SETTLEMENT_LIVE" "$webhook"
+          grep -F "constructEventAsync" "$webhook"
+          grep -F "claim_stripe_webhook_event" "$webhook"
+          grep -F 'settlement_status: "authorized"' "$webhook"
+          grep -F 'settlement_status: authorized ? "authorized" : "prepaid"' "$webhook"
+          grep -F "triggerEjection" "$webhook"
+          grep -F 'return response({ error: "WEBHOOK_PROCESSING_FAILED" }, 500)' "$webhook"
+          grep -F '.neq("settlement_status", "legacy")' "$webhook"
+
+          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" \
+            "$schema" "$inbox" "$checkout" "$webhook" "$kiosk"
