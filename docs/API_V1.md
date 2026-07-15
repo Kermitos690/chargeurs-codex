@@ -11,6 +11,7 @@ La version actuelle comporte :
 - une façade de synchronisation non destructive des stations ;
 - des clés séparées `test` et `live` ;
 - des scopes, quotas, journaux et protections d’idempotence ;
+- des webhooks sortants signés avec file de livraison et reprises ;
 - des interrupteurs de déploiement qui maintiennent toute mutation désactivée par défaut.
 
 Aucune route publique d’éjection, redémarrage ou maintenance matérielle n’est exposée.
@@ -209,43 +210,34 @@ Comportements :
 
 ## Propriété et isolation des locations
 
-Par défaut, une clé API ne lit et ne modifie que les locations créées par son propre `api_client_id`. Les locations kiosk historiques ne deviennent pas visibles automatiquement pour un partenaire.
+Les locations créées par la Platform API enregistrent `api_client_id`, `api_key_id`, `external_reference` et `created_via`.
 
-Les réponses sont nettoyées : aucun PaymentIntent, secret, URL interne fournisseur, payload brut ou token kiosk n’est exposé.
+Une clé partenaire ne peut lire ou modifier que les locations de son propre `api_client_id`, sauf scope de supervision explicite. Les anciennes locations kiosk ne sont pas automatiquement attribuées à un partenaire.
 
-## Rate limiting
+## Webhooks sortants
 
-Chaque clé possède sa limite par minute. Les réponses incluent :
+Le sous-système webhook est documenté dans `docs/API_WEBHOOKS_V1.md`.
+
+Fonctions :
+
+- `api-webhook-admin` pour créer, désactiver ou faire tourner un secret ;
+- `platform-api-webhook-worker` pour livrer les événements ;
+- file transactionnelle, retries et journal d’essais ;
+- signature HMAC dérivée d’un master secret backend ;
+- aucune conservation du secret brut.
+
+Variables supplémentaires :
 
 ```text
-X-RateLimit-Limit
-X-RateLimit-Remaining
-X-RateLimit-Reset
+PLATFORM_API_WEBHOOK_MASTER_SECRET
+PLATFORM_API_WEBHOOK_WORKER_TOKEN
 ```
 
-Le compteur est mis à jour atomiquement par `consume_platform_api_quota`.
-
-## Journalisation et confidentialité
-
-Chaque appel authentifié crée une ligne expurgée dans `api_request_logs` :
-
-- identifiant de requête ;
-- client et clé API ;
-- méthode et route ;
-- statut ;
-- durée ;
-- code d’erreur ;
-- hash IP salé facultatif ;
-- user agent ;
-- métadonnées non sensibles.
-
-Les en-têtes Authorization, clés brutes, secrets Stripe, identifiants ChargeNow, tokens kiosk et payloads bancaires ne doivent jamais être stockés.
-
-Configurer `API_LOG_HASH_SALT` pour activer le hash IP irréversible. Sans cette variable, aucune donnée dérivée de l’adresse IP n’est enregistrée.
+Le webhook reste best effort : un problème de livraison ne peut pas annuler une transition de paiement ou de location.
 
 ## Administration des clients API
 
-La fonction interne `api-key-admin` est réservée au rôle `super_admin`.
+`api-key-admin` est une fonction interne réservée à `super_admin`.
 
 Actions :
 
@@ -255,109 +247,93 @@ Actions :
 - `create_key` ;
 - `revoke_key`.
 
-Exemple de création d’une clé partenaire test :
+La clé brute est retournée une seule fois. Elle doit être immédiatement placée dans le gestionnaire de secrets du service consommateur.
 
-```json
-{
-  "action": "create_key",
-  "clientId": "<uuid>",
-  "name": "Application partenaire staging",
-  "scopes": [
-    "health:read",
-    "stations:read",
-    "inventory:read",
-    "pricing:read",
-    "rentals:read",
-    "rentals:write",
-    "payments:write"
-  ],
-  "rateLimitPerMinute": 120
-}
+## Quotas et journaux
+
+Chaque clé possède sa limite par minute. L’API retourne :
+
+```text
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
 ```
 
-La réponse contient `secret` une seule fois.
+Chaque appel authentifié écrit un journal expurgé avec l’identifiant de requête, le client, la route, le statut et la durée. Aucun en-tête d’autorisation, token brut, secret Stripe, secret ChargeNow ou token kiosk ne doit être enregistré.
+
+Configurer `API_LOG_HASH_SALT` pour activer le hash irréversible de l’adresse IP. Sans cette variable, aucune donnée dérivée de l’IP n’est stockée.
 
 ## Migrations
 
-Appliquer dans cet ordre :
+Ordre prévu :
 
 ```text
 supabase/migrations/20260715033000_rental_orchestrator_storage.sql
 supabase/migrations/20260715110000_platform_api_v1.sql
 supabase/migrations/20260715123000_platform_api_mutations.sql
+supabase/migrations/20260715133000_platform_api_webhooks.sql
+supabase/migrations/20260715133500_platform_api_webhook_resilience.sql
 ```
 
-La dernière migration ajoute notamment :
+Toutes les nouvelles tables activent RLS et révoquent l’accès direct `anon` et `authenticated`.
 
-- l’identité API sur `rental_sessions` ;
-- `api_idempotency_records` ;
-- la création transactionnelle d’une session API ;
-- l’initialisation du Rental Orchestrator ;
-- le nettoyage des données d’idempotence expirées.
-
-Les tables API ont RLS activé et aucun accès direct `anon` ou `authenticated`.
-
-## Variables d’environnement
-
-Variables existantes :
+## Variables backend
 
 ```text
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
-PUBLIC_APP_URL
-ALLOWED_APP_ORIGINS
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
+PUBLIC_APP_URL
 CHARGENOW_BASIC_AUTH
-# ou CHARGENOW_BASIC_USERNAME + CHARGENOW_BASIC_PASSWORD
+CHARGENOW_BASIC_USERNAME
+CHARGENOW_BASIC_PASSWORD
 CHARGENOW_EVENT_SECRET
 API_LOG_HASH_SALT
-```
-
-Interrupteurs de mutation, tous désactivés par défaut :
-
-```text
 PLATFORM_API_MUTATIONS_ENABLED
 PLATFORM_API_LIVE_MUTATIONS_ENABLED
-PLATFORM_API_HARDWARE_MUTATIONS_ENABLED
+PLATFORM_API_WEBHOOK_MASTER_SECRET
+PLATFORM_API_WEBHOOK_WORKER_TOKEN
 ```
 
-Configuration staging recommandée :
+Aucune valeur ne doit apparaître dans GitHub.
 
-```text
-PLATFORM_API_MUTATIONS_ENABLED=true
-PLATFORM_API_LIVE_MUTATIONS_ENABLED=false
-PLATFORM_API_HARDWARE_MUTATIONS_ENABLED=false
-```
+## Validation CI
 
-La Platform API n’expose actuellement aucune route matérielle, même si l’interrupteur matériel existe pour les développements ultérieurs.
+Les workflows suivants ont été relancés avec succès sur la branche :
 
-## Ordre de déploiement staging
+- lint ;
+- typecheck ;
+- tests unitaires ;
+- build production ;
+- tests Deno des helpers API ;
+- `deno check` des fonctions API et webhook ;
+- validation des contrats OpenAPI.
 
-1. Appliquer la migration Rental Orchestrator.
-2. Appliquer les deux migrations Platform API.
-3. Déployer `platform-api`, `platform-api-rentals`, `platform-api-stations`, `api-key-admin`.
-4. Déployer les versions durcies de `create-stripe-checkout` et `sync-cabinet-status`.
-5. Configurer `PUBLIC_APP_URL` et les origines autorisées.
-6. Activer uniquement `PLATFORM_API_MUTATIONS_ENABLED`.
-7. Créer un client `test` et une clé de moindre privilège.
-8. Tester lecture, création, replay, conflit, Checkout et annulation.
-9. Vérifier les journaux et la propriété des locations.
-10. Tester la synchronisation sur une borne réservée.
-11. Ne pas activer les mutations LIVE avant validation financière et matérielle.
+La CI valide le dépôt, mais ne prouve pas que les migrations sont appliquées ni que les fonctions sont déployées sur Supabase.
 
-## Éléments toujours bloqués avant production
+## Déploiement staging
 
-- modèle Stripe d’autorisation de 30 CHF et capture finale ;
-- complément de non-retour jusqu’à 99 CHF ;
-- corrélation exacte batterie-location au retour ;
-- worker de compensation ;
-- réconciliation périodique ;
-- test physique sur une borne puis trois bornes ;
-- rotation des anciens credentials ;
-- validation de l’APK wrapper.
+1. confirmer une séparation staging ;
+2. appliquer les migrations dans l’ordre ;
+3. configurer les variables sans les exposer ;
+4. déployer les fonctions API et webhook ;
+5. créer un client API test avec le minimum de scopes ;
+6. tester lecture, tarification, création, Checkout et annulation ;
+7. tester clé révoquée, quota et replay idempotent ;
+8. tester une livraison webhook signée ;
+9. synchroniser une seule borne sans commande matérielle ;
+10. contrôler les journaux et incidents.
 
-## Contrats OpenAPI
+## Gates avant les commandes matérielles
 
-- lecture : `docs/openapi/chargeurs-api-v1.yaml` ;
-- actions : `docs/openapi/chargeurs-api-actions-v1.yaml`.
+Les routes d’éjection, redémarrage ou maintenance restent interdites jusqu’à validation de :
+
+- la migration et l’intégration complète du Rental Orchestrator ;
+- l’inbox des événements Stripe et ChargeNow ;
+- le worker de compensation ;
+- la réconciliation périodique ;
+- l’autorisation Stripe de 30 CHF et la capture finale ;
+- la corrélation exacte batterie-location ;
+- un test physique sur une borne puis sur trois bornes ;
+- la rotation des anciens identifiants et tokens.
