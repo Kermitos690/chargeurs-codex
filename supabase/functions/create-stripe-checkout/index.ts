@@ -1,14 +1,19 @@
-// create-stripe-checkout — creates a real hosted Stripe Checkout Session.
-// The kiosk renders the returned URL as a QR code. Supports card + TWINT
-// (Apple Pay / Google Pay surface automatically via "card" when eligible).
-// The amount is taken from the server-side rental_session.amount_expected.
+// create-stripe-checkout — creates a hosted Stripe Checkout Session for the
+// server-computed deposit. The kiosk renders the returned URL as a QR code.
+//
+// Settlement is payment-method aware:
+//  - card / Apple Pay / Google Pay: manual capture (30 CHF hold, capture later)
+//  - TWINT: automatic capture (30 CHF prepaid, unused balance refunded later)
+//
+// The deposit, currency and pricing profile are taken only from the frozen
+// server-side pricing snapshot. No amount supplied by the browser is trusted.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
-const EXPIRY_MINUTES = 30; // Stripe minimum 30 min for hosted Checkout.
+const EXPIRY_MINUTES = 30;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -50,21 +55,20 @@ Deno.serve(async (req) => {
     });
     const base = APP_URL || origin || "";
 
-    // Price is server-side ONLY — taken from the frozen pricing snapshot.
     const snap = (session.pricing_snapshot ?? null) as Record<string, unknown> | null;
     if (!snap || typeof snap !== "object") {
       await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "MISSING_SNAPSHOT" } });
       return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    // Verify the snapshot was not tampered with (hash must match).
+
     const recomputedHash = await snapshotHash(snap);
     if (session.pricing_snapshot_hash && recomputedHash !== session.pricing_snapshot_hash) {
       await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_HASH_MISMATCH" } });
       return new Response(JSON.stringify({ ok: false, error: "SNAPSHOT_INVALID" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    // Snapshot currency must match the session currency.
+
     const snapCurrency = String(snap.currency ?? "").toUpperCase();
     const sessCurrency = String(session.currency ?? "CHF").toUpperCase();
     if (snapCurrency && snapCurrency !== sessCurrency) {
@@ -72,30 +76,44 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: "CURRENCY_MISMATCH" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const finalCents = Number(snap.final_cents ?? NaN);
-    const expectedCents = Math.round(Number(session.amount_expected ?? 0) * 100);
-    if (!Number.isFinite(finalCents) || finalCents <= 0 || finalCents !== expectedCents) {
-      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "AMOUNT_MISMATCH", finalCents, expectedCents } });
-      return new Response(JSON.stringify({ ok: false, error: "PRICING_NOT_CONFIGURED" }),
+
+    // The initial transaction is the deposit, not the final rental price.
+    // compute_pricing is the only source allowed to provide this amount.
+    const depositCents = Number(snap.deposit_cents ?? NaN);
+    if (!Number.isInteger(depositCents) || depositCents <= 0) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "DEPOSIT_NOT_CONFIGURED" } });
+      return new Response(JSON.stringify({ ok: false, error: "DEPOSIT_NOT_CONFIGURED" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const amount = finalCents / 100;
-    const amountCents = finalCents;
+
+    const amount = depositCents / 100;
     const currency = sessCurrency.toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
 
-
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
-      // Payment methods are NOT hardcoded: Stripe automatically surfaces every
-      // method enabled in the account dashboard (card, TWINT, Apple/Google Pay…)
-      // based on currency, country and device eligibility.
+      customer_creation: "always",
+      // Keep Dashboard-managed dynamic methods. Card is overridden to manual
+      // capture; TWINT remains automatic because it cannot be captured later.
+      payment_method_options: {
+        card: {
+          capture_method: "manual",
+          setup_future_usage: "off_session",
+          request_extended_authorization: "if_available",
+        },
+        twint: {
+          setup_future_usage: "off_session",
+        },
+      },
       expires_at: expiresAtUnix,
       line_items: [{
         price_data: {
           currency,
-          product_data: { name: "Chargeurs.ch — Location batterie" },
-          unit_amount: amountCents,
+          product_data: {
+            name: "Chargeurs.ch — Caution de location",
+            description: "Le montant final est calculé au retour de la batterie.",
+          },
+          unit_amount: depositCents,
         },
         quantity: 1,
       }],
@@ -109,7 +127,7 @@ Deno.serve(async (req) => {
         price_profile_id: session.price_profile_id ?? "",
         price_profile_version: String(session.price_profile_version ?? ""),
         pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
-        expected_amount: String(amount),
+        deposit_amount_cents: String(depositCents),
         expected_currency: currency,
       },
       success_url: `${base}/pay/${session.id}/success?c=${encodeURIComponent(session.public_session_code ?? "")}`,
@@ -120,7 +138,7 @@ Deno.serve(async (req) => {
 
     await logApi(db, {
       service: "stripe", endpoint: "checkout.sessions.create", method: "POST",
-      status_code: 200, request: { rentalSessionId, amountCents },
+      status_code: 200, request: { rentalSessionId, depositCents },
       response: { id: checkout.id }, error: null,
     });
 
@@ -129,12 +147,22 @@ Deno.serve(async (req) => {
       checkout_url: checkout.url,
       checkout_url_expires_at: expiresAtIso,
       state: "checkout_created",
+      amount: amount,
+      amount_expected: amount,
+      deposit_amount_cents: depositCents,
+      settlement_status: "pending",
+      settlement_error: null,
     }).eq("id", session.id);
 
     await db.from("payments").upsert({
       rental_session_id: session.id,
       stripe_session_id: checkout.id,
-      amount: amount, currency: session.currency, status: "pending",
+      amount,
+      currency: session.currency,
+      status: "pending",
+      amount_authorized_cents: 0,
+      amount_captured_cents: 0,
+      amount_refunded_cents: 0,
     }, { onConflict: "stripe_session_id" });
 
     await auditLog(db, {
@@ -142,10 +170,15 @@ Deno.serve(async (req) => {
       target: session.id,
       data: {
         stripe_checkout_session_id: checkout.id,
-        station_id: session.station_id, kiosk_device_id: session.kiosk_device_id ?? null,
-        price_profile_id: session.price_profile_id, price_profile_version: session.price_profile_version,
-        amount_cents: amountCents, currency,
+        station_id: session.station_id,
+        kiosk_device_id: session.kiosk_device_id ?? null,
+        price_profile_id: session.price_profile_id,
+        price_profile_version: session.price_profile_version,
+        deposit_cents: depositCents,
+        currency,
         pricing_snapshot_hash: session.pricing_snapshot_hash ?? recomputedHash,
+        card_capture: "manual",
+        twint_capture: "automatic",
       },
     });
 
@@ -153,6 +186,7 @@ Deno.serve(async (req) => {
       ok: true, checkout_url: checkout.url, checkout_id: checkout.id,
       public_session_code: session.public_session_code,
       expires_at: expiresAtIso, status: "awaiting_payment",
+      deposit_cents: depositCents,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), {
