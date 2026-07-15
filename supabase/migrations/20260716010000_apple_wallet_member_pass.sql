@@ -43,8 +43,10 @@ create table if not exists public.wallet_passes (
   serial_number text not null unique,
   pass_type_identifier text not null,
   qr_token_hash text not null unique,
+  qr_token_ciphertext text not null,
   qr_token_last_four text not null,
   apple_authentication_token_hash text not null,
+  apple_authentication_token_ciphertext text not null,
   status text not null default 'active' check (status in ('active','revoked','suspended')),
   pass_version bigint not null default 1 check (pass_version > 0),
   visible_data_hash text,
@@ -93,19 +95,15 @@ alter table public.wallet_passes enable row level security;
 alter table public.wallet_device_registrations enable row level security;
 alter table public.wallet_pass_events enable row level security;
 
--- Owners may inspect their pass metadata, never its hashes or device push tokens through the client.
-drop policy if exists "Wallet owners read own pass" on public.wallet_passes;
-create policy "Wallet owners read own pass"
-  on public.wallet_passes for select to authenticated
-  using (user_id = auth.uid());
-
--- All writes and Apple web-service reads go through service-role Edge Functions.
+-- Sensitive hashes, encrypted tokens and push tokens are service-role only.
+revoke all on public.wallet_passes from anon, authenticated;
 revoke all on public.wallet_device_registrations from anon, authenticated;
 revoke all on public.wallet_pass_events from anon, authenticated;
 
--- Return only safe owner-facing metadata.
-create or replace view public.my_wallet_pass
-with (security_invoker = true)
+-- Safe owner-facing metadata. The owner-filter is evaluated from the signed JWT.
+drop view if exists public.my_wallet_pass;
+create view public.my_wallet_pass
+with (security_barrier = true)
 as
 select id, user_id, serial_number, pass_type_identifier, qr_token_last_four,
        status, pass_version, last_generated_at, last_updated_at, revoked_at,
@@ -113,6 +111,7 @@ select id, user_id, serial_number, pass_type_identifier, qr_token_last_four,
 from public.wallet_passes
 where user_id = auth.uid();
 
+revoke all on public.my_wallet_pass from public, anon;
 grant select on public.my_wallet_pass to authenticated;
 
 create or replace function public.touch_wallet_pass(
