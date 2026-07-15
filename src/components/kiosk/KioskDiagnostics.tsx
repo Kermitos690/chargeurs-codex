@@ -38,7 +38,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
   return (
     <div className="flex items-center justify-between gap-4 border-b border-border/40 py-2">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={`font-mono text-sm ${color}`}>{value}</span>
+      <span className={`text-right font-mono text-sm ${color}`}>{value}</span>
     </div>
   );
 }
@@ -49,6 +49,20 @@ export function KioskDiagnostics(props: Props) {
   const [tokenInput, setTokenInput] = useState("");
   const [savedToken, setSavedToken] = useState(readToken());
   const [tokenSaved, setTokenSaved] = useState(false);
+
+  const tokenReady = savedToken.length >= 24;
+  const chargenowValue = !tokenReady
+    ? "activation kiosk requise"
+    : chargenowConfigured == null
+      ? "vérification…"
+      : chargenowConfigured
+        ? "configurée"
+        : "non configurée ou inaccessible";
+  const chargenowTone = !tokenReady || chargenowConfigured == null
+    ? "warn"
+    : chargenowConfigured
+      ? "ok"
+      : "bad";
 
   const relock = () => {
     if (stationId) {
@@ -83,7 +97,7 @@ export function KioskDiagnostics(props: Props) {
 
   return (
     <div className="fixed inset-0 z-[100] grid place-items-center bg-background/90 p-6 backdrop-blur-xl">
-      <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+      <div className="glass-strong liquid-border max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-bold">Diagnostic borne</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-5 w-5" /></Button>
@@ -99,14 +113,10 @@ export function KioskDiagnostics(props: Props) {
         />
         <Row label="Dernière synchro" value={lastSync ? new Date(lastSync).toLocaleString("fr-CH") : "—"} />
         <Row label="Réseau Internet" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
-        <Row
-          label="API ChargeNow"
-          value={chargenowConfigured == null ? "vérification…" : chargenowConfigured ? "configurée" : "non configurée"}
-          tone={chargenowConfigured == null ? "warn" : chargenowConfigured ? "ok" : "bad"}
-        />
-        <Row label="Borne physique" value={stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
+        <Row label="API ChargeNow" value={chargenowValue} tone={chargenowTone} />
+        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
-        <Row label="Token kiosk" value={maskToken(savedToken)} tone={savedToken.length >= 24 ? "ok" : "bad"} />
+        <Row label="Token kiosk" value={maskToken(savedToken)} tone={tokenReady ? "ok" : "bad"} />
 
         <div className="mt-5 rounded-2xl border border-border/40 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -114,7 +124,7 @@ export function KioskDiagnostics(props: Props) {
             {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette tablette et ne quitte jamais l'appareil en clair.
+            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette tablette et n'est envoyé qu'aux fonctions serveur kiosk autorisées.
           </p>
           <Input
             type="password"
