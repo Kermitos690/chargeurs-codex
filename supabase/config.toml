@@ -1,5 +1,9 @@
 project_id = "zoybkzkvvsbnqqarlaii"
 
+# Public provider callbacks and custom-auth API facades validate their own
+# signatures, API keys or worker tokens. All other functions retain JWT
+# verification at the Supabase gateway.
+
 [functions.stripe-webhook]
 verify_jwt = false
 
@@ -19,4 +23,19 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.chargenow-rent-callback]
+verify_jwt = false
+
+[functions.platform-api]
+verify_jwt = false
+
+[functions.platform-api-rentals]
+verify_jwt = false
+
+[functions.platform-api-stations]
+verify_jwt = false
+
+[functions.platform-api-webhook-worker]
+verify_jwt = false
+
+[functions.rental-settlement-worker]
 verify_jwt = false
