@@ -58,17 +58,16 @@ export function KioskBlankScreenGuard() {
   const [blank, setBlank] = useState(false);
 
   useEffect(() => {
-    let firstCheck: ReturnType<typeof setTimeout> | undefined;
     let interval: ReturnType<typeof setInterval> | undefined;
 
     const inspect = () => setBlank(!hasMeaningfulKioskContent());
-    firstCheck = setTimeout(() => {
+    const firstCheck = setTimeout(() => {
       inspect();
       interval = setInterval(inspect, RECHECK_INTERVAL_MS);
     }, BLANK_SCREEN_DELAY_MS);
 
     return () => {
-      if (firstCheck) clearTimeout(firstCheck);
+      clearTimeout(firstCheck);
       if (interval) clearInterval(interval);
     };
   }, []);
