@@ -73,17 +73,25 @@ jobs:
           deno-version: v2.x
       - name: Check Platform API authentication core
         run: deno check supabase/functions/_shared/platformApi.ts
+      - name: Check Platform API key administration
+        run: deno check supabase/functions/api-key-admin/index.ts
       - name: Test Platform API authentication core
         run: deno test --allow-env supabase/functions/tests/platform_api.test.ts
-      - name: Assert API migration remains browser-inaccessible
+      - name: Assert Platform API remains read-only and fail-closed
         shell: bash
         run: |
           set -euo pipefail
-          file="supabase/migrations/20260715110000_platform_api_v1.sql"
-          grep -F "alter table public.api_keys enable row level security" "$file"
-          grep -F "revoke all on public.api_keys from public, anon, authenticated" "$file"
-          grep -F "grant all on public.api_keys to service_role" "$file"
-          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$file"
+          migration="supabase/migrations/20260715110000_platform_api_v1.sql"
+          admin="supabase/functions/api-key-admin/index.ts"
+          grep -F "alter table public.api_keys enable row level security" "$migration"
+          grep -F "revoke all on public.api_keys from public, anon, authenticated" "$migration"
+          grep -F "grant all on public.api_keys to service_role" "$migration"
+          grep -F "PLATFORM_API_LIVE_KEYS_ENABLED" "$admin"
+          grep -F '"rentals:read"' "$admin"
+          ! grep -F '"rentals:write"' "$admin"
+          ! grep -F '"payments:write"' "$admin"
+          ! grep -F '"stations:write"' "$admin"
+          ! grep -Eiq "(sk_live_|sk_test_|service_role_key|password[[:space:]]*=)" "$migration" "$admin"
 
   kiosk-edge-function:
     runs-on: ubuntu-latest
