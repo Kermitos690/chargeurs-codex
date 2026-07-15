@@ -6,10 +6,16 @@
     <string name="station_id">Identifiant de la station</string>
     <string name="kiosk_token">Token kiosk</string>
     <string name="base_url">Domaine Chargeurs.ch</string>
+    <string name="default_base_url" translatable="false">https://chargeurs.ch</string>
     <string name="activate">Activer cette borne</string>
     <string name="invalid_station">Identifiant de station invalide.</string>
     <string name="invalid_token">Token kiosk invalide ou trop court.</string>
     <string name="invalid_url">Le domaine doit utiliser HTTPS et ne contenir ni identifiant ni fragment.</string>
-    <string name="loading">Connexion à Chargeurs.ch…</string>
+    <string name="storage_failed">Le stockage chiffré a échoué.</string>
+    <string name="reprovision_warning">Après activation, la configuration n’est plus accessible depuis l’écran public. Pour changer de borne, l’opérateur doit effacer les données de l’application ou la reprovisionner avec les outils de gestion du terminal.</string>
     <string name="network_unavailable">Connexion Internet indisponible</string>
+    <string name="download_blocked">Téléchargement bloqué en mode kiosk.</string>
+    <string name="navigation_blocked_title">Navigation bloquée</string>
+    <string name="navigation_blocked_message">Le kiosk a refusé une page hors du domaine Chargeurs.ch ou une connexion non sécurisée.</string>
+    <string name="reload">Recharger</string>
 </resources>
