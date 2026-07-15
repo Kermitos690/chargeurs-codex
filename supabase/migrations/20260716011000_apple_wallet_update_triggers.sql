@@ -32,8 +32,9 @@ security definer
 set search_path = public
 as $$
 begin
-  if tg_op = 'INSERT'
-     or (to_jsonb(old) - array['updated_at']) is distinct from (to_jsonb(new) - array['updated_at']) then
+  if tg_op = 'INSERT' then
+    perform public.queue_wallet_pass_update_for_user(new.id, 'profile_created');
+  elsif (to_jsonb(old) - array['updated_at']) is distinct from (to_jsonb(new) - array['updated_at']) then
     perform public.queue_wallet_pass_update_for_user(new.id, 'profile_changed');
   end if;
   return new;
@@ -59,19 +60,42 @@ declare
   v_visible_old jsonb;
   v_visible_new jsonb;
 begin
-  v_visible_old := v_old -> array['state','station_id','battery_id','created_at','paid_at','ejected_at','returned_at','closed_at'];
-  v_visible_new := v_row -> array['state','station_id','battery_id','created_at','paid_at','ejected_at','returned_at','closed_at'];
+  v_visible_old := jsonb_build_object(
+    'state', v_old -> 'state',
+    'station_id', v_old -> 'station_id',
+    'battery_id', v_old -> 'battery_id',
+    'created_at', v_old -> 'created_at',
+    'paid_at', v_old -> 'paid_at',
+    'ejected_at', v_old -> 'ejected_at',
+    'returned_at', v_old -> 'returned_at',
+    'closed_at', v_old -> 'closed_at'
+  );
+  v_visible_new := jsonb_build_object(
+    'state', v_row -> 'state',
+    'station_id', v_row -> 'station_id',
+    'battery_id', v_row -> 'battery_id',
+    'created_at', v_row -> 'created_at',
+    'paid_at', v_row -> 'paid_at',
+    'ejected_at', v_row -> 'ejected_at',
+    'returned_at', v_row -> 'returned_at',
+    'closed_at', v_row -> 'closed_at'
+  );
   if tg_op = 'UPDATE' and v_visible_old is not distinct from v_visible_new then
-    return coalesce(new, old);
+    return new;
   end if;
 
-  begin v_user_id := nullif(v_row ->> 'customer_user_id', '')::uuid; exception when others then v_user_id := null; end;
+  begin
+    v_user_id := nullif(v_row ->> 'customer_user_id', '')::uuid;
+  exception when others then
+    v_user_id := null;
+  end;
   v_email := nullif(lower(v_row ->> 'customer_email'), '');
   if v_user_id is null and v_email is not null then
     select id into v_user_id from auth.users where lower(email) = v_email limit 1;
   end if;
   perform public.queue_wallet_pass_update_for_user(v_user_id, 'rental_changed');
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
 end;
 $$;
 
@@ -91,9 +115,14 @@ declare
   v_row jsonb := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
   v_user_id uuid;
 begin
-  begin v_user_id := nullif(v_row ->> 'user_id', '')::uuid; exception when others then v_user_id := null; end;
+  begin
+    v_user_id := nullif(v_row ->> 'user_id', '')::uuid;
+  exception when others then
+    v_user_id := null;
+  end;
   perform public.queue_wallet_pass_update_for_user(v_user_id, lower(tg_table_name) || '_changed');
-  return coalesce(new, old);
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
 end;
 $$;
 
