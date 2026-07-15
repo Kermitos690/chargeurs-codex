@@ -19,7 +19,9 @@ const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body)
 function safeEqual(a: string, b: string): boolean {
   if (!a || !b || a.length !== b.length) return false;
   let mismatch = 0;
-  for (let i = 0; i < a.length; i += 1) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let index = 0; index < a.length; index += 1) {
+    mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
   return mismatch === 0;
 }
 
@@ -28,10 +30,15 @@ function safeCode(value: unknown, fallback: string): string {
   return /^[A-Z0-9_:-]{1,120}$/.test(text) ? text : fallback;
 }
 
-async function authorizeCaller(req: Request, db: DB): Promise<{ ok: true; actor: string } | { ok: false }> {
+async function authorizeCaller(
+  req: Request,
+  db: DB,
+): Promise<{ ok: true; actor: string } | { ok: false }> {
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (token && serviceRole && safeEqual(token, serviceRole)) return { ok: true, actor: "service_role" };
+  if (token && serviceRole && safeEqual(token, serviceRole)) {
+    return { ok: true, actor: "service_role" };
+  }
   const adminId = await requireAdmin(req, db);
   return adminId ? { ok: true, actor: adminId } : { ok: false };
 }
@@ -39,8 +46,11 @@ async function authorizeCaller(req: Request, db: DB): Promise<{ ok: true; actor:
 function extractReleasedBattery(payload: unknown): { batteryId: string | null; slotNum: number | null } {
   const root = payload && typeof payload === "object" ? payload as Record<string, any> : {};
   const data = root.data && typeof root.data === "object" ? root.data as Record<string, any> : root;
-  const battery = data.battery && typeof data.battery === "object" ? data.battery as Record<string, any> : data;
-  const batteryId = battery.batteryId ?? battery.battery_id ?? battery.sn ?? battery.bid ?? data.batteryId ?? data.sn;
+  const battery = data.battery && typeof data.battery === "object"
+    ? data.battery as Record<string, any>
+    : data;
+  const batteryId = battery.batteryId ?? battery.battery_id ?? battery.sn ?? battery.bid ??
+    data.batteryId ?? data.sn;
   const slotRaw = battery.slotNum ?? battery.slot ?? battery.slotId ?? data.slotNum ?? data.slot;
   const slotNum = Number(slotRaw);
   return {
@@ -56,13 +66,19 @@ async function openIncident(
   message: string,
   details: Record<string, unknown> = {},
 ) {
-  await db.from("system_incidents").insert({
+  const { error } = await db.from("system_incidents").insert({
     type: "eject_failed_after_payment",
     severity: "high",
     message,
-    data: { rental_session_id: session.id, station_id: session.station_id, code, ...details },
+    data: {
+      rental_session_id: session.id,
+      station_id: session.station_id,
+      code,
+      ...details,
+    },
     resolved: false,
   });
+  if (error) throw error;
   await auditLog(db, {
     action: "rental.release.incident",
     target: String(session.id),
@@ -70,32 +86,20 @@ async function openIncident(
   });
 }
 
-async function markFailed(
+async function markSupportRequired(
   db: DB,
   session: Session,
   code: string,
   message: string,
-  idempotencyKey: string,
+  details: Record<string, unknown> = {},
 ) {
-  try {
-    await appendRentalEvent(db, {
-      rentalId: String(session.id),
-      eventType: "rental_failed",
-      idempotencyKey,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId: String(session.station_id ?? "") || null,
-      failureReason: code,
-      metadata: { code },
-    });
-  } catch (error) {
-    if (!(error instanceof OrchestratorError) || error.code !== "INVALID_TRANSITION") throw error;
-  }
-  await db.from("rental_sessions").update({
+  const { error } = await db.from("rental_sessions").update({
     state: "needs_support",
     failure_code: code,
     failure_message: message,
   }).eq("id", session.id);
-  await openIncident(db, session, code, message);
+  if (error) throw error;
+  await openIncident(db, session, code, message, { retryable: true, ...details });
 }
 
 // Safe only before the physical ejection command has been sent.
@@ -108,12 +112,12 @@ async function compensateBeforeHardwareRequest(
   const paymentIntentId = String(session.stripe_payment_intent_id ?? "");
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
   if (!paymentIntentId || !stripeKey) {
-    await markFailed(
+    await markSupportRequired(
       db,
       session,
       code,
       "La batterie n'a pas été demandée, mais la compensation financière nécessite une intervention.",
-      `release_failed:${sessionId}:${code}`,
+      { phase: "before_hardware_command" },
     );
     return { compensated: false, action: "manual_review" };
   }
@@ -135,7 +139,10 @@ async function compensateBeforeHardwareRequest(
     );
     action = "cancel_authorization";
   } else {
-    const capturedCents = Math.max(Number(intent.amount_received ?? 0), Number(session.captured_amount_cents ?? 0));
+    const capturedCents = Math.max(
+      Number(intent.amount_received ?? 0),
+      Number(session.captured_amount_cents ?? 0),
+    );
     if (capturedCents <= refundedCents) {
       action = "already_refunded";
     } else if (capturedCents > 0) {
@@ -145,12 +152,13 @@ async function compensateBeforeHardwareRequest(
         { idempotencyKey: `release_compensation_refund:${sessionId}:${amount}` },
       );
       refundedCents += amount;
-      await db.from("payments").update({
+      const { error: paymentError } = await db.from("payments").update({
         status: refund.status === "succeeded" ? "refunded" : "partially_refunded",
         refund_id: refund.id,
         refunded_at: new Date().toISOString(),
         amount_refunded_cents: refundedCents,
       }).eq("stripe_payment_intent_id", paymentIntentId);
+      if (paymentError) throw paymentError;
       action = "refund";
     }
   }
@@ -172,19 +180,63 @@ async function compensateBeforeHardwareRequest(
     metadata: { reason: code, compensationAction: action },
   });
 
-  await db.from("rental_sessions").update({
+  const { error: sessionError } = await db.from("rental_sessions").update({
     state: "refunded",
     settlement_status: "settled",
     settlement_error: code,
     refunded_amount_cents: refundedCents,
     closed_at: new Date().toISOString(),
   }).eq("id", sessionId);
+  if (sessionError) throw sessionError;
+
   await auditLog(db, {
     action: "rental.release.compensated",
     target: sessionId,
     data: { code, action, refunded_cents: refundedCents },
   });
   return { compensated: true, action };
+}
+
+async function recoverUnexpectedFailure(
+  db: DB,
+  session: Session | null,
+  code: string,
+  hardwareCommandIssued: boolean,
+) {
+  if (!session) return;
+
+  if (hardwareCommandIssued) {
+    const { error } = await db.from("rental_sessions").update({
+      state: "needs_support",
+      chargenow_status: "release_unconfirmed",
+      failure_code: code,
+      failure_message: "Une erreur est survenue après l'envoi de la commande d'éjection. Une réconciliation est obligatoire.",
+    }).eq("id", session.id);
+    if (error) throw error;
+    await openIncident(
+      db,
+      session,
+      "EJECTION_RECONCILIATION_REQUIRED",
+      "Une erreur est survenue après l'envoi de la commande matérielle. Aucun retry ou remboursement automatique n'est autorisé.",
+      { underlying_code: code, hardware_command_issued: true },
+    );
+    return;
+  }
+
+  // The physical command was not sent. Release the legacy lock so an operator
+  // can safely retry with the same orchestrator event and ChargeNow order.
+  const { error } = await db.from("rental_sessions").update({
+    state: "eject_failed",
+    chargenow_status: "pre_command_failed",
+    failure_code: code,
+    failure_message: "La préparation de l'éjection a échoué avant l'envoi de la commande matérielle.",
+  }).eq("id", session.id).eq("state", "ejecting");
+  if (error) throw error;
+  await auditLog(db, {
+    action: "rental.release.retryable_pre_command_failure",
+    target: String(session.id),
+    data: { code, hardware_command_issued: false },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -196,15 +248,21 @@ Deno.serve(async (req) => {
   if (!caller.ok) return reply({ ok: false, error: "FORBIDDEN" }, 403);
 
   let rentalSessionId = "";
+  let session: Session | null = null;
+  let hardwareCommandIssued = false;
+
   try {
     const body = await req.json().catch(() => ({}));
     rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
-    if (!/^[0-9a-f-]{36}$/i.test(rentalSessionId)) return reply({ ok: false, error: "INVALID_RENTAL_ID" }, 400);
+    if (!/^[0-9a-f-]{36}$/i.test(rentalSessionId)) {
+      return reply({ ok: false, error: "INVALID_RENTAL_ID" }, 400);
+    }
 
-    const { data: session, error: sessionError } = await db.from("rental_sessions")
+    const { data, error: sessionError } = await db.from("rental_sessions")
       .select("*").eq("id", rentalSessionId).maybeSingle();
     if (sessionError) throw sessionError;
-    if (!session) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+    if (!data) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+    session = data as Session;
 
     if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed"].includes(session.state)) {
       return reply({ ok: true, alreadyDone: true, batteryId: session.battery_id ?? null });
@@ -257,7 +315,10 @@ Deno.serve(async (req) => {
         rentalSessionId,
       );
       const order = await orderCreate({ deviceId: cabinetId, callbackURL });
-      const orderData = order.data as { data?: { tradeNo?: string; orderId?: string }; tradeNo?: string } | null;
+      const orderData = order.data as {
+        data?: { tradeNo?: string; orderId?: string };
+        tradeNo?: string;
+      } | null;
       tradeNo = orderData?.data?.tradeNo ?? orderData?.tradeNo ?? null;
       const orderId = orderData?.data?.orderId ?? null;
 
@@ -270,13 +331,14 @@ Deno.serve(async (req) => {
         response: { ok: order.ok, tradeNo, orderId },
         error: order.ok ? null : safeCode(order.error, "CHARGENOW_ORDER_FAILED"),
       });
-      await db.from("apifox_orders").upsert({
+      const { error: orderRecordError } = await db.from("apifox_orders").upsert({
         rental_session_id: session.id,
         trade_no: tradeNo,
         request: { cabinetId },
         response: { ok: order.ok, tradeNo, orderId },
         status: order.ok ? "created" : "error",
       }, { onConflict: "rental_session_id" });
+      if (orderRecordError) throw orderRecordError;
 
       if (!order.ok || !tradeNo) {
         const code = safeCode(order.error, "CHARGENOW_ORDER_FAILED");
@@ -289,9 +351,14 @@ Deno.serve(async (req) => {
         chargenow_status: "created",
       }).eq("id", session.id);
       if (orderUpdateError) throw orderUpdateError;
+      session.apifox_trade_no = tradeNo;
+      session.chargenow_order_id = orderId;
     }
 
     const requestedSlotNum = Number(session.selected_slot_num ?? 0);
+    // From this line onward, any thrown error is physically ambiguous: the HTTP
+    // request may have reached the supplier even when no response is available.
+    hardwareCommandIssued = true;
     const ejection = await ejectByRent(cabinetId, requestedSlotNum, tradeNo ?? undefined);
     const released = extractReleasedBattery(ejection.data);
     const selectedSlotNum = released.slotNum ?? requestedSlotNum;
@@ -307,9 +374,6 @@ Deno.serve(async (req) => {
     });
 
     if (!ejection.ok) {
-      // A command may have reached the cabinet even if its response was lost.
-      // No automatic retry/refund is safe until ChargeNow reconciliation proves
-      // whether a battery actually left the station.
       const code = safeCode(ejection.error, "EJECTION_UNCONFIRMED");
       await db.from("rental_sessions").update({
         state: "needs_support",
@@ -317,9 +381,13 @@ Deno.serve(async (req) => {
         failure_code: code,
         failure_message: "La commande a été envoyée mais la sortie de batterie n'est pas confirmée.",
       }).eq("id", session.id);
-      await openIncident(db, session, code,
+      await openIncident(
+        db,
+        session,
+        code,
         "Résultat d'éjection incertain — réconciliation ChargeNow obligatoire avant toute compensation.",
-        { cabinetId, tradeNo, requestedSlotNum });
+        { cabinetId, tradeNo, requestedSlotNum },
+      );
       return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
     }
 
@@ -330,9 +398,13 @@ Deno.serve(async (req) => {
         failure_code: "BATTERY_ID_MISSING",
         failure_message: "ChargeNow confirme une sortie sans identifiant de batterie exploitable.",
       }).eq("id", session.id);
-      await openIncident(db, session, "BATTERY_ID_MISSING",
+      await openIncident(
+        db,
+        session,
+        "BATTERY_ID_MISSING",
         "La batterie sortie ne peut pas être corrélée de manière certaine.",
-        { cabinetId, tradeNo, slotNum: selectedSlotNum });
+        { cabinetId, tradeNo, slotNum: selectedSlotNum },
+      );
       return reply({ ok: false, error: "BATTERY_CORRELATION_REQUIRED" }, 202);
     }
 
@@ -365,6 +437,8 @@ Deno.serve(async (req) => {
       started_at: releasedAt,
       selected_slot_num: selectedSlotNum,
       battery_id: released.batteryId,
+      failure_code: null,
+      failure_message: null,
     }).eq("id", session.id);
     if (releaseUpdateError) throw releaseUpdateError;
 
@@ -379,7 +453,18 @@ Deno.serve(async (req) => {
     const code = error instanceof OrchestratorError
       ? error.code
       : safeCode(error instanceof Error ? error.message : "", "EJECTION_INTERNAL_ERROR");
+    try {
+      await recoverUnexpectedFailure(db, session, code, hardwareCommandIssued);
+    } catch (recoveryError) {
+      console.error("ejection failure recovery failed", safeCode(
+        recoveryError instanceof Error ? recoveryError.message : "",
+        "RECOVERY_FAILED",
+      ));
+    }
     console.error("eject-after-payment failed", code, rentalSessionId || "unknown");
-    return reply({ ok: false, error: code }, error instanceof OrchestratorError ? 409 : 500);
+    return reply({
+      ok: false,
+      error: hardwareCommandIssued ? "EJECTION_RECONCILIATION_REQUIRED" : code,
+    }, hardwareCommandIssued ? 202 : error instanceof OrchestratorError ? 409 : 500);
   }
 });
