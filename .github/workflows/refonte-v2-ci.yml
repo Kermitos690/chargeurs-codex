@@ -22,10 +22,38 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund --silent
       - name: Lint
-        run: npm run lint -- --quiet
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint -- --quiet > lint.log 2>&1 || {
+            echo "===== ESLint errors ====="
+            tail -n 250 lint.log
+            exit 1
+          }
       - name: Typecheck
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck > typecheck.log 2>&1 || {
+            echo "===== TypeScript errors ====="
+            tail -n 250 typecheck.log
+            exit 1
+          }
       - name: Unit tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test > tests.log 2>&1 || {
+            echo "===== Test failures ====="
+            tail -n 250 tests.log
+            exit 1
+          }
       - name: Production build
-        run: npm run build
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build > build.log 2>&1 || {
+            echo "===== Build errors ====="
+            tail -n 250 build.log
+            exit 1
+          }
