@@ -25,8 +25,6 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
-import android.webkit.RenderProcessGoneDetail;
-import android.webkit.SafeBrowsingResponse;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -45,6 +43,7 @@ public final class MainActivity extends Activity {
     private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private FrameLayout container;
     private WebView webView;
     private ProgressBar progress;
     private TextView networkBanner;
@@ -57,7 +56,7 @@ public final class MainActivity extends Activity {
     private final Runnable watchdog = new Runnable() {
         @Override
         public void run() {
-            if (webView != null && isNetworkAvailable()) {
+            if (webView != null && webView.getVisibility() == View.VISIBLE && isNetworkAvailable()) {
                 heartbeatPending = true;
                 webView.evaluateJavascript("(function(){return 'chargeurs-ok';})()", value -> heartbeatPending = false);
                 handler.postDelayed(() -> {
@@ -91,13 +90,13 @@ public final class MainActivity extends Activity {
     }
 
     private FrameLayout buildRoot() {
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.rgb(8, 17, 38));
+        container = new FrameLayout(this);
+        container.setBackgroundColor(Color.rgb(8, 17, 38));
 
         progress = new ProgressBar(this);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(56), dp(56));
         progressParams.gravity = Gravity.CENTER;
-        root.addView(progress, progressParams);
+        container.addView(progress, progressParams);
 
         networkBanner = new TextView(this);
         networkBanner.setText(R.string.network_unavailable);
@@ -112,15 +111,13 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.WRAP_CONTENT
         );
         bannerParams.gravity = Gravity.TOP;
-        root.addView(networkBanner, bannerParams);
-        return root;
+        container.addView(networkBanner, bannerParams);
+        return container;
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     private void createWebView() {
-        FrameLayout root = (FrameLayout) findViewById(android.R.id.content).getRootView();
-        if (!(root.getChildAt(0) instanceof FrameLayout)) return;
-        FrameLayout container = (FrameLayout) root.getChildAt(0);
+        if (container == null || isFinishing()) return;
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(8, 17, 38));
@@ -216,24 +213,6 @@ public final class MainActivity extends Activity {
                     progress.setVisibility(View.VISIBLE);
                 }
             }
-
-            @Override
-            public void onSafeBrowsingHit(
-                WebView view,
-                WebResourceRequest request,
-                int threatType,
-                SafeBrowsingResponse callback
-            ) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    callback.backToSafety(true);
-                }
-            }
-
-            @Override
-            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-                recreateWebView();
-                return true;
-            }
         });
 
         FrameLayout.LayoutParams webParams = new FrameLayout.LayoutParams(
@@ -260,7 +239,8 @@ public final class MainActivity extends Activity {
         heartbeatPending = false;
         credentialsInjected = false;
         if (webView != null) {
-            ((ViewGroup) webView.getParent()).removeView(webView);
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) parent.removeView(webView);
             webView.stopLoading();
             webView.loadUrl("about:blank");
             webView.clearHistory();
@@ -287,10 +267,7 @@ public final class MainActivity extends Activity {
         networkCallback = new ConnectivityManager.NetworkCallback() {
             @Override
             public void onAvailable(Network network) {
-                runOnUiThread(() -> {
-                    networkBanner.setVisibility(View.GONE);
-                    if (webView == null || webView.getUrl() == null) recreateWebView();
-                });
+                runOnUiThread(() -> networkBanner.setVisibility(View.GONE));
             }
 
             @Override
