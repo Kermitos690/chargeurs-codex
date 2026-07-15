@@ -12,6 +12,7 @@ import Pay from "./pages/Pay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
+import WalletLanding from "./pages/WalletLanding.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
 import AccountLayout from "./pages/account/AccountLayout.tsx";
 import AccountDashboard from "./pages/account/AccountDashboard.tsx";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/wallet/:token" element={<WalletLanding />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
             <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
@@ -67,7 +69,6 @@ const App = () => (
             </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />
-
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />
