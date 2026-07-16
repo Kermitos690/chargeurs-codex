@@ -1,33 +1,11 @@
 name: Chargeurs.ch Refonte V2 CI
 
+# Emergency cost control: manual execution only.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "src/**"
-      - "supabase/**"
-      - "package.json"
-      - "package-lock.json"
-      - "vite.config.ts"
-      - "tsconfig*.json"
-      - "eslint.config.*"
-      - ".github/workflows/refonte-v2-ci.yml"
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "supabase/**"
-      - "package.json"
-      - "package-lock.json"
-      - "vite.config.ts"
-      - "tsconfig*.json"
-      - "eslint.config.*"
-      - ".github/workflows/refonte-v2-ci.yml"
   workflow_dispatch:
 
 concurrency:
-  group: refonte-v2-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: refonte-v2-manual
   cancel-in-progress: true
 
 permissions:
@@ -35,7 +13,6 @@ permissions:
 
 jobs:
   quality:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
