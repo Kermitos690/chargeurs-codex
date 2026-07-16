@@ -1,71 +1,15 @@
-name: Chargeurs.ch Refonte V2 CI
+name: Chargeurs.ch Refonte V2 CI (paused)
 
+# Emergency cost control: no automatic CI.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: chargeurs-refonte-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  validate:
+  paused:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 1
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies from GitHub source manifest
-        run: npm install --no-audit --no-fund
-
-      - name: Lint
-        run: npm run lint -- --quiet
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm test
-
-      - name: Production build
-        run: npm run build
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Check Apple Wallet Edge Functions
-        run: |
-          deno check \
-            supabase/functions/_shared/appleWallet.ts \
-            supabase/functions/_shared/applePush.ts \
-            supabase/functions/apple-wallet-pass/index.ts \
-            supabase/functions/apple-wallet-web-service/index.ts \
-            supabase/functions/wallet-link/index.ts \
-            supabase/functions/wallet-admin/index.ts \
-            supabase/functions/wallet-push-updates/index.ts
-
-      - name: Run Apple Wallet security tests
-        run: deno test --allow-env --allow-read --no-check supabase/functions/tests/apple_wallet.test.ts
-
-      - name: Guard against committed Apple or Lovable secrets and packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          ! git ls-files | grep -Ei '\.(p12|pfx|cer|key|pem)$'
-          ! grep -RIlE 'BEGIN (RSA |EC |ENCRYPTED )?PRIVATE KEY|APPLE_PASS_SIGNER_KEY_BASE64=.{20}' \
-             --exclude-dir=.git --exclude='*.md' .
-          ! grep -RIlE '@lovable\.dev/cloud-auth-js|lovable-tagger' \
-             --exclude-dir=.git --exclude='*.md' .
+      - run: echo "Automatic CI is paused for cost control."
