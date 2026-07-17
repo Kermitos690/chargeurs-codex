@@ -62,7 +62,7 @@ jobs:
       - name: Test critical rental contracts
         if: inputs.run_edge_checks == true
         run: |
-          deno test --allow-env \
+          deno test --allow-read --allow-env \
             supabase/functions/tests/kiosk_sync_auth_contract.test.ts \
             supabase/functions/tests/settlement.test.ts \
             supabase/functions/tests/orchestrator_runtime.test.ts \
