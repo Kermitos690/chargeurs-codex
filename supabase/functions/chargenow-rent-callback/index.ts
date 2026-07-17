@@ -319,7 +319,7 @@ Deno.serve(async (req) => {
         data: { tradeNo: identity.tradeNo, batteryId: result.batteryId ?? null },
       });
       await finishExternalEvent(db, externalEventId, true);
-      return json({ received: true, state: "active_rental", ...result });
+      return json({ received: true, ...result, state: "active_rental" });
     }
 
     if (identity.status === "0") {
