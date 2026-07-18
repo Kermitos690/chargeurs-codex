@@ -1,7 +1,7 @@
 name: Chargeurs.ch Manual CI
 
 # Cost control: this workflow never runs automatically.
-# Launch it only after a coherent batch of changes is ready to validate.
+# Launch it once after a coherent batch of changes is ready to validate.
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: chargeurs-manual-ci
+  group: chargeurs-manual-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,15 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps --prefer-offline --no-audit --no-fund
+      - name: Install dependencies deterministically
+        run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
 
       - name: Frontend quality gate
         run: |
@@ -62,7 +62,7 @@ jobs:
       - name: Test critical rental contracts
         if: inputs.run_edge_checks == true
         run: |
-          deno test --allow-env \
+          deno test --allow-read --allow-env \
             supabase/functions/tests/kiosk_sync_auth_contract.test.ts \
             supabase/functions/tests/settlement.test.ts \
             supabase/functions/tests/orchestrator_runtime.test.ts \
