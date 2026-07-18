@@ -44,11 +44,11 @@ jobs:
       PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
       HISTORICAL_AMBIGUOUS_PROJECT_REF: zoybkzkvvsbnqqarlaii
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v2
         with:
-          version: latest
+          version: 2.101.0
 
       - name: Validate staging identity and write intent
         shell: bash
