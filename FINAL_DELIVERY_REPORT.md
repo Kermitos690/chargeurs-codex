@@ -44,7 +44,7 @@ Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation 
 | Lock-task Device Owner | TERMINÉ — TEST MATÉRIEL REQUIS | support applicatif ; DPC/tablette requis |
 | Pont natif et autorisation JWS anti-rejeu | TERMINÉ — TEST MATÉRIEL REQUIS | vérification implémentée ; protocole réel absent |
 | CI/CD | TERMINÉ — CLÉ EXTERNE REQUISE | workflows manuels/ciblés validés localement ; exécution GitHub et secrets d'environnement requis |
-| Frontend staging Vercel | TERMINÉ ET TESTÉ | `https://chargeurs-ch-staging.vercel.app`, routes `/admin`, `/kiosk` et route pilote HTTP 200 ; build du commit `7552de2` |
+| Frontend staging Vercel | TERMINÉ ET TESTÉ | `https://chargeurs-ch-staging.vercel.app`, routes `/admin`, `/kiosk` et route pilote HTTP 200 ; build du commit `fb4de66` |
 | Supabase staging | TERMINÉ ET TESTÉ | `chargeurs-ch-staging` (`xqepbqnaenoeyfjkjnzl`, Zurich), 46 migrations appliquées et 22 Edge Functions déployées |
 
 ## Décision de mise en production
