@@ -43,12 +43,31 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Type-check the read-only synchronization path
+      - name: Capture Deno type-check diagnostics
+        shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          mkdir -p /tmp/chargeurs-check
           deno check --allow-import \
             supabase/functions/_shared/chargenowStatus.ts \
-            supabase/functions/sync-cabinet-status/index.ts
+            supabase/functions/sync-cabinet-status/index.ts \
+            > /tmp/chargeurs-check/deno-check.log 2>&1
+          printf '%s' "$?" > /tmp/chargeurs-check/deno-check.status
+          exit 0
+
+      - name: Upload type-check diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-sync-deno-check-${{ github.sha }}
+          retention-days: 2
+          if-no-files-found: error
+          path: /tmp/chargeurs-check
+
+      - name: Enforce successful type-check
+        shell: bash
+        run: |
+          cat /tmp/chargeurs-check/deno-check.log
+          test "$(cat /tmp/chargeurs-check/deno-check.status)" = "0"
 
       - name: Run ChargeNow parser and client contract tests
         run: |
