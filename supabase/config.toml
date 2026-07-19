@@ -1,4 +1,4 @@
-project_id = "zoybkzkvvsbnqqarlaii"
+project_id = "chargeurs-codex-local"
 
 [functions.platform-api]
 verify_jwt = false
@@ -25,4 +25,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.chargenow-rent-callback]
+verify_jwt = false
+
+[functions.settle-rental-payment]
 verify_jwt = false
