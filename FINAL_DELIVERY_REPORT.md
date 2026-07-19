@@ -44,7 +44,8 @@ Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation 
 | Lock-task Device Owner | TERMINÉ — TEST MATÉRIEL REQUIS | support applicatif ; DPC/tablette requis |
 | Pont natif et autorisation JWS anti-rejeu | TERMINÉ — TEST MATÉRIEL REQUIS | vérification implémentée ; protocole réel absent |
 | CI/CD | TERMINÉ — CLÉ EXTERNE REQUISE | workflows manuels/ciblés validés localement ; exécution GitHub et secrets d'environnement requis |
-| Staging/production déployés | TERMINÉ — CLÉ EXTERNE REQUISE | procédures prêtes ; projets/accès non fournis |
+| Frontend staging Vercel | TERMINÉ ET TESTÉ | `https://chargeurs-ch-staging.vercel.app`, routes `/admin`, `/kiosk` et route pilote HTTP 200 ; build du commit `7552de2` |
+| Supabase staging | TERMINÉ — CLÉ EXTERNE REQUISE | projet public joignable, mais le compte CLI connecté n'a pas accès au projet cible ; migrations et fonctions restent à déployer |
 
 ## Décision de mise en production
 
@@ -53,15 +54,16 @@ Le dépôt est consolidé et prêt pour la phase de branchement externe, mais l'
 ## Validation locale exécutée
 
 - frontend : lint sans erreur (13 avertissements Fast Refresh/hooks connus), typecheck, 68 tests et build PWA ;
-- backend : `deno check` de toutes les Edge Functions et 160 tests Deno ;
+- backend : `deno check` de toutes les Edge Functions et 163 tests Deno ;
 - dépendances npm de production : 0 vulnérabilité signalée ;
 - Android : tests unitaires, lint debug/release, APK debug, APK release non signée et AAB ;
 - APK debug : signature v1/v2 vérifiée ; release/AAB volontairement non signés sans keystore propriétaire ;
-- SQL : contrats présents mais non exécutés, faute de serveur PostgreSQL/Supabase jetable dans la session ;
-- aucun paiement live, déploiement distant ou ordre matériel réel n'a été lancé.
+- SQL : contrats présents mais non exécutés, faute d'accès de gestion au projet Supabase cible et de moteur PostgreSQL/Docker local ;
+- Vercel staging déployé et validé ; `kiosk-enroll` répond encore 404 tant que les Edge Functions ne sont pas déployées ;
+- aucun paiement live ni ordre matériel réel n'a été lancé.
 
 SHA-256 des artefacts locaux :
 
-- `app-debug.apk` : `05af773b7cdbdd10acfa30fd38828b0666585fb79262226f7fd7673c6ceb00c4`
-- `app-release-unsigned.apk` : `4575ebb79e6467d44e757375a477a3d58691fc9888bee0de9b2b2571016ad6d6`
-- `app-release.aab` : `3450a86929f22de7387ff33761346b87989004aa65de1a2fcaab6e9724adcd7d`
+- `app-debug.apk` : `858972d7548950193603818086deecfe0930b167caaff154110372d3743fd8c2`
+- `app-release-unsigned.apk` : `2a9b4c371560a02a6d1a1017825f8c344194a95de023cc984a663f9ddadfb1df`
+- `app-release.aab` : `9b9b5185bf636da5d4ba64b19559d45f7a990954862becfa0911af66b9282c3c`
