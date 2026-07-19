@@ -2,6 +2,9 @@ name: Platform API CI
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -14,6 +17,21 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -54,3 +72,8 @@ jobs:
           deno test --allow-env --allow-net --no-check
           supabase/functions/tests/platform_api.test.ts
           supabase/functions/tests/api_client_admin.test.ts
+
+      - name: Run isolated PostgreSQL migration contract
+        run: >-
+          psql -h 127.0.0.1 -U postgres -d postgres
+          -f supabase/tests/platform_api_migration.sql
