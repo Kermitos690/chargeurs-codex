@@ -4,8 +4,8 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
 
-const BLANK_SCREEN_DELAY_MS = 8_000;
-const RECHECK_INTERVAL_MS = 5_000;
+const BLANK_SCREEN_DELAY_MS = 4_000;
+const RECHECK_INTERVAL_MS = 4_000;
 
 export function currentKioskStation(): string | null {
   const hashPath = window.location.hash.replace(/^#/, "");

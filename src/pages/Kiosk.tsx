@@ -59,6 +59,7 @@ export default function Kiosk() {
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
   const [lockedStation, setLockedStation] = useState<string | null>(null);
+  const [stationLoadError, setStationLoadError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -89,17 +90,30 @@ export default function Kiosk() {
   
 
   const loadStation = useCallback(async () => {
-    if (!stationId) return;
+    if (!stationId || !isValidStationId(stationId)) {
+      setStationLoadError("INVALID_STATION_ID");
+      setPhase((p) => (p === "loading" ? "idle" : p));
+      return;
+    }
     // Anonymous kiosk clients can only read operational columns (raw_data is
     // restricted to the back-office), so we select explicit non-sensitive fields.
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("stations")
       .select(
         "id, station_id, name, location_name, status, online, rentable_count, returnable_count, total_count, currency, price_per_period, last_sync_at, created_at, updated_at, shop_id",
       )
       .eq("station_id", stationId)
       .maybeSingle();
-    setStation(data as Station | null);
+    if (error) {
+      setStationLoadError(error.message || "STATION_QUERY_FAILED");
+      setStation(null);
+    } else if (!data) {
+      setStationLoadError("STATION_NOT_FOUND");
+      setStation(null);
+    } else {
+      setStationLoadError(null);
+      setStation(data as Station);
+    }
     setPhase((p) => (p === "loading" ? "idle" : p));
   }, [stationId]);
 
@@ -390,6 +404,28 @@ export default function Kiosk() {
               <p className="text-xl text-muted-foreground">Chargement…</p>
             </motion.div>
           )}
+
+          {phase === "idle" && !station && (
+            <motion.div key="idle-nostation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex max-w-xl flex-col items-center gap-5 text-center">
+              <div className="grid h-24 w-24 place-items-center rounded-full bg-warning/20">
+                <AlertTriangle className="h-12 w-12 text-warning" />
+              </div>
+              <h1 className="font-display text-3xl font-bold">
+                {stationLoadError === "INVALID_STATION_ID" ? "URL de borne invalide" : "Borne inconnue"}
+              </h1>
+              <p className="text-muted-foreground">
+                {stationLoadError === "INVALID_STATION_ID"
+                  ? "L'adresse ouverte sur cette tablette ne correspond à aucune borne valide."
+                  : "Cette borne n'est pas provisionnée dans le système. Contactez l'exploitant."}
+              </p>
+              {stationId && <p className="font-mono text-sm text-foreground">Borne demandée : {stationId}</p>}
+              <Button onClick={() => { setPhase("loading"); loadStation(); }} className="gap-2 rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
+                <RefreshCw className="h-5 w-5" />Réessayer
+              </Button>
+              <button onClick={onLogoTap} className="text-xs text-muted-foreground/60">·</button>
+            </motion.div>
+          )}
+
 
           {phase === "idle" && station && (
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-8">
