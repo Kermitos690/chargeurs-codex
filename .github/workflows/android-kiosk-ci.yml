@@ -1,0 +1,15 @@
+name: Chargeurs.ch Android Kiosk CI (paused)
+
+# Emergency cost control: no automatic Android builds.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "Android kiosk CI is paused for cost control."
