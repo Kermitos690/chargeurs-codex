@@ -298,6 +298,7 @@ export default function Kiosk() {
 
   const available = station?.rentable_count ?? 0;
   const canRent = station?.online && available > 0 && configured && !offline;
+  const inventoryReadable = Boolean(station?.online && configured && !offline);
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
@@ -449,8 +450,8 @@ export default function Kiosk() {
                 <div className="glass liquid-border flex items-center gap-3 rounded-2xl px-6 py-4">
                   <BatteryCharging className="h-8 w-8 text-success" />
                   <div className="text-left">
-                    <div className="text-3xl font-bold">{available}</div>
-                    <div className="text-sm text-muted-foreground">disponibles</div>
+                    <div className="text-3xl font-bold">{inventoryReadable ? available : "—"}</div>
+                    <div className="text-sm text-muted-foreground">{inventoryReadable ? "disponibles" : "stock indisponible"}</div>
                   </div>
                 </div>
               </div>
