@@ -11,18 +11,44 @@ const EXPECTED_KIOSK_QUOTE = {
   nonReturnCents: 9_900,
 } as const;
 
+const KIOSK_TOKEN_PATTERN = /^kt_[A-Za-z0-9_-]{24,128}$/;
+const KIOSK_PAIRING_CODE_PATTERN = /^kc_[A-Za-z0-9_-]{16,64}$/;
+
 type TokenReader = () => string | null;
+
+export function isValidKioskToken(value: unknown): value is string {
+  return typeof value === "string" && KIOSK_TOKEN_PATTERN.test(value.trim());
+}
+
+export function isValidKioskPairingCode(value: unknown): value is string {
+  return typeof value === "string" && KIOSK_PAIRING_CODE_PATTERN.test(value.trim());
+}
 
 /**
  * The native wrapper injects the credential into sessionStorage so it is not
  * persisted in the WebView profile. localStorage remains a deliberate browser
  * fallback for legacy/manual kiosk provisioning only.
+ *
+ * Pairing codes (kc_) are never accepted as runtime kiosk credentials. They
+ * must first be redeemed by kiosk-enroll for a real station-bound token (kt_).
  */
 export function readKioskToken(): string | null {
   try {
-    return sessionStorage.getItem(KIOSK_TOKEN_KEY) ?? localStorage.getItem(KIOSK_TOKEN_KEY);
+    const candidate = sessionStorage.getItem(KIOSK_TOKEN_KEY) ?? localStorage.getItem(KIOSK_TOKEN_KEY);
+    return isValidKioskToken(candidate) ? candidate.trim() : null;
   } catch {
     return null;
+  }
+}
+
+export function storeKioskToken(token: string): boolean {
+  const normalized = token.trim();
+  if (!isValidKioskToken(normalized)) return false;
+  try {
+    localStorage.setItem(KIOSK_TOKEN_KEY, normalized);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -71,7 +97,7 @@ export function buildKioskAwareRequestInit(
   if (!isKioskCabinetSyncRequest(input)) return init;
 
   const token = readToken()?.trim();
-  if (!token) return init;
+  if (!isValidKioskToken(token)) return init;
 
   const headers = new Headers(init.headers);
   if (!headers.has("X-Kiosk-Token")) headers.set("X-Kiosk-Token", token);
