@@ -38,6 +38,7 @@ import AdminShops from "./pages/admin/AdminShops.tsx";
 import AdminPartners from "./pages/admin/AdminPartners.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
+import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
@@ -85,6 +86,7 @@ const App = () => (
               <Route path="settings" element={<AdminSettings />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="kiosk-devices" element={<AdminKioskDevices />} />
+              <Route path="api-clients" element={<AdminApiClients />} />
               <Route path="maintenance" element={<AdminMaintenance />} />
               <Route path="api-health" element={<AdminApiHealth />} />
               <Route path="api-coverage" element={<AdminApiCoverage />} />
