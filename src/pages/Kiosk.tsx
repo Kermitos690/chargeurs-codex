@@ -89,17 +89,30 @@ export default function Kiosk() {
   
 
   const loadStation = useCallback(async () => {
-    if (!stationId) return;
+    if (!stationId || !isValidStationId(stationId)) {
+      setStationLoadError("INVALID_STATION_ID");
+      setPhase((p) => (p === "loading" ? "idle" : p));
+      return;
+    }
     // Anonymous kiosk clients can only read operational columns (raw_data is
     // restricted to the back-office), so we select explicit non-sensitive fields.
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("stations")
       .select(
         "id, station_id, name, location_name, status, online, rentable_count, returnable_count, total_count, currency, price_per_period, last_sync_at, created_at, updated_at, shop_id",
       )
       .eq("station_id", stationId)
       .maybeSingle();
-    setStation(data as Station | null);
+    if (error) {
+      setStationLoadError(error.message || "STATION_QUERY_FAILED");
+      setStation(null);
+    } else if (!data) {
+      setStationLoadError("STATION_NOT_FOUND");
+      setStation(null);
+    } else {
+      setStationLoadError(null);
+      setStation(data as Station);
+    }
     setPhase((p) => (p === "loading" ? "idle" : p));
   }, [stationId]);
 
