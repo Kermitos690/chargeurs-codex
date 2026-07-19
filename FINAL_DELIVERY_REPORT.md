@@ -9,7 +9,7 @@ Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation 
 | Frontend public, stations réelles, tarifs, FAQ, SEO, support et partenaires | TERMINÉ ET TESTÉ | build/typecheck/tests locaux ; aucun fallback démo production |
 | Formulaires support/installation | TERMINÉ — CLÉ EXTERNE REQUISE | Edge + table + file admin ; sel/origines Supabase requis |
 | Compte client, historique, profil, paiements, remboursements, incidents, export/suppression | TERMINÉ — CLÉ EXTERNE REQUISE | Auth/RLS/Edge implémentés ; staging requis |
-| Back-office opérations/finance/support/maintenance | TERMINÉ — CLÉ EXTERNE REQUISE | données réelles et RBAC ; Supabase staging requis |
+| Back-office opérations/finance/support/maintenance | TERMINÉ ET TESTÉ | staging Supabase déployé, administrateur invité, données pilotes et RBAC |
 | Organisations et séparation partenaires | TERMINÉ — CLÉ EXTERNE REQUISE | schéma/RLS présents ; comptes partenaires à provisionner |
 | Pages légales | TERMINÉ — CLÉ EXTERNE REQUISE | contenu intégré ; identité/validation juridique requises |
 
@@ -45,7 +45,7 @@ Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation 
 | Pont natif et autorisation JWS anti-rejeu | TERMINÉ — TEST MATÉRIEL REQUIS | vérification implémentée ; protocole réel absent |
 | CI/CD | TERMINÉ — CLÉ EXTERNE REQUISE | workflows manuels/ciblés validés localement ; exécution GitHub et secrets d'environnement requis |
 | Frontend staging Vercel | TERMINÉ ET TESTÉ | `https://chargeurs-ch-staging.vercel.app`, routes `/admin`, `/kiosk` et route pilote HTTP 200 ; build du commit `7552de2` |
-| Supabase staging | TERMINÉ — CLÉ EXTERNE REQUISE | projet public joignable, mais le compte CLI connecté n'a pas accès au projet cible ; migrations et fonctions restent à déployer |
+| Supabase staging | TERMINÉ ET TESTÉ | `chargeurs-ch-staging` (`xqepbqnaenoeyfjkjnzl`, Zurich), 46 migrations appliquées et 22 Edge Functions déployées |
 
 ## Décision de mise en production
 
@@ -56,14 +56,14 @@ Le dépôt est consolidé et prêt pour la phase de branchement externe, mais l'
 - frontend : lint sans erreur (13 avertissements Fast Refresh/hooks connus), typecheck, 68 tests et build PWA ;
 - backend : `deno check` de toutes les Edge Functions et 163 tests Deno ;
 - dépendances npm de production : 0 vulnérabilité signalée ;
-- Android : tests unitaires, lint debug/release, APK debug, APK release non signée et AAB ;
+- Android : tests unitaires, lint debug et APK debug staging ; release de production non reconstruite sans keystore propriétaire ;
 - APK debug : signature v1/v2 vérifiée ; release/AAB volontairement non signés sans keystore propriétaire ;
-- SQL : contrats présents mais non exécutés, faute d'accès de gestion au projet Supabase cible et de moteur PostgreSQL/Docker local ;
-- Vercel staging déployé et validé ; `kiosk-enroll` répond encore 404 tant que les Edge Functions ne sont pas déployées ;
+- SQL : migrations appliquées sur le staging distant ; suite centrale, RLS, snapshot tarifaire et appairage atomique validés ;
+- Edge Functions déployées ; `kiosk-enroll` répond de façon contrôlée avec HTTP 400 sur une requête invalide ;
 - aucun paiement live ni ordre matériel réel n'a été lancé.
 
 SHA-256 des artefacts locaux :
 
-- `app-debug.apk` : `858972d7548950193603818086deecfe0930b167caaff154110372d3743fd8c2`
+- `app-debug.apk` staging : `4b0745edbdf5cd9115df950e4854f6efa44b439b7d22f16da1df845a074bf25e`
 - `app-release-unsigned.apk` : `2a9b4c371560a02a6d1a1017825f8c344194a95de023cc984a663f9ddadfb1df`
 - `app-release.aab` : `9b9b5185bf636da5d4ba64b19559d45f7a990954862becfa0911af66b9282c3c`

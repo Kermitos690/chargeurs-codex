@@ -3,8 +3,8 @@
 ## Bloquants externes
 
 - Le protocole série BJP/DTA/RS485 et l'API locale autorisée ne sont pas fournis. L'application Android détecte le matériel en lecture seule mais refuse toute éjection locale (`NOT_CONFIGURED`).
-- Les endpoints/identifiants ChargeNow réels et leur environnement test ne sont pas disponibles dans le dépôt.
-- Aucun compte Stripe test/live, projet Supabase staging/production, domaine, DNS ou hébergeur de production n'a été fourni dans cette session.
+- Le secret ChargeNow officiel n'est volontairement pas présent dans le dépôt et doit encore être fourni par canal sécurisé pour exécuter la synchronisation en lecture seule.
+- Les clés Stripe test ne sont pas disponibles dans cette session. Le staging Supabase et l'hébergement Vercel existent ; aucun environnement Supabase de production n'a été créé.
 - Aucun test physique ni paiement live n'a été exécuté automatiquement.
 - La release Android de production exige la clé de signature du propriétaire.
 
@@ -18,4 +18,4 @@
 
 ## Validation
 
-Les tests locaux ne prouvent ni l'application des migrations sur un Supabase distant, ni l'éligibilité Apple Pay/Google Pay/TWINT, ni une commande ChargeNow, ni la compatibilité de la carte de contrôle. Ces éléments portent les statuts `TERMINÉ — CLÉ EXTERNE REQUISE`, `TERMINÉ — TEST MATÉRIEL REQUIS` ou `BLOQUÉ PAR FOURNISSEUR` dans le rapport final.
+Les migrations et tests SQL ont été exécutés sur le staging Supabase. Ils ne prouvent ni l'éligibilité Apple Pay/Google Pay/TWINT, ni une commande ChargeNow, ni la compatibilité de la carte de contrôle. Ces éléments portent les statuts `TERMINÉ — CLÉ EXTERNE REQUISE`, `TERMINÉ — TEST MATÉRIEL REQUIS` ou `BLOQUÉ PAR FOURNISSEUR` dans le rapport final.

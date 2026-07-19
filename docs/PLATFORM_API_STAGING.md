@@ -32,7 +32,7 @@ supabase projects list
 printf '%s\n' "$STAGING_PROJECT_REF"
 ```
 
-La référence doit être formellement identifiée comme staging et différente de `zoybkzkvvsbnqqarlaii`.
+La cible officielle est `xqepbqnaenoeyfjkjnzl` (`chargeurs-ch-staging`, Zurich). La référence historique `zoybkzkvvsbnqqarlaii` est abandonnée et ne doit jamais être utilisée comme cible active.
 
 ## 4. Validation locale sans écriture distante
 

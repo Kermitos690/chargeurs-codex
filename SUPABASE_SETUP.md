@@ -4,6 +4,16 @@
 
 Créer deux projets sans partage de secrets : staging et production. Activer les sauvegardes adaptées au plan choisi et restreindre l'accès au tableau de bord.
 
+Le staging officiel est actuellement :
+
+- nom : `chargeurs-ch-staging` ;
+- référence : `xqepbqnaenoeyfjkjnzl` ;
+- région : Zurich (`eu-central-2`) ;
+- URL : `https://xqepbqnaenoeyfjkjnzl.supabase.co` ;
+- dashboard : `https://supabase.com/dashboard/project/xqepbqnaenoeyfjkjnzl`.
+
+La référence historique `zoybkzkvvsbnqqarlaii` est abandonnée et ne doit plus être utilisée comme cible active.
+
 ## Variables
 
 - Frontend : URL et clé publique/anon uniquement.
