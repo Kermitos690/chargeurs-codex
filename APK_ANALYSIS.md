@@ -380,4 +380,3 @@ L’analyse ne permet pas de certifier :
 L’APK démontre l’existence d’une couche matérielle série structurée, de machines à états BJP/DTA/RS485, d’un protocole de location/retour, d’un démarrage au boot et d’une intégration Stripe Terminal complète. Il ne fournit toutefois ni une spécification matérielle réutilisable, ni un vrai verrouillage Device Owner, ni la preuve d’un Stripe Checkout QR ou d’une éjection conditionnée par webhook.
 
 La réimplémentation doit utiliser l’architecture définie dans `HARDWARE_INTEGRATION.md`, les accès officiels ChargeNow et la documentation matérielle fournisseur. La validation finale reste obligatoirement un test matériel supervisé.
-

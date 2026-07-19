@@ -6,4 +6,3 @@ public interface CabinetProtocolAdapter {
     byte[] createEjectRequest(int slot, String commandId) throws Exception;
     boolean isSuccessfulEjectResponse(byte[] response, int slot, String commandId) throws Exception;
 }
-

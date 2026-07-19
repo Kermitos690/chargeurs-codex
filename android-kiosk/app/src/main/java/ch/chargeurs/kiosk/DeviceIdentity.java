@@ -29,4 +29,3 @@ public final class DeviceIdentity {
         return created;
     }
 }
-

@@ -28,4 +28,3 @@ export function isServerConfirmedPayment(state: string): boolean {
 export function isServerCancelledPayment(state: string): boolean {
   return SERVER_CANCELLED_STATES.has(state);
 }
-

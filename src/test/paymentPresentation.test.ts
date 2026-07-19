@@ -21,4 +21,3 @@ describe("payment presentation", () => {
     expect(isServerCancelledPayment("payment_succeeded")).toBe(false);
   });
 });
-

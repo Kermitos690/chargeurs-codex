@@ -21,4 +21,3 @@ public final class EjectionAuthorization {
     public int slot() { return slot; }
     public long expiresAtSeconds() { return expiresAtSeconds; }
 }
-

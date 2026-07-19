@@ -133,4 +133,3 @@ drop trigger if exists trg_kiosk_revoked_at on public.kiosk_devices;
 create trigger trg_kiosk_revoked_at
 before update on public.kiosk_devices
 for each row execute function public.set_kiosk_revoked_at();
-

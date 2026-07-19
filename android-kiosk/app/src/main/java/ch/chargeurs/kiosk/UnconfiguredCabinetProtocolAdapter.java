@@ -21,4 +21,3 @@ public final class UnconfiguredCabinetProtocolAdapter implements CabinetProtocol
         return false;
     }
 }
-

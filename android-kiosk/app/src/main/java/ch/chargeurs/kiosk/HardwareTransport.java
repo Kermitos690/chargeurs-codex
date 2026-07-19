@@ -7,4 +7,3 @@ public interface HardwareTransport {
     JSONObject status();
     byte[] transact(byte[] request, int timeoutMs) throws Exception;
 }
-

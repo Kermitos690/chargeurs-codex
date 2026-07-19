@@ -23,4 +23,3 @@ Deno.test("pairing tokens are prefixed and never stored in plaintext", async () 
   assert(code.length >= 19);
   assertEquals((await sha256Hex(code)).length, 64);
 });
-
