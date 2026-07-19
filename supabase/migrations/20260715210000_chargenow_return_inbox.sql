@@ -1,6 +1,7 @@
 -- Exact ChargeNow callback correlation and retryable inbox.
 
 alter table public.rental_sessions
+  add column if not exists battery_id text,
   add column if not exists return_station_id text,
   add column if not exists returned_slot_num integer,
   add column if not exists return_external_event_id text;

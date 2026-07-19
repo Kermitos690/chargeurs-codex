@@ -5,7 +5,6 @@
 -- back by the included hardening tests. Uses RAISE EXCEPTION on failure so a
 -- non-zero psql exit code signals a failing suite.
 -- =====================================================================
-\set ON_ERROR_STOP on
 DO $$
 DECLARE
   v jsonb;
@@ -99,10 +98,89 @@ BEGIN
   IF has_table_privilege('anon','public.kiosk_devices','SELECT') THEN RAISE EXCEPTION 'FAIL anon table-grant on kiosk_devices'; END IF;
   RAISE NOTICE 'PASS anon has no grants on rental_sessions/payments/kiosk_devices';
 
+  RAISE NOTICE '--- STAGING PILOT BASELINE ---';
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.organizations
+    WHERE slug = 'chargeurs-ch' AND legal_name = 'Chargeurs.ch' AND kind = 'platform'
+  ) THEN RAISE EXCEPTION 'FAIL Chargeurs.ch organization missing'; END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.stations station
+    JOIN public.organizations organization ON organization.id = station.organization_id
+    WHERE station.station_id = 'DTA21269'
+      AND station.environment = 'staging'
+      AND station.is_pilot = true
+      AND organization.slug = 'chargeurs-ch'
+  ) THEN RAISE EXCEPTION 'FAIL staging pilot station is not organization-bound'; END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.price_profiles profile
+    JOIN public.price_assignments assignment ON assignment.price_profile_id = profile.id
+    WHERE profile.name = 'Chargeurs.ch Pilote'
+      AND profile.currency = 'CHF'
+      AND profile.period_minutes = 30
+      AND profile.price_per_period_cents = 75
+      AND profile.daily_cap_cents = 1800
+      AND profile.deposit_cents = 3000
+      AND profile.max_amount_cents = 9900
+      AND profile.unreturned_fee_cents = 9900
+      AND assignment.scope = 'station'
+      AND assignment.scope_ref = 'DTA21269'
+      AND assignment.active = true
+  ) THEN RAISE EXCEPTION 'FAIL exact pilot pricing or assignment missing'; END IF;
+
+  IF COALESCE((SELECT (value->>'enabled')::boolean FROM public.kiosk_settings WHERE key = 'simulation_mode'), true) THEN
+    RAISE EXCEPTION 'FAIL staging simulation mode must be disabled';
+  END IF;
+  RAISE NOTICE 'PASS organization, pilot station and exact pricing baseline';
+
   RAISE NOTICE '======================================================';
   RAISE NOTICE 'CORE DB TESTS PASSED';
   RAISE NOTICE '======================================================';
 END $$;
 
-\ir pricing-snapshot-hardening.sql
-\echo 'ALL DB TESTS PASSED'
+DO $$
+DECLARE
+  v_organization_id uuid;
+  v_device_public_id uuid := gen_random_uuid();
+  v_result jsonb;
+  v_device_id uuid;
+  v_pairing_id uuid;
+BEGIN
+  SELECT id INTO v_organization_id FROM public.organizations WHERE slug = 'chargeurs-ch';
+
+  INSERT INTO public.kiosk_pairing_codes (
+    station_id, organization_id, label, code_hash, expires_at
+  ) VALUES (
+    'DTA21269', v_organization_id, 'DB test', repeat('a', 64), now() + interval '15 minutes'
+  ) RETURNING id INTO v_pairing_id;
+
+  v_result := public.redeem_kiosk_pairing_code(
+    repeat('a', 64), repeat('b', 64), v_device_public_id, 'db-test'
+  );
+  IF COALESCE((v_result->>'ok')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'FAIL valid pairing code was not redeemed';
+  END IF;
+
+  v_device_id := (v_result->>'device_id')::uuid;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.kiosk_devices
+    WHERE id = v_device_id
+      AND station_id = 'DTA21269'
+      AND organization_id = v_organization_id
+      AND device_public_id = v_device_public_id
+      AND token_hash = repeat('b', 64)
+  ) THEN RAISE EXCEPTION 'FAIL enrolled kiosk identity was not bound correctly'; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.kiosk_pairing_codes
+    WHERE id = v_pairing_id AND used_at IS NOT NULL AND used_by_device_id = v_device_id
+  ) THEN RAISE EXCEPTION 'FAIL pairing code was not consumed atomically'; END IF;
+
+  DELETE FROM public.audit_logs WHERE action = 'kiosk.enrollment.redeemed' AND target = v_device_id::text;
+  DELETE FROM public.kiosk_pairing_codes WHERE id = v_pairing_id;
+  DELETE FROM public.kiosk_devices WHERE id = v_device_id;
+  RAISE NOTICE 'PASS one-time organization-bound kiosk enrollment';
+END $$;
