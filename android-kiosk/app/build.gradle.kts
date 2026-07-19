@@ -19,6 +19,12 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
+// Debug builds are deliberately pinned to the dedicated staging environment so
+// a locally built APK can always redeem a kc_ pairing code. Release builds keep
+// the fail-closed external configuration and are never silently pointed at staging.
+val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
+val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+
 fun quotedBuildConfig(value: String): String = "\"" + value
     .replace("\\", "\\\\")
     .replace("\"", "\\\"") + "\""
@@ -31,8 +37,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 23
         targetSdk = 36
-        versionCode = 100
-        versionName = "1.0.0"
+        versionCode = 101
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -62,8 +68,18 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
+            versionNameSuffix = "-staging-debug"
             isDebuggable = true
+            buildConfigField(
+                "String",
+                "ENROLLMENT_URL",
+                quotedBuildConfig(enrollmentUrl.get().ifBlank { stagingEnrollmentUrl }),
+            )
+            buildConfigField(
+                "String",
+                "KIOSK_PUBLIC_BASE_URL",
+                quotedBuildConfig(kioskPublicBaseUrl.get().ifBlank { stagingKioskPublicBaseUrl }),
+            )
         }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
