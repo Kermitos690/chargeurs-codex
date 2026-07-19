@@ -13,7 +13,10 @@ type Mode = "login" | "signup" | "forgot";
 
 export default function AccountAuth() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(() => {
+    const requestedMode = new URLSearchParams(window.location.search).get("mode");
+    return requestedMode === "forgot" || requestedMode === "signup" ? requestedMode : "login";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -113,7 +116,6 @@ export default function AccountAuth() {
             </Button>
           </>
         )}
-
 
         {mode === "login" && (
           <button type="button" onClick={() => setMode("forgot")} className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground">
