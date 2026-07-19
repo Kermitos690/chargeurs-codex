@@ -59,6 +59,7 @@ export default function Kiosk() {
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
   const [lockedStation, setLockedStation] = useState<string | null>(null);
+  const [stationLoadError, setStationLoadError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
