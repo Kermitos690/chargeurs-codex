@@ -1,8 +1,9 @@
 -- =====================================================================
 -- Chargeurs.ch — automated DB test suite (pricing + security grants)
 -- Run: psql -f supabase/tests/db-tests.sql
--- Pure read-only assertions. Creates NO data. Uses RAISE EXCEPTION on
--- failure so a non-zero psql exit code signals a failing suite.
+-- Assertions are read-only except for transactional fixtures that are rolled
+-- back by the included hardening tests. Uses RAISE EXCEPTION on failure so a
+-- non-zero psql exit code signals a failing suite.
 -- =====================================================================
 \set ON_ERROR_STOP on
 DO $$
@@ -99,6 +100,9 @@ BEGIN
   RAISE NOTICE 'PASS anon has no grants on rental_sessions/payments/kiosk_devices';
 
   RAISE NOTICE '======================================================';
-  RAISE NOTICE 'ALL DB TESTS PASSED';
+  RAISE NOTICE 'CORE DB TESTS PASSED';
   RAISE NOTICE '======================================================';
 END $$;
+
+\ir pricing-snapshot-hardening.sql
+\echo 'ALL DB TESTS PASSED'

@@ -11,6 +11,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_shared/pricingSnapshot.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
@@ -59,8 +60,11 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
     }
 
+    const storedHash = typeof session.pricing_snapshot_hash === "string"
+      ? session.pricing_snapshot_hash
+      : "";
     const recomputedHash = await snapshotHash(snap);
-    if (session.pricing_snapshot_hash && recomputedHash !== session.pricing_snapshot_hash) {
+    if (!storedHash || recomputedHash !== storedHash) {
       await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_HASH_MISMATCH" } });
       return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
     }
@@ -75,6 +79,28 @@ Deno.serve(async (req) => {
       });
       return json({ ok: false, error: "CURRENCY_MISMATCH" }, 409);
     }
+    if (
+      (session.price_profile_id && String(snap.profile_id ?? "") !== String(session.price_profile_id)) ||
+      (session.price_profile_version != null && Number(snap.profile_version) !== Number(session.price_profile_version))
+    ) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_BINDING_MISMATCH" } });
+      return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    }
+
+    try {
+      const validationTime = String(session.created_at ?? new Date().toISOString());
+      computeFinalPricingFromSnapshot({
+        snapshot: snap,
+        expectedCurrency: sessCurrency,
+        startAt: validationTime,
+        endAt: validationTime,
+        returnState: "normal",
+      });
+    } catch (error) {
+      const code = error instanceof PricingSnapshotError ? error.code : "SNAPSHOT_INVALID";
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code } });
+      return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    }
 
     const depositCents = Number(snap.deposit_cents ?? NaN);
     if (!Number.isInteger(depositCents) || depositCents <= 0) {
@@ -82,7 +108,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "DEPOSIT_NOT_CONFIGURED" }, 409);
     }
 
-    const pricingHash = String(session.pricing_snapshot_hash ?? recomputedHash);
+    const pricingHash = storedHash;
     const paymentEventKey = `payment_started:${session.id}:${pricingHash}`;
     await appendRentalEvent(db, {
       rentalId: String(session.id),

@@ -29,3 +29,12 @@ verify_jwt = false
 
 [functions.settle-rental-payment]
 verify_jwt = false
+
+[functions.kiosk-enroll]
+verify_jwt = false
+
+[functions.public-contact]
+verify_jwt = false
+
+[functions.account-privacy]
+verify_jwt = true

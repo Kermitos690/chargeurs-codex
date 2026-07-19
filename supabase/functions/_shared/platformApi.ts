@@ -11,8 +11,91 @@ export const ALL_SCOPES = [
   "inventory:read",
   "pricing:read",
   "rentals:read",
+  "incidents:read",
 ] as const;
 export type PlatformApiScope = typeof ALL_SCOPES[number];
+
+export type IncidentListQuery = {
+  limit: number;
+  offset: number;
+  resolved: boolean | null;
+  severity: string | null;
+  type: string | null;
+};
+
+export type IncidentListQueryResult =
+  | { ok: true; value: IncidentListQuery }
+  | { ok: false; message: string };
+
+const INCIDENT_FILTER_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
+const DECIMAL_INTEGER_RE = /^(0|[1-9][0-9]*)$/;
+export const INCIDENT_RESULT_WINDOW = 10_000;
+
+/** Parse the deliberately small, bounded query surface of GET /v1/incidents. */
+export function parseIncidentListQuery(url: URL): IncidentListQueryResult {
+  const limitRaw = url.searchParams.get("limit");
+  const offsetRaw = url.searchParams.get("offset");
+  const resolvedRaw = url.searchParams.get("resolved");
+  const severityRaw = url.searchParams.get("severity");
+  const typeRaw = url.searchParams.get("type");
+
+  const limit = limitRaw === null ? 50 : DECIMAL_INTEGER_RE.test(limitRaw) ? Number(limitRaw) : Number.NaN;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    return { ok: false, message: "limit must be an integer between 1 and 100" };
+  }
+
+  const offset = offsetRaw === null ? 0 : DECIMAL_INTEGER_RE.test(offsetRaw) ? Number(offsetRaw) : Number.NaN;
+  if (!Number.isInteger(offset) || offset < 0 || offset >= INCIDENT_RESULT_WINDOW) {
+    return { ok: false, message: "offset must be an integer between 0 and 9999" };
+  }
+  if (offset + limit > INCIDENT_RESULT_WINDOW) {
+    return { ok: false, message: "offset plus limit must not exceed 10000" };
+  }
+
+  let resolved: boolean | null = null;
+  if (resolvedRaw !== null) {
+    if (resolvedRaw !== "true" && resolvedRaw !== "false") {
+      return { ok: false, message: "resolved must be true or false" };
+    }
+    resolved = resolvedRaw === "true";
+  }
+
+  if (severityRaw !== null && !INCIDENT_FILTER_RE.test(severityRaw)) {
+    return { ok: false, message: "severity is invalid" };
+  }
+  if (typeRaw !== null && !INCIDENT_FILTER_RE.test(typeRaw)) {
+    return { ok: false, message: "type is invalid" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      limit,
+      offset,
+      resolved,
+      severity: severityRaw,
+      type: typeRaw,
+    },
+  };
+}
+
+/** Keep pagination inside the deliberately capped 10,000-row result window. */
+export function nextIncidentOffset(offset: number, limit: number, fetchedCount: number): number | null {
+  const candidate = offset + limit;
+  return fetchedCount > limit && candidate < INCIDENT_RESULT_WINDOW ? candidate : null;
+}
+
+/** Explicit allowlist: operator messages and arbitrary incident data stay private. */
+export function toIncidentPublic(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    type: row.type,
+    severity: row.severity,
+    resolved: Boolean(row.resolved),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
 
 export const platformCorsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

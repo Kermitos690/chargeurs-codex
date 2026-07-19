@@ -85,4 +85,5 @@ jobs:
         run: |
           echo "DRY RUN ONLY"
           echo "Migration prepared: supabase/migrations/20260719133000_platform_api_readonly_v1.sql"
+          echo "Migration prepared: supabase/migrations/20260719143000_platform_api_legacy_reconciliation.sql"
           echo "No database command was executed."

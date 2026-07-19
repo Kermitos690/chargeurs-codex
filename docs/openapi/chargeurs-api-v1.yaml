@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Chargeurs.ch Platform API
-  version: 1.0.0-readonly
+  version: 1.1.0-readonly
   description: |
     API publique en lecture seule pour les stations, l'inventaire,
     les tarifs calculés côté serveur et les locations appartenant au client API.
@@ -23,6 +23,7 @@ tags:
   - name: Stations
   - name: Pricing
   - name: Rentals
+  - name: Incidents
 paths:
   /v1/health:
     get:
@@ -61,6 +62,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /v1/me:
     get:
       tags: [Client]
@@ -240,6 +242,48 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: Lister les incidents opérationnels non sensibles
+      description: |
+        Retourne uniquement l'identifiant, le type, la sévérité, l'état de
+        résolution et les horodatages. Les champs internes `message` et `data`
+        ne sont jamais exposés par cette route.
+      x-required-scope: incidents:read
+      parameters:
+        - name: resolved
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$' }
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          description: Avec `limit`, ne peut pas dépasser la fenêtre bornée de 10000 résultats.
+          schema: { type: integer, minimum: 0, maximum: 9999, default: 0 }
+      responses:
+        '200':
+          description: Page d'incidents expurgés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -295,7 +339,7 @@ components:
           type: array
           items:
             type: string
-            enum: [health:read, stations:read, inventory:read, pricing:read, rentals:read]
+            enum: [health:read, stations:read, inventory:read, pricing:read, rentals:read, incidents:read]
         quota:
           type: object
           required: [per_minute, per_day]
@@ -384,6 +428,35 @@ components:
         resulting_state: { type: string }
         version: { type: integer, minimum: 1 }
         data: {}
+    Incident:
+      type: object
+      additionalProperties: false
+      required: [id, type, severity, resolved, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        severity: { type: string }
+        resolved: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    IncidentList:
+      type: object
+      additionalProperties: false
+      required: [incidents, pagination]
+      properties:
+        incidents:
+          type: array
+          items: { $ref: '#/components/schemas/Incident' }
+        pagination:
+          type: object
+          additionalProperties: false
+          required: [limit, offset, returned, has_more, next_offset]
+          properties:
+            limit: { type: integer, minimum: 1, maximum: 100 }
+            offset: { type: integer, minimum: 0, maximum: 9999 }
+            returned: { type: integer, minimum: 0, maximum: 100 }
+            has_more: { type: boolean }
+            next_offset: { type: [integer, 'null'], minimum: 0, maximum: 9999 }
     Error:
       type: object
       required: [error]
@@ -418,6 +491,11 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     RateLimited:
       description: Quota dépassé
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: Erreur interne sans détail fournisseur ni donnée sensible
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

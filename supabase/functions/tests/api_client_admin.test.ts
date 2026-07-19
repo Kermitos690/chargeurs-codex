@@ -27,7 +27,8 @@ Deno.test("only read-only scopes survive normalization", () => {
     "payments:write",
     "*",
     "inventory:read",
-  ]), ["stations:read", "inventory:read"]);
+    "incidents:read",
+  ]), ["stations:read", "inventory:read", "incidents:read"]);
   assertEquals(normalizeScopes("stations:read"), []);
 });
 

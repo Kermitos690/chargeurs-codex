@@ -1,9 +1,9 @@
 // CALLBACK tests — full signed branch of cabinet-event-push via the exported
 // handler with an injected fake db and a TEMPORARY in-process secret.
 // Proves: fail-closed (503), production guard, signature gate, replay window,
-// size cap, invalid JSON, atomic dedup (23505), state-machine advancement.
+// size cap, invalid JSON, atomic dedup (23505), and exact return delegation.
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { FakeDb } from "./_fakes.ts";
+import { FakeDb, jsonResponse, stubFetch } from "./_fakes.ts";
 import { handleEvent, unsignedAllowed } from "../cabinet-event-push/index.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -78,24 +78,69 @@ Deno.test("replay window: timestamp older than 5min => 408", async () => {
   assertEquals(r.status, 408);
 });
 
-Deno.test("dedup: same external_event_id twice => second is deduplicated, single row", async () => {
+Deno.test("incomplete BATTERY_IN never mutates the latest rental", async () => {
   const d = db();
   const e = { eventType: "BATTERY_IN", deviceId: "DTA-TST", messageId: "dup-1" };
   d.seed("rental_sessions", [{ id: "rs1", station_id: "DTA-TST", state: "active_rental", created_at: "2026-01-01" }]);
   const r1 = await handleEvent(req(e, { "x-event-secret": SECRET }), asClient(d), env());
   const r2 = await handleEvent(req(e, { "x-event-secret": SECRET }), asClient(d), env());
-  assertEquals(r1.status, 200);
+  assertEquals(r1.status, 202);
   assertEquals((await r2.json()).deduplicated, true);
   assertEquals(d.tables["cabinet_events"].length, 1);
-  // Exactly one business effect: the session advanced once.
-  assertEquals(d.tables["rental_sessions"][0].state, "battery_returned");
+  assertEquals(d.tables["rental_sessions"][0].state, "active_rental");
+  assertEquals(d.tables["system_incidents"].length, 1);
+});
+
+Deno.test("complete BATTERY_IN is delegated to the canonical return inbox", async () => {
+  const d = db();
+  const rentalId = "11111111-1111-4111-8111-111111111111";
+  d.seed("rental_sessions", [{
+    id: rentalId,
+    station_id: "ORIGIN",
+    apifox_trade_no: "T-EXACT-1",
+    battery_id: "BAT-EXACT-1",
+    state: "active_rental",
+  }]);
+  Deno.env.set("CHARGENOW_CALLBACK_SIGNING_KEY", "callback-test-signing-key");
+  const fetchStub = stubFetch((_url, init) => {
+    const forwarded = JSON.parse(String(init?.body));
+    assertEquals(forwarded, {
+      status: "2",
+      tradeNo: "T-EXACT-1",
+      eventId: "cabinet-event:return-exact-1",
+      stationId: "RETURN-STATION",
+      batteryId: "BAT-EXACT-1",
+      slotNum: 4,
+    });
+    return jsonResponse({ received: true, settlement_triggered: true, settlement_ok: true });
+  });
+  try {
+    const response = await handleEvent(req({
+      eventType: "BATTERY_IN",
+      deviceId: "RETURN-STATION",
+      messageId: "return-exact-1",
+      tradeNo: "T-EXACT-1",
+      batteryId: "BAT-EXACT-1",
+      slotNum: 4,
+    }, { "x-event-secret": SECRET }), asClient(d), env({ SUPABASE_URL: "https://project.supabase.co" }));
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(body.delegated, true);
+    assertEquals(body.settlement_triggered, true);
+    assertEquals(fetchStub.calls.length, 1);
+    assertEquals(fetchStub.calls[0].url.includes("/functions/v1/chargenow-rent-callback"), true);
+  } finally {
+    fetchStub.restore();
+    Deno.env.delete("CHARGENOW_CALLBACK_SIGNING_KEY");
+  }
 });
 
 Deno.test("state machine: BATTERY_IN does NOT regress a terminal session", async () => {
   const d = db();
   d.seed("rental_sessions", [{ id: "rs2", station_id: "DTA-TST", state: "refunded", created_at: "2026-01-01" }]);
-  await handleEvent(
+  const response = await handleEvent(
     req({ eventType: "BATTERY_IN", deviceId: "DTA-TST", messageId: "x9" }, { "x-event-secret": SECRET }),
     asClient(d), env());
+  assertEquals(response.status, 202);
   assertEquals(d.tables["rental_sessions"][0].state, "refunded");
 });

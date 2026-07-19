@@ -11,7 +11,10 @@ import {
   jsonResponse,
   logRequest,
   newRequestId,
+  nextIncidentOffset,
+  parseIncidentListQuery,
   platformCorsHeaders,
+  toIncidentPublic,
   type AuthedClient,
   type PlatformApiScope,
 } from "../_shared/platformApi.ts";
@@ -169,6 +172,7 @@ const routes: Route[] = [
   route("POST", "/v1/pricing/quote", "pricing:read", pricingQuote),
   route("GET", "/v1/rentals/:rentalId", "rentals:read", getRental),
   route("GET", "/v1/rentals/:rentalId/events", "rentals:read", getRentalEvents),
+  route("GET", "/v1/incidents", "incidents:read", listIncidents),
 ];
 
 function route(method: "GET" | "POST", pattern: string, scope: PlatformApiScope | null, handler: Handler): Route {
@@ -385,6 +389,39 @@ async function getRentalEvents(_req: Request, { db, client, params }: RouteConte
       version: event.resulting_version,
       data: sanitizeEventMetadata(event.metadata),
     })),
+  });
+}
+
+async function listIncidents(req: Request, { db }: RouteContext): Promise<Response> {
+  const parsed = parseIncidentListQuery(new URL(req.url));
+  if (!parsed.ok) return apiError(400, "invalid_query", parsed.message);
+
+  const { limit, offset, resolved, severity, type } = parsed.value;
+  let query = db.from("system_incidents")
+    .select("id,type,severity,resolved,created_at,updated_at")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(offset, offset + limit);
+
+  if (resolved !== null) query = query.eq("resolved", resolved);
+  if (severity !== null) query = query.eq("severity", severity);
+  if (type !== null) query = query.eq("type", type);
+
+  const { data, error } = await query;
+  if (error) return apiError(500, "db_error", "Unable to load incidents");
+
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const nextOffset = nextIncidentOffset(offset, limit, rows.length);
+  const incidents = rows.slice(0, limit).map(toIncidentPublic);
+  return jsonResponse({
+    incidents,
+    pagination: {
+      limit,
+      offset,
+      returned: incidents.length,
+      has_more: nextOffset !== null,
+      next_offset: nextOffset,
+    },
   });
 }
 

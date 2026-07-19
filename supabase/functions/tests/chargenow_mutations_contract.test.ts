@@ -309,6 +309,38 @@ Deno.test("C3 ejectByRent — builds POST with cabinetid/rentOrderId/slotNum (mo
 });
 Deno.test("C3 ejectByRent — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRent("DTA21269", 3, "ORD-1")));
 
+Deno.test("C3 ejectByRent — slot 0 is fail-closed without a confirmed provider convention", async () => {
+  const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_SLOT_ZERO_NOT_ALLOWED");
+    assertEquals(s.calls.length, 0, "fail-closed validation must happen before fetch");
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+    else Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", previous);
+  }
+});
+
+Deno.test("C3 ejectByRent — slot 0 is sent only in explicit provider-auto-select mode", async () => {
+  const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", "provider_auto_select");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
+    assertEquals(result.ok, true);
+    assertEquals(s.calls.length, 1);
+    assert(s.calls[0].url.includes("slotNum=0"));
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+    else Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", previous);
+  }
+});
+
 // ----------------------------------------------------------------
 // E1 — Event Push Config (POST /cabinet/eventPush/config) — BLOCKED_BY_SAFETY
 // Reconfigures global push routing; mock only.

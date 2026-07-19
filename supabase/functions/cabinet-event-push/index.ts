@@ -1,6 +1,8 @@
 // cabinet-event-push — receiver for ChargeNow hardware events.
-// Stores raw events, classifies severity, updates station state and closes
-// rentals on battery return. Public endpoint (called by ChargeNow servers).
+// Stores raw events and classifies severity. Online/offline events update the
+// station directly. BATTERY_IN is never assigned heuristically: a complete
+// trade/battery/station/slot identity is delegated to the canonical, inbox-
+// backed ChargeNow rental callback and Rental Orchestrator.
 //
 // SECURITY: this endpoint MUTATES business state (station status, rental
 // returns), so it is FAIL-CLOSED by default. Without CHARGENOW_EVENT_SECRET it
@@ -9,6 +11,7 @@
 // matching token (constant-time compare). Replay/oversize requests are dropped.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
+import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const SEVERITY: Record<string, string> = {
@@ -59,6 +62,153 @@ function j(body: unknown, status: number) {
   });
 }
 
+function mergedPayload(payload: EventPayload): Record<string, unknown> {
+  const nested = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+    ? payload.data as Record<string, unknown>
+    : {};
+  return { ...payload, ...nested };
+}
+
+function firstString(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function firstInteger(source: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const raw = source[key];
+    const value = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (Number.isInteger(value) && value >= 0) return value;
+  }
+  return null;
+}
+
+async function returnIncident(
+  db: SupabaseClient,
+  code: string,
+  details: Record<string, unknown>,
+) {
+  const { error } = await db.from("system_incidents").insert({
+    type: "uncorrelated_battery_return",
+    severity: "high",
+    message: "Un événement BATTERY_IN n'a pas pu être corrélé de façon exacte; aucun état de location n'a été modifié.",
+    data: { code, ...details },
+    resolved: false,
+  });
+  if (error) throw error;
+}
+
+async function delegateBatteryReturn(
+  db: SupabaseClient,
+  payload: EventPayload,
+  eventId: string | null,
+  env: (key: string) => string | undefined,
+  rawDuplicate: boolean,
+): Promise<Response> {
+  const merged = mergedPayload(payload);
+  const stationId = firstString(merged, [
+    "deviceId", "cabinetid", "cabinetId", "stationId", "cabinetSn",
+    "givebackDeviceId", "returnDeviceId", "returnStationId",
+  ]);
+  const tradeNo = firstString(merged, ["tradeNo", "trade_no", "orderNo"]);
+  const batteryId = firstString(merged, [
+    "batteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
+  ]);
+  const slotNum = firstInteger(merged, [
+    "slotNum", "slot", "slotId", "position", "givebackSlot", "returnSlot",
+  ]);
+
+  if (!eventId || !stationId || !tradeNo || !batteryId || slotNum == null) {
+    if (rawDuplicate) {
+      return j({
+        received: true,
+        deduplicated: true,
+        settlement_triggered: false,
+        requires_reconciliation: true,
+        reason: "RETURN_IDENTITY_INCOMPLETE",
+      }, 200);
+    }
+    await returnIncident(db, "RETURN_IDENTITY_INCOMPLETE", {
+      external_event_id: eventId,
+      station_id: stationId,
+      trade_no_fingerprint: tradeNo?.slice(-8) ?? null,
+      battery_id: batteryId,
+      slot_num: slotNum,
+    });
+    return j({
+      received: true,
+      settlement_triggered: false,
+      requires_reconciliation: true,
+      reason: "RETURN_IDENTITY_INCOMPLETE",
+    }, 202);
+  }
+
+  // A return station can differ from the origin station. The immutable rent
+  // order plus battery identity is the exact business correlation key.
+  const { data: matches, error: matchError } = await db.from("rental_sessions")
+    .select("id,apifox_trade_no,battery_id")
+    .eq("apifox_trade_no", tradeNo)
+    .eq("battery_id", batteryId)
+    .limit(2);
+  if (matchError) throw matchError;
+
+  if (!matches || matches.length !== 1) {
+    const code = matches && matches.length > 1 ? "RETURN_IDENTITY_AMBIGUOUS" : "RETURN_RENTAL_NOT_FOUND";
+    await returnIncident(db, code, {
+      external_event_id: eventId,
+      station_id: stationId,
+      trade_no_fingerprint: tradeNo.slice(-8),
+      battery_id: batteryId,
+      slot_num: slotNum,
+      match_count: matches?.length ?? 0,
+    });
+    return j({
+      received: true,
+      settlement_triggered: false,
+      requires_reconciliation: true,
+      reason: code,
+    }, 202);
+  }
+
+  const supabaseUrl = env("SUPABASE_URL") ?? "";
+  if (!supabaseUrl) {
+    await returnIncident(db, "SUPABASE_INTERNAL_CONFIG_MISSING", {
+      external_event_id: eventId,
+      rental_session_id: matches[0].id,
+    });
+    return j({ ok: false, error: "SUPABASE_INTERNAL_CONFIG_MISSING" }, 503);
+  }
+
+  const callbackUrl = await buildChargeNowCallbackUrl(supabaseUrl, String(matches[0].id));
+  const response = await fetch(callbackUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      status: "2",
+      tradeNo,
+      eventId: `cabinet-event:${eventId}`,
+      stationId,
+      batteryId,
+      slotNum,
+    }),
+  });
+  const result = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok) {
+    return j({ ok: false, error: "CANONICAL_RETURN_PIPELINE_FAILED" }, 502);
+  }
+  return j({
+    received: true,
+    delegated: true,
+    duplicate: result?.duplicate === true,
+    settlement_triggered: result?.settlement_triggered === true,
+    settlement_ok: result?.settlement_ok === true,
+  }, response.status);
+}
+
 // Core request handler — exported and dependency-injected so the full signed
 // branch (secret gate, replay window, size cap, atomic dedup, state machine)
 // can be exercised by the automated integration harness with a fake db and a
@@ -99,9 +249,9 @@ export async function handleEvent(
     let payload: EventPayload = {};
     try { payload = raw ? JSON.parse(raw) : {}; } catch { return j({ ok: false, error: "INVALID_JSON" }, 400); }
 
-    const eventType: string = payload.eventType ?? payload.type ?? payload.event ?? "UNKNOWN";
-    const stationId: string | null =
-      payload.deviceId ?? payload.cabinetid ?? payload.cabinetId ?? payload.stationId ?? null;
+    const flattened = mergedPayload(payload);
+    const eventType = firstString(flattened, ["eventType", "type", "event"]) ?? "UNKNOWN";
+    const stationId = firstString(flattened, ["deviceId", "cabinetid", "cabinetId", "stationId"]);
 
     // ---- Replay window (only enforced when a timestamp is present) ----
     const tsRaw = payload.timestamp ?? payload.ts ?? payload.eventTime ?? payload.time ?? null;
@@ -118,8 +268,7 @@ export async function handleEvent(
     // We rely on the partial UNIQUE index cabinet_events_external_event_id_uniq.
     // Two simultaneous duplicate callbacks race on the INSERT; exactly one wins,
     // the other gets a unique-violation (23505) and is treated as a no-op.
-    const idKey = ["messageId", "eventId", "msgId", "id"].find((k) => payload[k] != null) ?? null;
-    const eventId = idKey ? String(payload[idKey]) : null;
+    const eventId = firstString(flattened, ["messageId", "eventId", "msgId", "id"]);
 
     const { error: insErr } = await db.from("cabinet_events").insert({
       station_id: stationId,
@@ -128,32 +277,24 @@ export async function handleEvent(
       payload,
       external_event_id: eventId,
     });
-    if (insErr) {
-      // 23505 = unique_violation → duplicate event already processed.
-      if ((insErr as { code?: string }).code === "23505") {
-        return j({ received: true, deduplicated: true }, 200);
-      }
+    const duplicate = (insErr as { code?: string } | null)?.code === "23505";
+    if (insErr && !duplicate) {
       return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
     }
+
+    // The canonical return inbox owns retry/dedup state. Even when the raw
+    // cabinet event already exists, delegate a complete BATTERY_IN again so a
+    // previously failed canonical handler can be reclaimed safely.
+    if (eventType === "BATTERY_IN") {
+      return await delegateBatteryReturn(db, payload, eventId, env, duplicate);
+    }
+    if (duplicate) return j({ received: true, deduplicated: true }, 200);
 
     if (stationId) {
       if (eventType === "CABINET_ONLINE") {
         await db.from("stations").update({ online: true, status: "online" }).eq("station_id", stationId);
       } else if (eventType === "CABINET_OFFLINE") {
         await db.from("stations").update({ online: false, status: "offline" }).eq("station_id", stationId);
-      } else if (eventType === "BATTERY_IN") {
-        // Battery physically returned — advance the most recent active rental.
-        // Idempotent: the state filter prevents re-processing already-returned
-        // or terminal sessions (closed/refunded/manual_review/needs_support).
-        const { data: active } = await db.from("rental_sessions")
-          .select("id").eq("station_id", stationId)
-          .in("state", ["active_rental", "battery_taken", "ejected"])
-          .order("created_at", { ascending: false }).limit(1);
-        if (active && active[0]) {
-          await db.from("rental_sessions").update({
-            state: "battery_returned", returned_at: new Date().toISOString(),
-          }).eq("id", active[0].id);
-        }
       }
     }
 
@@ -163,4 +304,4 @@ export async function handleEvent(
   }
 }
 
-Deno.serve((req) => handleEvent(req, adminClient()));
+if (import.meta.main) Deno.serve((req) => handleEvent(req, adminClient()));

@@ -1,3 +1,5 @@
+import { resolveRentSlot } from "./chargenowSafety.ts";
+
 // ============================================================
 // Chargeurs.ch — ChargeNow / Bajie (Apifox-documented) API client
 // PRODUCTION base: https://developer.chargenow.top/cdb-open-api/v1
@@ -176,9 +178,23 @@ export const operationPop = (cabinetid: string, slotNum: number) =>
 export const ejectByRepair = (cabinetid: string, slotNum: number) =>
   request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum } });
 
-// C3 — Eject By Rent (query: cabinetid, rentOrderId, slotNum)
-export const ejectByRent = (cabinetid: string, slotNum: number, rentOrderId?: string) =>
-  request("POST", "/cabinet/ejectByRent", { query: { cabinetid, rentOrderId, slotNum } });
+// C3 — Eject By Rent (query: cabinetid, rentOrderId, slotNum).
+// Slot 0 is ambiguous in the supplier material. It is refused unless the
+// operator explicitly configures CHARGENOW_RENT_SLOT_ZERO_MODE to
+// "provider_auto_select" after confirming that convention with ChargeNow.
+export const ejectByRent = (
+  cabinetid: string,
+  slotNum: number,
+  rentOrderId?: string,
+): Promise<ApiResult> => {
+  const slot = resolveRentSlot(slotNum, Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE"));
+  if (!slot.ok) {
+    return Promise.resolve({ ok: false, status: 0, data: null, error: slot.error });
+  }
+  return request("POST", "/cabinet/ejectByRent", {
+    query: { cabinetid, rentOrderId, slotNum: slot.slotNum },
+  });
+};
 
 // C4 — Cabinet Detail
 export const cabinetDetail = (cabinetId: string) =>

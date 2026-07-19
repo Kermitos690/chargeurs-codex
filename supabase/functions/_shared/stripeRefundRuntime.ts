@@ -19,10 +19,10 @@ async function currentRefunds(
     payment_intent: paymentIntentId,
     limit: 100,
   });
-  const accepted = refunds.data.filter(countsAsRefunded);
+  const accepted: Stripe.Refund[] = refunds.data.filter(countsAsRefunded);
   return {
-    cents: accepted.reduce((sum, refund) => sum + Number(refund.amount ?? 0), 0),
-    ids: accepted.map((refund) => refund.id),
+    cents: accepted.reduce((sum: number, refund: Stripe.Refund) => sum + Number(refund.amount ?? 0), 0),
+    ids: accepted.map((refund: Stripe.Refund) => refund.id),
   };
 }
 

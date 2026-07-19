@@ -180,4 +180,20 @@ grant all on public.api_request_logs to service_role;
 
 comment on table public.api_clients is 'Read-only Platform API clients managed by super-admin Edge Functions.';
 comment on table public.api_keys is 'Hashed Platform API keys. Raw secrets are never stored.';
-comment on column public.api_request_logs.ip_hash is 'One-way salted SHA-256 hash, never a raw client IP address.';
+-- A database initialized with the retired docs/platform-api/staging-bootstrap.sql
+-- still has api_request_logs.ip instead of ip_hash. Keep this migration
+-- applicable there; the following reconciliation migration adds the safe
+-- column, irreversibly transforms legacy values and drops the raw column.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'api_request_logs'
+      and column_name = 'ip_hash'
+  ) then
+    comment on column public.api_request_logs.ip_hash is
+      'One-way salted SHA-256 hash, never a raw client IP address.';
+  end if;
+end
+$$;

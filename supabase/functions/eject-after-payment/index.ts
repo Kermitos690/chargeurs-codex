@@ -6,6 +6,7 @@ import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
 import { ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
 
 const MAX_RETRIES = 3;
 type DB = ReturnType<typeof adminClient>;
@@ -288,6 +289,16 @@ Deno.serve(async (req) => {
       return reply({ ok: false, error: "CHARGENOW_NOT_CONFIGURED", compensation }, 503);
     }
 
+    const slotDecision = resolveRentSlot(
+      session.selected_slot_num,
+      Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE"),
+    );
+    if (!slotDecision.ok) {
+      const compensation = await compensateBeforeHardwareRequest(db, session, slotDecision.error);
+      return reply({ ok: false, error: slotDecision.error, compensation }, 409);
+    }
+    const requestedSlotNum = slotDecision.slotNum;
+
     const retry = Number(session.retry_count ?? 0);
     if (retry >= MAX_RETRIES) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "MAX_RETRIES");
@@ -355,7 +366,6 @@ Deno.serve(async (req) => {
       session.chargenow_order_id = orderId;
     }
 
-    const requestedSlotNum = Number(session.selected_slot_num ?? 0);
     // From this line onward, any thrown error is physically ambiguous: the HTTP
     // request may have reached the supplier even when no response is available.
     hardwareCommandIssued = true;

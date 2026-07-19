@@ -183,6 +183,16 @@ async function applyReleaseSuccess(
       );
       throw new OrchestratorError("RELEASE_IDENTITY_INCOMPLETE");
     }
+    if (batteryId && batteryId !== identity.batteryId) {
+      await openIncident(
+        db,
+        session,
+        "RELEASE_BATTERY_MISMATCH",
+        "ChargeNow confirme la sortie d'une batterie différente de celle réservée.",
+        { tradeNo: identity.tradeNo, expectedBattery: batteryId, observedBattery: identity.batteryId },
+      );
+      throw new OrchestratorError("RELEASE_BATTERY_MISMATCH");
+    }
     batteryId = identity.batteryId;
     slotNum = identity.slotNum;
     const releasedAt = new Date().toISOString();

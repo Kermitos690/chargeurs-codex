@@ -2,6 +2,7 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 
 const ejectSource = await Deno.readTextFile("supabase/functions/eject-after-payment/index.ts");
 const callbackSource = await Deno.readTextFile("supabase/functions/chargenow-rent-callback/index.ts");
+const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-event-push/index.ts");
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
 const refundSource = await Deno.readTextFile("supabase/functions/_shared/stripeRefundRuntime.ts");
 
@@ -18,6 +19,14 @@ Deno.test("ChargeNow release callbacks require exact battery identity", () => {
   assert(callbackSource.includes('eventType: "battery_released"'));
   assert(callbackSource.includes('eventType: "rental_activated"'));
   assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);
+});
+
+Deno.test("legacy BATTERY_IN events cannot select the latest station rental", () => {
+  assertEquals(cabinetEventSource.includes('order("created_at", { ascending: false })'), false);
+  assertEquals(cabinetEventSource.includes("delegateBatteryReturn"), true);
+  assertEquals(cabinetEventSource.includes('eq("apifox_trade_no", tradeNo)'), true);
+  assertEquals(cabinetEventSource.includes('eq("battery_id", batteryId)'), true);
+  assertEquals(cabinetEventSource.includes("RETURN_IDENTITY_INCOMPLETE"), true);
 });
 
 Deno.test("non-return remains an explicit super-admin decision", () => {

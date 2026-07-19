@@ -1,8 +1,9 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, auditLog, logApi } from "./db.ts";
+import { adminClient, auditLog, logApi, snapshotHash } from "./db.ts";
 import { planSettlement, resolveSettlementStrategy } from "./settlement.ts";
 import { appendRentalEvent, OrchestratorError } from "./rentalOrchestratorRuntime.ts";
+import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "./pricingSnapshot.ts";
 
 const LOCK_TTL_MINUTES = 10;
 
@@ -40,6 +41,7 @@ function cents(value: unknown): number {
 
 function safeErrorCode(error: unknown): string {
   if (error instanceof OrchestratorError) return error.code;
+  if (error instanceof PricingSnapshotError) return error.code;
   if (error instanceof Error && /^[A-Z0-9_:-]+$/.test(error.message)) {
     return error.message.slice(0, 120);
   }
@@ -125,6 +127,29 @@ async function recordRetryableSettlementFailure(
 
   await openIncident(db, session, code, message, {
     retryable: true,
+    ...details,
+  });
+}
+
+async function recordPricingSnapshotFailure(
+  db: DB,
+  session: Session,
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+) {
+  const { error: updateError } = await db.from("rental_sessions").update({
+    settlement_status: "manual_review",
+    settlement_error: code,
+    settlement_locked_at: null,
+    state: "needs_support",
+    failure_code: code,
+    failure_message: message,
+  }).eq("id", session.id);
+  if (updateError) throw updateError;
+
+  await openIncident(db, session, code, message, {
+    retryable: false,
     ...details,
   });
 }
@@ -292,32 +317,78 @@ async function settle(
 ) {
   const startAt = session.started_at ?? session.ejected_at ?? session.created_at;
   const effectiveEnd = returnState === "normal" ? session.returned_at ?? finalAt : finalAt;
-
-  const { data: pricing, error: pricingError } = await db.rpc("compute_pricing", {
-    p_device: session.kiosk_device_id ?? null,
-    p_station: session.station_id,
-    p_shop: session.shop_id ?? null,
-    p_start: startAt,
-    p_end: effectiveEnd,
-    p_rental_state: "active",
-    p_return_state: returnState,
-    p_currency: session.currency ?? "CHF",
-  });
-
-  if (pricingError || !pricing) {
-    await recordRetryableSettlementFailure(
+  const initialSnapshot = session.pricing_snapshot as Record<string, unknown> | null;
+  const storedSnapshotHash = typeof session.pricing_snapshot_hash === "string"
+    ? session.pricing_snapshot_hash
+    : "";
+  if (!initialSnapshot || !storedSnapshotHash) {
+    await recordPricingSnapshotFailure(
       db,
       session,
-      "FINAL_PRICING_ERROR",
-      "Le tarif final n'a pas pu être calculé automatiquement.",
-      { pricing_error_code: pricingError?.code ?? null },
+      "PRICING_SNAPSHOT_MISSING",
+      "Le snapshot tarifaire immuable de la location est absent.",
     );
-    return json({ ok: false, error: "FINAL_PRICING_ERROR" }, 409);
+    return json({ ok: false, error: "PRICING_SNAPSHOT_MISSING" }, 409);
   }
 
-  const pricingRow = pricing as Record<string, unknown>;
+  const recomputedSnapshotHash = await snapshotHash(initialSnapshot);
+  if (recomputedSnapshotHash !== storedSnapshotHash) {
+    await recordPricingSnapshotFailure(
+      db,
+      session,
+      "PRICING_SNAPSHOT_HASH_MISMATCH",
+      "Le snapshot tarifaire de la location ne correspond plus à son empreinte d'origine.",
+      { stored_hash: storedSnapshotHash, recomputed_hash: recomputedSnapshotHash },
+    );
+    return json({ ok: false, error: "PRICING_SNAPSHOT_HASH_MISMATCH" }, 409);
+  }
+
+  if (
+    session.price_profile_id &&
+    String(initialSnapshot.profile_id ?? "") !== String(session.price_profile_id)
+  ) {
+    await recordPricingSnapshotFailure(
+      db,
+      session,
+      "PRICING_SNAPSHOT_PROFILE_MISMATCH",
+      "Le profil du snapshot tarifaire ne correspond pas à la location.",
+    );
+    return json({ ok: false, error: "PRICING_SNAPSHOT_PROFILE_MISMATCH" }, 409);
+  }
+  if (
+    session.price_profile_version != null &&
+    Number(initialSnapshot.profile_version) !== Number(session.price_profile_version)
+  ) {
+    await recordPricingSnapshotFailure(
+      db,
+      session,
+      "PRICING_SNAPSHOT_VERSION_MISMATCH",
+      "La version du snapshot tarifaire ne correspond pas à la location.",
+    );
+    return json({ ok: false, error: "PRICING_SNAPSHOT_VERSION_MISMATCH" }, 409);
+  }
+
+  let pricingRow: Record<string, unknown>;
+  try {
+    pricingRow = computeFinalPricingFromSnapshot({
+      snapshot: initialSnapshot,
+      expectedCurrency: String(session.currency ?? "CHF"),
+      startAt,
+      endAt: effectiveEnd,
+      returnState,
+    });
+  } catch (error) {
+    const code = safeErrorCode(error);
+    await recordPricingSnapshotFailure(
+      db,
+      session,
+      code,
+      "Le snapshot tarifaire est incomplet ou invalide; aucun tarif courant n'a été utilisé en remplacement.",
+    );
+    return json({ ok: false, error: code }, 409);
+  }
+
   const finalAmountCents = cents(pricingRow.final_cents);
-  const initialSnapshot = session.pricing_snapshot as Record<string, unknown> | null;
   const depositAmountCents = cents(
     session.deposit_amount_cents ?? initialSnapshot?.deposit_cents ?? 0,
   );

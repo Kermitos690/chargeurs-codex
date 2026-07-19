@@ -54,11 +54,31 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const stationActions = new Set(["test_auth", "sync_status", "eject_by_repair", "operation_pop"]);
+    if (stationActions.has(actionType) && (typeof stationId !== "string" || !/^[A-Za-z0-9_-]{4,64}$/.test(stationId))) {
+      return new Response(JSON.stringify({ ok: false, error: "VALID_STATION_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (["eject_by_repair", "operation_pop"].includes(actionType)
+      && (!Number.isInteger(Number(slotNum)) || Number(slotNum) < 1 || Number(slotNum) > 128)) {
+      return new Response(JSON.stringify({ ok: false, error: "VALID_SLOT_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (actionType === "config_event_push") {
+      try {
+        const parsed = new URL(String(eventPushUrl ?? ""));
+        if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error("invalid");
+      } catch {
+        return new Response(JSON.stringify({ ok: false, error: "VALID_HTTPS_EVENT_PUSH_URL_REQUIRED" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     let result;
     switch (actionType) {
       case "test_auth":
         // Non-destructive credential check.
-        result = await cabinetQuery(stationId ?? "DTA21269");
+        result = await cabinetQuery(stationId);
         break;
       case "sync_status":
         result = await cabinetQuery(stationId);

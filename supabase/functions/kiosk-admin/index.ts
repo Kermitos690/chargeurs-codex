@@ -6,16 +6,16 @@
 // the kiosk's station_id — preventing one kiosk from impersonating another.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, requireAdmin, auditLog } from "../_shared/db.ts";
-
-async function sha256Hex(s: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { randomOpaque, sha256Hex } from "../_shared/kioskEnrollment.ts";
 
 function newToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return "kt_" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function newPairingCode(): string {
+  return randomOpaque("kc_", 18);
 }
 
 Deno.serve(async (req) => {
@@ -28,13 +28,38 @@ Deno.serve(async (req) => {
   if (!adminId) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
   try {
-    const { action, deviceId, stationId, label, ttlDays } = await req.json();
+    const { action, deviceId, stationId, label, ttlDays, ttlMinutes } = await req.json();
 
     if (action === "list") {
       const { data } = await db.from("kiosk_devices")
-        .select("id,station_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at")
+        .select("id,station_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at,device_public_id,app_version,enrolled_at,revoked_at")
         .order("created_at", { ascending: false });
       return json({ ok: true, devices: data ?? [] });
+    }
+
+    if (action === "create_pairing_code") {
+      if (!stationId) return json({ ok: false, error: "MISSING_STATION" }, 400);
+      const minutes = Math.max(5, Math.min(60, Number(ttlMinutes ?? 15)));
+      const { data: station } = await db.from("stations").select("station_id").eq("station_id", stationId).maybeSingle();
+      if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
+
+      const pairingCode = newPairingCode();
+      const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
+      const { data, error } = await db.from("kiosk_pairing_codes").insert({
+        station_id: stationId,
+        label: label ?? null,
+        code_hash: await sha256Hex(pairingCode),
+        expires_at: expiresAt,
+        created_by: adminId,
+      }).select("id,station_id,expires_at").single();
+      if (error) throw error;
+      await auditLog(db, {
+        actor: adminId,
+        action: "kiosk.pairing_code.created",
+        target: data.id,
+        data: { station_id: data.station_id, expires_at: data.expires_at },
+      });
+      return json({ ok: true, pairingCode, expiresAt, stationId: data.station_id });
     }
 
     if (action === "provision" || action === "rotate") {
@@ -72,7 +97,7 @@ Deno.serve(async (req) => {
     if (action === "revoke") {
       if (!deviceId) return json({ ok: false, error: "MISSING_DEVICE" }, 400);
       const { error } = await db.from("kiosk_devices")
-        .update({ token_revoked: true, active: false }).eq("id", deviceId);
+        .update({ token_revoked: true, active: false, revoked_at: new Date().toISOString() }).eq("id", deviceId);
       if (error) throw error;
       await auditLog(db, { actor: adminId, action: "kiosk.token.revoke", target: deviceId });
       return json({ ok: true });

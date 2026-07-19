@@ -2,7 +2,8 @@
 
 ## Statut
 
-Cette API est en développement dans la branche `agent/platform-api-readonly-v1` et la PR #34.
+Cette API est intégrée au socle consolidé Chargeurs.ch. Elle reste à valider sur
+un environnement staging distinct avant toute activation publique.
 
 Elle est actuellement **lecture seule**. Elle ne permet pas de créer une location, déclencher un paiement, éjecter une batterie, enregistrer un retour ou agir sur le matériel.
 
@@ -36,7 +37,7 @@ Pour les premiers essais Apifox, utiliser :
 ```text
 Nom : Chargeurs.ch Apifox
 Environnement : test
-Scopes : health:read, stations:read, inventory:read, pricing:read, rentals:read
+Scopes : health:read, stations:read, inventory:read, pricing:read, rentals:read, incidents:read
 Quota : 60/minute, 10000/jour
 ```
 
@@ -78,6 +79,7 @@ chg_live_...  environnement réel
 - `inventory:read`
 - `pricing:read`
 - `rentals:read`
+- `incidents:read`
 
 Aucun scope d’écriture n’est accepté dans cette version.
 
@@ -167,6 +169,35 @@ rental_orchestrator_events
 
 La table historique `rental_events` n’est plus utilisée par cette façade.
 
+### Incidents opérationnels
+
+```http
+GET /v1/incidents
+```
+
+Scope : `incidents:read`
+
+Filtres facultatifs :
+
+- `resolved=true|false` ;
+- `severity=<valeur exacte>` ;
+- `type=<valeur exacte>` ;
+- `limit=1..100`, valeur par défaut `50` ;
+- `offset=0..9999`, valeur par défaut `0` ;
+- `offset + limit` ne peut pas dépasser la fenêtre bornée de `10000` résultats.
+
+Exemple :
+
+```http
+GET /v1/incidents?resolved=false&severity=high&limit=25&offset=0
+```
+
+La réponse contient une pagination explicite. À la limite de la fenêtre bornée,
+`has_more` vaut `false` et `next_offset` vaut `null`. Elle expose seulement les champs publics
+`id`, `type`, `severity`, `resolved`, `created_at` et `updated_at`. Les champs
+opérateur `message` et `data` ne sont jamais renvoyés, car ils peuvent contenir
+des détails internes ou fournisseur.
+
 ## Réponses et identifiant de requête
 
 Chaque réponse comprend un en-tête :
@@ -202,6 +233,8 @@ Une limite dépassée retourne `429`.
 - aucune clé API brute n’est journalisée ;
 - les paramètres d’URL sont supprimés des chemins journalisés ;
 - l’adresse IP est hachée avec un sel serveur avant stockage ;
+- les anciennes adresses IP éventuellement stockées par le bootstrap retiré sont
+  transformées irréversiblement puis la colonne brute est supprimée ;
 - les secrets Stripe, Supabase et ChargeNow ne sont jamais renvoyés ;
 - aucune route publique de maintenance matérielle n’est exposée ;
 - aucune route publique d’écriture n’est incluse dans cette version ;
@@ -230,7 +263,7 @@ docs/PLATFORM_API_STAGING.md
 
 À faire avant publication :
 
-- exécuter manuellement la CI de la PR #34 ;
+- exécuter manuellement la CI Platform API ;
 - appliquer les migrations uniquement sur staging ;
 - déployer `platform-api` et `api-key-admin` uniquement sur staging ;
 - créer un client et une clé `chg_test_...` ;

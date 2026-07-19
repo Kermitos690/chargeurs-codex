@@ -5,8 +5,11 @@ import {
   ensureScope,
   extractKey,
   generateApiKey,
+  nextIncidentOffset,
+  parseIncidentListQuery,
   sha256Hex,
   signPayload,
+  toIncidentPublic,
   type AuthedClient,
 } from "../_shared/platformApi.ts";
 
@@ -17,6 +20,7 @@ Deno.test("scopes are limited to the frozen read-only v1 set", () => {
     "inventory:read",
     "pricing:read",
     "rentals:read",
+    "incidents:read",
   ]);
 });
 
@@ -83,7 +87,74 @@ Deno.test("ensureScope enforces per-scope isolation", () => {
   assertEquals(ensureScope(client, "stations:read"), true);
   assertEquals(ensureScope(client, "pricing:read"), true);
   assertEquals(ensureScope(client, "rentals:read"), false);
+  assertEquals(ensureScope(client, "incidents:read"), false);
   assertEquals(ensureScope(client, "inventory:read"), false);
+});
+
+Deno.test("incident list query defaults are bounded", () => {
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents")), {
+    ok: true,
+    value: {
+      limit: 50,
+      offset: 0,
+      resolved: null,
+      severity: null,
+      type: null,
+    },
+  });
+});
+
+Deno.test("incident list query accepts only strict filters and pagination", () => {
+  assertEquals(
+    parseIncidentListQuery(new URL(
+      "https://api.example/v1/incidents?limit=25&offset=50&resolved=false&severity=high&type=eject_failed_after_payment",
+    )),
+    {
+      ok: true,
+      value: {
+        limit: 25,
+        offset: 50,
+        resolved: false,
+        severity: "high",
+        type: "eject_failed_after_payment",
+      },
+    },
+  );
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?limit=101")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?limit=1e2")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?limit=0x10")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?offset=")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?offset=-1")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?offset=9951&limit=50")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?offset=9999&limit=1")).ok, true);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?resolved=yes")).ok, false);
+  assertEquals(parseIncidentListQuery(new URL("https://api.example/v1/incidents?type=bad%20type")).ok, false);
+});
+
+Deno.test("incident pagination never returns an unusable next offset", () => {
+  assertEquals(nextIncidentOffset(50, 25, 26), 75);
+  assertEquals(nextIncidentOffset(50, 25, 25), null);
+  assertEquals(nextIncidentOffset(9_950, 50, 51), null);
+});
+
+Deno.test("public incidents exclude operator messages and arbitrary metadata", () => {
+  assertEquals(toIncidentPublic({
+    id: "incident-id",
+    type: "eject_failed_after_payment",
+    severity: "high",
+    resolved: false,
+    created_at: "2026-07-19T10:00:00Z",
+    updated_at: "2026-07-19T10:01:00Z",
+    message: "provider response contained sensitive details",
+    data: { token: "secret", raw_response: "private" },
+  }), {
+    id: "incident-id",
+    type: "eject_failed_after_payment",
+    severity: "high",
+    resolved: false,
+    created_at: "2026-07-19T10:00:00Z",
+    updated_at: "2026-07-19T10:01:00Z",
+  });
 });
 
 Deno.test("signPayload emits t=<timestamp>,v1=<hex64>", async () => {

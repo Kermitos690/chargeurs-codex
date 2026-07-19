@@ -7,8 +7,8 @@ Ce document décrit une validation **staging uniquement**. Il ne faut jamais uti
 - projet Supabase staging distinct ;
 - accès super-administrateur à l’application staging ;
 - Supabase CLI authentifiée localement ;
-- branche `agent/platform-api-readonly-v1` récupérée ;
-- CI manuelle de la PR #34 réussie ;
+- branche de consolidation récupérée ;
+- CI Platform API manuelle réussie ;
 - aucun secret commité dans GitHub.
 
 ## 2. Variables locales
@@ -70,9 +70,10 @@ La migration Platform API attendue est :
 
 ```text
 supabase/migrations/20260719133000_platform_api_readonly_v1.sql
+supabase/migrations/20260719143000_platform_api_legacy_reconciliation.sql
 ```
 
-Elle crée ou complète :
+Ces migrations créent ou complètent :
 
 - `api_clients` ;
 - `api_keys` ;
@@ -80,6 +81,11 @@ Elle crée ou complète :
 - `api_request_logs` ;
 - `api_quota_hit` ;
 - `rental_sessions.api_client_id`.
+
+La seconde migration réconcilie de façon idempotente un staging ayant appliqué
+l’ancien `docs/platform-api/staging-bootstrap.sql` : elle ajoute les colonnes
+canoniques absentes, transforme puis supprime toute IP brute, retire les scopes
+non-read-only et supprime les anciennes politiques d’écriture directe.
 
 Aucune table Stripe ou ChargeNow n’est modifiée par cette migration.
 
@@ -138,6 +144,7 @@ Scopes :
 - inventory:read
 - pricing:read
 - rentals:read
+- incidents:read
 Quota : 60/minute, 10000/jour
 ```
 
@@ -167,6 +174,14 @@ curl -i \
   "https://${STAGING_PROJECT_REF}.supabase.co/functions/v1/platform-api/v1/stations/DTA21269"
 ```
 
+Incidents ouverts, sans détails opérateur :
+
+```bash
+curl -i \
+  -H "Authorization: Bearer $CHARGEURS_TEST_API_KEY" \
+  "https://${STAGING_PROJECT_REF}.supabase.co/functions/v1/platform-api/v1/incidents?resolved=false&limit=25&offset=0"
+```
+
 ## 12. Tests négatifs obligatoires
 
 Vérifier :
@@ -179,6 +194,8 @@ Vérifier :
 - location appartenant à un autre client → HTTP 404 ;
 - route inconnue → HTTP 404 ;
 - query string contenant une fausse clé → la valeur ne doit jamais apparaître dans `api_request_logs` ;
+- filtre incident invalide → HTTP 400 ;
+- réponse incidents → aucun champ `message`, `data`, token ou réponse fournisseur ;
 - aucune réponse ne doit contenir de secret Supabase, Stripe ou ChargeNow.
 
 ## 13. Validation des événements canoniques

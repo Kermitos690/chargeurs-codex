@@ -11,6 +11,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, auditLog, logApi } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { refundPaymentIntentBalance } from "../_shared/stripeRefundRuntime.ts";
 
 const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 type DB = ReturnType<typeof adminClient>;
@@ -228,7 +229,7 @@ Deno.serve(async (req) => {
     const { uid, roles } = await rolesOf(req, db);
     if (!uid) return json({ ok: false, error: "FORBIDDEN" }, 403);
     const isAdmin = roles.includes("admin") || roles.includes("super_admin");
-    const isOperator = isAdmin || roles.includes("operator");
+    const isOperator = isAdmin || roles.includes("operations_admin") || roles.includes("operator");
     const isSuper = roles.includes("super_admin");
     if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
@@ -399,39 +400,23 @@ Deno.serve(async (req) => {
         apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient(),
       });
       const providerIds: string[] = [];
-      let refundedCents = Number(session.refunded_amount_cents ?? payment.amount_refunded_cents ?? 0);
-      const initialIntent = await stripe.paymentIntents.retrieve(payment.stripe_payment_intent_id);
-      if (initialIntent.status === "requires_capture") {
-        const canceled = await stripe.paymentIntents.cancel(
-          initialIntent.id, {}, { idempotencyKey: `admin_cancel_${rentalSessionId}` },
-        );
-        providerIds.push(canceled.id);
-      } else {
-        const initialCaptured = Number(initialIntent.amount_received ?? payment.amount_captured_cents ?? 0);
-        const initialPreviouslyRefunded = Number(payment.amount_refunded_cents ?? 0);
-        const refundable = Math.max(0, initialCaptured - initialPreviouslyRefunded);
-        if (refundable > 0) {
-          const refund = await stripe.refunds.create(
-            { payment_intent: initialIntent.id, amount: refundable },
-            { idempotencyKey: `admin_refund_${rentalSessionId}_${refundable}` },
-          );
-          providerIds.push(refund.id);
-          refundedCents += refundable;
-        }
-      }
+      const initialRefund = await refundPaymentIntentBalance(
+        stripe,
+        payment.stripe_payment_intent_id,
+        `admin_refund_${rentalSessionId}_initial`,
+      );
+      providerIds.push(...initialRefund.providerIds);
+      let refundedCents = initialRefund.refundedCents;
 
       const supplementalId = String(session.stripe_supplemental_payment_intent_id ?? "");
       if (supplementalId) {
-        const supplemental = await stripe.paymentIntents.retrieve(supplementalId);
-        const captured = Number(supplemental.amount_received ?? 0);
-        if (captured > 0) {
-          const refund = await stripe.refunds.create(
-            { payment_intent: supplementalId, amount: captured },
-            { idempotencyKey: `admin_refund_supplemental_${rentalSessionId}_${captured}` },
-          );
-          providerIds.push(refund.id);
-          refundedCents += captured;
-        }
+        const supplementalRefund = await refundPaymentIntentBalance(
+          stripe,
+          supplementalId,
+          `admin_refund_${rentalSessionId}_supplemental`,
+        );
+        providerIds.push(...supplementalRefund.providerIds);
+        refundedCents += supplementalRefund.refundedCents;
       }
       if (providerIds.length === 0 && payment.status === "refunded") {
         return json({ ok: true, alreadyRefunded: true });

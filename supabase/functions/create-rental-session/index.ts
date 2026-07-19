@@ -128,7 +128,9 @@ Deno.serve(async (req) => {
     }
 
     // ---- 6. Authoritative server-side pricing (single source of truth) ----
-    const { data: snapshot, error: priceErr } = await db.rpc("compute_pricing", {
+    // This RPC enriches the quote with every rule required to settle the
+    // rental later without consulting a mutable profile assignment.
+    const { data: snapshot, error: priceErr } = await db.rpc("compute_rental_pricing_snapshot", {
       p_device: device.id,
       p_station: stationId,
       p_shop: station.shop_id ?? null,
