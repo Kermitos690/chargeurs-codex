@@ -1,0 +1,69 @@
+name: ChargeNow sync fix — one-time staging validation
+
+on:
+  push:
+    branches:
+      - agent/finalize-chargeurs-platform
+    paths:
+      - .github/workflows/chargeurs-sync-fix-once.yml
+      - supabase/functions/_shared/chargenowStatus.ts
+      - supabase/functions/sync-cabinet-status/index.ts
+      - supabase/functions/tests/chargenow_status.test.ts
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargeurs-sync-fix-once
+  cancel-in-progress: true
+
+jobs:
+  validate-and-deploy-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: settlement-staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_PROJECT_REF: xqepbqnaenoeyfjkjnzl
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
+      HISTORICAL_AMBIGUOUS_PROJECT_REF: zoybkzkvvsbnqqarlaii
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check the read-only synchronization path
+        run: |
+          set -euo pipefail
+          deno check --allow-import \
+            supabase/functions/_shared/chargenowStatus.ts \
+            supabase/functions/sync-cabinet-status/index.ts
+
+      - name: Run ChargeNow parser and client contract tests
+        run: |
+          set -euo pipefail
+          deno test --allow-env --allow-net --no-check \
+            supabase/functions/tests/chargenow_status.test.ts \
+            supabase/functions/tests/chargenow_contract.test.ts
+
+      - name: Guard the staging deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "SUPABASE_ACCESS_TOKEN is missing" >&2; exit 1; }
+          [ "$STAGING_PROJECT_REF" != "$PRODUCTION_SUPABASE_PROJECT_REF" ] || { echo "Production project refused" >&2; exit 1; }
+          [ "$STAGING_PROJECT_REF" != "$HISTORICAL_AMBIGUOUS_PROJECT_REF" ] || { echo "Historical project refused" >&2; exit 1; }
+          echo "Staging guard passed for $STAGING_PROJECT_REF"
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+
+      - name: Deploy only sync-cabinet-status to staging
+        run: |
+          set -euo pipefail
+          supabase functions deploy sync-cabinet-status \
+            --project-ref "$STAGING_PROJECT_REF" \
+            --use-api
