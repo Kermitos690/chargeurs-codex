@@ -14,6 +14,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
   },
   global: {
     // The kiosk token is injected only for the station-bound cabinet sync
