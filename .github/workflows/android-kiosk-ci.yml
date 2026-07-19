@@ -1,7 +1,6 @@
 name: Chargeurs.ch Android Kiosk Build
 
-# Manual for normal use; temporarily also validates/builds the corrected staging
-# APK on the active finalization branch so the pairing-enabled APK is produced.
+# Manual build only: avoids automatic failure notifications on every commit.
 on:
   workflow_dispatch:
     inputs:
@@ -10,29 +9,12 @@ on:
         required: true
         default: false
         type: boolean
-  push:
-    branches:
-      - agent/finalize-chargeurs-platform
-    paths:
-      - .github/workflows/android-kiosk-ci.yml
-      - android-kiosk/**
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/android-kiosk-ci.yml
-      - android-kiosk/**
 
 permissions:
   contents: read
 
-concurrency:
-  group: android-kiosk-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   validate-and-build:
-    if: github.event_name != 'pull_request' || github.head_ref == 'agent/finalize-chargeurs-platform'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -54,20 +36,18 @@ jobs:
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
         run: ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug
 
-      - name: Verify corrected staging APK
+      - name: Verify APK signature and checksum
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
-          unzip -p "$apk" classes.dex | strings | grep -F "xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
-          unzip -p "$apk" classes.dex | strings | grep -F "chargeurs-ch-staging.vercel.app"
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           "$build_tools/apksigner" verify --verbose "$apk"
           sha256sum "$apk" > android-kiosk/app/build/outputs/apk/debug/SHA256SUMS.txt
 
       - name: Materialize release keystore
-        if: github.event_name == 'workflow_dispatch' && inputs.build_release == true
+        if: inputs.build_release == true
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -76,7 +56,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/chargeurs-signing/release.jks"
 
       - name: Signed release APK and AAB
-        if: github.event_name == 'workflow_dispatch' && inputs.build_release == true
+        if: inputs.build_release == true
         working-directory: android-kiosk
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/chargeurs-signing/release.jks
