@@ -2,6 +2,9 @@ name: Platform API CI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/platform-api-readonly-v1
 
 permissions:
   contents: read
