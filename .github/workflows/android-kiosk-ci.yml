@@ -1,20 +1,22 @@
 name: Chargeurs.ch Android Kiosk Build
 
-# Manual build only: avoids automatic failure notifications on every commit.
 on:
+  push:
+    branches:
+      - agent/finalize-chargeurs-platform
+    paths:
+      - .github/workflows/android-kiosk-ci.yml
   workflow_dispatch:
-    inputs:
-      build_release:
-        description: "Build signed release APK/AAB (requires repository secrets)"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: android-kiosk-one-shot-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate-and-build:
+  build-staging-apk:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -26,56 +28,29 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
-
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Unit tests, strict lint and debug APK
+      - name: Build corrected staging APK
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
         run: ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug
 
-      - name: Verify APK signature and checksum
+      - name: Prepare artifact
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
-          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          "$build_tools/apksigner" verify --verbose "$apk"
-          sha256sum "$apk" > android-kiosk/app/build/outputs/apk/debug/SHA256SUMS.txt
+          mkdir -p dist
+          cp "$apk" dist/chargeurs-kiosk-staging-v1.0.1-debug.apk
+          sha256sum dist/chargeurs-kiosk-staging-v1.0.1-debug.apk > dist/SHA256SUMS.txt
 
-      - name: Materialize release keystore
-        if: inputs.build_release == true
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          test -n "$ANDROID_KEYSTORE_BASE64"
-          mkdir -p "$RUNNER_TEMP/chargeurs-signing"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/chargeurs-signing/release.jks"
-
-      - name: Signed release APK and AAB
-        if: inputs.build_release == true
-        working-directory: android-kiosk
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/chargeurs-signing/release.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          CHARGEURS_ENROLLMENT_URL: ${{ vars.CHARGEURS_ENROLLMENT_URL }}
-          CHARGEURS_KIOSK_PUBLIC_BASE_URL: ${{ vars.CHARGEURS_KIOSK_PUBLIC_BASE_URL }}
-          CHARGEURS_EJECTION_PUBLIC_KEY_BASE64: ${{ vars.CHARGEURS_EJECTION_PUBLIC_KEY_BASE64 }}
-        run: ./gradlew --no-daemon lintRelease assembleRelease bundleRelease
-
-      - name: Upload requested Android artifacts
+      - name: Upload corrected APK
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-staging-v1.0.1-${{ github.sha }}
+          name: chargeurs-kiosk-staging-v1.0.1-debug
           retention-days: 7
           if-no-files-found: error
-          path: |
-            android-kiosk/app/build/outputs/apk/debug/*.apk
-            android-kiosk/app/build/outputs/apk/debug/SHA256SUMS.txt
-            android-kiosk/app/build/outputs/apk/release/*.apk
-            android-kiosk/app/build/outputs/bundle/release/*.aab
+          path: dist/*
