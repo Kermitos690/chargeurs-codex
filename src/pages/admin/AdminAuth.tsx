@@ -12,7 +12,9 @@ type Mode = "login" | "forgot";
 
 export default function AdminAuth() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(() =>
+    new URLSearchParams(window.location.search).get("mode") === "forgot" ? "forgot" : "login",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
