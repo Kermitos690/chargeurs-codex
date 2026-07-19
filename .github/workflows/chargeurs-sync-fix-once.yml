@@ -9,6 +9,14 @@ on:
       - supabase/functions/_shared/chargenowStatus.ts
       - supabase/functions/sync-cabinet-status/index.ts
       - supabase/functions/tests/chargenow_status.test.ts
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/chargeurs-sync-fix-once.yml
+      - supabase/functions/_shared/chargenowStatus.ts
+      - supabase/functions/sync-cabinet-status/index.ts
+      - supabase/functions/tests/chargenow_status.test.ts
 
 permissions:
   contents: read
@@ -19,6 +27,7 @@ concurrency:
 
 jobs:
   validate-and-deploy-staging:
+    if: github.event_name == 'push' || github.head_ref == 'agent/finalize-chargeurs-platform'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: settlement-staging
