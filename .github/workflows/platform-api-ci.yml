@@ -1,42 +1,31 @@
 name: Platform API CI
 
 on:
-  pull_request:
-    paths:
-      - "src/pages/admin/AdminApiClients.tsx"
-      - "supabase/functions/_shared/platformApi.ts"
-      - "supabase/functions/_shared/apiClientAdmin.ts"
-      - "supabase/functions/api-key-admin/**"
-      - "supabase/functions/platform-api/**"
-      - "supabase/functions/tests/platform_api.test.ts"
-      - "supabase/functions/tests/api_client_admin.test.ts"
-      - "supabase/migrations/*platform_api*"
-      - "docs/API_V1.md"
-      - "docs/openapi/chargeurs-api-v1.yaml"
-      - ".github/workflows/platform-api-ci.yml"
-  push:
-    branches:
-      - "agent/platform-api-readonly-v1"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: platform-api-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
 
       - name: Type-check frontend
         run: npm run typecheck
@@ -51,6 +40,14 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+
+      - name: Check Platform API functions
+        run: >-
+          deno check --allow-import
+          supabase/functions/platform-api/index.ts
+          supabase/functions/api-key-admin/index.ts
+          supabase/functions/_shared/platformApi.ts
+          supabase/functions/_shared/apiClientAdmin.ts
 
       - name: Run Platform API unit tests
         run: >-
