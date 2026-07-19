@@ -27,8 +27,9 @@ interface CabinetPayload {
 const functionCorsHeaders = {
   ...corsHeaders,
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-kiosk-token",
+    "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-supabase-api-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -37,7 +38,15 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: functionCorsHeaders });
+  if (req.method === "OPTIONS") {
+    const requestedHeaders = req.headers.get("Access-Control-Request-Headers")?.trim();
+    return new Response("ok", {
+      headers: {
+        ...functionCorsHeaders,
+        ...(requestedHeaders ? { "Access-Control-Allow-Headers": requestedHeaders } : {}),
+      },
+    });
+  }
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
