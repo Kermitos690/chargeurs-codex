@@ -1,0 +1,59 @@
+name: Platform API CI
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/admin/AdminApiClients.tsx"
+      - "supabase/functions/_shared/platformApi.ts"
+      - "supabase/functions/_shared/apiClientAdmin.ts"
+      - "supabase/functions/api-key-admin/**"
+      - "supabase/functions/platform-api/**"
+      - "supabase/functions/tests/platform_api.test.ts"
+      - "supabase/functions/tests/api_client_admin.test.ts"
+      - "supabase/migrations/*platform_api*"
+      - "docs/API_V1.md"
+      - "docs/openapi/chargeurs-api-v1.yaml"
+      - ".github/workflows/platform-api-ci.yml"
+  push:
+    branches:
+      - "agent/platform-api-readonly-v1"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Validate OpenAPI YAML syntax
+        run: node --input-type=module -e "import fs from 'node:fs'; import yaml from 'js-yaml'; const doc=yaml.load(fs.readFileSync('docs/openapi/chargeurs-api-v1.yaml','utf8')); if(doc?.openapi !== '3.1.0') throw new Error('OpenAPI 3.1.0 required'); console.log(doc.info?.title, doc.info?.version);"
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run Platform API unit tests
+        run: >-
+          deno test --allow-env --allow-net --no-check
+          supabase/functions/tests/platform_api.test.ts
+          supabase/functions/tests/api_client_admin.test.ts
