@@ -1,5 +1,11 @@
 project_id = "zoybkzkvvsbnqqarlaii"
 
+[functions.platform-api]
+verify_jwt = false
+
+[functions.api-key-admin]
+verify_jwt = true
+
 [functions.stripe-webhook]
 verify_jwt = false
 
