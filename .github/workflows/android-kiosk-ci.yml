@@ -1,15 +1,66 @@
-name: Chargeurs.ch Android Kiosk CI (paused)
+name: Chargeurs.ch Android Kiosk Build
 
-# Emergency cost control: no automatic Android builds.
+# Cost control: Android builds are explicit and never run on every push.
 on:
   workflow_dispatch:
+    inputs:
+      build_release:
+        description: "Build signed release APK/AAB (requires repository secrets)"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
-  paused:
+  validate-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 30
     steps:
-      - run: echo "Android kiosk CI is paused for cost control."
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Unit tests, strict lint and debug APK
+        working-directory: android-kiosk
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+
+      - name: Materialize release keystore
+        if: inputs.build_release == true
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          mkdir -p "$RUNNER_TEMP/chargeurs-signing"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/chargeurs-signing/release.jks"
+
+      - name: Signed release APK and AAB
+        if: inputs.build_release == true
+        working-directory: android-kiosk
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/chargeurs-signing/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          CHARGEURS_ENROLLMENT_URL: ${{ vars.CHARGEURS_ENROLLMENT_URL }}
+          CHARGEURS_EJECTION_PUBLIC_KEY_BASE64: ${{ vars.CHARGEURS_EJECTION_PUBLIC_KEY_BASE64 }}
+        run: ./gradlew --no-daemon lintRelease assembleRelease bundleRelease
+
+      - name: Upload requested Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            android-kiosk/app/build/outputs/apk/debug/*.apk
+            android-kiosk/app/build/outputs/apk/release/*.apk
+            android-kiosk/app/build/outputs/bundle/release/*.aab

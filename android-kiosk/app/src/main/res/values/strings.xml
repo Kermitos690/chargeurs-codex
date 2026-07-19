@@ -2,17 +2,16 @@
 <resources>
     <string name="app_name">Chargeurs.ch Kiosk</string>
     <string name="provision_title">Activation de la borne</string>
-    <string name="provision_help">Saisissez l’identifiant de la station, le token kiosk fourni par l’administration et le domaine HTTPS autorisé.</string>
-    <string name="station_id">Identifiant de la station</string>
-    <string name="kiosk_token">Token kiosk</string>
-    <string name="base_url">Domaine de l’application</string>
-    <string name="default_base_url" translatable="false">https://chargeurs-codex.lovable.app</string>
+    <string name="provision_help">Créez un code d’appairage temporaire dans le back-office, puis saisissez-le ici. La borne et son identité sont attribuées par le serveur.</string>
+    <string name="pairing_code">Code d’appairage temporaire</string>
+    <string name="invalid_pairing_code">Le code d’appairage est invalide.</string>
+    <string name="enrollment_not_configured">L’URL d’appairage n’est pas configurée dans cette version de l’APK.</string>
+    <string name="enrollment_failed">L’appairage a échoué. Vérifiez le code, sa date d’expiration et la connexion Internet.</string>
+    <string name="enrollment_in_progress">Appairage en cours…</string>
     <string name="activate">Activer cette borne</string>
-    <string name="invalid_station">Identifiant de station invalide.</string>
-    <string name="invalid_token">Token kiosk invalide ou trop court.</string>
-    <string name="invalid_url">Le domaine doit utiliser HTTPS et ne contenir ni identifiant ni fragment.</string>
-    <string name="storage_failed">Le stockage chiffré a échoué.</string>
-    <string name="reprovision_warning">Après activation, la configuration n’est plus accessible depuis l’écran public. Pour changer de borne, l’opérateur doit effacer les données de l’application ou la reprovisionner avec les outils de gestion du terminal.</string>
+    <string name="reprovision_warning">Le code expire et ne peut être utilisé qu’une fois. Après activation, un changement de borne exige une révocation côté back-office et un nouveau code.</string>
+    <string name="diagnostics_title">Diagnostic du terminal</string>
+    <string name="diagnostics_close">Fermer</string>
     <string name="network_unavailable">Connexion Internet indisponible</string>
     <string name="download_blocked">Téléchargement bloqué en mode kiosk.</string>
     <string name="navigation_blocked_title">Navigation bloquée</string>

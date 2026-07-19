@@ -2,6 +2,24 @@ plugins {
     id("com.android.application")
 }
 
+val enrollmentUrl = providers.gradleProperty("chargeursEnrollmentUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_ENROLLMENT_URL"))
+    .orElse("")
+val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
+    .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
+    .orElse("")
+val releaseStorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orElse("")
+val releaseStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse("")
+val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orElse("")
+val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orElse("")
+val releaseSigningReady = listOf(
+    releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
+).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
+
+fun quotedBuildConfig(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"") + "\""
+
 android {
     namespace = "ch.chargeurs.kiosk"
     compileSdk = 36
@@ -10,14 +28,31 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 100
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
+        buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
+        buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
     }
 
     buildFeatures {
         buildConfig = true
+    }
+
+    signingConfigs {
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = file(releaseStorePath.get())
+                storePassword = releaseStorePassword.get()
+                keyAlias = releaseKeyAlias.get()
+                keyPassword = releaseKeyPassword.get()
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
     }
 
     buildTypes {
@@ -27,6 +62,7 @@ android {
             isDebuggable = true
         }
         release {
+            if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

@@ -14,11 +14,14 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public final class ProvisioningActivity extends Activity {
-    private EditText stationInput;
-    private EditText tokenInput;
-    private EditText baseUrlInput;
+    private EditText pairingCodeInput;
+    private Button activateButton;
     private SecureConfigStore store;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,28 +57,17 @@ public final class ProvisioningActivity extends Activity {
         help.setGravity(Gravity.CENTER);
         content.addView(help, matchWrap(0, dp(24)));
 
-        stationInput = field(getString(R.string.station_id));
-        stationInput.setSingleLine(true);
-        stationInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
-        content.addView(stationInput, matchWrap(0, dp(12)));
+        pairingCodeInput = field(getString(R.string.pairing_code));
+        pairingCodeInput.setSingleLine(true);
+        pairingCodeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        content.addView(pairingCodeInput, matchWrap(0, dp(24)));
 
-        tokenInput = field(getString(R.string.kiosk_token));
-        tokenInput.setSingleLine(true);
-        tokenInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        content.addView(tokenInput, matchWrap(0, dp(12)));
-
-        baseUrlInput = field(getString(R.string.base_url));
-        baseUrlInput.setSingleLine(true);
-        baseUrlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        baseUrlInput.setText(R.string.default_base_url);
-        content.addView(baseUrlInput, matchWrap(0, dp(24)));
-
-        Button activate = new Button(this);
-        activate.setText(R.string.activate);
-        activate.setTextSize(17);
-        activate.setAllCaps(false);
-        activate.setOnClickListener(view -> provision());
-        content.addView(activate, new LinearLayout.LayoutParams(
+        activateButton = new Button(this);
+        activateButton.setText(R.string.activate);
+        activateButton.setTextSize(17);
+        activateButton.setAllCaps(false);
+        activateButton.setOnClickListener(view -> provision());
+        content.addView(activateButton, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(56)
         ));
@@ -92,30 +84,39 @@ public final class ProvisioningActivity extends Activity {
     }
 
     private void provision() {
-        String station = stationInput.getText().toString().trim();
-        String token = tokenInput.getText().toString().trim();
-        String baseUrl = KioskConfigValidator.normalizeBaseUrl(baseUrlInput.getText().toString());
-
-        if (!KioskConfigValidator.isValidStationId(station)) {
-            stationInput.setError(getString(R.string.invalid_station));
+        String pairingCode = pairingCodeInput.getText().toString().trim();
+        if (!pairingCode.matches("^kc_[A-Za-z0-9_-]{16,64}$")) {
+            pairingCodeInput.setError(getString(R.string.invalid_pairing_code));
             return;
         }
-        if (!KioskConfigValidator.isValidToken(token)) {
-            tokenInput.setError(getString(R.string.invalid_token));
-            return;
-        }
-        if (baseUrl == null) {
-            baseUrlInput.setError(getString(R.string.invalid_url));
+        if (KioskConfigValidator.normalizeHttpsEndpoint(BuildConfig.ENROLLMENT_URL) == null) {
+            Toast.makeText(this, R.string.enrollment_not_configured, Toast.LENGTH_LONG).show();
             return;
         }
 
-        if (!store.save(new KioskConfig(station, token, baseUrl))) {
-            Toast.makeText(this, R.string.storage_failed, Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        tokenInput.setText("");
-        launchKiosk();
+        activateButton.setEnabled(false);
+        activateButton.setText(R.string.enrollment_in_progress);
+        executor.execute(() -> {
+            try {
+                EnrollmentResult result = EnrollmentClient.enroll(
+                    BuildConfig.ENROLLMENT_URL,
+                    pairingCode,
+                    DeviceIdentity.getOrCreate(this),
+                    BuildConfig.VERSION_NAME
+                );
+                if (!store.save(result.config())) throw new IllegalStateException("STORAGE_FAILED");
+                runOnUiThread(() -> {
+                    pairingCodeInput.setText("");
+                    launchKiosk();
+                });
+            } catch (Exception ignored) {
+                runOnUiThread(() -> {
+                    activateButton.setEnabled(true);
+                    activateButton.setText(R.string.activate);
+                    Toast.makeText(this, R.string.enrollment_failed, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
     }
 
     private void launchKiosk() {
@@ -154,5 +155,11 @@ public final class ProvisioningActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onDestroy() {
+        executor.shutdownNow();
+        super.onDestroy();
     }
 }

@@ -69,4 +69,16 @@ public final class KioskConfigValidatorTest {
             KioskConfigValidator.kioskUrl("http://chargeurs.ch", "DTA21269")
         );
     }
+
+    @Test
+    public void acceptsOnlyHttpsEnrollmentEndpoints() {
+        assertEquals(
+            "https://example.supabase.co/functions/v1/kiosk-enroll",
+            KioskConfigValidator.normalizeHttpsEndpoint("https://example.supabase.co/functions/v1/kiosk-enroll")
+        );
+        assertNull(KioskConfigValidator.normalizeHttpsEndpoint("http://example.test/kiosk-enroll"));
+        assertNull(KioskConfigValidator.normalizeHttpsEndpoint("https://example.test"));
+        assertNull(KioskConfigValidator.normalizeHttpsEndpoint("https://user@example.test/kiosk-enroll"));
+        assertNull(KioskConfigValidator.normalizeHttpsEndpoint("https://example.test/kiosk-enroll?token=x"));
+    }
 }

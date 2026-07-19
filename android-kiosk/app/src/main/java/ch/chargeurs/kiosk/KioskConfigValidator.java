@@ -26,13 +26,30 @@ public final class KioskConfigValidator {
         try {
             URI uri = new URI(trimmed);
             if (!"https".equalsIgnoreCase(uri.getScheme())) return null;
-            if (uri.getHost() == null || uri.getHost().isBlank()) return null;
+            if (uri.getHost() == null || uri.getHost().trim().isEmpty()) return null;
             if (uri.getUserInfo() != null || uri.getFragment() != null || uri.getQuery() != null) return null;
             String path = uri.getPath();
-            if (path != null && !path.isBlank() && !"/".equals(path)) return null;
+            if (path != null && !path.trim().isEmpty() && !"/".equals(path)) return null;
             int port = uri.getPort();
             if (port != -1 && port != 443) return null;
             return "https://" + uri.getHost().toLowerCase(Locale.ROOT) + (port == 443 ? ":443" : "");
+        } catch (URISyntaxException exception) {
+            return null;
+        }
+    }
+
+    public static String normalizeHttpsEndpoint(String value) {
+        if (value == null) return null;
+        try {
+            URI uri = new URI(value.trim());
+            if (!"https".equalsIgnoreCase(uri.getScheme())) return null;
+            if (uri.getHost() == null || uri.getHost().trim().isEmpty()) return null;
+            if (uri.getUserInfo() != null || uri.getFragment() != null || uri.getQuery() != null) return null;
+            int port = uri.getPort();
+            if (port != -1 && port != 443) return null;
+            String path = uri.getRawPath();
+            if (path == null || path.trim().isEmpty() || "/".equals(path)) return null;
+            return uri.toASCIIString();
         } catch (URISyntaxException exception) {
             return null;
         }

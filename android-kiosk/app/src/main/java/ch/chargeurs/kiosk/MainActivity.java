@@ -53,6 +53,7 @@ public final class MainActivity extends Activity {
     private boolean heartbeatPending;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
+    private CabinetController cabinetController;
 
     private final Runnable watchdog = new Runnable() {
         @Override
@@ -77,6 +78,11 @@ public final class MainActivity extends Activity {
             finish();
             return;
         }
+
+        cabinetController = new CabinetController(
+            new AndroidSerialHardwareTransport(this),
+            new UnconfiguredCabinetProtocolAdapter()
+        );
 
         getWindow().addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
@@ -146,6 +152,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.getSettings().setSafeBrowsingEnabled(true);
         }
+        webView.addJavascriptInterface(new NativeBridge(this, config, cabinetController), "ChargeursNative");
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
             Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_SHORT).show()
@@ -228,7 +235,8 @@ public final class MainActivity extends Activity {
     private void injectCredentialsAndReload(WebView view) {
         String script = "(function(){"
             + "localStorage.setItem('kiosk_locked_station'," + JSONObject.quote(config.stationId()) + ");"
-            + "localStorage.setItem('kiosk_token'," + JSONObject.quote(config.kioskToken()) + ");"
+            + "localStorage.removeItem('kiosk_token');"
+            + "sessionStorage.setItem('kiosk_token'," + JSONObject.quote(config.kioskToken()) + ");"
             + "localStorage.setItem('chargeurs_native_wrapper'," + JSONObject.quote(BuildConfig.VERSION_NAME) + ");"
             + "return true;})()";
         view.evaluateJavascript(script, result -> {
@@ -262,6 +270,23 @@ public final class MainActivity extends Activity {
             .setCancelable(false)
             .setPositiveButton(R.string.reload, (dialog, which) -> recreateWebView())
             .show();
+    }
+
+    void showNativeDiagnostics(JSONObject hardwareStatus) {
+        runOnUiThread(() -> new AlertDialog.Builder(this)
+            .setTitle(R.string.diagnostics_title)
+            .setMessage(JsonObjects.of(
+                "appVersion", BuildConfig.VERSION_NAME,
+                "stationId", config.stationId(),
+                "deviceId", DeviceIdentity.getOrCreate(this),
+                "hardware", hardwareStatus
+            ).toString())
+            .setPositiveButton(R.string.diagnostics_close, null)
+            .show());
+    }
+
+    void restartKioskRuntime() {
+        runOnUiThread(this::recreateWebView);
     }
 
     private void registerConnectivityMonitoring() {
