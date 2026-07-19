@@ -8,7 +8,8 @@
 const encoder = new TextEncoder();
 
 function signingSecret(): string {
-  return Deno.env.get("CHARGENOW_CALLBACK_SIGNING_KEY")
+  return Deno.env.get("CHARGENOW_CALLBACK_SECRET")
+    ?? Deno.env.get("CHARGENOW_CALLBACK_SIGNING_KEY")
     ?? Deno.env.get("CHARGENOW_EVENT_SECRET")
     ?? "";
 }
@@ -61,7 +62,9 @@ export async function verifyChargeNowCallback(
   req: Request,
   rentalId: string,
 ): Promise<boolean> {
-  const legacySecret = Deno.env.get("CHARGENOW_EVENT_SECRET") ?? "";
+  const legacySecret = Deno.env.get("CHARGENOW_CALLBACK_SECRET")
+    ?? Deno.env.get("CHARGENOW_EVENT_SECRET")
+    ?? "";
   const legacyHeader = req.headers.get("x-event-secret")
     ?? req.headers.get("x-chargenow-secret")
     ?? "";

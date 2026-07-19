@@ -8,6 +8,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 
 Deno.env.set("CHARGENOW_BASIC_AUTH", "dGVzdA==");
 Deno.env.set("CHARGENOW_API_BASE_URL", "https://example.test/cdb-open-api/v1");
+Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "true");
 const cn = await import("../_shared/chargenow.ts");
 
 const SECRET = "test-secret-" + crypto.randomUUID();

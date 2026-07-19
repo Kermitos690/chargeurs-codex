@@ -15,6 +15,8 @@ Node, npm, Deno 2, Supabase CLI, Java 17 et Android SDK 36. Renseigner les varia
 7. Créer le webhook Stripe test vers `stripe-webhook` et enregistrer son secret.
 8. Laisser `beta_rentals_enabled=false` jusqu'aux tests Checkout, callback, remboursement et matériel.
 
+Configuration ChargeNow staging : `CHARGENOW_MODE=test`, base officielle dans `CHARGENOW_API_BASE_URL`, identifiant prioritaire dans `CHARGENOW_BASIC_AUTH`, timeout `10000` et `CHARGENOW_MUTATIONS_ENABLED=false`. Ne jamais copier ces secrets dans Vercel, Vite ou Android.
+
 ## Production
 
 Reproduire la procédure avec de nouveaux projets/clefs. Effectuer une revue manuelle du diff de migrations, une sauvegarde, un test de restauration et une validation à quatre yeux avant `supabase db push`. Le déploiement frontend doit être atomique et réversible. L'activation des mutations ChargeNow et de Stripe live est une action manuelle finale.

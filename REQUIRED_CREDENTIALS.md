@@ -9,7 +9,7 @@ Ne transmettre aucun secret dans une issue, un email non chiffré ou Git. Utilis
 | Secrets webhook Stripe | Dashboard Webhooks, un par endpoint/environnement | secret Edge `STRIPE_WEBHOOK_SECRET` | test/live | critique | Stripe CLI et événement signé |
 | Activation Wallets/TWINT | Dashboard Payment methods et paramètres domaine | compte Stripe | test/live | administrateur | Checkout compatible affiche les moyens |
 | Banque et identité Stripe | Dashboard business/payouts | compte Stripe | live | critique/juridique | compte « charges enabled » et payouts |
-| ChargeNow base URL/IDs/secrets | Portail/support fournisseur | secrets Edge `CHARGENOW_*` | test/live | critique | auth et statut lecture seule |
+| ChargeNow HTTP Basic | Valeur officielle après le préfixe `Basic` | secret Edge `CHARGENOW_BASIC_AUTH` | test | critique | requête borne en lecture seule, HTTP et code métier |
 | Documentation API/protocole | Fournisseur de la borne | dépôt privé/référence contrôlée, jamais secrets | les deux | confidentiel | endpoints, signatures, slots et erreurs confirmés |
 | Identifiants/numéros de série bornes | Étiquettes/portail fournisseur | back-office stations | test/live | interne | statut de la bonne borne uniquement |
 | Domaine et DNS | Registrar/DNS du propriétaire | hébergeur web/Stripe/Auth | staging/live | administrateur | HTTPS, redirects Auth, webhook et Apple Pay |
@@ -25,6 +25,8 @@ Ne transmettre aucun secret dans une issue, un email non chiffré ou Git. Utilis
 ## Variables particulières
 
 - `CHARGENOW_RENT_SLOT_ZERO_MODE` reste vide. N'utiliser `provider_auto_select` qu'après confirmation écrite du fournisseur.
+- `CHARGENOW_API_BASE_URL` vaut `https://developer.chargenow.top/cdb-open-api/v1`; le couple `CHARGENOW_BASIC_USERNAME`/`CHARGENOW_BASIC_PASSWORD` est uniquement un fallback.
+- `CHARGENOW_MUTATIONS_ENABLED` reste `false` jusqu'à l'autorisation explicite d'un essai matériel.
 - `PUBLIC_CONTACT_IP_HASH_SALT` doit contenir au moins 32 caractères aléatoires.
 - `ALLOWED_ORIGINS` est une liste exacte séparée par virgules, sans joker en production.
 - Les quatre variables `ANDROID_KEYSTORE_*` sont requises pour une release installable.

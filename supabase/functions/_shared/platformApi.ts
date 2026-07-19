@@ -207,7 +207,7 @@ export async function enforceQuota(
 
 async function hashClientIp(ip: string | null | undefined): Promise<string | null> {
   const normalized = (ip ?? "").split(",")[0].trim();
-  const salt = (Deno.env.get("API_LOG_HASH_SALT") ?? "").trim();
+  const salt = (Deno.env.get("PLATFORM_API_IP_HASH_SALT") ?? Deno.env.get("API_LOG_HASH_SALT") ?? "").trim();
   if (!normalized || !salt) return null;
   return await sha256Hex(`${salt}:${normalized}`);
 }

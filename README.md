@@ -154,6 +154,8 @@ Variables importantes, sans leurs valeurs :
 - `PUBLIC_APP_URL`
 - secrets ChargeNow requis par les fonctions partagées
 
+ChargeNow utilise `CHARGENOW_API_BASE_URL` et, en priorité, `CHARGENOW_BASIC_AUTH`. Les mutations fournisseur sont refusées tant que `CHARGENOW_MUTATIONS_ENABLED` n'est pas explicitement activé.
+
 Tous les domaines sont configurables ; aucun domaine temporaire n'est une hypothèse de production.
 
 ## Gouvernance

@@ -24,6 +24,19 @@ const BASIC_USER = Deno.env.get("CHARGENOW_BASIC_USERNAME") ?? "";
 const BASIC_PASS = Deno.env.get("CHARGENOW_BASIC_PASSWORD") ?? "";
 // Preferred: store the ready-made base64 token (everything after "Basic ").
 const BASIC_AUTH = Deno.env.get("CHARGENOW_BASIC_AUTH") ?? "";
+const CHARGENOW_MODE = (Deno.env.get("CHARGENOW_MODE") ?? "test").trim().toLowerCase();
+const parsedTimeoutMs = Number(Deno.env.get("CHARGENOW_TIMEOUT_MS") ?? "10000");
+const TIMEOUT_MS = Number.isInteger(parsedTimeoutMs) && parsedTimeoutMs >= 1_000 && parsedTimeoutMs <= 30_000
+  ? parsedTimeoutMs
+  : 10_000;
+
+export function areChargeNowMutationsEnabled(): boolean {
+  return Deno.env.get("CHARGENOW_MUTATIONS_ENABLED") === "true";
+}
+
+export function chargeNowMode(): "test" | "live" {
+  return CHARGENOW_MODE === "live" ? "live" : "test";
+}
 
 export function isChargeNowConfigured(): boolean {
   return Boolean(BASIC_AUTH || (BASIC_USER && BASIC_PASS));
@@ -46,10 +59,13 @@ type Query = Record<string, string | number | boolean | undefined | null>;
 async function request<T = unknown>(
   method: string,
   path: string,
-  opts: { query?: Query; body?: unknown; bearer?: string } = {},
+  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean } = {},
 ): Promise<ApiResult<T>> {
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
+  }
+  if (opts.mutation && !areChargeNowMutationsEnabled()) {
+    return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 
   const url = new URL(BASE_URL.replace(/\/$/, "") + path);
@@ -70,6 +86,7 @@ async function request<T = unknown>(
       method,
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const text = await res.text();
     let data: unknown = null;
@@ -110,7 +127,7 @@ export const cabinetQueryPost = async (deviceId: string): Promise<ApiResult> => 
     const res = await fetch(url.toString(), {
       method: "POST",
       headers: { Authorization: authHeader(), Accept: "application/json" },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const text = await res.text();
     let data: unknown = null;
@@ -127,6 +144,7 @@ export const cabinetQueryPost = async (deviceId: string): Promise<ApiResult> => 
 export const orderCreate = (args: { deviceId: string; callbackURL?: string }) =>
   request("POST", "/rent/order/create", {
     query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
+    mutation: true,
   });
 
 // O3 — Query Rent Order Status (query: tradeNo)
@@ -136,7 +154,7 @@ export const orderQuery = (tradeNo: string) =>
 // O4 — Mark Order Completed / Close (query: tradeNo)
 export const orderClose = (args: { tradeNo: string } | string) => {
   const tradeNo = typeof args === "string" ? args : args.tradeNo;
-  return request("POST", "/rent/order/close", { query: { tradeNo } });
+  return request("POST", "/rent/order/close", { query: { tradeNo }, mutation: true });
 };
 
 // O5 — Get Order Detail (query: tradeNo)
@@ -169,6 +187,7 @@ export const cabinetOperation = (args: {
       cabinetid: args.cabinetid, slotNum: args.slotNum,
       operationType: args.operationType, reason: args.reason ?? "admin",
     },
+    mutation: true,
   });
 // Back-compat helper used by older callers.
 export const operationPop = (cabinetid: string, slotNum: number) =>
@@ -176,7 +195,7 @@ export const operationPop = (cabinetid: string, slotNum: number) =>
 
 // C2 — Eject By Repair (query: cabinetid, slotNum). 0/null = eject all.
 export const ejectByRepair = (cabinetid: string, slotNum: number) =>
-  request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum } });
+  request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true });
 
 // C3 — Eject By Rent (query: cabinetid, rentOrderId, slotNum).
 // Slot 0 is ambiguous in the supplier material. It is refused unless the
@@ -193,6 +212,7 @@ export const ejectByRent = (
   }
   return request("POST", "/cabinet/ejectByRent", {
     query: { cabinetid, rentOrderId, slotNum: slot.slotNum },
+    mutation: true,
   });
 };
 
@@ -218,21 +238,21 @@ export const slotByCabinetId = (cabinetId: string) =>
 
 // C9 — Bind Device To Shop
 export const bind2shop = (qrcode: string, newshopid: string) =>
-  request("POST", `/cabinet/bind2shop/${encodeURIComponent(qrcode)}/${encodeURIComponent(newshopid)}`);
+  request("POST", `/cabinet/bind2shop/${encodeURIComponent(qrcode)}/${encodeURIComponent(newshopid)}`, { mutation: true });
 
 // C10 — Update Cabinet Advertising
 export const bindAd = (body: {
   cabinetIdList: string[]; isRestart?: boolean; adConfigList: unknown[];
-}) => request("POST", "/cabinet/bindAd", { body });
+}) => request("POST", "/cabinet/bindAd", { body, mutation: true });
 
 // C11 — Unbind Device From Shop
 export const unbindShop = (deviceIds: string[]) =>
-  request("POST", "/cabinet/unbindShop", { body: deviceIds });
+  request("POST", "/cabinet/unbindShop", { body: deviceIds, mutation: true });
 
 // C12 — Publish Advertisement
 export const publishAd = (body: {
   cabinetIdList: string[]; restart?: boolean; adConfigList: unknown[];
-}) => request("POST", "/cabinet/publishAd", { body });
+}) => request("POST", "/cabinet/publishAd", { body, mutation: true });
 
 // ============================================================
 // ADVANCE API — SHOP (S1-S5)
@@ -246,15 +266,15 @@ export const shopDetail = (shopid: string) =>
 
 // S3 — Create New Shop
 export const shopCreate = (body: Record<string, unknown>) =>
-  request("POST", "/shop/create", { body });
+  request("POST", "/shop/create", { body, mutation: true });
 
 // S4 — Update Shop
 export const shopUpdate = (body: Record<string, unknown>) =>
-  request("PUT", "/shop/update", { body });
+  request("PUT", "/shop/update", { body, mutation: true });
 
 // S5 — Delete Shop
 export const shopDelete = (shopid: string) =>
-  request("DELETE", `/shop/delete/${encodeURIComponent(shopid)}`);
+  request("DELETE", `/shop/delete/${encodeURIComponent(shopid)}`, { mutation: true });
 
 // ============================================================
 // ADVANCE API — PRICE STRATEGY (P1-P6)
@@ -280,22 +300,24 @@ export const priceStrategySave = (body: {
   timeoutDay?: number; freeMinutes?: number; dayUseFreeCount?: number; price?: number;
   priceTime?: number; priceUnit?: number; dailyMaxPrice?: number;
   priceStrategyDetailList?: PriceStrategyDetailRow[];
-}) => request("POST", "/shop/priceStrategy/saveOrUpdate", { body });
+}) => request("POST", "/shop/priceStrategy/saveOrUpdate", { body, mutation: true });
 
 // P4 — Delete Price Strategy (body: array of priceIds)
 export const priceStrategyDelete = (priceIds: number[]) =>
-  request("POST", "/shop/priceStrategy/delete", { body: priceIds });
+  request("POST", "/shop/priceStrategy/delete", { body: priceIds, mutation: true });
 
 // P5 — Shop Bind Price Strategy
 export const priceStrategyBind = (args: { shopId: string; priceId: number; customType?: number }) =>
   request("POST", "/shop/priceStrategy/bindShop", {
     body: { shopId: args.shopId, priceId: args.priceId, customType: args.customType ?? 0 },
+    mutation: true,
   });
 
 // P6 — Shop Unbind Price Strategy
 export const priceStrategyUnbind = (args: { shopId: string; customType?: number }) =>
   request("POST", "/shop/priceStrategy/unbindShop", {
     body: { shopId: args.shopId, customType: args.customType ?? 0 },
+    mutation: true,
   });
 
 // ============================================================
@@ -313,6 +335,7 @@ export interface EventSubscription { event: string; pushUrl?: string; enable?: b
 export const eventPushConfig = (pushUrl: string, eventSubscriptions?: EventSubscription[]) =>
   request("POST", "/cabinet/eventPush/config", {
     body: { pushUrl, eventSubscriptions: eventSubscriptions ?? [] },
+    mutation: true,
   });
 
 // E2 — Get current event push config

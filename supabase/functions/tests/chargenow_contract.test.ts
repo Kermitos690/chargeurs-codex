@@ -12,6 +12,7 @@ import { stubFetch, jsonResponse } from "./_fakes.ts";
 // Configure BEFORE first import so the module-level auth picks it up.
 Deno.env.set("CHARGENOW_BASIC_AUTH", "dGVzdC10b2tlbg==");
 Deno.env.set("CHARGENOW_API_BASE_URL", "https://example.test/cdb-open-api/v1");
+Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "true");
 const cn = await import("../_shared/chargenow.ts");
 
 Deno.test("isChargeNowConfigured true when BASIC_AUTH set", () => {

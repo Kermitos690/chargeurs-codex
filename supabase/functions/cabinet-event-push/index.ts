@@ -220,13 +220,13 @@ export async function handleEvent(
 ): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const expectedSecret = env("CHARGENOW_EVENT_SECRET");
+  const expectedSecret = env("CHARGENOW_CALLBACK_SECRET") ?? env("CHARGENOW_EVENT_SECRET");
   const allowUnsigned = unsignedAllowed(env);
 
   // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
     if (!allowUnsigned) {
-      return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "CHARGENOW_EVENT_SECRET not configured" }, 503);
+      return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "ChargeNow callback secret not configured" }, 503);
     }
     // else: explicit dev override in a non-production runtime — proceed unauthenticated.
   } else {

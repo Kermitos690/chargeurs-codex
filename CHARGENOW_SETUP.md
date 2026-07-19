@@ -1,8 +1,20 @@
 # Configuration ChargeNow
 
-## Accès requis
+## Configuration de référence
 
-Demander au fournisseur la base URL test/live, app ID, secret, merchant ID, méthode d'authentification, signature callback, catalogue exact des endpoints, sémantique des statuts, timeouts, quotas et documentation du protocole matériel/slots.
+```dotenv
+CHARGENOW_MODE=test
+CHARGENOW_API_BASE_URL=https://developer.chargenow.top/cdb-open-api/v1
+CHARGENOW_BASIC_AUTH=
+CHARGENOW_BASIC_USERNAME=
+CHARGENOW_BASIC_PASSWORD=
+CHARGENOW_MUTATIONS_ENABLED=false
+CHARGENOW_RENT_SLOT_ZERO_MODE=
+CHARGENOW_TIMEOUT_MS=10000
+CHARGENOW_CALLBACK_SECRET=
+```
+
+`CHARGENOW_BASIC_AUTH` contient uniquement la valeur après `Basic` et a priorité sur le couple utilisateur/mot de passe. Le secret reste exclusivement dans les secrets Edge Functions. Les anciens noms `CHARGENOW_BASE_URL`, `CHARGENOW_APP_ID`, `CHARGENOW_SECRET` et `CHARGENOW_MERCHANT_ID` ne sont pas consommés.
 
 Ne jamais inventer un endpoint. Les valeurs du fournisseur restent exclusivement dans les secrets Edge Functions.
 
@@ -16,7 +28,7 @@ Ne jamais inventer un endpoint. Les valeurs du fournisseur restent exclusivement
 6. Éjection demandée puis confirmée.
 7. Location activée uniquement après preuve matérielle.
 
-Une réponse HTTP 2xx portant `ok=false` est un échec. Le slot 0 est refusé par défaut ; `CHARGENOW_RENT_SLOT_ZERO_MODE=provider_auto_select` n'est permis qu'après confirmation écrite que le fournisseur sélectionne réellement un slot.
+Une réponse HTTP 2xx avec un code métier différent de `0` est un échec. Toutes les requêtes expirent après `CHARGENOW_TIMEOUT_MS`. Le slot 0 est refusé par défaut ; `CHARGENOW_RENT_SLOT_ZERO_MODE=provider_auto_select` n'est permis qu'après confirmation écrite que le fournisseur sélectionne réellement un slot.
 
 ## Callbacks et retours
 
@@ -28,4 +40,4 @@ Ne pas afficher de succès. Ouvrir un incident, demander le remboursement idempo
 
 ## Activation
 
-Tester d'abord lecture seule et authentification, puis une borne de staging. Les mutations et paiements live restent désactivés par défaut. Voir `HARDWARE_INTEGRATION.md` pour les limites du protocole série.
+Tester d'abord `GET /rent/cabinet/query` en lecture seule. Le client refuse centralement toute route mutante tant que `CHARGENOW_MUTATIONS_ENABLED` n'est pas exactement `true`. Les paiements live restent désactivés. Voir `HARDWARE_INTEGRATION.md` pour les limites du protocole série.

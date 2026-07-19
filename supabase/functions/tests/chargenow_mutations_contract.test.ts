@@ -27,11 +27,28 @@ import { jsonResponse, stubFetch } from "./_fakes.ts";
 
 Deno.env.set("CHARGENOW_BASIC_AUTH", "dGVzdC10b2tlbg==");
 Deno.env.set("CHARGENOW_API_BASE_URL", "https://example.test/cdb-open-api/v1");
+Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "true");
 const cn = await import("../_shared/chargenow.ts");
 
 const HTTP_ERRORS = [400, 401, 403, 404, 409, 429, 500] as const;
 
 type ApiResult = Awaited<ReturnType<typeof cn.cabinetQuery>>;
+
+Deno.test("mutations are blocked centrally unless the feature flag is exactly true", async () => {
+  const previous = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.orderCreate({ deviceId: "DTA21269" });
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_MUTATIONS_DISABLED");
+    assertEquals(s.calls.length, 0);
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previous);
+  }
+});
 
 // Generic helper: run an op, assert success mapping + auth header present.
 async function expectSuccess(
