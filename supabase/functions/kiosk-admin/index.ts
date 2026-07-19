@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
         .select("id,station_id,organization_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at,device_public_id,app_version,enrolled_at,revoked_at")
         .order("created_at", { ascending: false }),
         db.from("kiosk_pairing_codes")
-        .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at")
+        .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at,organization:organizations(slug,legal_name)")
         .order("created_at", { ascending: false }),
       ]);
       if (deviceError || pairingError) throw deviceError ?? pairingError;
@@ -45,8 +45,10 @@ Deno.serve(async (req) => {
 
     if (action === "create_pairing_code") {
       if (!stationId) return json({ ok: false, error: "MISSING_STATION" }, 400);
-      const minutes = Math.max(5, Math.min(60, Number(ttlMinutes ?? 15)));
-      const { data: station } = await db.from("stations").select("station_id,organization_id").eq("station_id", stationId).maybeSingle();
+      const minutes = Math.max(5, Math.min(15, Number(ttlMinutes ?? 15)));
+      const { data: station } = await db.from("stations")
+        .select("station_id,name,organization_id,organization:organizations(slug,legal_name)")
+        .eq("station_id", stationId).maybeSingle();
       if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
       if (!station.organization_id) return json({ ok: false, error: "STATION_ORGANIZATION_MISSING" }, 409);
 
@@ -59,7 +61,7 @@ Deno.serve(async (req) => {
         code_hash: await sha256Hex(pairingCode),
         expires_at: expiresAt,
         created_by: adminId,
-      }).select("id,station_id,organization_id,expires_at").single();
+      }).select("id,station_id,organization_id,created_at,expires_at").single();
       if (error) throw error;
       await auditLog(db, {
         actor: adminId,
@@ -67,7 +69,17 @@ Deno.serve(async (req) => {
         target: data.id,
         data: { station_id: data.station_id, expires_at: data.expires_at },
       });
-      return json({ ok: true, pairingCode, expiresAt, stationId: data.station_id });
+      const organization = Array.isArray(station.organization) ? station.organization[0] : station.organization;
+      return json({
+        ok: true,
+        pairingCode,
+        createdAt: data.created_at,
+        expiresAt,
+        stationId: data.station_id,
+        stationName: station.name,
+        organizationId: data.organization_id,
+        organizationName: organization?.legal_name ?? "Chargeurs.ch",
+      });
     }
 
     if (action === "cancel_pairing_code") {
