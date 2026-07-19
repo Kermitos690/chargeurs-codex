@@ -1,0 +1,81 @@
+# Platform API v1 — Staging
+
+Manual, dry-run-by-default workflow used to exercise the Platform API v1 on a
+dedicated staging Supabase project. Never runs automatically. Never touches
+LIVE data. Never triggers Stripe/ChargeNow mutations or hardware ejections.
+
+name: platform-api-staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Environment (staging only)"
+        type: choice
+        options: [staging]
+        default: staging
+      apply_migration:
+        description: "Apply docs/platform-api/staging-bootstrap.sql to staging"
+        type: boolean
+        default: false
+      run_deno_tests:
+        description: "Run Deno tests for platform-api"
+        type: boolean
+        default: true
+      call_live_apis:
+        description: "Call live Stripe/ChargeNow (must stay false)"
+        type: boolean
+        default: false
+      trigger_hardware_ejection:
+        description: "Trigger hardware ejection (must stay false)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry-run (no mutations)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: platform-api-staging
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse forbidden toggles
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.call_live_apis }}" == "true" ]]; then
+            echo "call_live_apis is not allowed for platform-api-staging"; exit 1; fi
+          if [[ "${{ inputs.trigger_hardware_ejection }}" == "true" ]]; then
+            echo "trigger_hardware_ejection is not allowed for platform-api-staging"; exit 1; fi
+          if [[ "${{ inputs.target }}" != "staging" ]]; then
+            echo "Only staging target is supported"; exit 1; fi
+          if [[ "${{ inputs.dry_run }}" != "true" && "${{ inputs.apply_migration }}" == "true" ]]; then
+            echo "apply_migration requires dry_run=true (manual review only)"; exit 1; fi
+          echo "Guard OK — dry_run=${{ inputs.dry_run }} apply_migration=${{ inputs.apply_migration }}"
+
+  tests:
+    needs: guard
+    if: ${{ inputs.run_deno_tests }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v1.x }
+      - name: Deno check + tests (platform-api)
+        run: |
+          deno check supabase/functions/platform-api/index.ts \
+                     supabase/functions/_shared/platformApi.ts \
+                     supabase/functions/platform-api-webhook-dispatcher/index.ts
+          deno test --allow-env --allow-net supabase/functions/tests/platform_api.test.ts
+
+  openapi:
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npx --yes @redocly/cli@1.25.5 lint openapi/platform-api-v1.yaml

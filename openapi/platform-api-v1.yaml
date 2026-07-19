@@ -1,0 +1,163 @@
+openapi: 3.1.0
+info:
+  title: Chargeurs Platform API
+  version: "1.0.0"
+  summary: Read-only public API for stations, availability, pricing and rentals.
+  description: |
+    Public, read-only Platform API v1. All endpoints require a Bearer API key
+    except `GET /v1/health`. Rentals endpoints are strictly scoped to the
+    calling client. The pricing quote endpoint calls the canonical server-side
+    pricing engine; client-supplied amounts are never trusted.
+  contact:
+    name: Chargeurs.ch
+    url: https://chargeurs-codex.lovable.app
+servers:
+  - url: "{baseUrl}"
+    description: Staging (parametrisable)
+    variables:
+      baseUrl:
+        default: https://staging.example.com/functions/v1/platform-api
+        description: Override to point at the staging Supabase Edge Functions host.
+security:
+  - bearerAuth: []
+paths:
+  /v1/health:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+  /v1/health/details:
+    get:
+      summary: Dependency status (coarse booleans)
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/me:
+    get:
+      summary: Current API client (scopes, quota, environment)
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/stations:
+    get:
+      summary: List stations
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /v1/stations/{stationId}:
+    get:
+      summary: Station detail
+      parameters: [ { $ref: "#/components/parameters/StationId" } ]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/stations/{stationId}/availability:
+    get:
+      summary: Station availability (rentable/returnable counters)
+      parameters: [ { $ref: "#/components/parameters/StationId" } ]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/stations/{stationId}/inventory:
+    get:
+      summary: Slot-level inventory
+      parameters: [ { $ref: "#/components/parameters/StationId" } ]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/pricing/quote:
+    post:
+      summary: Compute a pricing quote (server-side canonical engine)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                station_id: { type: string }
+                device_id:  { type: string }
+              anyOf:
+                - required: [station_id]
+                - required: [device_id]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/rentals/{rentalId}:
+    get:
+      summary: Rental detail (scoped to the calling client)
+      parameters: [ { $ref: "#/components/parameters/RentalId" } ]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/rentals/{rentalId}/events:
+    get:
+      summary: Rental events (canonical engine only, sanitized payloads)
+      parameters: [ { $ref: "#/components/parameters/RentalId" } ]
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: chg_test_* | chg_live_*
+  parameters:
+    StationId:
+      name: stationId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{4,32}$" }
+    RentalId:
+      name: rentalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Ok:
+      description: Success
+      content: { application/json: { schema: { type: object } } }
+    BadRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Missing or invalid API key
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Missing scope
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Resource not found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: Quota exceeded
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:    { type: string }
+            message: { type: string }
+        request_id: { type: string }
