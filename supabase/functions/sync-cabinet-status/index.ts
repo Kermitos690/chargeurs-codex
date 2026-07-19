@@ -24,13 +24,20 @@ interface CabinetPayload {
   cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
 }
 
+const functionCorsHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-kiosk-token",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  headers: { ...functionCorsHeaders, "Content-Type": "application/json" },
 });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: functionCorsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
@@ -126,7 +133,6 @@ Deno.serve(async (req) => {
           battery_id: bid,
           raw_data: b,
         }, { onConflict: "station_id,slot_num" });
-
         if (bid) {
           await db.from("batteries").upsert({
             battery_id: bid,
