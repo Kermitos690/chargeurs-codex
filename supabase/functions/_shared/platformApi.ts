@@ -1,9 +1,9 @@
 // Shared helpers for the read-only Platform API v1.
-// - Bearer key auth against public.api_keys (sha-256 hash)
+// - API key auth against public.api_keys (sha-256 hash)
 // - Scope enforcement (health:read, stations:read, inventory:read,
 //   pricing:read, rentals:read)
 // - Atomic quota check via public.api_quota_hit
-// - Redacted request logging (never persists secrets or upstream payloads)
+// - Redacted request logging (never persists secrets, raw IPs or upstream payloads)
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 export const PLATFORM_API_VERSION = "v1";
@@ -21,7 +21,7 @@ export const platformCorsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, content-type, x-request-id, x-idempotency-key",
+    "authorization, x-api-key, content-type, x-request-id, x-idempotency-key",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -73,12 +73,13 @@ export function errorResponse(
   });
 }
 
-/** Extract the raw API key from an Authorization header. */
+/** Extract a raw API key without ever logging it. */
 export function extractKey(req: Request): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization");
-  if (!h) return null;
-  const m = h.match(/^Bearer\s+(chg_(?:test|live)_[A-Za-z0-9]{16,})$/);
-  return m ? m[1] : null;
+  const direct = (req.headers.get("x-api-key") ?? "").trim();
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
+  const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? "";
+  const candidate = direct || bearer;
+  return /^chg_(?:test|live)_[A-Za-z0-9_-]{24,}$/.test(candidate) ? candidate : null;
 }
 
 export async function authenticate(
@@ -98,12 +99,10 @@ export async function authenticate(
   if (error || !key || key.revoked_at) {
     return { ok: false, status: 401, code: "invalid_key", message: "Invalid or revoked API key" };
   }
-  // Supabase embeds return an object OR array; normalize.
   const cli = Array.isArray(key.api_clients) ? key.api_clients[0] : key.api_clients;
   if (!cli || !cli.active || cli.revoked_at) {
     return { ok: false, status: 401, code: "client_inactive", message: "Client is inactive" };
   }
-  // Best-effort last_used bump; ignore failures.
   db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", key.id).then(() => {});
   return {
     ok: true,
@@ -139,6 +138,13 @@ export async function enforceQuota(
   return { ok: true, remaining };
 }
 
+async function hashClientIp(ip: string | null | undefined): Promise<string | null> {
+  const normalized = (ip ?? "").split(",")[0].trim();
+  if (!normalized) return null;
+  const salt = Deno.env.get("API_LOG_HASH_SALT") ?? "chargeurs-api-log-v1";
+  return await sha256Hex(`${salt}:${normalized}`);
+}
+
 export async function logRequest(
   db: SupabaseClient,
   entry: {
@@ -155,8 +161,7 @@ export async function logRequest(
     error_code?: string | null;
   },
 ): Promise<void> {
-  // Sanitize path — drop query string to avoid leaking secrets passed by
-  // buggy clients as URL parameters.
+  // Drop query strings: clients must never be able to leak credentials into logs.
   const safePath = entry.path.split("?")[0];
   try {
     await db.from("api_request_logs").insert({
@@ -166,18 +171,19 @@ export async function logRequest(
       path: safePath.slice(0, 512),
       status: entry.status,
       scope_required: entry.scope_required ?? null,
-      ip: entry.ip ?? null,
+      // Existing schema column retained, but the value is now a one-way hash.
+      ip: await hashClientIp(entry.ip),
       user_agent: (entry.user_agent ?? "").slice(0, 256) || null,
       request_id: entry.request_id,
       latency_ms: entry.latency_ms,
       error_code: entry.error_code ?? null,
     });
   } catch (_) {
-    // Never block on logging.
+    // Never block an API response on observability.
   }
 }
 
-/** Generate a new raw API key with the correct prefix. */
+/** Generate a raw API key. Only its hash must be persisted; raw is shown once. */
 export function generateApiKey(env: "test" | "live"): {
   raw: string;
   prefix: string;
