@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as typedSupabase } from "@/integrations/supabase/client";
+// The api_* tables are provisioned by docs/platform-api/staging-bootstrap.sql
+// and are not yet in the generated Database types. Cast through unknown so
+// the UI can address them without weakening types elsewhere.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = typedSupabase as unknown as any;
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
