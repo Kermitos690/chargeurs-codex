@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Plus, Search, FlaskConical, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 type Profile = {
   id: string; name: string; currency: string; active: boolean; is_default: boolean;
-  price_per_period_cents: number; period_minutes: number; total_cap_cents: number;
+  price_per_period_cents: number; period_minutes: number; daily_cap_cents: number;
   valid_from: string | null; valid_to: string | null; updated_at: string; version: number;
   counts: { station: number; shop: number; device: number };
 };
@@ -24,12 +25,13 @@ async function call(action: string, payload: Record<string, unknown> = {}) {
 }
 
 export default function AdminPricing() {
+  const { canManageFinance } = useAuth();
   const [rows, setRows] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
-  const [form, setForm] = useState({ name: "", currency: "CHF", price: "0.50", period: "30", cap: "" });
-  const [sim, setSim] = useState({ station: "DTA21269", minutes: "30", return_state: "normal" });
+  const [form, setForm] = useState({ name: "", currency: "CHF", price: "0.75", period: "30", cap: "18.00" });
+  const [sim, setSim] = useState({ station: "", minutes: "30", return_state: "normal" });
   const [simResult, setSimResult] = useState<Record<string, unknown> | null>(null);
   const [simLoading, setSimLoading] = useState(false);
 
@@ -50,10 +52,15 @@ export default function AdminPricing() {
       await call("create", {
         name: form.name, currency: form.currency,
         price_per_period_cents: cents, period_minutes: Number(form.period),
-        total_cap_cents: form.cap ? Math.round(Number(form.cap) * 100) : 0, active: true,
+        daily_cap_cents: form.cap ? Math.round(Number(form.cap) * 100) : 1_800,
+        total_cap_cents: 0,
+        max_amount_cents: 9_900,
+        deposit_cents: 3_000,
+        unreturned_fee_cents: 9_900,
+        active: true,
       });
       toast.success("Formule créée");
-      setForm({ name: "", currency: "CHF", price: "0.50", period: "30", cap: "" });
+      setForm({ name: "", currency: "CHF", price: "0.75", period: "30", cap: "18.00" });
       load();
     } catch (e) { toast.error(String((e as Error).message)); }
   };
@@ -103,27 +110,27 @@ export default function AdminPricing() {
               p.currency,
               `${chf(p.price_per_period_cents)}`,
               `${p.period_minutes} min`,
-              p.total_cap_cents ? chf(p.total_cap_cents) : "—",
+              p.daily_cap_cents ? chf(p.daily_cap_cents) : "—",
               p.counts.station, p.counts.shop, p.counts.device,
-              p.is_default ? "★" : <Button size="sm" variant="ghost" onClick={() => setDefault(p)}>définir</Button>,
+              p.is_default ? "★" : canManageFinance ? <Button size="sm" variant="ghost" onClick={() => setDefault(p)}>définir</Button> : "—",
               p.valid_to ? `→ ${new Date(p.valid_to).toLocaleDateString()}` : "permanent",
               `v${p.version} · ${new Date(p.updated_at).toLocaleDateString()}`,
-              <div className="flex gap-1">
+              canManageFinance ? <div className="flex gap-1">
                 <Button size="sm" variant="ghost" onClick={() => toggle(p)}>{p.active ? "désact." : "activer"}</Button>
                 <Button size="sm" variant="ghost" onClick={() => duplicate(p)}>dupliquer</Button>
                 <Button size="sm" variant="destructive" onClick={() => remove(p)}>suppr.</Button>
-              </div>,
+              </div> : <span className="text-xs text-muted-foreground">Lecture seule</span>,
             ])}
           />
         )}
-        <div className="mt-4 flex flex-wrap items-end gap-2">
+        {canManageFinance && <div className="mt-4 flex flex-wrap items-end gap-2">
           <div><label className="text-xs text-muted-foreground">Nom</label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div className="w-28"><label className="text-xs text-muted-foreground">Prix/période</label><Input type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /></div>
           <div className="w-24"><label className="text-xs text-muted-foreground">Période (min)</label><Input type="number" min="1" value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} /></div>
-          <div className="w-24"><label className="text-xs text-muted-foreground">Plafond</label><Input type="number" step="0.01" min="0" value={form.cap} onChange={(e) => setForm({ ...form, cap: e.target.value })} /></div>
+          <div className="w-24"><label className="text-xs text-muted-foreground">Plafond/jour</label><Input type="number" step="0.01" min="0" value={form.cap} onChange={(e) => setForm({ ...form, cap: e.target.value })} /></div>
           <div className="w-24"><label className="text-xs text-muted-foreground">Devise</label><Input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} /></div>
           <Button onClick={create} className="gap-2"><Plus className="h-4 w-4" />Créer</Button>
-        </div>
+        </div>}
         <p className="mt-2 text-xs text-muted-foreground">Détails complets (frais, plafonds, validité, affectations) sur la fiche de chaque tarif.</p>
       </section>
 

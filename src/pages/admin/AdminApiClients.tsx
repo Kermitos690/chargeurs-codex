@@ -49,10 +49,11 @@ const AVAILABLE_SCOPES = [
   "inventory:read",
   "pricing:read",
   "rentals:read",
+  "incidents:read",
 ] as const;
 
-const DOC_URL = "https://github.com/Kermitos690/chargeurs-codex/blob/agent/platform-api-readonly-v1/docs/API_V1.md";
-const OPENAPI_URL = "https://github.com/Kermitos690/chargeurs-codex/blob/agent/platform-api-readonly-v1/docs/openapi/chargeurs-api-v1.yaml";
+const DOC_URL = "https://github.com/Kermitos690/chargeurs-codex/blob/main/docs/API_V1.md";
+const OPENAPI_URL = "https://github.com/Kermitos690/chargeurs-codex/blob/main/docs/openapi/chargeurs-api-v1.yaml";
 
 export default function AdminApiClients() {
   const [clients, setClients] = useState<ApiClient[]>([]);

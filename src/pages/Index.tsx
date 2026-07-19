@@ -28,12 +28,6 @@ const PAYMENTS = [
   { icon: Zap, label: "Google Pay" },
 ];
 
-const DEMO_STATIONS = [
-  { station_id: "DTA21269", name: "Borne de démonstration 1", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
-  { station_id: "DTA21277", name: "Borne de démonstration 2", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
-  { station_id: "DTA22032", name: "Borne de démonstration 3", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
-];
-
 const FAQ = [
   { q: "Combien coûte une location ?", a: `La location coûte ${formatChf(PUBLIC_PRICING.hourlyRate)} par heure, facturée par tranches de ${PUBLIC_PRICING.incrementMinutes} minutes à ${formatChf(PUBLIC_PRICING.incrementPrice)}, avec un plafond de ${formatChf(PUBLIC_PRICING.dailyCap)} par jour.` },
   { q: "À quoi sert la caution de 30 CHF ?", a: "La caution sécurise la mise à disposition de la batterie. À la restitution, le montant final de la location est calculé et le solde non utilisé est libéré ou remboursé selon le parcours de paiement." },
@@ -49,6 +43,7 @@ function Section({ id, children, className = "" }: { id: string; children: React
 export default function Index() {
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(true);
+  const [stationsError, setStationsError] = useState(false);
   const [searchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
 
@@ -57,8 +52,9 @@ export default function Index() {
       .from("stations")
       .select("station_id, name, location_name, online")
       .order("station_id")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         setStations(data ?? []);
+        setStationsError(Boolean(error));
         setLoadingStations(false);
       });
   }, []);
@@ -71,7 +67,7 @@ export default function Index() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [requestedSection]);
 
-  const visibleStations = useMemo(() => stations.length ? stations : DEMO_STATIONS, [stations]);
+  const visibleStations = useMemo(() => stations, [stations]);
 
   return (
     <div className="relative min-h-screen">
@@ -97,13 +93,13 @@ export default function Index() {
 
         <Section id="bornes">
           <h2 className="font-display text-3xl font-bold sm:text-4xl">Bornes Chargeurs.ch</h2>
-          <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes connectées apparaissent automatiquement. Les trois équipements ci-dessous restent affichés en démonstration lorsqu'ils sont hors ligne.</p>
+          <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes publiées et connectées apparaissent automatiquement à partir des données de la plateforme.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleStations.map((station) => (
               <Link key={station.station_id} to={`/kiosk/${station.station_id}`} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
                 <div className="flex items-start justify-between gap-3">
                   <MonitorSmartphone className="h-7 w-7 text-primary" />
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${station.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{station.online ? "Disponible" : station.demo ? "Démonstration" : "Hors ligne"}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${station.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{station.online ? "Disponible" : "Hors ligne"}</span>
                 </div>
                 <div className="mt-4 font-mono text-xs text-muted-foreground">{station.station_id}</div>
                 <div className="text-lg font-bold">{station.name}</div>
@@ -113,6 +109,8 @@ export default function Index() {
             ))}
           </div>
           {loadingStations && <p className="mt-4 text-sm text-muted-foreground">Synchronisation de l'état des bornes…</p>}
+          {!loadingStations && stationsError && <p className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">La disponibilité des bornes est momentanément indisponible. Aucune donnée de démonstration n’est affichée.</p>}
+          {!loadingStations && !stationsError && visibleStations.length === 0 && <p className="mt-4 rounded-2xl border border-border bg-card/70 p-4 text-sm text-muted-foreground">Aucune borne publique n’est actuellement publiée. Revenez prochainement ou contactez le support.</p>}
         </Section>
 
         <Section id="comment">
@@ -169,7 +167,7 @@ export default function Index() {
       <footer className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-10">
         <div className="flex flex-col items-center justify-between gap-4 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row">
           <span>© {new Date().getFullYear()} Chargeurs.ch · Location de powerbanks en Suisse romande</span>
-          <div className="flex gap-4"><Link to="/partenaires">Partenaires</Link><Link to="/support">Support</Link><Link to="/admin" className="text-muted-foreground/70">Administration</Link></div>
+          <div className="flex flex-wrap justify-center gap-4"><Link to="/partenaires">Partenaires</Link><Link to="/support">Support</Link><Link to="/legal/conditions">Conditions</Link><Link to="/legal/confidentialite">Confidentialité</Link><Link to="/legal/mentions-legales">Mentions légales</Link><Link to="/admin" className="text-muted-foreground/70">Administration</Link></div>
         </div>
       </footer>
     </div>

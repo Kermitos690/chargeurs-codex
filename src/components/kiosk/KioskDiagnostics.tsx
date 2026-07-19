@@ -3,16 +3,9 @@ import { X, RefreshCw, Lock, LogOut, KeyRound, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
+import { readKioskToken } from "@/lib/kioskFetch";
 
 const KIOSK_TOKEN_KEY = "kiosk_token";
-
-function readToken(): string {
-  try {
-    return localStorage.getItem(KIOSK_TOKEN_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
 
 function maskToken(t: string): string {
   if (!t) return "aucun token enregistré";
@@ -47,7 +40,7 @@ export function KioskDiagnostics(props: Props) {
   const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
-  const [savedToken, setSavedToken] = useState(readToken());
+  const [savedToken, setSavedToken] = useState(() => readKioskToken() ?? "");
   const [tokenSaved, setTokenSaved] = useState(false);
 
   const tokenReady = savedToken.length >= 24;

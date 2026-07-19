@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Save, FlaskConical, ExternalLink } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const chf = (c: number) => (Number(c) / 100).toFixed(2);
 
@@ -35,6 +36,7 @@ const RULES: { key: string; label: string; money?: boolean }[] = [
 ];
 
 export default function AdminPricingDetail() {
+  const { canManageFinance } = useAuth();
   const { id } = useParams();
   const [data, setData] = useState<any>(null);
   const [form, setForm] = useState<any>({});
@@ -83,9 +85,9 @@ export default function AdminPricingDetail() {
       <div className="flex items-center justify-between">
         <Link to="/admin/pricing" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Tarifs</Link>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => call("toggle", { id, active: !p.active }).then(load)}>{p.active ? "Désactiver" : "Activer"}</Button>
-          <Button size="sm" variant="ghost" onClick={() => call("setDefault", { id }).then(load)} disabled={p.is_default}>Définir par défaut</Button>
-          <Button size="sm" variant="ghost" onClick={() => call("duplicate", { id }).then(() => toast.success("Dupliqué"))}>Dupliquer</Button>
+          {canManageFinance && <Button size="sm" variant="ghost" onClick={() => call("toggle", { id, active: !p.active }).then(load)}>{p.active ? "Désactiver" : "Activer"}</Button>}
+          {canManageFinance && <Button size="sm" variant="ghost" onClick={() => call("setDefault", { id }).then(load)} disabled={p.is_default}>Définir par défaut</Button>}
+          {canManageFinance && <Button size="sm" variant="ghost" onClick={() => call("duplicate", { id }).then(() => toast.success("Dupliqué"))}>Dupliquer</Button>}
           {firstStation && <a href={`/kiosk/station/${firstStation}`} target="_blank" rel="noreferrer"><Button size="sm" className="gap-1"><ExternalLink className="h-4 w-4" />Test kiosk</Button></a>}
         </div>
       </div>
@@ -121,7 +123,7 @@ export default function AdminPricingDetail() {
             </div>
           ))}
         </div>
-        <Button onClick={save} className="mt-4 gap-2">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Enregistrer</Button>
+        {canManageFinance && <Button onClick={save} className="mt-4 gap-2">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Enregistrer</Button>}
       </section>
 
       {/* Assignments */}
@@ -129,8 +131,8 @@ export default function AdminPricingDetail() {
         <h2 className="mb-3 font-semibold">Affectations (priorité : borne &gt; station &gt; boutique &gt; défaut)</h2>
         <DataTable columns={["Portée", "Référence", "Active", ""]} empty="Aucune affectation"
           rows={data.assignments.map((a: any) => [a.scope, a.scope_ref, a.active ? "oui" : "non",
-            <Button size="sm" variant="destructive" onClick={() => unassign(a.id)}>retirer</Button>])} />
-        <div className="mt-3 flex flex-wrap items-end gap-2">
+            canManageFinance ? <Button size="sm" variant="destructive" onClick={() => unassign(a.id)}>retirer</Button> : "—"]) } />
+        {canManageFinance && <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="w-36">
             <label className="text-xs text-muted-foreground">Portée</label>
             <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={assign.scope} onChange={(e) => setAssign({ ...assign, scope: e.target.value })}>
@@ -139,7 +141,7 @@ export default function AdminPricingDetail() {
           </div>
           <div className="w-52"><label className="text-xs text-muted-foreground">Référence (ex: DTA21269)</label><Input value={assign.scope_ref} onChange={(e) => setAssign({ ...assign, scope_ref: e.target.value })} /></div>
           <Button onClick={doAssign}>Affecter</Button>
-        </div>
+        </div>}
       </section>
 
       {/* Simulator */}

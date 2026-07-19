@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PublicNav } from "@/components/public/PublicNav";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
+import { PublicContactForm } from "@/components/public/PublicContactForm";
 
 const BENEFITS = [
   { icon: Zap, title: "Un service utile immédiatement", text: "Vos clients restent joignables, prolongent leur visite et n'ont plus besoin de chercher une prise." },
@@ -45,6 +46,14 @@ export default function Partners() {
           <h2 className="font-display text-3xl font-bold">Déploiement prioritaire</h2>
           <p className="mt-3 max-w-3xl text-muted-foreground">La première zone commerciale visée est le canton de Vaud, avec une priorité autour d'Épalinges, Lausanne, Renens, Prilly, Pully, Morges, Nyon, Vevey, Montreux et Yverdon-les-Bains. L'architecture est prévue pour toute la Suisse romande.</p>
         </section>
+
+        <div className="mt-12">
+          <PublicContactForm
+            requestType="partner_installation"
+            title="Demander une installation"
+            description="Décrivez votre établissement, la ville et le volume de visiteurs. La demande rejoint directement la file de suivi Chargeurs.ch."
+          />
+        </div>
       </main>
     </div>
   );

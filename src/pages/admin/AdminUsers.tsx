@@ -18,10 +18,13 @@ type AdminUser = {
   roles: string[];
 };
 
-const ASSIGNABLE = ["admin", "super_admin", "staff", "operator", "viewer"] as const;
+const ASSIGNABLE = [
+  "super_admin", "operations_admin", "finance_admin", "support_agent",
+  "maintenance_technician", "partner_owner", "partner_staff", "customer",
+] as const;
 
 export default function AdminUsers() {
-  const { canWrite } = useAuth();
+  const { isSuperAdmin: canWrite } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);

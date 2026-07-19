@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, BatteryCharging, MapPin, Receipt, RefreshCw } from "lucide-react";
+import { Loader2, BatteryCharging, MapPin, Receipt, RefreshCw, Download, Save, Trash2, ShieldCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Rental = {
   id: string;
@@ -52,6 +54,11 @@ function fmtDate(d: string | null) {
 export default function AccountDashboard() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payments, setPayments] = useState<Array<{ id: string; status: string; amount: number | null; currency: string | null; payment_method: string | null; created_at: string }>>([]);
+  const [refunds, setRefunds] = useState<Array<{ id: string; status: string; amount: number; currency: string; created_at: string }>>([]);
+  const [incidents, setIncidents] = useState<Array<{ id: string; type: string; severity: string; resolved: boolean; created_at: string }>>([]);
+  const [profile, setProfile] = useState({ display_name: "", phone: "", preferred_language: "fr", marketing_consent: false });
+  const [privacyBusy, setPrivacyBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,6 +72,24 @@ export default function AccountDashboard() {
     } else {
       setRentals((data ?? []) as Rental[]);
     }
+    const { data: privacyData } = await supabase.functions.invoke("account-privacy", { body: { action: "summary" } });
+    if (privacyData?.ok) {
+      const summary = privacyData.data as {
+        profile?: Record<string, unknown> | null;
+        payments?: typeof payments;
+        refunds?: typeof refunds;
+        incidents?: typeof incidents;
+      };
+      setPayments(summary.payments ?? []);
+      setRefunds(summary.refunds ?? []);
+      setIncidents(summary.incidents ?? []);
+      if (summary.profile) setProfile({
+        display_name: String(summary.profile.display_name ?? ""),
+        phone: String(summary.profile.phone ?? ""),
+        preferred_language: String(summary.profile.preferred_language ?? "fr"),
+        marketing_consent: Boolean(summary.profile.marketing_consent),
+      });
+    }
     setLoading(false);
   }, []);
 
@@ -72,6 +97,47 @@ export default function AccountDashboard() {
 
   const active = rentals.filter((r) => ACTIVE_STATES.includes(r.state));
   const history = rentals.filter((r) => !ACTIVE_STATES.includes(r.state));
+
+  const saveProfile = async () => {
+    setPrivacyBusy(true);
+    const { error } = await supabase.from("profiles").update({
+      display_name: profile.display_name || null,
+      phone: profile.phone || null,
+      preferred_language: profile.preferred_language,
+      marketing_consent: profile.marketing_consent,
+      privacy_acknowledged_at: new Date().toISOString(),
+    } as never).eq("id", (await supabase.auth.getUser()).data.user?.id ?? "");
+    setPrivacyBusy(false);
+    if (error) toast.error("Le profil n'a pas pu être enregistré.");
+    else toast.success("Profil enregistré.");
+  };
+
+  const exportData = async () => {
+    setPrivacyBusy(true);
+    const { data, error } = await supabase.functions.invoke("account-privacy", { body: { action: "export" } });
+    setPrivacyBusy(false);
+    if (error || !data?.ok) return toast.error("L'export n'a pas pu être généré.");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = `chargeurs-export-${new Date().toISOString().slice(0, 10)}.json`; anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const deleteAccount = async () => {
+    const confirmation = window.prompt("Cette action est définitive. Tapez DELETE_ACCOUNT pour confirmer.");
+    if (confirmation !== "DELETE_ACCOUNT") return;
+    setPrivacyBusy(true);
+    const { data, error } = await supabase.functions.invoke("account-privacy", { body: { action: "delete", confirmation } });
+    setPrivacyBusy(false);
+    if (error || !data?.ok) {
+      toast.error(data?.error === "ACTIVE_OR_UNSETTLED_RENTAL"
+        ? "Suppression impossible tant qu'une location ou un règlement est actif."
+        : "Le compte n'a pas pu être supprimé.");
+      return;
+    }
+    await supabase.auth.signOut();
+    window.location.assign("/");
+  };
 
   return (
     <div className="space-y-8 pt-2">
@@ -146,6 +212,30 @@ export default function AccountDashboard() {
           </section>
         </>
       )}
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Paiements et remboursements</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="glass rounded-2xl p-4"><p className="font-semibold">Paiements</p><p className="mt-1 text-2xl font-bold">{payments.length}</p><p className="text-xs text-muted-foreground">Historique relié à vos locations</p></div>
+          <div className="glass rounded-2xl p-4"><p className="font-semibold">Remboursements</p><p className="mt-1 text-2xl font-bold">{refunds.length}</p><p className="text-xs text-muted-foreground">{refunds.some((refund) => refund.status === "pending") ? "Un remboursement est en cours" : "Aucun remboursement en attente"}</p></div>
+        </div>
+        {incidents.length > 0 && <div className="glass rounded-2xl p-4"><p className="font-semibold">Incidents liés à vos locations</p><p className="mt-1 text-sm text-muted-foreground">{incidents.filter((incident) => !incident.resolved).length} ouvert(s), {incidents.filter((incident) => incident.resolved).length} résolu(s).</p></div>}
+      </section>
+
+      <section className="glass-strong liquid-border space-y-5 rounded-3xl p-6">
+        <div><h2 className="flex items-center gap-2 font-display text-xl font-bold"><ShieldCheck className="h-5 w-5 text-primary" />Profil et confidentialité</h2><p className="mt-1 text-sm text-muted-foreground">Modifiez vos informations, exportez vos données ou supprimez votre compte.</p></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label className="text-sm font-medium">Nom affiché</label><Input value={profile.display_name} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} /></div>
+          <div><label className="text-sm font-medium">Téléphone</label><Input type="tel" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} /></div>
+          <div><label className="text-sm font-medium">Langue préférée</label><select className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={profile.preferred_language} onChange={(e) => setProfile({ ...profile, preferred_language: e.target.value })}><option value="fr">Français</option><option value="de">Deutsch</option><option value="it">Italiano</option><option value="en">English</option></select></div>
+          <label className="flex items-center gap-3 self-end rounded-xl border border-border p-3 text-sm"><Checkbox checked={profile.marketing_consent} onCheckedChange={(checked) => setProfile({ ...profile, marketing_consent: checked === true })} />Recevoir les informations commerciales (facultatif)</label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={saveProfile} disabled={privacyBusy}><Save className="mr-2 h-4 w-4" />Enregistrer</Button>
+          <Button onClick={exportData} disabled={privacyBusy} variant="outline"><Download className="mr-2 h-4 w-4" />Exporter mes données</Button>
+          <Button onClick={deleteAccount} disabled={privacyBusy} variant="destructive"><Trash2 className="mr-2 h-4 w-4" />Supprimer mon compte</Button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -56,8 +56,11 @@ describe("kiosk quote safety guard", () => {
       currency: "CHF",
       period_minutes: 30,
       duration_cents: 75,
+      price_per_period_cents: 75,
       final_cents: 75,
       deposit_cents: 3_000,
+      daily_cap_cents: 1_800,
+      unreturned_fee_cents: 9_900,
     })).toBe(true);
   });
 

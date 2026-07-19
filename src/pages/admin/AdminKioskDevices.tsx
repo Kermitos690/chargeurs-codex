@@ -19,6 +19,10 @@ type Device = {
   token_expires_at: string | null;
   token_rotated_at: string | null;
   last_seen_at: string | null;
+  device_public_id?: string | null;
+  app_version?: string | null;
+  enrolled_at?: string | null;
+  revoked_at?: string | null;
 };
 
 function statusBadge(d: Device) {
@@ -37,9 +41,10 @@ export default function AdminKioskDevices() {
 
   const [stationId, setStationId] = useState("");
   const [label, setLabel] = useState("");
-  const [ttlDays, setTtlDays] = useState("");
+  const [pairingMinutes, setPairingMinutes] = useState("15");
 
   const [revealedToken, setRevealedToken] = useState<{ id: string; token: string } | null>(null);
+  const [revealedPairing, setRevealedPairing] = useState<{ code: string; expiresAt: string; stationId: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
@@ -69,19 +74,18 @@ export default function AdminKioskDevices() {
 
   const provision = async () => {
     if (!stationId) { toast.error("Choisissez une borne"); return; }
-    const data = await mutate("provision", {
-      stationId, label: label || null, ttlDays: ttlDays ? Number(ttlDays) : null,
+    const data = await mutate("create_pairing_code", {
+      stationId, label: label || null, ttlMinutes: Number(pairingMinutes || 15),
     }, "provision");
-    if (data?.token) {
-      setRevealedToken({ id: data.device.id, token: data.token });
-      setLabel(""); setTtlDays("");
-      toast.success("Token créé — copiez-le maintenant, il ne sera plus affiché.");
-      await load();
+    if (data?.pairingCode) {
+      setRevealedPairing({ code: data.pairingCode, expiresAt: data.expiresAt, stationId: data.stationId });
+      setLabel("");
+      toast.success("Code d’appairage créé — il est temporaire et à usage unique.");
     }
   };
 
   const rotate = async (id: string) => {
-    const data = await mutate("rotate", { deviceId: id, ttlDays: ttlDays ? Number(ttlDays) : null }, `rotate-${id}`);
+    const data = await mutate("rotate", { deviceId: id, ttlDays: null }, `rotate-${id}`);
     if (data?.token) {
       setRevealedToken({ id, token: data.token });
       toast.success("Token régénéré — l'ancien est invalidé.");
@@ -105,7 +109,7 @@ export default function AdminKioskDevices() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-bold">Tablettes kiosque</h1>
-          <p className="text-muted-foreground">Provisionnez le token d'authentification de chaque borne.</p>
+          <p className="text-muted-foreground">Appairez chaque terminal avec un code temporaire à usage unique.</p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading} className="gap-2 rounded-full">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Actualiser
@@ -117,7 +121,7 @@ export default function AdminKioskDevices() {
           <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold">
             <Plus className="h-5 w-5" />Provisionner une tablette
           </h2>
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_140px_auto]">
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_auto]">
             <Select value={stationId} onValueChange={setStationId}>
               <SelectTrigger><SelectValue placeholder="Borne (cabinet)" /></SelectTrigger>
               <SelectContent>
@@ -125,11 +129,24 @@ export default function AdminKioskDevices() {
               </SelectContent>
             </Select>
             <Input placeholder="Libellé (ex. Tablette entrée)" value={label} onChange={(e) => setLabel(e.target.value)} />
-            <Input type="number" min={1} placeholder="Expire (jours)" value={ttlDays} onChange={(e) => setTtlDays(e.target.value)} />
+            <Input type="number" min={5} max={60} placeholder="Validité (minutes)" value={pairingMinutes} onChange={(e) => setPairingMinutes(e.target.value)} />
             <Button onClick={provision} disabled={busy === "provision"} className="gap-2 rounded-full bg-gradient-primary">
-              {busy === "provision" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}Créer le token
+              {busy === "provision" ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}Créer le code
             </Button>
           </div>
+        </div>
+      )}
+
+      {revealedPairing && (
+        <div className="glass-strong liquid-border rounded-2xl border-success/40 p-6">
+          <p className="mb-2 text-sm font-medium text-success">Code affiché une seule fois — saisissez-le dans l’APK de la borne {revealedPairing.stationId} avant {new Date(revealedPairing.expiresAt).toLocaleTimeString("fr-CH")}.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded-lg bg-background/60 p-3 font-mono text-lg tracking-wider">{revealedPairing.code}</code>
+            <Button onClick={() => copyToken(revealedPairing.code)} variant="outline" className="gap-2 rounded-full">
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copié" : "Copier"}
+            </Button>
+          </div>
+          <button onClick={() => setRevealedPairing(null)} className="mt-3 text-xs text-muted-foreground hover:text-foreground">J’ai saisi le code, masquer</button>
         </div>
       )}
 
@@ -168,6 +185,7 @@ export default function AdminKioskDevices() {
                 <p className="text-sm text-muted-foreground">
                   {d.label ?? "—"} · vue {d.last_seen_at ? new Date(d.last_seen_at).toLocaleString("fr-CH") : "jamais"}
                   {d.token_expires_at ? ` · expire ${new Date(d.token_expires_at).toLocaleDateString("fr-CH")}` : ""}
+                  {d.app_version ? ` · APK ${d.app_version}` : ""}
                 </p>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Loader2, CheckCircle2, XCircle, ExternalLink, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,16 +8,15 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
+import { isServerCancelledPayment, isServerConfirmedPayment } from "@/lib/paymentPresentation";
 
 export default function Pay() {
   const { rentalSessionId } = useParams();
-  const { pathname, search } = useLocation();
+  const search = window.location.search;
   const sessionCode = new URLSearchParams(search).get("c") ?? "";
   const { t } = useI18n();
   const [state, setState] = useState<string>("loading");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
-
-  const outcome = pathname.endsWith("/success") ? "success" : pathname.endsWith("/cancel") ? "cancel" : null;
 
   useEffect(() => {
     if (!rentalSessionId || !sessionCode) return;
@@ -34,8 +33,11 @@ export default function Pay() {
     return () => clearInterval(i);
   }, [rentalSessionId, sessionCode]);
 
-  const paid = ["payment_succeeded", "ejecting", "ejected", "battery_taken", "active_rental"].includes(state) || outcome === "success";
-  const cancelled = ["payment_cancelled", "payment_expired"].includes(state) || outcome === "cancel";
+  // The URL may be the Stripe success_url or cancel_url, but it is never proof
+  // of payment. Only the scoped server projection (fed by a verified webhook)
+  // may switch this page to a confirmed state.
+  const paid = isServerConfirmedPayment(state);
+  const cancelled = isServerCancelledPayment(state);
 
   return (
     <div className="relative flex min-h-screen flex-col px-5 py-6">

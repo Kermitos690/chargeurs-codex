@@ -7,6 +7,7 @@ import {
   ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { readKioskToken } from "@/lib/kioskFetch";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -25,6 +26,8 @@ type Station = {
 type Quote = {
   amount: number; currency: string; profile_name: string;
   final_cents: number; profile_id: string; source: string; error?: string;
+  deposit_cents: number; period_minutes: number; price_per_period_cents: number;
+  daily_cap_cents: number; unreturned_fee_cents: number;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 
@@ -119,10 +122,10 @@ export default function Kiosk() {
 
   const loadQuote = useCallback(async () => {
     if (!stationId) return;
-    // Real kiosk authentication: a provisioned tablet stores its individual
-    // token in localStorage. The token is strictly bound to this station's id
-    // server-side (kiosk_quote), so a kiosk cannot impersonate another station.
-    const token = localStorage.getItem("kiosk_token");
+    // The native wrapper supplies the individual token for this WebView
+    // session. Browser-only maintenance keeps the explicit legacy fallback.
+    // The server still binds the token to exactly one station.
+    const token = readKioskToken();
     if (!token) {
       setQuote(null);
       setQuoteError("KIOSK_AUTH_REQUIRED");
@@ -143,6 +146,11 @@ export default function Kiosk() {
       final_cents: Number(snap.final_cents),
       profile_id: String(snap.profile_id ?? ""),
       source: String(snap.source ?? ""),
+      deposit_cents: Number(snap.deposit_cents),
+      period_minutes: Number(snap.period_minutes),
+      price_per_period_cents: Number(snap.price_per_period_cents ?? snap.duration_cents),
+      daily_cap_cents: Number(snap.daily_cap_cents),
+      unreturned_fee_cents: Number(snap.unreturned_fee_cents),
     });
   }, [stationId]);
 
@@ -255,7 +263,7 @@ export default function Kiosk() {
     try {
       // Kiosk credential: provisioned per-tablet token, sent ONLY in a header
       // (never in the URL). The server hashes it and binds it to this station.
-      const kioskToken = localStorage.getItem("kiosk_token");
+      const kioskToken = readKioskToken();
       if (!kioskToken) {
         setStatusMsg({ title: "Borne non activée", sub: "Cette tablette n'est pas appairée. Contactez le support." });
         setPhase("error");
@@ -291,6 +299,7 @@ export default function Kiosk() {
   const available = station?.rentable_count ?? 0;
   const canRent = station?.online && available > 0 && configured && !offline;
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
+  const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
@@ -463,8 +472,14 @@ export default function Kiosk() {
               {quote ? (
                 <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
                   <div className="text-lg font-semibold">{quote.profile_name}</div>
-                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
-                  <div className="mt-2 text-sm text-muted-foreground">Tarif appliqué automatiquement à cette borne</div>
+                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">
+                    {fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min
+                  </div>
+                  <div className="mt-4 space-y-1 text-sm text-muted-foreground">
+                    <p>Garantie initiale débitée ou autorisée : <strong className="text-foreground">{fmtCents(quote.deposit_cents, quote.currency)}</strong></p>
+                    <p>Plafond journalier : {fmtCents(quote.daily_cap_cents, quote.currency)} · Non-retour : {fmtCents(quote.unreturned_fee_cents, quote.currency)} au total</p>
+                    <p>Le montant final est calculé au retour ; le solde est libéré ou remboursé selon le moyen de paiement.</p>
+                  </div>
                 </div>
               ) : (
                 <p className="text-warning">
@@ -476,7 +491,7 @@ export default function Kiosk() {
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>Retour</Button>
                 <Button onClick={startRental} disabled={!quote} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
-                  Payer {quote ? fmtAmount(quote.amount, quote.currency) : ""}
+                  Continuer — garantie {quote ? fmtCents(quote.deposit_cents, quote.currency) : ""}
                 </Button>
               </div>
             </motion.div>
@@ -494,7 +509,8 @@ export default function Kiosk() {
               {quote && (
                 <div className="text-center">
                   <div className="text-lg font-semibold">{quote.profile_name}</div>
-                  <div className="text-3xl font-bold text-gradient-cyan">{fmtAmount(quote.amount, quote.currency)}</div>
+                  <div className="text-3xl font-bold text-gradient-cyan">Garantie {fmtCents(quote.deposit_cents, quote.currency)}</div>
+                  <div className="text-sm text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min</div>
                 </div>
               )}
               <h2 className="font-display text-2xl font-bold sm:text-3xl">Scannez ce QR code avec votre téléphone pour payer</h2>

@@ -39,6 +39,7 @@ import AdminPartners from "./pages/admin/AdminPartners.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
 import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
+import LegalPage from "./pages/LegalPage.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
@@ -55,6 +56,7 @@ const App = () => (
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
             <Route path="/kiosk/station/:stationId" element={<Kiosk />} />

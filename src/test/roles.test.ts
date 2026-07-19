@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { canView, canWrite, isSuperAdmin } from "@/lib/roles";
+import { canManageFinance, canView, canWrite, isSuperAdmin } from "@/lib/roles";
+import { canAccessAdminPath } from "@/pages/admin/adminNav";
 
 describe("auth role gating", () => {
   it("grants view to back-office roles", () => {
@@ -12,14 +13,25 @@ describe("auth role gating", () => {
   it("denies view to anonymous / unknown roles", () => {
     expect(canView([])).toBe(false);
     expect(canView(["customer"])).toBe(false);
+    expect(canView(["partner_owner"])).toBe(false);
   });
-  it("restricts write to admin and super_admin only", () => {
+  it("restricts generic writes to operational administrators", () => {
     expect(canWrite(["admin"])).toBe(true);
     expect(canWrite(["super_admin"])).toBe(true);
     expect(canWrite(["viewer"])).toBe(false);
     expect(canWrite(["staff"])).toBe(false);
     expect(canWrite(["operator"])).toBe(false);
     expect(canWrite([])).toBe(false);
+  });
+
+  it("separates operational, finance and user-management sections", () => {
+    expect(canWrite(["operations_admin"])).toBe(true);
+    expect(canWrite(["finance_admin"])).toBe(false);
+    expect(canManageFinance(["finance_admin"])).toBe(true);
+    expect(canAccessAdminPath("/admin/payments", ["finance_admin"])).toBe(true);
+    expect(canAccessAdminPath("/admin/stations", ["finance_admin"])).toBe(false);
+    expect(canAccessAdminPath("/admin/users", ["operations_admin"])).toBe(false);
+    expect(canAccessAdminPath("/admin/users", ["super_admin"])).toBe(true);
   });
   it("identifies super_admin only", () => {
     expect(isSuperAdmin(["super_admin"])).toBe(true);

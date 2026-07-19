@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import { canView, canWrite as canWriteFn, isSuperAdmin as isSuperFn } from "@/lib/roles";
+import {
+  canManageFinance as canManageFinanceFn,
+  canView,
+  canWrite as canWriteFn,
+  isSuperAdmin as isSuperFn,
+} from "@/lib/roles";
 
 
 export function useAuth() {
@@ -41,7 +46,8 @@ export function useAuth() {
 
   // Write access is restricted to roles the backend `requireAdmin` accepts.
   const canWrite = canWriteFn(roles);
+  const canManageFinance = canManageFinanceFn(roles);
   const isSuperAdmin = isSuperFn(roles);
 
-  return { user, roles, isAdmin, canWrite, isSuperAdmin, loading };
+  return { user, roles, isAdmin, canWrite, canManageFinance, isSuperAdmin, loading };
 }

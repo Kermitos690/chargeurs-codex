@@ -74,7 +74,7 @@ Routes principales :
 
 ### Android
 
-Le wrapper Android natif est développé dans la PR dédiée, mais n'est pas encore fusionné, signé pour la production ni certifié sur le matériel réel.
+Le projet Android natif consolidé se trouve dans `android-kiosk/`. Il inclut le Gradle Wrapper, l'enrôlement à usage unique, Android Keystore, WebView restreinte, démarrage après boot, watchdog, diagnostic matériel et un pont natif qui refuse toute éjection sans autorisation JWS courte. La signature production et la certification matérielle restent des validations du propriétaire.
 
 ## Rental Orchestrator
 
@@ -92,29 +92,15 @@ Le frontend, le kiosk et les webhooks ne doivent jamais imposer directement un �
 
 ## État réel du projet
 
-### Fusionné dans `main`
-
-- refonte publique V2, SEO local, tarifs et support ;
-- machine à états et réconciliation du Rental Orchestrator ;
-- couche transactionnelle Supabase du Rental Orchestrator ;
-- Project Bible canonique ;
-- routage profond Lovable et service worker kiosk-only ;
-- sécurité d'activation kiosk, diagnostic ChargeNow et verrou de bêta fermé par défaut.
-
-### Développé mais pas encore fusionné
-
-- moteur de règlement Stripe complet ;
-- Platform API ;
-- wrapper Android kiosk.
-
-### Non encore prouvé sur staging et matériel
+La branche de livraison consolide le frontend, le règlement Stripe, l'API plateforme, ChargeNow, le RBAC/organisations, l'enrôlement et Android. Restent non prouvés sans les accès du propriétaire :
 
 - application de toutes les migrations récentes ;
 - autorisation et capture partielle Stripe test ;
 - remboursement partiel TWINT ;
 - éjection et retour ChargeNow corrélés ;
 - cycle complet sur DTA21269 ;
-- APK installé et testé sur la tablette réelle.
+- APK release signé, installé et testé sur la tablette réelle ;
+- protocole série fournisseur, volontairement bloqué en `NOT_CONFIGURED`.
 
 Une CI verte valide la qualité du code du dépôt. Elle ne prouve pas une connexion réelle à Stripe, Supabase ou ChargeNow.
 
@@ -150,7 +136,7 @@ npm test
 npm run build
 ```
 
-Des scripts supplémentaires existent pour les tests Deno, PostgreSQL, Stripe, ChargeNow, callbacks, concurrence, résilience et sécurité. Voir `package.json` et les workflows GitHub Actions.
+Des scripts supplémentaires existent pour les tests Deno, PostgreSQL, Stripe, ChargeNow, callbacks, concurrence, résilience, sécurité et Android. Voir `TESTING.md`, `package.json` et les workflows GitHub Actions.
 
 ## Environnements et secrets
 
@@ -168,14 +154,12 @@ Variables importantes, sans leurs valeurs :
 - `PUBLIC_APP_URL`
 - secrets ChargeNow requis par les fonctions partagées
 
-Le domaine de test temporaire est actuellement :
-
-```text
-https://chargeurs-codex.lovable.app
-```
-
-Il doit rester configurable et ne pas être utilisé comme hypothèse définitive de production.
+Tous les domaines sont configurables ; aucun domaine temporaire n'est une hypothèse de production.
 
 ## Gouvernance
 
 Toute modification des règles métier, de l'architecture, de l'ordre d'intégration ou du domaine actif doit être enregistrée dans `docs/PROJECT_BIBLE.md` avant fusion.
+
+## Documentation de livraison
+
+Commencer par `ARCHITECTURE.md`, `DEPLOYMENT.md`, `REQUIRED_CREDENTIALS.md`, `PRODUCTION_CHECKLIST.md`, `KNOWN_LIMITATIONS.md` et `FINAL_DELIVERY_REPORT.md`. Les guides Stripe, ChargeNow, Android, provisionnement, sécurité, incidents et exploitation sont à la racine du dépôt.
