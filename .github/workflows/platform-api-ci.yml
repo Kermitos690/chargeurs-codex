@@ -36,8 +36,8 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Validate OpenAPI YAML syntax
-        run: node --input-type=module -e "import fs from 'node:fs'; import yaml from 'js-yaml'; const doc=yaml.load(fs.readFileSync('docs/openapi/chargeurs-api-v1.yaml','utf8')); if(doc?.openapi !== '3.1.0') throw new Error('OpenAPI 3.1.0 required'); console.log(doc.info?.title, doc.info?.version);"
+      - name: Validate OpenAPI document
+        run: npx --yes @redocly/cli@1.25.5 lint docs/openapi/chargeurs-api-v1.yaml
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
