@@ -1,11 +1,24 @@
-// claim-admin — bootstrap helper. Grants 'admin' to the authenticated caller
-// ONLY if no admin exists yet (first-come). Safe to expose: becomes a no-op
-// once the first admin is set.
+// Legacy bootstrap helper. It is disabled by default and requires an internal
+// secret even when explicitly enabled. Normal administration uses a controlled
+// Auth invitation followed by a service-role role assignment.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
 
+function safeEqual(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < a.length; index += 1) mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  return mismatch === 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const enabled = Deno.env.get("ADMIN_BOOTSTRAP_ENABLED") === "true";
+  const expectedSecret = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
+  const providedSecret = req.headers.get("x-internal-function-secret") ?? "";
+  if (!enabled || expectedSecret.length < 32 || !safeEqual(providedSecret, expectedSecret)) {
+    return json({ ok: false, error: "ADMIN_BOOTSTRAP_DISABLED" }, 403);
+  }
   const db = adminClient();
 
   const authHeader = req.headers.get("Authorization");

@@ -23,3 +23,19 @@ Deno.test("pairing tokens are prefixed and never stored in plaintext", async () 
   assert(code.length >= 19);
   assertEquals((await sha256Hex(code)).length, 64);
 });
+
+Deno.test("pairing administration binds organization and supports audited cancellation", async () => {
+  const source = await Deno.readTextFile("supabase/functions/kiosk-admin/index.ts");
+  assert(source.includes('select("station_id,organization_id")'));
+  assert(source.includes("STATION_ORGANIZATION_MISSING"));
+  assert(source.includes('action === "cancel_pairing_code"'));
+  assert(source.includes('action: "kiosk.pairing_code.cancelled"'));
+  assert(source.includes('code_hash: await sha256Hex(pairingCode)'));
+});
+
+Deno.test("legacy public admin bootstrap is closed by default", async () => {
+  const source = await Deno.readTextFile("supabase/functions/claim-admin/index.ts");
+  assert(source.includes('ADMIN_BOOTSTRAP_ENABLED") === "true"'));
+  assert(source.includes("expectedSecret.length < 32"));
+  assert(source.includes("ADMIN_BOOTSTRAP_DISABLED"));
+});

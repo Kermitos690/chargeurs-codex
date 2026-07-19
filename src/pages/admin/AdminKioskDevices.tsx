@@ -25,6 +25,17 @@ type Device = {
   revoked_at?: string | null;
 };
 
+type PairingCode = {
+  id: string;
+  station_id: string;
+  organization_id: string;
+  label: string | null;
+  expires_at: string;
+  used_at: string | null;
+  used_by_device_id: string | null;
+  created_at: string;
+};
+
 function statusBadge(d: Device) {
   if (d.token_revoked || !d.active) return <Badge variant="destructive">Révoqué</Badge>;
   if (d.token_expires_at && new Date(d.token_expires_at) < new Date())
@@ -35,6 +46,7 @@ function statusBadge(d: Device) {
 export default function AdminKioskDevices() {
   const { canWrite } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
+  const [pairingCodes, setPairingCodes] = useState<PairingCode[]>([]);
   const [stations, setStations] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -53,7 +65,10 @@ export default function AdminKioskDevices() {
       supabase.functions.invoke("kiosk-admin", { body: { action: "list" } }),
       supabase.from("stations").select("station_id").order("station_id"),
     ]);
-    if (dRes?.ok) setDevices(dRes.devices as Device[]);
+    if (dRes?.ok) {
+      setDevices(dRes.devices as Device[]);
+      setPairingCodes((dRes.pairingCodes ?? []) as PairingCode[]);
+    }
     else toast.error(dRes?.error ?? "Erreur de chargement des tablettes");
     setStations((sRes ?? []).map((s) => s.station_id));
     setLoading(false);
@@ -96,6 +111,11 @@ export default function AdminKioskDevices() {
   const revoke = async (id: string) => {
     const data = await mutate("revoke", { deviceId: id }, `revoke-${id}`);
     if (data) { toast.success("Tablette révoquée"); await load(); }
+  };
+
+  const cancelPairingCode = async (id: string) => {
+    const data = await mutate("cancel_pairing_code", { pairingCodeId: id }, `cancel-${id}`);
+    if (data) { toast.success("Code d’appairage annulé"); await load(); }
   };
 
   const copyToken = async (t: string) => {
@@ -164,6 +184,35 @@ export default function AdminKioskDevices() {
           </button>
         </div>
       )}
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Codes d’appairage récents</h2>
+        {pairingCodes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucun code généré.</p>
+        ) : pairingCodes.map((code) => {
+          const expired = new Date(code.expires_at).getTime() <= Date.now();
+          const status = code.used_by_device_id ? "Utilisé" : code.used_at ? "Annulé" : expired ? "Expiré" : "Actif";
+          const active = status === "Actif";
+          return (
+            <div key={code.id} className="glass liquid-border flex flex-wrap items-center justify-between gap-3 rounded-2xl p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-semibold">{code.station_id}</span>
+                  <Badge variant={active ? "default" : "outline"}>{status}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {code.label ?? "Tablette"} · créé {new Date(code.created_at).toLocaleString("fr-CH")} · expire {new Date(code.expires_at).toLocaleString("fr-CH")}
+                </p>
+              </div>
+              {canWrite && active && (
+                <Button variant="ghost" size="sm" onClick={() => cancelPairingCode(code.id)} disabled={busy === `cancel-${code.id}`} className="gap-1 rounded-full text-destructive">
+                  {busy === `cancel-${code.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}Annuler
+                </Button>
+              )}
+            </div>
+          );
+        })}
+      </section>
 
       <div className="grid gap-4">
         {loading ? (

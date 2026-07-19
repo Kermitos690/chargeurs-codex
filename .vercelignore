@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.git
+.vercel
+node_modules
+dist
+android-kiosk/.gradle
+android-kiosk/**/build
+*.apk
+*.aab
