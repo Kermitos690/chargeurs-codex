@@ -39,6 +39,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm dependencies required by Deno npm imports
+        run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
+
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
