@@ -1,16 +1,13 @@
-// Platform API v1 — public, read-only surface for external integrators.
-// Everything here is DEV-ONLY until deployed to the staging project.
-// - No writes to rentals, payments, ChargeNow or Stripe are exposed.
-// - Rentals reads are strictly scoped to the calling client via
-//   rental_sessions.api_client_id (set by future write endpoints).
-// - The pricing quote calls the canonical server function compute_pricing;
-//   no client-supplied amounts are trusted.
+// Chargeurs.ch Platform API v1 — public, read-only integration surface.
+// No route in this function creates a rental, changes a payment, calls ChargeNow,
+// ejects hardware or mutates the canonical Rental Orchestrator.
+
 import { adminClient } from "../_shared/db.ts";
 import {
+  PLATFORM_API_VERSION,
   authenticate,
   enforceQuota,
   ensureScope,
-  errorResponse,
   jsonResponse,
   logRequest,
   newRequestId,
@@ -19,62 +16,54 @@ import {
   type PlatformApiScope,
 } from "../_shared/platformApi.ts";
 
-interface RouteMatch {
-  handler: (
-    req: Request,
-    ctx: RouteContext,
-  ) => Promise<Response>;
-  scope: PlatformApiScope | null;
-  params: Record<string, string>;
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const STATION_ID_RE = /^[A-Za-z0-9_-]{4,32}$/;
+const MAX_BODY_BYTES = 64 * 1024;
 
-interface RouteContext {
-  db: ReturnType<typeof adminClient>;
-  client: AuthedClient;
-  requestId: string;
-  params: Record<string, string>;
-}
-
+type Db = ReturnType<typeof adminClient>;
+type Handler = (req: Request, context: RouteContext) => Promise<Response>;
 type Route = {
   method: "GET" | "POST";
   pattern: RegExp;
   paramNames: string[];
-  scope: PlatformApiScope | null; // null = auth only, no scope
-  handler: (req: Request, ctx: RouteContext) => Promise<Response>;
+  scope: PlatformApiScope | null;
+  handler: Handler;
+};
+type RouteMatch = Pick<Route, "handler" | "scope"> & { params: Record<string, string> };
+type RouteContext = {
+  db: Db;
+  client: AuthedClient;
+  requestId: string;
+  params: Record<string, string>;
 };
 
 Deno.serve(async (req) => {
-  const requestId = req.headers.get("x-request-id") ?? newRequestId();
+  if (req.method === "OPTIONS") return new Response("ok", { headers: platformCorsHeaders });
+
+  const requestId = validRequestId(req.headers.get("x-request-id")) ?? newRequestId();
   const started = performance.now();
-
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: platformCorsHeaders });
-  }
-
-  const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/platform-api/, "") || "/";
-
+  const path = extractPath(req);
   const db = adminClient();
 
-  // Unauthenticated routes: /v1/health only.
   if (req.method === "GET" && path === "/v1/health") {
     return finish(db, req, path, 200, requestId, started, null, null, null, {
       status: "ok",
-      version: "v1",
+      version: PLATFORM_API_VERSION,
       time: new Date().toISOString(),
+      mode: "read-only",
     });
   }
 
   const auth = await authenticate(db, req);
   if (!auth.ok) {
-    return finish(
-      db, req, path, auth.status, requestId, started, null, null, auth.code,
-      { error: { code: auth.code, message: auth.message }, request_id: requestId },
-    );
+    return finish(db, req, path, auth.status, requestId, started, null, null, auth.code, {
+      error: { code: auth.code, message: auth.message },
+      request_id: requestId,
+    });
   }
-  const client = auth.client;
 
-  const match = matchRoute(req.method as "GET" | "POST", path);
+  const client = auth.client;
+  const match = matchRoute(req.method, path);
   if (!match) {
     return finish(db, req, path, 404, requestId, started, client.clientId, client.keyId, "not_found", {
       error: { code: "not_found", message: "Unknown route" },
@@ -94,14 +83,11 @@ Deno.serve(async (req) => {
     return finish(db, req, path, 429, requestId, started, client.clientId, client.keyId, "rate_limited", {
       error: { code: "rate_limited", message: "Quota exceeded" },
       request_id: requestId,
-    }, match.scope ?? undefined);
+    }, match.scope);
   }
 
   try {
-    const response = await match.handler(req, {
-      db, client, requestId, params: match.params,
-    });
-    // Persist log with the actual status.
+    const response = await match.handler(req, { db, client, requestId, params: match.params });
     await logRequest(db, {
       client_id: client.clientId,
       key_id: client.keyId,
@@ -114,22 +100,38 @@ Deno.serve(async (req) => {
       request_id: requestId,
       latency_ms: Math.round(performance.now() - started),
     });
-    // Attach request id + remaining quota to the response.
     const headers = new Headers(response.headers);
     headers.set("x-request-id", requestId);
     headers.set("x-quota-remaining", String(Math.max(0, quota.remaining)));
     return new Response(response.body, { status: response.status, headers });
-  } catch (err) {
-    console.error("PLATFORM_API_ERROR", requestId, err instanceof Error ? err.message : "unknown");
+  } catch (error) {
+    console.error("PLATFORM_API_ERROR", requestId, error instanceof Error ? error.message : "unknown");
     return finish(db, req, path, 500, requestId, started, client.clientId, client.keyId, "internal_error", {
       error: { code: "internal_error", message: "Internal error" },
       request_id: requestId,
-    }, match.scope ?? undefined);
+    }, match.scope);
   }
 });
 
+function validRequestId(value: string | null): string | null {
+  return value && UUID_RE.test(value) ? value : null;
+}
+
+function extractPath(req: Request): string {
+  const pathname = new URL(req.url).pathname.replace(/\/+$/, "") || "/";
+  for (const marker of ["/functions/v1/platform-api", "/platform-api"]) {
+    const index = pathname.indexOf(marker);
+    if (index >= 0) return pathname.slice(index + marker.length) || "/";
+  }
+  return pathname;
+}
+
+function clientIp(req: Request): string | null {
+  return req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for") ?? null;
+}
+
 async function finish(
-  db: ReturnType<typeof adminClient>,
+  db: Db,
   req: Request,
   path: string,
   status: number,
@@ -157,14 +159,6 @@ async function finish(
   return jsonResponse(body, status, { "x-request-id": requestId });
 }
 
-function clientIp(req: Request): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  return fwd ? fwd.split(",")[0].trim() : null;
-}
-
-// ---------------------------------------------------------------------------
-// Route table
-// ---------------------------------------------------------------------------
 const routes: Route[] = [
   route("GET", "/v1/health/details", "health:read", healthDetails),
   route("GET", "/v1/me", null, me),
@@ -177,52 +171,60 @@ const routes: Route[] = [
   route("GET", "/v1/rentals/:rentalId/events", "rentals:read", getRentalEvents),
 ];
 
-function route(
-  method: "GET" | "POST",
-  pattern: string,
-  scope: PlatformApiScope | null,
-  handler: Route["handler"],
-): Route {
+function route(method: "GET" | "POST", pattern: string, scope: PlatformApiScope | null, handler: Handler): Route {
   const paramNames: string[] = [];
-  const rx = new RegExp(
-    "^" +
-      pattern.replace(/:([A-Za-z_]+)/g, (_m, n) => {
-        paramNames.push(n);
-        return "([^/]+)";
-      }) +
-      "$",
-  );
-  return { method, pattern: rx, paramNames, scope, handler };
+  const expression = new RegExp("^" + pattern.replace(/:([A-Za-z_]+)/g, (_match, name) => {
+    paramNames.push(name);
+    return "([^/]+)";
+  }) + "$");
+  return { method, pattern: expression, paramNames, scope, handler };
 }
 
-function matchRoute(method: "GET" | "POST", path: string): RouteMatch | null {
-  for (const r of routes) {
-    if (r.method !== method) continue;
-    const m = r.pattern.exec(path);
-    if (!m) continue;
+function matchRoute(method: string, path: string): RouteMatch | null {
+  for (const candidate of routes) {
+    if (candidate.method !== method) continue;
+    const match = candidate.pattern.exec(path);
+    if (!match) continue;
     const params: Record<string, string> = {};
-    r.paramNames.forEach((n, i) => (params[n] = decodeURIComponent(m[i + 1])));
-    return { handler: r.handler, scope: r.scope, params };
+    candidate.paramNames.forEach((name, index) => { params[name] = decodeURIComponent(match[index + 1]); });
+    return { handler: candidate.handler, scope: candidate.scope, params };
   }
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Handlers — all read-only
-// ---------------------------------------------------------------------------
+function apiError(status: number, code: string, message: string): Response {
+  return jsonResponse({ error: { code, message } }, status);
+}
+
+function validStationId(value: string): boolean {
+  return STATION_ID_RE.test(value);
+}
+
+function validRentalId(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+async function readJson(req: Request): Promise<Record<string, unknown> | null> {
+  const raw = await req.text();
+  if (raw.length > MAX_BODY_BYTES) return null;
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
 
 async function healthDetails(_req: Request, { db }: RouteContext): Promise<Response> {
-  // Only reports coarse booleans; never returns row counts of sensitive tables.
-  const chargenowConfigured = Boolean(Deno.env.get("CHARGENOW_BASIC_AUTH"));
-  const stripeConfigured = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
-  const { error: dbError } = await db.from("stations").select("station_id").limit(1);
+  const { error: databaseError } = await db.from("stations").select("station_id").limit(1);
   return jsonResponse({
-    status: dbError ? "degraded" : "ok",
+    status: databaseError ? "degraded" : "ok",
     time: new Date().toISOString(),
     dependencies: {
-      database: dbError ? "down" : "up",
-      chargenow_configured: chargenowConfigured,
-      stripe_configured: stripeConfigured,
+      database: databaseError ? "down" : "up",
+      chargenow_configured: Boolean(Deno.env.get("CHARGENOW_BASIC_AUTH") || Deno.env.get("CHARGENOW_BASIC_USERNAME")),
+      stripe_configured: Boolean(Deno.env.get("STRIPE_SECRET_KEY")),
     },
   });
 }
@@ -232,44 +234,47 @@ async function me(_req: Request, { client }: RouteContext): Promise<Response> {
     client_id: client.clientId,
     environment: client.environment,
     scopes: client.scopes,
-    quota: {
-      per_minute: client.quotaPerMinute,
-      per_day: client.quotaPerDay,
-    },
+    quota: { per_minute: client.quotaPerMinute, per_day: client.quotaPerDay },
   });
 }
 
-async function listStations(_req: Request, { db }: RouteContext): Promise<Response> {
-  const { data, error } = await db
-    .from("stations")
-    .select("station_id, name, location_name, online, status, rentable_count, returnable_count, total_count, currency, last_sync_at")
-    .order("station_id");
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
-  return jsonResponse({ stations: (data ?? []).map(toStationPublic) });
+async function listStations(req: Request, { db }: RouteContext): Promise<Response> {
+  const url = new URL(req.url);
+  const requestedLimit = Number(url.searchParams.get("limit") ?? 50);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(100, Math.trunc(requestedLimit))) : 50;
+  let query = db.from("stations")
+    .select("station_id,name,location_name,online,status,rentable_count,returnable_count,total_count,currency,last_sync_at")
+    .order("station_id")
+    .limit(limit);
+  if (url.searchParams.get("online") === "true") query = query.eq("online", true);
+  if (url.searchParams.get("online") === "false") query = query.eq("online", false);
+  const { data, error } = await query;
+  if (error) return apiError(500, "db_error", "Unable to load stations");
+  return jsonResponse({ stations: (data ?? []).map(toStationPublic), count: data?.length ?? 0 });
 }
 
 async function getStation(_req: Request, { db, params }: RouteContext): Promise<Response> {
-  const { data, error } = await db
-    .from("stations")
-    .select("station_id, name, location_name, online, status, rentable_count, returnable_count, total_count, currency, last_sync_at")
+  if (!validStationId(params.stationId)) return apiError(400, "invalid_station_id", "Invalid station identifier");
+  const { data, error } = await db.from("stations")
+    .select("station_id,name,location_name,online,status,rentable_count,returnable_count,total_count,currency,last_sync_at")
     .eq("station_id", params.stationId)
     .maybeSingle();
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
-  if (!data) return jsonResponse({ error: { code: "not_found", message: "Station not found" } }, 404);
+  if (error) return apiError(500, "db_error", "Unable to load station");
+  if (!data) return apiError(404, "not_found", "Station not found");
   return jsonResponse(toStationPublic(data));
 }
 
 async function getAvailability(_req: Request, { db, params }: RouteContext): Promise<Response> {
-  const { data, error } = await db
-    .from("stations")
-    .select("station_id, online, rentable_count, returnable_count, total_count, last_sync_at")
+  if (!validStationId(params.stationId)) return apiError(400, "invalid_station_id", "Invalid station identifier");
+  const { data, error } = await db.from("stations")
+    .select("station_id,online,rentable_count,returnable_count,total_count,last_sync_at")
     .eq("station_id", params.stationId)
     .maybeSingle();
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
-  if (!data) return jsonResponse({ error: { code: "not_found", message: "Station not found" } }, 404);
+  if (error) return apiError(500, "db_error", "Unable to load station availability");
+  if (!data) return apiError(404, "not_found", "Station not found");
   return jsonResponse({
     station_id: data.station_id,
-    online: !!data.online,
+    online: Boolean(data.online),
     rentable: data.rentable_count ?? 0,
     returnable: data.returnable_count ?? 0,
     total_slots: data.total_count ?? 0,
@@ -278,37 +283,37 @@ async function getAvailability(_req: Request, { db, params }: RouteContext): Pro
 }
 
 async function getInventory(_req: Request, { db, params }: RouteContext): Promise<Response> {
-  const { data, error } = await db
-    .from("slots")
-    .select("slot_num, status, battery_id")
-    .eq("station_id", params.stationId)
-    .order("slot_num");
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
+  if (!validStationId(params.stationId)) return apiError(400, "invalid_station_id", "Invalid station identifier");
+  const [{ data: station, error: stationError }, { data: slots, error: slotError }] = await Promise.all([
+    db.from("stations").select("station_id,online,last_sync_at").eq("station_id", params.stationId).maybeSingle(),
+    db.from("slots").select("slot_num,status,battery_id").eq("station_id", params.stationId).order("slot_num"),
+  ]);
+  if (stationError || slotError) return apiError(500, "db_error", "Unable to load station inventory");
+  if (!station) return apiError(404, "not_found", "Station not found");
   return jsonResponse({
     station_id: params.stationId,
-    slots: (data ?? []).map((s) => ({
-      slot_num: s.slot_num,
-      status: s.status,
-      battery_id: s.battery_id ?? null,
+    online: Boolean(station.online),
+    last_sync_at: station.last_sync_at,
+    slots: (slots ?? []).map((slot) => ({
+      slot_num: slot.slot_num,
+      status: slot.status,
+      battery_id: slot.battery_id ?? null,
     })),
   });
 }
 
 async function pricingQuote(req: Request, { db }: RouteContext): Promise<Response> {
-  let body: Record<string, unknown> = {};
-  try { body = await req.json(); } catch { /* empty body allowed */ }
+  const body = await readJson(req);
+  if (!body) return apiError(400, "invalid_request", "A valid JSON body under 64 KiB is required");
+  const stationId = typeof body.station_id === "string" ? body.station_id.trim() : null;
+  const deviceId = typeof body.device_id === "string" ? body.device_id.trim() : null;
+  if (!stationId && !deviceId) return apiError(400, "invalid_request", "station_id or device_id is required");
+  if (stationId && !validStationId(stationId)) return apiError(400, "invalid_station_id", "Invalid station identifier");
+  if (deviceId && !validStationId(deviceId)) return apiError(400, "invalid_device_id", "Invalid device identifier");
 
-  const stationId = typeof body.station_id === "string" ? body.station_id : undefined;
-  const deviceId = typeof body.device_id === "string" ? body.device_id : undefined;
-  if (!stationId && !deviceId) {
-    return jsonResponse({
-      error: { code: "invalid_request", message: "station_id or device_id required" },
-    }, 400);
-  }
-  // Canonical pricing — server-side only, ignores any client-supplied amount.
   const { data, error } = await db.rpc("compute_pricing", {
-    p_device: deviceId ?? null,
-    p_station: stationId ?? null,
+    p_device: deviceId,
+    p_station: stationId,
     p_shop: null,
     p_start: null,
     p_end: null,
@@ -316,11 +321,9 @@ async function pricingQuote(req: Request, { db }: RouteContext): Promise<Respons
     p_return_state: "normal",
     p_currency: null,
   });
-  if (error) return jsonResponse({ error: { code: "pricing_error", message: error.message } }, 400);
-  if (data && typeof data === "object" && "error" in (data as Record<string, unknown>)) {
-    return jsonResponse({ error: { code: "pricing_error", message: String((data as Record<string, unknown>).error) } }, 400);
-  }
+  if (error || !data) return apiError(409, "pricing_unavailable", "Canonical pricing is unavailable");
   const quote = data as Record<string, unknown>;
+  if (quote.error) return apiError(409, "pricing_unavailable", "Canonical pricing is unavailable");
   return jsonResponse({
     currency: quote.currency,
     period_minutes: quote.period_minutes,
@@ -334,94 +337,105 @@ async function pricingQuote(req: Request, { db }: RouteContext): Promise<Respons
   });
 }
 
-async function getRental(_req: Request, { db, client, params }: RouteContext): Promise<Response> {
-  const { data, error } = await db
-    .from("rental_sessions")
-    .select("id, station_id, state, amount_expected, amount_paid, currency, created_at, paid_at, ejected_at, returned_at, closed_at, api_client_id")
-    .eq("id", params.rentalId)
-    .eq("api_client_id", client.clientId)
+async function loadOwnedRental(db: Db, clientId: string, rentalId: string) {
+  if (!validRentalId(rentalId)) return { invalid: true, rental: null, error: null };
+  const { data, error } = await db.from("rental_sessions")
+    .select("id,station_id,state,amount_expected,amount_paid,currency,created_at,paid_at,ejected_at,returned_at,closed_at,api_client_id")
+    .eq("id", rentalId)
+    .eq("api_client_id", clientId)
     .maybeSingle();
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
-  if (!data) return jsonResponse({ error: { code: "not_found", message: "Rental not found" } }, 404);
-  return jsonResponse(toRentalPublic(data));
+  return { invalid: false, rental: data, error };
+}
+
+async function getRental(_req: Request, { db, client, params }: RouteContext): Promise<Response> {
+  const owned = await loadOwnedRental(db, client.clientId, params.rentalId);
+  if (owned.invalid) return apiError(400, "invalid_rental_id", "Rental UUID required");
+  if (owned.error) return apiError(500, "db_error", "Unable to load rental");
+  if (!owned.rental) return apiError(404, "not_found", "Rental not found");
+
+  const { data: snapshot, error: snapshotError } = await db.from("rental_orchestrator_snapshots")
+    .select("state,version,station_id,battery_id,final_amount_chf,failure_reason,updated_at")
+    .eq("rental_id", params.rentalId)
+    .maybeSingle();
+  if (snapshotError) return apiError(500, "db_error", "Unable to load canonical rental state");
+
+  return jsonResponse(toRentalPublic(owned.rental, snapshot));
 }
 
 async function getRentalEvents(_req: Request, { db, client, params }: RouteContext): Promise<Response> {
-  // Confirm ownership first — never disclose events for another client's rental.
-  const { data: rental } = await db
-    .from("rental_sessions")
-    .select("id")
-    .eq("id", params.rentalId)
-    .eq("api_client_id", client.clientId)
-    .maybeSingle();
-  if (!rental) return jsonResponse({ error: { code: "not_found", message: "Rental not found" } }, 404);
-  const { data, error } = await db
-    .from("rental_events")
-    .select("id, event_type, created_at, payload")
-    .eq("rental_session_id", params.rentalId)
-    .order("created_at", { ascending: true });
-  if (error) return jsonResponse({ error: { code: "db_error", message: "Query failed" } }, 500);
+  const owned = await loadOwnedRental(db, client.clientId, params.rentalId);
+  if (owned.invalid) return apiError(400, "invalid_rental_id", "Rental UUID required");
+  if (owned.error) return apiError(500, "db_error", "Unable to verify rental ownership");
+  if (!owned.rental) return apiError(404, "not_found", "Rental not found");
+
+  const { data, error } = await db.from("rental_orchestrator_events")
+    .select("id,event_type,occurred_at,metadata,resulting_state,resulting_version,created_at")
+    .eq("rental_id", params.rentalId)
+    .order("resulting_version", { ascending: true });
+  if (error) return apiError(500, "db_error", "Unable to load canonical rental events");
+
   return jsonResponse({
     rental_id: params.rentalId,
-    events: (data ?? []).map((e) => ({
-      id: e.id,
-      type: e.event_type,
-      occurred_at: e.created_at,
-      // Payload is exposed as-is only for events emitted by the canonical
-      // engine; it never contains provider secrets.
-      data: sanitizeEventPayload(e.payload),
+    source: "rental_orchestrator_events",
+    events: (data ?? []).map((event) => ({
+      id: event.id,
+      type: event.event_type,
+      occurred_at: event.occurred_at,
+      resulting_state: event.resulting_state,
+      version: event.resulting_version,
+      data: sanitizeEventMetadata(event.metadata),
     })),
   });
 }
 
-function toStationPublic(s: Record<string, unknown>) {
+function toStationPublic(station: Record<string, unknown>) {
   return {
-    id: s.station_id,
-    name: s.name,
-    location: s.location_name,
-    online: !!s.online,
-    status: s.status,
-    rentable: s.rentable_count ?? 0,
-    returnable: s.returnable_count ?? 0,
-    total_slots: s.total_count ?? 0,
-    currency: s.currency ?? "CHF",
-    last_sync_at: s.last_sync_at,
+    id: station.station_id,
+    name: station.name,
+    location: station.location_name,
+    online: Boolean(station.online),
+    status: station.status,
+    rentable: station.rentable_count ?? 0,
+    returnable: station.returnable_count ?? 0,
+    total_slots: station.total_count ?? 0,
+    currency: station.currency ?? "CHF",
+    last_sync_at: station.last_sync_at,
   };
 }
 
-function toRentalPublic(r: Record<string, unknown>) {
+function toRentalPublic(rental: Record<string, unknown>, snapshot: Record<string, unknown> | null) {
   return {
-    id: r.id,
-    station_id: r.station_id,
-    state: r.state,
-    amount_expected: r.amount_expected,
-    amount_paid: r.amount_paid,
-    currency: r.currency,
-    created_at: r.created_at,
-    paid_at: r.paid_at,
-    ejected_at: r.ejected_at,
-    returned_at: r.returned_at,
-    closed_at: r.closed_at,
+    id: rental.id,
+    station_id: snapshot?.station_id ?? rental.station_id,
+    state: snapshot?.state ?? rental.state,
+    orchestrator_version: snapshot?.version ?? null,
+    battery_id: snapshot?.battery_id ?? null,
+    amount_expected: rental.amount_expected,
+    amount_paid: rental.amount_paid,
+    final_amount_chf: snapshot?.final_amount_chf ?? null,
+    currency: rental.currency,
+    failure_reason: snapshot?.failure_reason ?? null,
+    created_at: rental.created_at,
+    paid_at: rental.paid_at,
+    ejected_at: rental.ejected_at,
+    returned_at: rental.returned_at,
+    closed_at: rental.closed_at,
+    canonical_updated_at: snapshot?.updated_at ?? null,
   };
 }
 
 const FORBIDDEN_KEYS = new Set([
-  "authorization","secret","api_key","apikey","token","password",
-  "stripe_secret","stripe_signature","chargenow_auth","raw_data",
+  "authorization", "secret", "api_key", "apikey", "token", "password",
+  "stripe_secret", "stripe_signature", "chargenow_auth", "raw_data",
+  "client_secret", "service_role_key", "access_token", "refresh_token",
 ]);
 
-function sanitizeEventPayload(payload: unknown): unknown {
-  if (!payload || typeof payload !== "object") return payload ?? null;
-  const clone: Record<string, unknown> = JSON.parse(JSON.stringify(payload));
-  const walk = (o: Record<string, unknown>) => {
-    for (const k of Object.keys(o)) {
-      if (FORBIDDEN_KEYS.has(k.toLowerCase())) {
-        o[k] = "***";
-      } else if (o[k] && typeof o[k] === "object") {
-        walk(o[k] as Record<string, unknown>);
-      }
-    }
-  };
-  walk(clone);
-  return clone;
+function sanitizeEventMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeEventMetadata);
+  if (!value || typeof value !== "object") return value ?? null;
+  const output: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    output[key] = FORBIDDEN_KEYS.has(key.toLowerCase()) ? "***" : sanitizeEventMetadata(nested);
+  }
+  return output;
 }
