@@ -1,24 +1,13 @@
 name: Chargeurs.ch Android Kiosk Build
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/android-kiosk-ci.yml
-      - android-kiosk/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: android-kiosk-one-shot-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build-staging-apk:
-    if: github.head_ref == 'agent/finalize-chargeurs-platform' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,7 +21,7 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build corrected staging APK
+      - name: Build staging APK
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
@@ -49,7 +38,7 @@ jobs:
           cp "$apk" dist/chargeurs-kiosk-staging-v1.0.1-debug.apk
           sha256sum dist/chargeurs-kiosk-staging-v1.0.1-debug.apk > dist/SHA256SUMS.txt
 
-      - name: Upload corrected APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: chargeurs-kiosk-staging-v1.0.1-debug
