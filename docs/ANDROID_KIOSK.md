@@ -126,7 +126,9 @@ Build local avec Gradle installé :
 
 ```bash
 cd android-kiosk
-gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+CHARGEURS_ENROLLMENT_URL=https://PROJECT_REF.supabase.co/functions/v1/kiosk-enroll \
+CHARGEURS_KIOSK_PUBLIC_BASE_URL=https://chargeurs-ch-staging.vercel.app \
+  gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
 La CI publie :

@@ -5,6 +5,9 @@ plugins {
 val enrollmentUrl = providers.gradleProperty("chargeursEnrollmentUrl")
     .orElse(providers.environmentVariable("CHARGEURS_ENROLLMENT_URL"))
     .orElse("")
+val kioskPublicBaseUrl = providers.gradleProperty("chargeursKioskPublicBaseUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_KIOSK_PUBLIC_BASE_URL"))
+    .orElse("")
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
@@ -33,6 +36,7 @@ android {
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
+        buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
     }
 

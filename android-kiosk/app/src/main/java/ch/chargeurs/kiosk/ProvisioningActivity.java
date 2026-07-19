@@ -27,10 +27,14 @@ public final class ProvisioningActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = new SecureConfigStore(this);
-        if (store.load() != null) {
+        KioskConfig existing = store.load();
+        if (existing != null && KioskConfigValidator.matchesPinnedBaseUrl(
+            existing.baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
+        )) {
             launchKiosk();
             return;
         }
+        if (existing != null) store.clear();
         setContentView(buildView());
     }
 
@@ -104,6 +108,9 @@ public final class ProvisioningActivity extends Activity {
                     DeviceIdentity.getOrCreate(this),
                     BuildConfig.VERSION_NAME
                 );
+                if (!KioskConfigValidator.matchesPinnedBaseUrl(
+                    result.config().baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
+                )) throw new IllegalStateException("KIOSK_ORIGIN_MISMATCH");
                 if (!store.save(result.config())) throw new IllegalStateException("STORAGE_FAILED");
                 runOnUiThread(() -> {
                     pairingCodeInput.setText("");

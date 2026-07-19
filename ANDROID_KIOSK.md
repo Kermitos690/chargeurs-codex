@@ -24,7 +24,9 @@ Le protocole cabinet reste volontairement `NOT_CONFIGURED`. Aucun octet supposé
 
 ```bash
 cd android-kiosk
-./gradlew testDebugUnitTest lintDebug assembleDebug
+CHARGEURS_ENROLLMENT_URL=https://PROJECT_REF.supabase.co/functions/v1/kiosk-enroll \
+CHARGEURS_KIOSK_PUBLIC_BASE_URL=https://chargeurs-ch-staging.vercel.app \
+  ./gradlew testDebugUnitTest lintDebug assembleDebug
 ./gradlew lintRelease assembleRelease bundleRelease
 ```
 

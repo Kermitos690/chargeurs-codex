@@ -71,6 +71,22 @@ public final class KioskConfigValidatorTest {
     }
 
     @Test
+    public void enrollmentOriginMustMatchThePinnedBuildOrigin() {
+        assertTrue(KioskConfigValidator.matchesPinnedBaseUrl(
+            "https://chargeurs-ch-staging.vercel.app/",
+            "https://chargeurs-ch-staging.vercel.app"
+        ));
+        assertFalse(KioskConfigValidator.matchesPinnedBaseUrl(
+            "https://chargeurs.ch",
+            "https://chargeurs-ch-staging.vercel.app"
+        ));
+        assertFalse(KioskConfigValidator.matchesPinnedBaseUrl(
+            "http://chargeurs-ch-staging.vercel.app",
+            "https://chargeurs-ch-staging.vercel.app"
+        ));
+    }
+
+    @Test
     public void acceptsOnlyHttpsEnrollmentEndpoints() {
         assertEquals(
             "https://example.supabase.co/functions/v1/kiosk-enroll",

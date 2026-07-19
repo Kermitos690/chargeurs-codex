@@ -72,8 +72,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        config = new SecureConfigStore(this).load();
-        if (config == null) {
+        SecureConfigStore configStore = new SecureConfigStore(this);
+        config = configStore.load();
+        if (config == null || !KioskConfigValidator.matchesPinnedBaseUrl(
+            config.baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
+        )) {
+            if (config != null) configStore.clear();
             startActivity(new Intent(this, ProvisioningActivity.class));
             finish();
             return;

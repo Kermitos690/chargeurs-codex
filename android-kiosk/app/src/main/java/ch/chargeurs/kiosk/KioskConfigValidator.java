@@ -71,6 +71,14 @@ public final class KioskConfigValidator {
         }
     }
 
+    public static boolean matchesPinnedBaseUrl(String candidate, String pinnedBaseUrl) {
+        String normalizedCandidate = normalizeBaseUrl(candidate);
+        String normalizedPinned = normalizeBaseUrl(pinnedBaseUrl);
+        return normalizedCandidate != null
+            && normalizedPinned != null
+            && normalizedCandidate.equals(normalizedPinned);
+    }
+
     public static String kioskUrl(String baseUrl, String stationId) {
         String normalizedBase = normalizeBaseUrl(baseUrl);
         if (normalizedBase == null || !isValidStationId(stationId)) {
