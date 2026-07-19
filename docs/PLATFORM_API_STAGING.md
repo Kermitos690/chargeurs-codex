@@ -69,7 +69,7 @@ supabase db push --dry-run
 La migration Platform API attendue est :
 
 ```text
-supabase/migrations/20260719130000_platform_api_readonly_v1.sql
+supabase/migrations/20260719133000_platform_api_readonly_v1.sql
 ```
 
 Elle crée ou complète :
