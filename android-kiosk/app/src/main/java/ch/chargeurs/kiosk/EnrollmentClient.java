@@ -55,16 +55,24 @@ public final class EnrollmentClient {
                 ? connection.getInputStream()
                 : connection.getErrorStream();
             String response = readLimited(body);
-            if (status != 200) throw new IllegalStateException("ENROLLMENT_REJECTED");
+            JSONObject json = response.trim().isEmpty() ? new JSONObject() : new JSONObject(response);
+            String serverError = json.optString("error", "").trim();
 
-            JSONObject json = new JSONObject(response);
-            if (!json.optBoolean("ok", false)) throw new IllegalStateException("ENROLLMENT_REJECTED");
+            if (status != 200) {
+                throw new IllegalStateException(serverError.isEmpty() ? "HTTP_" + status : serverError);
+            }
+            if (!json.optBoolean("ok", false)) {
+                throw new IllegalStateException(serverError.isEmpty() ? "ENROLLMENT_REJECTED" : serverError);
+            }
+
             String stationId = json.optString("stationId", "");
             String kioskToken = json.optString("kioskToken", "");
             String baseUrl = json.optString("baseUrl", "");
             String deviceId = json.optString("deviceId", "");
             KioskConfig config = new KioskConfig(stationId, kioskToken, baseUrl);
-            if (!config.isValid() || deviceId.trim().isEmpty()) throw new IllegalStateException("INVALID_ENROLLMENT_RESPONSE");
+            if (!config.isValid() || deviceId.trim().isEmpty()) {
+                throw new IllegalStateException("INVALID_ENROLLMENT_RESPONSE");
+            }
             return new EnrollmentResult(deviceId, config);
         } finally {
             connection.disconnect();
