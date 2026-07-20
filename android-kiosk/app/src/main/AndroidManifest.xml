@@ -26,6 +26,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".HardwareDiagnosticActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
@@ -37,11 +41,6 @@
             </intent-filter>
         </activity>
 
-        <!--
-          Only release builds expose Chargeurs.ch as an Android HOME/launcher.
-          Debug/staging APKs keep this alias disabled so testers can always leave
-          the app with the Home button and reach Android settings.
-        -->
         <activity-alias
             android:name=".KioskHomeAlias"
             android:targetActivity=".MainActivity"
