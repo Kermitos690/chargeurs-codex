@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
+    <queries>
+        <package android:name="com.szbjkj.bajietouchpower" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -21,13 +25,8 @@
         android:supportsRtl="true"
         tools:targetApi="s">
 
-        <activity
-            android:name=".ProvisioningActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".HardwareDiagnosticActivity"
-            android:exported="false" />
+        <activity android:name=".ProvisioningActivity" android:exported="false" />
+        <activity android:name=".HardwareDiagnosticActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
