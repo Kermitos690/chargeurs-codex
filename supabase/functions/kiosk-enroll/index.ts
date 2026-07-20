@@ -2,6 +2,9 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
 import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
 
+const STAGING_SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
+const STAGING_KIOSK_ORIGIN = "https://chargeurs-ch-staging.vercel.app";
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -10,6 +13,11 @@ function json(body: unknown, status = 200) {
 }
 
 function publicBaseUrl(): string | null {
+  // This project is the dedicated staging backend. Pin its kiosk origin so an
+  // outdated/mistyped secret cannot consume a pairing code and then make the
+  // APK reject the returned configuration with KIOSK_ORIGIN_MISMATCH.
+  const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
+  if (projectOrigin === STAGING_SUPABASE_ORIGIN) return STAGING_KIOSK_ORIGIN;
   return normalizeKioskBaseUrl(Deno.env.get("KIOSK_PUBLIC_BASE_URL") ?? "");
 }
 
@@ -38,11 +46,27 @@ Deno.serve(async (req) => {
       p_device_public_id: devicePublicId,
       p_app_version: appVersion,
     });
-    if (error) return json({ ok: false, error: "ENROLLMENT_UNAVAILABLE" }, 503);
+    if (error) {
+      console.error("kiosk enrollment RPC unavailable", error.code ?? "RPC_ERROR");
+      return json({ ok: false, error: "ENROLLMENT_UNAVAILABLE" }, 503);
+    }
 
-    const result = data as { ok?: boolean; error?: string; station_id?: string; device_id?: string } | null;
+    const result = data as {
+      ok?: boolean;
+      error?: string;
+      station_id?: string;
+      device_id?: string;
+      recovered?: boolean;
+    } | null;
+
     if (!result?.ok || !result.station_id || !result.device_id) {
-      // Do not reveal whether a code existed, expired or was already consumed.
+      if (result?.error === "DEVICE_BOUND_TO_ANOTHER_STATION") {
+        return json({ ok: false, error: "DEVICE_BOUND_TO_ANOTHER_STATION" }, 409);
+      }
+      if (result?.error === "PAIRING_ORGANIZATION_MISSING") {
+        return json({ ok: false, error: "PAIRING_CONFIGURATION_INVALID" }, 503);
+      }
+      // Keep invalid, expired and already consumed pairing codes indistinguishable.
       return json({ ok: false, error: "PAIRING_CODE_INVALID_OR_EXPIRED" }, 401);
     }
 
@@ -52,8 +76,10 @@ Deno.serve(async (req) => {
       stationId: result.station_id,
       kioskToken,
       baseUrl,
+      recovered: result.recovered === true,
     });
-  } catch {
+  } catch (error) {
+    console.error("kiosk enrollment unavailable", error instanceof Error ? error.name : "UNKNOWN_ERROR");
     return json({ ok: false, error: "ENROLLMENT_UNAVAILABLE" }, 503);
   }
 });
