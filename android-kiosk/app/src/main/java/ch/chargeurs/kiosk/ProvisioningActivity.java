@@ -78,6 +78,19 @@ public final class ProvisioningActivity extends Activity {
             dp(56)
         ));
 
+        Button diagnosticButton = new Button(this);
+        diagnosticButton.setText("Diagnostic matériel automatique");
+        diagnosticButton.setAllCaps(false);
+        diagnosticButton.setOnClickListener(view -> startActivity(
+            new Intent(this, HardwareDiagnosticActivity.class)
+        ));
+        LinearLayout.LayoutParams diagnosticParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(56)
+        );
+        diagnosticParams.setMargins(0, dp(10), 0, 0);
+        content.addView(diagnosticButton, diagnosticParams);
+
         TextView warning = text(
             getString(R.string.reprovision_warning),
             13,
