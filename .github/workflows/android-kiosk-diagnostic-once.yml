@@ -7,6 +7,12 @@ on:
     paths:
       - .github/workflows/android-kiosk-diagnostic-once.yml
       - android-kiosk/**
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/android-kiosk-diagnostic-once.yml
+      - android-kiosk/**
 
 permissions:
   contents: read
@@ -17,6 +23,7 @@ concurrency:
 
 jobs:
   build-diagnostic-apk:
+    if: github.event_name == 'push' || github.head_ref == 'agent/finalize-chargeurs-platform'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
