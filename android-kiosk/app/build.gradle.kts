@@ -32,10 +32,10 @@ android {
 
     defaultConfig {
         applicationId = "ch.chargeurs.kiosk"
-        minSdk = 23
+        minSdk = 26
         targetSdk = 36
-        versionCode = 102
-        versionName = "1.0.2"
+        versionCode = 103
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
