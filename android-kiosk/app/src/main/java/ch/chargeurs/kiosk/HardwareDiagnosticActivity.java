@@ -53,7 +53,7 @@ public final class HardwareDiagnosticActivity extends Activity {
         content.addView(title, matchWrap(dp(8), dp(12)));
 
         TextView help = new TextView(this);
-        help.setText("Lecture uniquement : ports série, USB, pilote, firmware Android et présence de l’APK fournisseur. Aucune commande d’éjection n’est envoyée.");
+        help.setText("Lecture uniquement : ports série, USB, pilotes, firmware Android et présence de l’APK fournisseur. Aucune commande n’est envoyée à la borne.");
         help.setTextSize(14);
         help.setTextColor(Color.rgb(190, 202, 226));
         help.setGravity(Gravity.CENTER);
@@ -77,6 +77,16 @@ public final class HardwareDiagnosticActivity extends Activity {
             dp(54)
         ));
 
+        Button rerunButton = new Button(this);
+        rerunButton.setText("Relancer le diagnostic");
+        rerunButton.setOnClickListener(view -> runDiagnostic());
+        LinearLayout.LayoutParams rerunParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(54)
+        );
+        rerunParams.setMargins(0, dp(10), 0, 0);
+        content.addView(rerunButton, rerunParams);
+
         Button closeButton = new Button(this);
         closeButton.setText("Retour à l’activation");
         closeButton.setOnClickListener(view -> finish());
@@ -91,12 +101,20 @@ public final class HardwareDiagnosticActivity extends Activity {
     }
 
     private void runDiagnostic() {
+        output.setText("Analyse en cours…");
+        copyButton.setEnabled(false);
         executor.execute(() -> {
-            JSONObject collected = HardwareDiagnosticCollector.collect(this);
-            String formatted = collected.toString(2);
+            String formatted;
+            try {
+                JSONObject collected = HardwareDiagnosticCollector.collect(this);
+                formatted = collected.toString(2);
+            } catch (Exception error) {
+                formatted = "{\n  \"diagnosticError\": \"" + error.getClass().getSimpleName() + "\",\n  \"safeReadOnly\": true\n}";
+            }
+            final String result = formatted;
             runOnUiThread(() -> {
-                report = formatted;
-                output.setText(formatted);
+                report = result;
+                output.setText(result);
                 copyButton.setEnabled(true);
             });
         });
