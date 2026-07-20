@@ -1,0 +1,53 @@
+name: Android kiosk DTA diagnostic APK — one-time build
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/android-kiosk-diagnostic-once.yml
+      - android-kiosk/**
+
+permissions:
+  contents: read
+
+jobs:
+  build-diagnostic-apk:
+    if: github.head_ref == 'agent/finalize-chargeurs-platform'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Test, lint and build the read-only diagnostic APK
+        working-directory: android-kiosk
+        env:
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+        run: ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug
+
+      - name: Prepare the installable artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          mkdir -p dist
+          cp "$apk" dist/chargeurs-kiosk-dta-diagnostic-v1.0.3.apk
+          sha256sum dist/chargeurs-kiosk-dta-diagnostic-v1.0.3.apk > dist/SHA256SUMS.txt
+
+      - name: Upload the diagnostic APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-dta-diagnostic-v1.0.3
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/*
