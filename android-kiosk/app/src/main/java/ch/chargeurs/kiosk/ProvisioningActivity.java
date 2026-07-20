@@ -14,6 +14,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -116,14 +118,42 @@ public final class ProvisioningActivity extends Activity {
                     pairingCodeInput.setText("");
                     launchKiosk();
                 });
-            } catch (Exception ignored) {
+            } catch (Exception error) {
+                String message = enrollmentErrorMessage(error);
                 runOnUiThread(() -> {
                     activateButton.setEnabled(true);
                     activateButton.setText(R.string.activate);
-                    Toast.makeText(this, R.string.enrollment_failed, Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
             }
         });
+    }
+
+    private String enrollmentErrorMessage(Exception error) {
+        if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible.";
+        if (error instanceof SocketTimeoutException) return "Le serveur d’appairage ne répond pas à temps.";
+
+        String code = error.getMessage() == null ? "UNKNOWN_ERROR" : error.getMessage().trim();
+        switch (code) {
+            case "PAIRING_CODE_INVALID_OR_EXPIRED":
+                return "Code refusé par le serveur : expiré, déjà utilisé ou non reconnu.";
+            case "DEVICE_BOUND_TO_ANOTHER_STATION":
+                return "Cette tablette est déjà liée à une autre borne. Révoquez-la dans le back-office.";
+            case "PAIRING_CONFIGURATION_INVALID":
+                return "Configuration de la borne incomplète côté serveur.";
+            case "ENROLLMENT_UNAVAILABLE":
+                return "Service d’appairage temporairement indisponible.";
+            case "KIOSK_ORIGIN_MISMATCH":
+                return "Le serveur a renvoyé une mauvaise adresse kiosk.";
+            case "STORAGE_FAILED":
+                return "Activation reçue, mais la tablette n’a pas pu enregistrer le token localement.";
+            case "INVALID_ENROLLMENT_RESPONSE":
+                return "Réponse d’activation incomplète reçue du serveur.";
+            default:
+                return BuildConfig.DEBUG
+                    ? "Échec d’appairage — diagnostic : " + code
+                    : getString(R.string.enrollment_failed);
+        }
     }
 
     private void launchKiosk() {
