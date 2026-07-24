@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { X, RefreshCw, Lock, LogOut, KeyRound, Check } from "lucide-react";
+import { X, RefreshCw, Lock, LogOut, KeyRound, Check, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
 import { readKioskToken } from "@/lib/kioskFetch";
 
 const KIOSK_TOKEN_KEY = "kiosk_token";
+
+type NativeDiagnosticsWindow = Window & {
+  ChargeursNative?: {
+    openDiagnostics?: () => void;
+  };
+};
 
 function maskToken(t: string): string {
   if (!t) return "aucun token enregistré";
@@ -42,6 +48,11 @@ export function KioskDiagnostics(props: Props) {
   const [tokenInput, setTokenInput] = useState("");
   const [savedToken, setSavedToken] = useState(() => readKioskToken() ?? "");
   const [tokenSaved, setTokenSaved] = useState(false);
+
+  const nativeBridge = typeof window === "undefined"
+    ? undefined
+    : (window as NativeDiagnosticsWindow).ChargeursNative;
+  const nativeDiagnosticsAvailable = typeof nativeBridge?.openDiagnostics === "function";
 
   const tokenReady = savedToken.length >= 24;
   const chargenowValue = !tokenReady
@@ -108,6 +119,7 @@ export function KioskDiagnostics(props: Props) {
         <Row label="Réseau Internet" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
         <Row label="API ChargeNow" value={chargenowValue} tone={chargenowTone} />
         <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
+        <Row label="Passerelle locale" value={nativeDiagnosticsAvailable ? "APK Chargeurs.ch détectée" : "navigateur web uniquement"} tone={nativeDiagnosticsAvailable ? "ok" : "warn"} />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
         <Row label="Token kiosk" value={maskToken(savedToken)} tone={tokenReady ? "ok" : "bad"} />
 
@@ -141,6 +153,14 @@ export function KioskDiagnostics(props: Props) {
           {needRefresh && (
             <Button onClick={onApplyUpdate} className="gap-2 rounded-full bg-gradient-primary">
               <RefreshCw className="h-4 w-4" />Appliquer la mise à jour
+            </Button>
+          )}
+          {nativeDiagnosticsAvailable && (
+            <Button
+              onClick={() => nativeBridge?.openDiagnostics?.()}
+              className="gap-2 rounded-full bg-gradient-primary"
+            >
+              <Cpu className="h-4 w-4" />Analyser le matériel local
             </Button>
           )}
           <Button variant="outline" onClick={relock} className="gap-2 rounded-full">
