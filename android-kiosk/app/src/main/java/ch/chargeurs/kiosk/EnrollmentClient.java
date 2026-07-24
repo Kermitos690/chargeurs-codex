@@ -21,12 +21,17 @@ public final class EnrollmentClient {
         String endpoint,
         String pairingCode,
         String devicePublicId,
-        String appVersion
+        String appVersion,
+        String requestedTestToken
     ) throws Exception {
         String normalizedEndpoint = KioskConfigValidator.normalizeHttpsEndpoint(endpoint);
         if (normalizedEndpoint == null) throw new IllegalArgumentException("ENROLLMENT_NOT_CONFIGURED");
         if (pairingCode == null || !pairingCode.matches("^kc_[A-Za-z0-9_-]{16,64}$")) {
             throw new IllegalArgumentException("INVALID_PAIRING_CODE");
+        }
+        if (requestedTestToken != null && !requestedTestToken.isEmpty()
+            && !TestKioskToken.isValid(requestedTestToken)) {
+            throw new IllegalArgumentException("INVALID_TEST_TOKEN");
         }
 
         HttpsURLConnection connection = (HttpsURLConnection) new URL(normalizedEndpoint).openConnection();
@@ -43,6 +48,9 @@ public final class EnrollmentClient {
             .put("pairingCode", pairingCode)
             .put("devicePublicId", devicePublicId)
             .put("appVersion", appVersion);
+        if (requestedTestToken != null && !requestedTestToken.isEmpty()) {
+            request.put("requestedKioskToken", requestedTestToken);
+        }
         byte[] requestBytes = request.toString().getBytes(StandardCharsets.UTF_8);
         connection.setFixedLengthStreamingMode(requestBytes.length);
 
@@ -72,6 +80,10 @@ public final class EnrollmentClient {
             KioskConfig config = new KioskConfig(stationId, kioskToken, baseUrl);
             if (!config.isValid() || deviceId.trim().isEmpty()) {
                 throw new IllegalStateException("INVALID_ENROLLMENT_RESPONSE");
+            }
+            if (requestedTestToken != null && !requestedTestToken.isEmpty()
+                && !requestedTestToken.equals(kioskToken)) {
+                throw new IllegalStateException("TEST_TOKEN_NOT_ACCEPTED");
             }
             return new EnrollmentResult(deviceId, config);
         } finally {
