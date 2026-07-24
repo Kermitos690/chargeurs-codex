@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, RefreshCw, Lock, LogOut, KeyRound, Check, Cpu } from "lucide-react";
+import { X, RefreshCw, Lock, LogOut, KeyRound, Check, Cpu, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
@@ -85,7 +85,7 @@ export function KioskDiagnostics(props: Props) {
       setTokenSaved(true);
       setTimeout(() => setTokenSaved(false), 2500);
     } catch {
-      // Local storage can be unavailable in restricted kiosk mode.
+      // Browser-only fallback. The native APK injects its token in sessionStorage.
     }
   };
 
@@ -121,33 +121,49 @@ export function KioskDiagnostics(props: Props) {
         <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
         <Row label="Passerelle locale" value={nativeDiagnosticsAvailable ? "APK Chargeurs.ch détectée" : "navigateur web uniquement"} tone={nativeDiagnosticsAvailable ? "ok" : "warn"} />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
-        <Row label="Token kiosk" value={maskToken(savedToken)} tone={tokenReady ? "ok" : "bad"} />
+        <Row
+          label="Token kiosk"
+          value={nativeDiagnosticsAvailable && tokenReady ? "créé et injecté automatiquement" : maskToken(savedToken)}
+          tone={tokenReady ? "ok" : "bad"}
+        />
 
-        <div className="mt-5 rounded-2xl border border-border/40 p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <KeyRound className="h-4 w-4" />
-            {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
+        {nativeDiagnosticsAvailable ? (
+          <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-success">
+              <ShieldCheck className="h-4 w-4" />
+              Activation gérée par l’APK
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Aucun token à coller ici. L’APK diagnostic l’a généré, enregistré dans le stockage sécurisé Android et injecté pour cette session.
+            </p>
           </div>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Collez le token fourni pour cette borne ({stationId ?? "—"}). Il est stocké uniquement sur cette tablette et n'est envoyé qu'aux fonctions serveur kiosk autorisées.
-          </p>
-          <Input
-            type="password"
-            inputMode="text"
-            autoComplete="off"
-            placeholder="kt_…"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            className="font-mono text-sm"
-          />
-          <Button
-            onClick={saveToken}
-            disabled={tokenInput.trim().length < 24}
-            className="mt-3 w-full gap-2 rounded-full bg-gradient-primary"
-          >
-            {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
-          </Button>
-        </div>
+        ) : (
+          <div className="mt-5 rounded-2xl border border-border/40 p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <KeyRound className="h-4 w-4" />
+              {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Secours navigateur uniquement : collez le token de cette borne ({stationId ?? "—"}).
+            </p>
+            <Input
+              type="password"
+              inputMode="text"
+              autoComplete="off"
+              placeholder="kt_…"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              className="font-mono text-sm"
+            />
+            <Button
+              onClick={saveToken}
+              disabled={tokenInput.trim().length < 24}
+              className="mt-3 w-full gap-2 rounded-full bg-gradient-primary"
+            >
+              {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
+            </Button>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-col gap-2">
           {needRefresh && (
@@ -171,7 +187,7 @@ export function KioskDiagnostics(props: Props) {
           </Button>
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Aucun secret ChargeNow / Stripe n'est exposé ici. Les opérations sensibles restent côté serveur.
+          Aucun secret ChargeNow / Stripe n’est exposé ici. Les opérations sensibles restent côté serveur.
         </p>
       </div>
     </div>
