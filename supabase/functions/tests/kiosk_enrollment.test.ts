@@ -1,5 +1,11 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
+import {
+  normalizeKioskBaseUrl,
+  randomOpaque,
+  sha256Hex,
+  validEnrollmentRequest,
+  validRequestedTestToken,
+} from "../_shared/kioskEnrollment.ts";
 
 Deno.test("kiosk enrollment accepts only high-entropy code and UUID v4", () => {
   assert(validEnrollmentRequest(
@@ -22,6 +28,14 @@ Deno.test("pairing tokens are prefixed and never stored in plaintext", async () 
   assert(code.startsWith("kc_"));
   assert(code.length >= 19);
   assertEquals((await sha256Hex(code)).length, 64);
+});
+
+Deno.test("device-proposed tokens use the diagnostic-only format", () => {
+  assert(validRequestedTestToken(
+    "kt_test_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG",
+  ));
+  assertEquals(validRequestedTestToken("kt_live_not_allowed"), false);
+  assertEquals(validRequestedTestToken("kt_test_too-short"), false);
 });
 
 Deno.test("pairing administration binds organization and supports audited cancellation", async () => {
