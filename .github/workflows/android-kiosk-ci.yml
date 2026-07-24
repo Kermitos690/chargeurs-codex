@@ -29,44 +29,66 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build staging APK
+      - name: Test and assemble diagnostic APK
         working-directory: android-kiosk
         shell: bash
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p ../dist
-          ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug --stacktrace 2>&1 \
-            | tee ../dist/android-build.log
+          ./gradlew --no-daemon clean testDebugUnitTest assembleDebug --stacktrace 2>&1 \
+            | tee ../dist/android-assemble.log
 
-      - name: Prepare APK artifact
-        if: success()
+      - name: Prepare uniquely named APK
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
-          cp "$apk" dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk
-          sha256sum dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk > dist/SHA256SUMS.txt
+          short_sha="${GITHUB_SHA::7}"
+          filename="chargeurs-kiosk-DTA21269-shadow-v1.0.4-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
+          cp "$apk" "dist/$filename"
+          sha256sum "dist/$filename" > dist/SHA256SUMS.txt
+          printf '%s\n' "$filename" > dist/INSTALL_THIS_FILE.txt
+
+      - name: Run strict Android lint
+        id: lint
+        continue-on-error: true
+        working-directory: android-kiosk
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon lintDebug --stacktrace 2>&1 | tee ../dist/android-lint.log
+
+      - name: Collect lint reports
+        if: always()
+        shell: bash
+        run: |
+          find android-kiosk/app/build/reports android-kiosk/app/build/intermediates \
+            -type f \( -name 'lint-results-debug.*' -o -name 'lint-results*.txt' \) \
+            -exec cp {} dist/ \; 2>/dev/null || true
+
+      - name: Upload APK package
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-DTA21269-shadow-v1.0.4-build-${{ github.run_number }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
+            dist/INSTALL_THIS_FILE.txt
 
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-build-log
+          name: chargeurs-kiosk-build-diagnostics-${{ github.run_number }}
           retention-days: 7
           if-no-files-found: warn
-          path: dist/android-build.log
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: chargeurs-kiosk-staging-v1.0.3-shadow-debug
-          retention-days: 7
-          if-no-files-found: error
           path: |
-            dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk
-            dist/SHA256SUMS.txt
+            dist/android-assemble.log
+            dist/android-lint.log
+            dist/lint-results*
