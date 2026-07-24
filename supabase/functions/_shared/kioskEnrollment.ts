@@ -1,4 +1,5 @@
 const PAIRING_CODE = /^kc_[A-Za-z0-9_-]{16,64}$/;
+const TEST_KIOSK_TOKEN = /^kt_test_[A-Za-z0-9_-]{43}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -18,6 +19,10 @@ export function randomOpaque(prefix: "kc_" | "kt_", byteLength: number): string 
 
 export function validEnrollmentRequest(pairingCode: string, devicePublicId: string, appVersion: string): boolean {
   return PAIRING_CODE.test(pairingCode) && UUID_V4.test(devicePublicId) && appVersion.length > 0 && appVersion.length <= 64;
+}
+
+export function validRequestedTestToken(value: string): boolean {
+  return TEST_KIOSK_TOKEN.test(value);
 }
 
 export function normalizeKioskBaseUrl(value: string): string | null {
