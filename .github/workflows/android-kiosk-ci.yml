@@ -31,25 +31,42 @@ jobs:
 
       - name: Build staging APK
         working-directory: android-kiosk
+        shell: bash
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
-        run: ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug
+        run: |
+          set -o pipefail
+          mkdir -p ../dist
+          ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug --stacktrace 2>&1 \
+            | tee ../dist/android-build.log
 
-      - name: Prepare artifact
+      - name: Prepare APK artifact
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
-          mkdir -p dist
           cp "$apk" dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk
           sha256sum dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk > dist/SHA256SUMS.txt
 
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-build-log
+          retention-days: 7
+          if-no-files-found: warn
+          path: dist/android-build.log
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: chargeurs-kiosk-staging-v1.0.3-shadow-debug
           retention-days: 7
           if-no-files-found: error
-          path: dist/*
+          path: |
+            dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk
+            dist/SHA256SUMS.txt
