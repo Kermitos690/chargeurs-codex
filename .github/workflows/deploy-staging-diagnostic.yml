@@ -9,17 +9,24 @@ on:
       - "supabase/functions/_shared/db.ts"
       - "supabase/functions/_shared/kioskEnrollment.ts"
       - ".github/workflows/deploy-staging-diagnostic.yml"
+  pull_request:
+    paths:
+      - "supabase/functions/kiosk-enroll-diagnostic/**"
+      - "supabase/functions/_shared/db.ts"
+      - "supabase/functions/_shared/kioskEnrollment.ts"
+      - ".github/workflows/deploy-staging-diagnostic.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-staging-diagnostic
+  group: deploy-staging-diagnostic-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: staging
