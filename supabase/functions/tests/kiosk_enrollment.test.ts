@@ -38,6 +38,22 @@ Deno.test("device-proposed tokens use the diagnostic-only format", () => {
   assertEquals(validRequestedTestToken("kt_test_too-short"), false);
 });
 
+Deno.test("direct activation is pinned to staging diagnostic pilot stations", async () => {
+  const source = await Deno.readTextFile("supabase/functions/kiosk-enroll/index.ts");
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260724031000_staging_kiosk_self_enrollment.sql",
+  );
+
+  assert(source.includes('projectOrigin() === STAGING_SUPABASE_ORIGIN'));
+  assert(source.includes('appVersion.endsWith("-staging-diagnostic")'));
+  assert(source.includes('body.testSelfEnroll === true'));
+  assert(source.includes('db.rpc("self_enroll_staging_kiosk"'));
+  assert(migration.includes("environment = 'staging'"));
+  assert(migration.includes("is_pilot = true"));
+  assert(migration.includes("now() + interval '7 days'"));
+  assert(migration.includes("grant execute on function public.self_enroll_staging_kiosk"));
+});
+
 Deno.test("pairing administration binds organization and supports audited cancellation", async () => {
   const source = await Deno.readTextFile("supabase/functions/kiosk-admin/index.ts");
   assert(source.includes('select("station_id,organization_id")'));
