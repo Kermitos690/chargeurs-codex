@@ -58,6 +58,14 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Upload compiled kiosk preview
+        uses: actions/upload-artifact@v6
+        with:
+          name: chargeurs-kiosk-v2-preview-${{ github.run_number }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Validate OpenAPI document
         run: npx --yes @redocly/cli@1.25.5 lint docs/openapi/chargeurs-api-v1.yaml
 
