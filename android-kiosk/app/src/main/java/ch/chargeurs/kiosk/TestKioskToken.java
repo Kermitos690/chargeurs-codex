@@ -4,9 +4,10 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * Generates a device-side token only for diagnostic builds. The server still
- * requires a valid one-time pairing code and independently decides whether a
- * device-proposed token may be accepted.
+ * Generates a device-side credential only for diagnostic builds. The staging
+ * backend accepts it exclusively for a station explicitly marked as a pilot,
+ * binds it to this Android device, stores only its SHA-256 digest and expires
+ * the enrollment automatically. Release builds never use this path.
  */
 public final class TestKioskToken {
     private static final SecureRandom RANDOM = new SecureRandom();
