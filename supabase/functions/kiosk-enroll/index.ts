@@ -1,11 +1,17 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
-import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
+import {
+  normalizeKioskBaseUrl,
+  randomOpaque,
+  sha256Hex,
+  validEnrollmentRequest,
+  validRequestedTestToken,
+} from "../_shared/kioskEnrollment.ts";
 
 const STAGING_SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
 const STAGING_KIOSK_ORIGIN = "https://chargeurs-ch-staging.vercel.app";
 
-type EnrollmentResult = {
+ type EnrollmentResult = {
   ok?: boolean;
   error?: string;
   station_id?: string;
@@ -27,6 +33,13 @@ function publicBaseUrl(): string | null {
   const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
   if (projectOrigin === STAGING_SUPABASE_ORIGIN) return STAGING_KIOSK_ORIGIN;
   return normalizeKioskBaseUrl(Deno.env.get("KIOSK_PUBLIC_BASE_URL") ?? "");
+}
+
+function diagnosticTokenAllowed(appVersion: string, requestedToken: string): boolean {
+  const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
+  return projectOrigin === STAGING_SUPABASE_ORIGIN
+    && appVersion.endsWith("-staging-diagnostic")
+    && validRequestedTestToken(requestedToken);
 }
 
 async function recoverInterruptedEnrollment(
@@ -125,12 +138,21 @@ Deno.serve(async (req) => {
     const pairingCode = typeof body.pairingCode === "string" ? body.pairingCode.trim() : "";
     const devicePublicId = typeof body.devicePublicId === "string" ? body.devicePublicId.trim() : "";
     const appVersion = typeof body.appVersion === "string" ? body.appVersion.trim().slice(0, 64) : "";
+    const requestedKioskToken = typeof body.requestedKioskToken === "string"
+      ? body.requestedKioskToken.trim()
+      : "";
 
     if (!validEnrollmentRequest(pairingCode, devicePublicId, appVersion)) {
       return json({ ok: false, error: "INVALID_ENROLLMENT_REQUEST" }, 400);
     }
+    if (requestedKioskToken && !diagnosticTokenAllowed(appVersion, requestedKioskToken)) {
+      return json({ ok: false, error: "TEST_TOKEN_NOT_ALLOWED" }, 403);
+    }
 
-    const kioskToken = randomOpaque("kt_", 32);
+    // Production and normal enrollment remain server-generated. Only the pinned
+    // staging backend may accept a token proposed by the diagnostic APK, and a
+    // valid one-time pairing code is still mandatory.
+    const kioskToken = requestedKioskToken || randomOpaque("kt_", 32);
     const codeHash = await sha256Hex(pairingCode);
     const tokenHash = await sha256Hex(kioskToken);
     const db = adminClient();
@@ -176,6 +198,7 @@ Deno.serve(async (req) => {
       kioskToken,
       baseUrl,
       recovered: result.recovered === true,
+      diagnosticTokenAccepted: requestedKioskToken.length > 0,
     });
   } catch (error) {
     console.error("kiosk enrollment unavailable", error instanceof Error ? error.name : "UNKNOWN_ERROR");
