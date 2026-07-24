@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.content.Intent;
 import android.webkit.JavascriptInterface;
 
 public final class NativeBridge {
@@ -55,7 +56,9 @@ public final class NativeBridge {
 
     @JavascriptInterface
     public void openDiagnostics() {
-        activity.showNativeDiagnostics(cabinetController.status());
+        activity.runOnUiThread(() -> activity.startActivity(
+            new Intent(activity, HardwareDiagnosticActivity.class)
+        ));
     }
 
     @JavascriptInterface
