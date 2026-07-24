@@ -88,9 +88,15 @@ export function extractProviderReleaseIdentity(value: unknown): ProviderReleaseI
 export function choosePilotBattery(
   status: ParsedCabinetStatus,
   requestedSlot?: number | null,
+  excludedBatteryIds: ReadonlySet<string> = new Set<string>(),
 ): ChargeNowBattery | null {
   const candidates = status.batteries
-    .filter((battery) => battery.batteryId && battery.slotNum != null && battery.slotNum >= 1)
+    .filter((battery) =>
+      battery.batteryId
+      && battery.slotNum != null
+      && battery.slotNum >= 1
+      && !excludedBatteryIds.has(battery.batteryId)
+    )
     .sort((left, right) => Number(left.slotNum) - Number(right.slotNum));
   if (requestedSlot != null) {
     return candidates.find((battery) => battery.slotNum === requestedSlot) ?? null;
