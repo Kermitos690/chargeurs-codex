@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users, TabletSmartphone, KeyRound,
+  Building2, Users, TabletSmartphone, KeyRound, Gauge,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +37,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { to: "/admin/stations", icon: Server, label: "Bornes", roles: OPERATIONS_READ },
       { to: "/admin/kiosk-devices", icon: TabletSmartphone, label: "Tablettes kiosque", roles: OPERATIONS_READ },
+      { to: "/admin/battery-qualification", icon: Gauge, label: "Qualification batteries", roles: OPERATIONS },
       { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes", roles: FINANCE_READ },
       { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)", roles: FINANCE_READ },
     ],
