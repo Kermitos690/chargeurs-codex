@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -31,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class HardwareDiagnosticCollector {
     private static final String VENDOR_PACKAGE = "com.szbjkj.bajietouchpower";
+    private static final String PILOT_SERIAL_PORT = "/dev/ttyS1";
     private static final int MAX_COMMAND_LINES = 250;
     private static final int MAX_COMMAND_CHARS = 48 * 1024;
 
@@ -39,7 +39,7 @@ public final class HardwareDiagnosticCollector {
     public static JSONObject collect(Context context) {
         Context app = context.getApplicationContext();
         JSONObject report = new JSONObject();
-        put(report, "schemaVersion", 2);
+        put(report, "schemaVersion", 3);
         put(report, "generatedAt", System.currentTimeMillis());
         put(report, "elapsedRealtimeMs", SystemClock.elapsedRealtime());
         put(report, "appVersion", BuildConfig.VERSION_NAME);
@@ -58,7 +58,37 @@ public final class HardwareDiagnosticCollector {
         put(report, "processIdentity", command("id"));
         put(report, "uptime", command("cat /proc/uptime"));
         put(report, "procTtyDrivers", command("cat /proc/tty/drivers"));
+        put(report, "serialKernelState", command("cat /proc/tty/driver/serial 2>/dev/null"));
         put(report, "serialProperties", command("getprop | grep -Ei 'serial|uart|tty|rs485|dta|bajie|wch'"));
+        put(report, "serialPortPermissions", command(
+            "ls -lZ " + PILOT_SERIAL_PORT + " 2>/dev/null; "
+                + "stat -c '%A %a %U %G %t:%T %n' " + PILOT_SERIAL_PORT + " 2>/dev/null"
+        ));
+        put(report, "serialPortConfiguration", command(
+            "(stty -F " + PILOT_SERIAL_PORT + " -a || toybox stty -F "
+                + PILOT_SERIAL_PORT + " -a) 2>/dev/null"
+        ));
+        put(report, "serialDeviceTree", command(
+            "for p in /sys/class/tty/ttyS1/device /sys/class/tty/ttyS1/device/of_node; do "
+                + "echo PATH=$p; ls -la $p 2>/dev/null; "
+                + "find $p -maxdepth 1 -type f -print 2>/dev/null; done"
+        ));
+        put(report, "serialOwnership", command(
+            "for fd in /proc/[0-9]*/fd/*; do "
+                + "target=$(readlink \"$fd\" 2>/dev/null || true); "
+                + "case \"$target\" in /dev/ttyS*|/dev/serial*|/dev/uart*|/dev/rs485*) "
+                + "pid=${fd#/proc/}; pid=${pid%%/*}; "
+                + "cmd=$(tr '\\000' ' ' < \"/proc/$pid/cmdline\" 2>/dev/null || true); "
+                + "printf '%s|%s|%s|%s\\n' \"$pid\" \"$fd\" \"$target\" \"$cmd\";; esac; done"
+        ));
+        put(report, "vendorProcessState", command(
+            "for pid in $(pidof " + VENDOR_PACKAGE + " 2>/dev/null); do "
+                + "echo PID=$pid; "
+                + "grep -E '^(Name|State|Pid|PPid|Uid|Gid|Threads):' /proc/$pid/status 2>/dev/null; "
+                + "echo IO; cat /proc/$pid/io 2>/dev/null; "
+                + "echo FDS; ls -l /proc/$pid/fd 2>/dev/null | grep -Ei 'tty|serial|uart|rs485|socket' || true; "
+                + "done"
+        ));
         put(report, "hardwareServices", command("service list | grep -Ei 'serial|uart|rs485|usb|device'"));
         put(report, "usbDump", command("dumpsys usb"));
         put(report, "networkAddress", command("ip -details address"));
@@ -73,6 +103,8 @@ public final class HardwareDiagnosticCollector {
         ));
         put(report, "bajieConfig", configInfo());
         put(report, "safeReadOnly", true);
+        put(report, "pilotSerialPort", PILOT_SERIAL_PORT);
+        put(report, "serialPortOpenedByChargeurs", false);
         put(report, "serialBytesWritten", 0);
         put(report, "vendorPayloadCaptured", false);
         put(report, "credentialsCollected", false);
