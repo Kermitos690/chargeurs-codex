@@ -63,3 +63,9 @@ verify_jwt = false
 
 [functions.account-privacy]
 verify_jwt = true
+
+[functions.dta-pilot-qualification]
+verify_jwt = true
+
+[functions.dta-pilot-callback]
+verify_jwt = false
