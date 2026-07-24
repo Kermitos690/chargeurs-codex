@@ -73,7 +73,7 @@ public final class ProvisioningActivity extends Activity {
 
         TextView help = text(
             BuildConfig.DEBUG
-                ? "Sélectionnez la borne puis appuyez sur Activer. Aucun fichier, clé USB ou code créé dans le back-office n’est nécessaire pendant la phase de test."
+                ? "Sélectionnez DTA21269. L’activation serveur permet la synchronisation, mais la qualification matérielle complète fonctionne aussi localement sans backend."
                 : getString(R.string.provision_help),
             16,
             Color.rgb(190, 202, 226)
@@ -85,6 +85,7 @@ public final class ProvisioningActivity extends Activity {
             stationIdInput = field("Identifiant de la borne — ex. DTA21269");
             stationIdInput.setSingleLine(true);
             stationIdInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+            stationIdInput.setText("DTA21269");
             content.addView(stationIdInput, matchWrap(0, dp(16)));
 
             LinearLayout tokenCard = new LinearLayout(this);
@@ -97,7 +98,7 @@ public final class ProvisioningActivity extends Activity {
             tokenCard.addView(tokenTitle, matchWrap(0, dp(8)));
 
             TextView tokenHelp = text(
-                "Le token est enregistré automatiquement sur la tablette et sur le serveur de test. Le bouton Copier reste disponible pour contrôle ou dépannage.",
+                "Le token sera synchronisé dès que le backend staging sera déployé. Il n’est pas nécessaire pour la campagne locale de qualification.",
                 13,
                 Color.rgb(190, 202, 226)
             );
@@ -141,7 +142,7 @@ public final class ProvisioningActivity extends Activity {
         }
 
         activateButton = new Button(this);
-        activateButton.setText(BuildConfig.DEBUG ? "Activer cette borne" : getString(R.string.activate));
+        activateButton.setText(BuildConfig.DEBUG ? "Activer et synchroniser" : getString(R.string.activate));
         activateButton.setTextSize(17);
         activateButton.setAllCaps(false);
         activateButton.setOnClickListener(view -> provision());
@@ -150,22 +151,20 @@ public final class ProvisioningActivity extends Activity {
             dp(58)
         ));
 
-        Button diagnosticButton = new Button(this);
-        diagnosticButton.setText("Diagnostic matériel automatique");
-        diagnosticButton.setAllCaps(false);
-        diagnosticButton.setOnClickListener(view -> startActivity(
-            new Intent(this, HardwareDiagnosticActivity.class)
-        ));
-        LinearLayout.LayoutParams diagnosticParams = new LinearLayout.LayoutParams(
+        Button qualificationButton = new Button(this);
+        qualificationButton.setText("Continuer en qualification locale avancée");
+        qualificationButton.setAllCaps(false);
+        qualificationButton.setOnClickListener(view -> launchLocalQualification());
+        LinearLayout.LayoutParams qualificationParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(56)
+            dp(58)
         );
-        diagnosticParams.setMargins(0, dp(10), 0, 0);
-        content.addView(diagnosticButton, diagnosticParams);
+        qualificationParams.setMargins(0, dp(10), 0, 0);
+        content.addView(qualificationButton, qualificationParams);
 
         TextView warning = text(
             BuildConfig.DEBUG
-                ? "Mode temporaire : uniquement pour les bornes pilotes de staging. Le token expire après 7 jours."
+                ? "Le mode local collecte les neuf scénarios sans serveur, sans paiement et sans commande matérielle. Les rapports restent copiables puis pourront être renvoyés après déploiement du staging."
                 : getString(R.string.reprovision_warning),
             13,
             Color.rgb(148, 163, 192)
@@ -191,6 +190,27 @@ public final class ProvisioningActivity extends Activity {
         Toast.makeText(this, "Token copié.", Toast.LENGTH_LONG).show();
     }
 
+    private String selectedStationId() {
+        if (!BuildConfig.DEBUG) return "";
+        return stationIdInput == null ? "" : stationIdInput.getText().toString().trim().toUpperCase();
+    }
+
+    private boolean validateSelectedStation(String stationId) {
+        if (KioskConfigValidator.isValidStationId(stationId)) return true;
+        if (stationIdInput != null) {
+            stationIdInput.setError("Saisissez l’identifiant exact, par exemple DTA21269.");
+        }
+        return false;
+    }
+
+    private void launchLocalQualification() {
+        String stationId = selectedStationId();
+        if (BuildConfig.DEBUG && !validateSelectedStation(stationId)) return;
+        Intent intent = new Intent(this, HardwareDiagnosticActivity.class);
+        intent.putExtra(HardwareDiagnosticActivity.EXTRA_STATION_ID, stationId);
+        startActivity(intent);
+    }
+
     private void provision() {
         if (KioskConfigValidator.normalizeHttpsEndpoint(BuildConfig.ENROLLMENT_URL) == null) {
             Toast.makeText(this, R.string.enrollment_not_configured, Toast.LENGTH_LONG).show();
@@ -200,12 +220,9 @@ public final class ProvisioningActivity extends Activity {
         final String stationId;
         final String pairingCode;
         if (BuildConfig.DEBUG) {
-            stationId = stationIdInput == null ? "" : stationIdInput.getText().toString().trim().toUpperCase();
+            stationId = selectedStationId();
             pairingCode = "";
-            if (!KioskConfigValidator.isValidStationId(stationId)) {
-                stationIdInput.setError("Saisissez l’identifiant exact, par exemple DTA21269.");
-                return;
-            }
+            if (!validateSelectedStation(stationId)) return;
             if (!TestKioskToken.isValid(requestedTestToken)) generateTestToken();
         } else {
             stationId = "";
@@ -243,7 +260,7 @@ public final class ProvisioningActivity extends Activity {
                 String message = enrollmentErrorMessage(error);
                 runOnUiThread(() -> {
                     activateButton.setEnabled(true);
-                    activateButton.setText(BuildConfig.DEBUG ? "Activer cette borne" : getString(R.string.activate));
+                    activateButton.setText(BuildConfig.DEBUG ? "Activer et synchroniser" : getString(R.string.activate));
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
             }
@@ -251,11 +268,13 @@ public final class ProvisioningActivity extends Activity {
     }
 
     private String enrollmentErrorMessage(Exception error) {
-        if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible.";
-        if (error instanceof SocketTimeoutException) return "Le serveur d’activation ne répond pas à temps.";
+        if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible. La qualification locale reste disponible.";
+        if (error instanceof SocketTimeoutException) return "Le serveur ne répond pas. La qualification locale reste disponible.";
 
         String code = error.getMessage() == null ? "UNKNOWN_ERROR" : error.getMessage().trim();
         switch (code) {
+            case "HTTP_404":
+                return "Backend staging non déployé. Utilisez « Continuer en qualification locale avancée ».";
             case "PAIRING_CODE_INVALID_OR_EXPIRED":
                 return "Code refusé par le serveur : expiré, déjà utilisé ou non reconnu.";
             case "DEVICE_BOUND_TO_ANOTHER_STATION":
@@ -267,7 +286,7 @@ public final class ProvisioningActivity extends Activity {
             case "TEST_SELF_ENROLLMENT_NOT_ALLOWED":
                 return "L’auto-activation de test est désactivée ou cette APK n’est pas la version diagnostic.";
             case "TEST_ENROLLMENT_UNAVAILABLE":
-                return "Le service d’auto-activation de test n’est pas encore déployé.";
+                return "Le service d’auto-activation n’est pas déployé. La qualification locale reste disponible.";
             case "KIOSK_ORIGIN_MISMATCH":
                 return "Le serveur a renvoyé une mauvaise adresse kiosk.";
             case "STORAGE_FAILED":
@@ -278,7 +297,7 @@ public final class ProvisioningActivity extends Activity {
                 return "Le serveur n’a pas confirmé le token créé sur cette tablette.";
             default:
                 return BuildConfig.DEBUG
-                    ? "Échec d’activation — diagnostic : " + code
+                    ? "Échec de synchronisation : " + code + ". La qualification locale reste disponible."
                     : getString(R.string.enrollment_failed);
         }
     }
