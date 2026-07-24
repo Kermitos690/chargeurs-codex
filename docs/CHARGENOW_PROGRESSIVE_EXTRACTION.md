@@ -6,6 +6,30 @@ Remplacer progressivement ChargeNow par une passerelle locale et un backend Char
 
 L’APK fournisseur reste active pendant la phase `shadow`. L’APK Chargeurs.ch observe uniquement les composants Android, USB, série, réseau et processus accessibles avec ses propres permissions, puis envoie ces observations au backend Chargeurs.ch. Aucune trame série ou commande matérielle n’est inventée.
 
+## Activation simplifiée de la phase de test
+
+L’APK diagnostic ne demande plus de fichier, de clé USB ni de code d’appairage créé dans le back-office.
+
+Sur l’écran d’activation :
+
+1. saisir l’identifiant exact de la borne pilote, par exemple `DTA21269` ;
+2. laisser l’APK générer automatiquement un token `kt_test_…` ;
+3. appuyer sur **Activer cette borne** ;
+4. le token est enregistré simultanément dans le stockage sécurisé Android et sous forme de hash côté serveur ;
+5. le kiosk s’ouvre directement sur la borne sélectionnée.
+
+Le bouton **Copier le token** reste présent pour le diagnostic ou le dépannage, mais aucun copier-coller n’est requis pour l’activation normale de test.
+
+Cette voie est strictement limitée à :
+
+- l’APK dont la version se termine par `-staging-diagnostic` ;
+- le projet Supabase de staging épinglé ;
+- une station dont `environment = 'staging'` et `is_pilot = true` ;
+- un token au format diagnostic généré localement ;
+- une durée de validité de sept jours.
+
+Les builds release et production conservent l’appairage sécurisé par code à usage unique généré par un administrateur.
+
 ## Architecture de transition
 
 ```text
@@ -104,10 +128,11 @@ Retourne :
 ## Séquence de tests sur DTA21269
 
 1. Installer l’APK diagnostic Chargeurs.ch à côté de ChargeNow.
-2. Garder ChargeNow ouvert et attendre que le logo de connexion soit allumé.
-3. Ouvrir le diagnostic depuis l’écran de maintenance Chargeurs.ch.
-4. Exécuter et envoyer une observation `shadow`.
-5. Répéter dans les états suivants :
+2. Sur la page d’activation, saisir `DTA21269` et appuyer sur **Activer cette borne**.
+3. Garder ChargeNow ouvert et attendre que le logo de connexion soit allumé.
+4. Ouvrir le diagnostic depuis l’écran de maintenance Chargeurs.ch.
+5. Exécuter et envoyer une observation `shadow`.
+6. Répéter dans les états suivants :
    - ChargeNow connecté et au repos ;
    - une batterie retirée par un parcours fournisseur autorisé ;
    - une batterie rendue ;
@@ -116,9 +141,9 @@ Retourne :
    - ChargeNow fermé ;
    - ChargeNow relancé ;
    - tablette redémarrée.
-6. Comparer les ports, processus, sockets, timestamps, changements USB/TTY et snapshot fournisseur.
-7. Identifier les éléments qui disparaissent exactement lorsque ChargeNow s’arrête.
-8. Ne développer le premier lecteur local qu’après cette identification.
+7. Comparer les ports, processus, sockets, timestamps, changements USB/TTY et snapshot fournisseur.
+8. Identifier les éléments qui disparaissent exactement lorsque ChargeNow s’arrête.
+9. Ne développer le premier lecteur local qu’après cette identification.
 
 ## Critères avant lecture série
 
