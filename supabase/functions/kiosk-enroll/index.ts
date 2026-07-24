@@ -10,13 +10,16 @@ import {
 
 const STAGING_SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
 const STAGING_KIOSK_ORIGIN = "https://chargeurs-ch-staging.vercel.app";
+const STATION_ID = /^[A-Za-z0-9_-]{4,32}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
- type EnrollmentResult = {
+type EnrollmentResult = {
   ok?: boolean;
   error?: string;
   station_id?: string;
   device_id?: string;
   recovered?: boolean;
+  token_expires_at?: string;
 };
 
 function json(body: unknown, status = 200) {
@@ -26,18 +29,28 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function projectOrigin(): string | null {
+  return normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
+}
+
 function publicBaseUrl(): string | null {
-  // This project is the dedicated staging backend. Pin its kiosk origin so an
-  // outdated/mistyped secret cannot consume a pairing code and then make the
-  // APK reject the returned configuration with KIOSK_ORIGIN_MISMATCH.
-  const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
-  if (projectOrigin === STAGING_SUPABASE_ORIGIN) return STAGING_KIOSK_ORIGIN;
+  // The dedicated staging project is pinned to the staging kiosk frontend.
+  // Other environments must provide their own explicit HTTPS origin.
+  if (projectOrigin() === STAGING_SUPABASE_ORIGIN) return STAGING_KIOSK_ORIGIN;
   return normalizeKioskBaseUrl(Deno.env.get("KIOSK_PUBLIC_BASE_URL") ?? "");
 }
 
-function diagnosticTokenAllowed(appVersion: string, requestedToken: string): boolean {
-  const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
-  return projectOrigin === STAGING_SUPABASE_ORIGIN
+function diagnosticSelfEnrollmentAllowed(
+  stationId: string,
+  devicePublicId: string,
+  appVersion: string,
+  requestedToken: string,
+): boolean {
+  const explicitFlag = (Deno.env.get("KIOSK_TEST_SELF_ENROLLMENT_ENABLED") ?? "true") === "true";
+  return explicitFlag
+    && projectOrigin() === STAGING_SUPABASE_ORIGIN
+    && STATION_ID.test(stationId)
+    && UUID_V4.test(devicePublicId)
     && appVersion.endsWith("-staging-diagnostic")
     && validRequestedTestToken(requestedToken);
 }
@@ -75,8 +88,6 @@ async function recoverInterruptedEnrollment(
     return { ok: false, error: "DEVICE_BOUND_TO_ANOTHER_STATION" };
   }
 
-  // Claim the fresh pairing code before rotating the token. The conditional
-  // update prevents two concurrent requests from consuming the same code.
   const { data: claimed, error: claimError } = await db
     .from("kiosk_pairing_codes")
     .update({ used_at: now, used_by_device_id: device.id })
@@ -107,7 +118,6 @@ async function recoverInterruptedEnrollment(
 
   if (updateError || !updated) return { ok: false, error: "ENROLLMENT_UNAVAILABLE" };
 
-  // Best-effort audit only; never log the pairing code or kiosk token.
   await db.from("audit_logs").insert({
     action: "kiosk.enrollment.recovered",
     target: updated.id,
@@ -136,26 +146,65 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const pairingCode = typeof body.pairingCode === "string" ? body.pairingCode.trim() : "";
+    const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     const devicePublicId = typeof body.devicePublicId === "string" ? body.devicePublicId.trim() : "";
     const appVersion = typeof body.appVersion === "string" ? body.appVersion.trim().slice(0, 64) : "";
     const requestedKioskToken = typeof body.requestedKioskToken === "string"
       ? body.requestedKioskToken.trim()
       : "";
+    const testSelfEnroll = body.testSelfEnroll === true;
+    const db = adminClient();
 
+    if (testSelfEnroll) {
+      if (!diagnosticSelfEnrollmentAllowed(
+        stationId,
+        devicePublicId,
+        appVersion,
+        requestedKioskToken,
+      )) {
+        return json({ ok: false, error: "TEST_SELF_ENROLLMENT_NOT_ALLOWED" }, 403);
+      }
+
+      const tokenHash = await sha256Hex(requestedKioskToken);
+      const { data, error } = await db.rpc("self_enroll_staging_kiosk", {
+        p_station_id: stationId,
+        p_token_hash: tokenHash,
+        p_device_public_id: devicePublicId,
+        p_app_version: appVersion,
+      });
+      if (error) {
+        console.error("test self enrollment RPC unavailable", error.code ?? "RPC_ERROR");
+        return json({ ok: false, error: "TEST_ENROLLMENT_UNAVAILABLE" }, 503);
+      }
+
+      const result = data as EnrollmentResult | null;
+      if (!result?.ok || !result.station_id || !result.device_id) {
+        const code = result?.error ?? "TEST_ENROLLMENT_REJECTED";
+        const status = code === "DEVICE_BOUND_TO_ANOTHER_STATION" ? 409
+          : code === "TEST_STATION_NOT_ALLOWED" ? 404
+          : 400;
+        return json({ ok: false, error: code }, status);
+      }
+
+      return json({
+        ok: true,
+        deviceId: result.device_id,
+        stationId: result.station_id,
+        kioskToken: requestedKioskToken,
+        baseUrl,
+        tokenExpiresAt: result.token_expires_at ?? null,
+        testSelfEnrolled: true,
+      });
+    }
+
+    // Normal/release enrollment remains unchanged and requires a one-time code.
     if (!validEnrollmentRequest(pairingCode, devicePublicId, appVersion)) {
       return json({ ok: false, error: "INVALID_ENROLLMENT_REQUEST" }, 400);
     }
-    if (requestedKioskToken && !diagnosticTokenAllowed(appVersion, requestedKioskToken)) {
-      return json({ ok: false, error: "TEST_TOKEN_NOT_ALLOWED" }, 403);
-    }
 
-    // Production and normal enrollment remain server-generated. Only the pinned
-    // staging backend may accept a token proposed by the diagnostic APK, and a
-    // valid one-time pairing code is still mandatory.
-    const kioskToken = requestedKioskToken || randomOpaque("kt_", 32);
+    const kioskToken = randomOpaque("kt_", 32);
     const codeHash = await sha256Hex(pairingCode);
     const tokenHash = await sha256Hex(kioskToken);
-    const db = adminClient();
     const { data, error } = await db.rpc("redeem_kiosk_pairing_code", {
       p_code_hash: codeHash,
       p_token_hash: tokenHash,
@@ -187,7 +236,6 @@ Deno.serve(async (req) => {
       if (result?.error === "ENROLLMENT_UNAVAILABLE") {
         return json({ ok: false, error: "ENROLLMENT_UNAVAILABLE" }, 503);
       }
-      // Keep invalid, expired and already consumed pairing codes indistinguishable.
       return json({ ok: false, error: "PAIRING_CODE_INVALID_OR_EXPIRED" }, 401);
     }
 
@@ -198,7 +246,6 @@ Deno.serve(async (req) => {
       kioskToken,
       baseUrl,
       recovered: result.recovered === true,
-      diagnosticTokenAccepted: requestedKioskToken.length > 0,
     });
   } catch (error) {
     console.error("kiosk enrollment unavailable", error instanceof Error ? error.name : "UNKNOWN_ERROR");
