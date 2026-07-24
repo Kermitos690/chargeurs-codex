@@ -33,7 +33,7 @@ jobs:
         working-directory: android-kiosk
         shell: bash
         env:
-          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll-diagnostic
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
         run: |
           set -euo pipefail
@@ -48,7 +48,7 @@ jobs:
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           short_sha="${GITHUB_SHA::7}"
-          filename="chargeurs-kiosk-DTA21269-shadow-v1.0.4-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
+          filename="Chargeurs-ch-DTA21269-Kiosk-v1.0.5-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
           cp "$apk" "dist/$filename"
           sha256sum "dist/$filename" > dist/SHA256SUMS.txt
           printf '%s\n' "$filename" > dist/INSTALL_THIS_FILE.txt
@@ -71,9 +71,9 @@ jobs:
             -exec cp {} dist/ \; 2>/dev/null || true
 
       - name: Upload APK package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: chargeurs-kiosk-DTA21269-shadow-v1.0.4-build-${{ github.run_number }}
+          name: Chargeurs-ch-DTA21269-Kiosk-v1.0.5-build-${{ github.run_number }}
           retention-days: 7
           if-no-files-found: error
           path: |
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload build diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: chargeurs-kiosk-build-diagnostics-${{ github.run_number }}
           retention-days: 7
