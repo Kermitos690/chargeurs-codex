@@ -60,11 +60,24 @@ export function KioskDiagnostics(props: Props) {
     : chargenowConfigured == null
       ? "vérification…"
       : chargenowConfigured
-        ? "configurée"
-        : "non configurée ou inaccessible";
+        ? "configuré et joignable"
+        : "non configuré ou inaccessible";
   const chargenowTone = !tokenReady || chargenowConfigured == null
     ? "warn"
     : chargenowConfigured
+      ? "ok"
+      : "bad";
+
+  const storedStationValue = !tokenReady
+    ? "activation requise"
+    : stationOnline == null
+      ? "aucun état récent"
+      : stationOnline
+        ? "en ligne — dernier état"
+        : "hors ligne — dernier état";
+  const storedStationTone = !tokenReady || stationOnline == null || chargenowConfigured === false
+    ? "warn"
+    : stationOnline
       ? "ok"
       : "bad";
 
@@ -77,7 +90,7 @@ export function KioskDiagnostics(props: Props) {
 
   const saveToken = () => {
     const t = tokenInput.trim();
-    if (t.length < 24) return;
+    if (t.length < 24 || !t.startsWith("kt_")) return;
     try {
       localStorage.setItem(KIOSK_TOKEN_KEY, t);
       setSavedToken(t);
@@ -109,23 +122,34 @@ export function KioskDiagnostics(props: Props) {
 
         <Row label="Version frontend" value={typeof __APP_BUILD__ !== "undefined" ? __APP_BUILD__ : "dev"} />
         <Row label="Service Worker" value={swUrl ? swUrl.split("/").pop() ?? "actif" : "inactif (dev/preview)"} tone={swUrl ? "ok" : "warn"} />
-        <Row label="Cabinet (URL)" value={stationId ?? "—"} />
+        <Row label="Cabinet demandé" value={stationId ?? "—"} />
         <Row
           label="Cabinet verrouillé"
           value={lockedStation ?? "non verrouillé"}
           tone={lockedStation && lockedStation === stationId ? "ok" : lockedStation ? "bad" : "warn"}
         />
-        <Row label="Dernière synchro" value={lastSync ? new Date(lastSync).toLocaleString("fr-CH") : "—"} />
-        <Row label="Réseau Internet" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
-        <Row label="API ChargeNow" value={chargenowValue} tone={chargenowTone} />
-        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
-        <Row label="Passerelle locale" value={nativeDiagnosticsAvailable ? "APK Chargeurs.ch détectée" : "navigateur web uniquement"} tone={nativeDiagnosticsAvailable ? "ok" : "warn"} />
+        <Row label="Dernière synchro fournisseur" value={lastSync ? new Date(lastSync).toLocaleString("fr-CH") : "—"} />
+        <Row label="Réseau de la tablette" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
+        <Row label="Cloud ChargeNow" value={chargenowValue} tone={chargenowTone} />
+        <Row label="État station enregistré" value={storedStationValue} tone={storedStationTone} />
+        <Row
+          label="Observation locale"
+          value={nativeDiagnosticsAvailable ? "APK Chargeurs.ch disponible" : "aucune lecture Android locale"}
+          tone={nativeDiagnosticsAvailable ? "ok" : "warn"}
+        />
+        <Row label="Contrôle matériel local" value="désactivé pendant le mode shadow" tone="warn" />
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
         <Row
           label="Token kiosk"
           value={nativeDiagnosticsAvailable && tokenReady ? "créé et injecté automatiquement" : maskToken(savedToken)}
           tone={tokenReady ? "ok" : "bad"}
         />
+
+        {chargenowConfigured === false && stationOnline === true && (
+          <div className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-xs text-muted-foreground">
+            La station est affichée « en ligne » d’après un état déjà enregistré. Cette indication ne prouve pas une synchronisation ChargeNow actuelle ni une lecture matérielle locale.
+          </div>
+        )}
 
         {nativeDiagnosticsAvailable ? (
           <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 p-4">
@@ -141,10 +165,10 @@ export function KioskDiagnostics(props: Props) {
           <div className="mt-5 rounded-2xl border border-border/40 p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium">
               <KeyRound className="h-4 w-4" />
-              {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
+              {savedToken ? "Remplacer le token kiosk" : "Enregistrer un token kiosk"}
             </div>
             <p className="mb-3 text-xs text-muted-foreground">
-              Secours navigateur uniquement : collez le token de cette borne ({stationId ?? "—"}).
+              Secours navigateur uniquement : seuls les tokens commençant par <code>kt_</code> sont acceptés. Un code <code>kc_</code> est un code d’appairage et sera refusé.
             </p>
             <Input
               type="password"
@@ -157,7 +181,7 @@ export function KioskDiagnostics(props: Props) {
             />
             <Button
               onClick={saveToken}
-              disabled={tokenInput.trim().length < 24}
+              disabled={tokenInput.trim().length < 24 || !tokenInput.trim().startsWith("kt_")}
               className="mt-3 w-full gap-2 rounded-full bg-gradient-primary"
             >
               {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
@@ -187,7 +211,7 @@ export function KioskDiagnostics(props: Props) {
           </Button>
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Aucun secret ChargeNow / Stripe n’est exposé ici. Les opérations sensibles restent côté serveur.
+          Aucun secret ChargeNow ou Stripe n’est exposé ici. Les opérations sensibles restent côté serveur.
         </p>
       </div>
     </div>
