@@ -23,11 +23,17 @@ public final class HardwareDiagnosticActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView output;
     private Button copyButton;
+    private Button uploadButton;
     private String report = "";
+    private JSONObject collectedReport;
+    private KioskConfig config;
+    private String shadowEndpoint;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        config = new SecureConfigStore(this).load();
+        shadowEndpoint = ShadowTelemetryClient.deriveEndpoint(BuildConfig.ENROLLMENT_URL);
         setContentView(buildView());
         runDiagnostic();
     }
@@ -46,14 +52,17 @@ public final class HardwareDiagnosticActivity extends Activity {
         ));
 
         TextView title = new TextView(this);
-        title.setText("Diagnostic matériel automatique DTA");
+        title.setText("Diagnostic matériel et mode shadow DTA");
         title.setTextSize(25);
         title.setTextColor(Color.WHITE);
         title.setGravity(Gravity.CENTER);
         content.addView(title, matchWrap(dp(8), dp(12)));
 
         TextView help = new TextView(this);
-        help.setText("Lecture uniquement : ports série, USB, pilotes, firmware Android et présence de l’APK fournisseur. Aucune commande n’est envoyée à la borne.");
+        help.setText(
+            "Lecture uniquement : ports série, USB, pilotes, réseau, processus, firmware Android "
+                + "et présence de l’APK fournisseur. Aucune trame ni commande n’est envoyée à la borne."
+        );
         help.setTextSize(14);
         help.setTextColor(Color.rgb(190, 202, 226));
         help.setGravity(Gravity.CENTER);
@@ -77,6 +86,19 @@ public final class HardwareDiagnosticActivity extends Activity {
             dp(54)
         ));
 
+        uploadButton = new Button(this);
+        uploadButton.setText(config != null && config.isValid()
+            ? "Envoyer au serveur Chargeurs.ch"
+            : "Activation requise pour l’envoi");
+        uploadButton.setEnabled(false);
+        uploadButton.setOnClickListener(view -> uploadReport());
+        LinearLayout.LayoutParams uploadParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(54)
+        );
+        uploadParams.setMargins(0, dp(10), 0, 0);
+        content.addView(uploadButton, uploadParams);
+
         Button rerunButton = new Button(this);
         rerunButton.setText("Relancer le diagnostic");
         rerunButton.setOnClickListener(view -> runDiagnostic());
@@ -88,7 +110,7 @@ public final class HardwareDiagnosticActivity extends Activity {
         content.addView(rerunButton, rerunParams);
 
         Button closeButton = new Button(this);
-        closeButton.setText("Retour à l’activation");
+        closeButton.setText("Retour");
         closeButton.setOnClickListener(view -> finish());
         LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -103,20 +125,73 @@ public final class HardwareDiagnosticActivity extends Activity {
     private void runDiagnostic() {
         output.setText("Analyse en cours…");
         copyButton.setEnabled(false);
+        uploadButton.setEnabled(false);
+        collectedReport = null;
         executor.execute(() -> {
             String formatted;
+            JSONObject collected = null;
             try {
-                JSONObject collected = HardwareDiagnosticCollector.collect(this);
+                collected = HardwareDiagnosticCollector.collect(this);
                 formatted = collected.toString(2);
             } catch (Exception error) {
-                formatted = "{\n  \"diagnosticError\": \"" + error.getClass().getSimpleName() + "\",\n  \"safeReadOnly\": true\n}";
+                formatted = "{\n  \"diagnosticError\": \"" + error.getClass().getSimpleName()
+                    + "\",\n  \"safeReadOnly\": true\n}";
             }
+            final JSONObject resultObject = collected;
             final String result = formatted;
             runOnUiThread(() -> {
+                collectedReport = resultObject;
                 report = result;
                 output.setText(result);
                 copyButton.setEnabled(true);
+                uploadButton.setEnabled(
+                    collectedReport != null
+                        && config != null
+                        && config.isValid()
+                        && shadowEndpoint != null
+                );
             });
+        });
+    }
+
+    private void uploadReport() {
+        if (collectedReport == null || config == null || !config.isValid() || shadowEndpoint == null) {
+            Toast.makeText(this, "La borne doit être activée avant l’envoi.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        uploadButton.setEnabled(false);
+        uploadButton.setText("Envoi sécurisé en cours…");
+        final JSONObject snapshot = collectedReport;
+        final long sequence = System.currentTimeMillis();
+        executor.execute(() -> {
+            try {
+                JSONObject receipt = ShadowTelemetryClient.upload(
+                    shadowEndpoint,
+                    config,
+                    DeviceIdentity.getOrCreate(this),
+                    BuildConfig.VERSION_NAME,
+                    sequence,
+                    snapshot
+                );
+                String receiptText = receipt.toString(2);
+                runOnUiThread(() -> {
+                    report = report + "\n\n--- Réception serveur Chargeurs.ch ---\n" + receiptText;
+                    output.setText(report);
+                    uploadButton.setText("Observation envoyée ✓");
+                    uploadButton.setEnabled(true);
+                    Toast.makeText(this, "Observation shadow enregistrée.", Toast.LENGTH_LONG).show();
+                });
+            } catch (Exception error) {
+                String code = error.getMessage() == null
+                    ? error.getClass().getSimpleName()
+                    : error.getMessage();
+                runOnUiThread(() -> {
+                    uploadButton.setText("Réessayer l’envoi");
+                    uploadButton.setEnabled(true);
+                    Toast.makeText(this, "Échec de l’envoi : " + code, Toast.LENGTH_LONG).show();
+                });
+            }
         });
     }
 
