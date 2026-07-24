@@ -1,10 +1,18 @@
 name: Chargeurs.ch Android Kiosk Build
 
 on:
+  pull_request:
+    paths:
+      - "android-kiosk/**"
+      - ".github/workflows/android-kiosk-ci.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: android-kiosk-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-staging-apk:
@@ -35,13 +43,13 @@ jobs:
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           mkdir -p dist
-          cp "$apk" dist/chargeurs-kiosk-staging-v1.0.1-debug.apk
-          sha256sum dist/chargeurs-kiosk-staging-v1.0.1-debug.apk > dist/SHA256SUMS.txt
+          cp "$apk" dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk
+          sha256sum dist/chargeurs-kiosk-staging-v1.0.3-shadow-debug.apk > dist/SHA256SUMS.txt
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-staging-v1.0.1-debug
+          name: chargeurs-kiosk-staging-v1.0.3-shadow-debug
           retention-days: 7
           if-no-files-found: error
           path: dist/*
