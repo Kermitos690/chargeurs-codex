@@ -54,6 +54,8 @@ jobs:
       - name: Build static Kiosk V2 preview
         env:
           VITE_ROUTER_MODE: hash
+          VITE_SUPABASE_URL: https://preview-only.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: preview-only-not-a-real-credential
         run: npm run build -- --base /chargeurs-codex/
 
       - name: Upload downloadable preview
@@ -65,6 +67,7 @@ jobs:
           retention-days: 7
 
       - name: Configure GitHub Pages
+        continue-on-error: true
         uses: actions/configure-pages@v5
         with:
           enablement: true
