@@ -1,6 +1,18 @@
 name: Chargeurs.ch staging kiosk backend deploy
 
 on:
+  pull_request:
+    branches:
+      - agent/chargenow-local-diagnostics
+    paths:
+      - ".github/workflows/staging-kiosk-backend-deploy.yml"
+      - "supabase/config.toml"
+      - "supabase/functions/kiosk-enroll/**"
+      - "supabase/functions/device-shadow-ingest/**"
+      - "supabase/functions/local-gateway-api/**"
+      - "supabase/functions/_shared/**"
+      - "supabase/migrations/20260724021500_local_gateway_shadow_reports.sql"
+      - "supabase/migrations/20260724031000_staging_kiosk_self_enrollment.sql"
   push:
     branches:
       - ops/deploy-staging-kiosk-20260724
