@@ -1,0 +1,61 @@
+name: DTA21269 battery qualification CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/functions/dta-pilot-qualification/**"
+      - "supabase/functions/dta-pilot-callback/**"
+      - "supabase/functions/_shared/dtaPilot*.ts"
+      - "supabase/functions/tests/dta_pilot.test.ts"
+      - "supabase/migrations/2026072406*.sql"
+      - "supabase/config.toml"
+      - ".github/workflows/dta-pilot-qualification-ci.yml"
+  push:
+    branches: [agent/finalize-chargeurs-platform]
+    paths:
+      - "supabase/functions/dta-pilot-qualification/**"
+      - "supabase/functions/dta-pilot-callback/**"
+      - "supabase/functions/_shared/dtaPilot*.ts"
+      - "supabase/functions/tests/dta_pilot.test.ts"
+      - "supabase/migrations/2026072406*.sql"
+      - "supabase/config.toml"
+      - ".github/workflows/dta-pilot-qualification-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta-pilot-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check qualification functions
+        run: >-
+          deno check --allow-import
+          supabase/functions/dta-pilot-qualification/index.ts
+          supabase/functions/dta-pilot-callback/index.ts
+          supabase/functions/_shared/dtaPilot.ts
+          supabase/functions/_shared/dtaPilotCallbackAuth.ts
+
+      - name: Run qualification unit tests
+        run: >-
+          deno test --allow-env --allow-net --no-check
+          supabase/functions/tests/dta_pilot.test.ts
+
+      - name: Verify fail-closed gates are documented
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^DTA21269_FREEPAY_ENABLED=false$' .env.example
+          grep -q '^CHARGENOW_MUTATIONS_ENABLED=false$' .env.example
+          grep -q '^CHARGENOW_MODE=test$' .env.example
