@@ -3,17 +3,39 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { AlertTriangle, ShieldCheck, RefreshCw, Radio, Loader2, Inbox } from "lucide-react";
+import { AlertTriangle, ShieldCheck, RefreshCw, Radio, Loader2, Inbox, Database, BatteryCharging } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+type ProviderSnapshot = {
+  stationId: string;
+  cabinetId: string;
+  collectedAt: string;
+  providerReachable: boolean;
+  stateKnown: boolean;
+  online: boolean | null;
+  signal: number | null;
+  totalSlots: number | null;
+  rentableCount: number;
+  returnableCount: number | null;
+  shop: { id: string | null; name: string | null; address: string | null };
+  pricing: {
+    currency: string | null; depositAmount: number | null; price: number | null;
+    priceMinute: number | null; dailyMaxPrice: number | null; timeoutAmount: number | null;
+  };
+  batteries: Array<{ batteryId: string; slotNum: number | null; powerLevel: number | null }>;
+  slots: Array<{ slotNum: number; status: string | null; batteryId: string | null }>;
+  attempts: Array<{ source: string; status: number; ok: boolean; error: string | null }>;
+};
+
 export default function AdminMaintenance() {
-  const [stationId, setStationId] = useState("");
+  const [stationId, setStationId] = useState("DTA21269");
   const [slotNum, setSlotNum] = useState("1");
   const [pushUrl, setPushUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [providerSnapshot, setProviderSnapshot] = useState<ProviderSnapshot | null>(null);
   const [requests, setRequests] = useState<Array<{
     id: string; request_type: string; name: string; email: string; station_id: string | null;
     organization: string | null; message: string; status: string; created_at: string;
@@ -41,6 +63,28 @@ export default function AdminMaintenance() {
     else { toast.success("Demande mise à jour"); loadRequests(); }
   };
 
+  const runReadonlyAudit = async () => {
+    setBusy("readonly_audit");
+    try {
+      const { data, error } = await supabase.functions.invoke("chargenow-readonly-audit", {
+        body: { stationId: stationId.trim() || "DTA21269" },
+      });
+      if (error) throw error;
+      const payload = data as { ok?: boolean; error?: string; snapshot?: ProviderSnapshot };
+      if (!payload.ok || !payload.snapshot) {
+        setProviderSnapshot(payload.snapshot ?? null);
+        toast.error(payload.error ?? "Snapshot fournisseur indisponible");
+        return;
+      }
+      setProviderSnapshot(payload.snapshot);
+      toast.success("Snapshot ChargeNow reçu en lecture seule");
+    } catch (error) {
+      toast.error((error as Error).message ?? "Erreur de lecture fournisseur");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const call = async (actionType: string, extra: Record<string, unknown> = {}) => {
     setBusy(actionType);
     try {
@@ -55,9 +99,73 @@ export default function AdminMaintenance() {
   };
 
   return (
-    <div className="animate-fade-in max-w-3xl space-y-6">
+    <div className="animate-fade-in max-w-4xl space-y-6">
       <h1 className="font-display text-3xl font-bold">Maintenance</h1>
-      <p className="text-muted-foreground">Actions administrateur exécutées côté serveur uniquement. Les actions dangereuses agissent sur le matériel.</p>
+      <p className="text-muted-foreground">Audit fournisseur en lecture seule et actions administrateur exécutées côté serveur.</p>
+
+      <section className="glass liquid-border space-y-4 rounded-2xl p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-bold"><Database className="mr-2 inline h-5 w-5" />Snapshot ChargeNow → Chargeurs.ch</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Lecture seule : aucune location, aucun paiement et aucune commande matérielle.</p>
+          </div>
+          <Button onClick={runReadonlyAudit} disabled={!!busy} className="gap-2">
+            {busy === "readonly_audit" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Auditer DTA21269
+          </Button>
+        </div>
+
+        {providerSnapshot ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SnapshotCard label="Fournisseur" value={providerSnapshot.providerReachable ? "joignable" : "injoignable"} />
+              <SnapshotCard label="Borne" value={providerSnapshot.online === true ? "en ligne" : providerSnapshot.online === false ? "hors ligne" : "inconnue"} />
+              <SnapshotCard label="Batteries louables" value={String(providerSnapshot.rentableCount)} />
+              <SnapshotCard label="Retours possibles" value={providerSnapshot.returnableCount == null ? "inconnu" : String(providerSnapshot.returnableCount)} />
+            </div>
+
+            <div className="grid gap-4 rounded-xl border border-border p-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Borne et lieu</p>
+                <p className="mt-2 font-semibold">{providerSnapshot.stationId} · {providerSnapshot.cabinetId}</p>
+                <p className="text-sm text-muted-foreground">{providerSnapshot.shop.name ?? "Magasin non fourni"}</p>
+                <p className="text-sm text-muted-foreground">{providerSnapshot.shop.address ?? "Adresse non fournie"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">Collecté le {new Date(providerSnapshot.collectedAt).toLocaleString("fr-CH")}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Tarif observé chez le fournisseur</p>
+                <p className="mt-2 text-sm">Caution : {formatMoney(providerSnapshot.pricing.depositAmount, providerSnapshot.pricing.currency)}</p>
+                <p className="text-sm">Prix : {formatMoney(providerSnapshot.pricing.price, providerSnapshot.pricing.currency)} / {providerSnapshot.pricing.priceMinute ?? "?"} min</p>
+                <p className="text-sm">Plafond : {formatMoney(providerSnapshot.pricing.dailyMaxPrice, providerSnapshot.pricing.currency)}</p>
+                <p className="text-sm">Non-retour : {formatMoney(providerSnapshot.pricing.timeoutAmount, providerSnapshot.pricing.currency)}</p>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 flex items-center text-sm font-semibold"><BatteryCharging className="mr-2 h-4 w-4" />Batteries observées ({providerSnapshot.batteries.length})</p>
+              {providerSnapshot.batteries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucune batterie identifiable dans les réponses fournisseur.</p>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {providerSnapshot.batteries.map((battery) => (
+                    <div key={battery.batteryId} className="rounded-lg border border-border px-3 py-2 text-sm">
+                      <span className="font-medium">{battery.batteryId}</span>
+                      <span className="ml-2 text-muted-foreground">slot {battery.slotNum ?? "?"} · {battery.powerLevel ?? "?"}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <details className="rounded-xl border border-border p-4">
+              <summary className="cursor-pointer text-sm font-semibold">Détail des routes fournisseur</summary>
+              <pre className="mt-3 overflow-auto text-xs text-muted-foreground">{JSON.stringify(providerSnapshot.attempts, null, 2)}</pre>
+            </details>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Aucun snapshot chargé.</p>
+        )}
+      </section>
 
       <section className="glass liquid-border space-y-4 rounded-2xl p-6">
         <div className="flex items-center justify-between gap-3">
@@ -85,7 +193,7 @@ export default function AdminMaintenance() {
 
       <section className="glass liquid-border grid gap-3 rounded-2xl p-6 sm:grid-cols-2">
         <div>
-          <label className="text-sm text-muted-foreground">Borne (cabinetId)</label>
+          <label className="text-sm text-muted-foreground">Borne (stationId / cabinetId)</label>
           <Input value={stationId} onChange={(e) => setStationId(e.target.value)} />
         </div>
         <div>
@@ -125,6 +233,20 @@ export default function AdminMaintenance() {
       </section>
     </div>
   );
+}
+
+function SnapshotCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/40 p-4">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function formatMoney(value: number | null, currency: string | null) {
+  if (value == null) return "inconnu";
+  return `${value.toLocaleString("fr-CH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency ?? "CHF"}`;
 }
 
 function DangerButton({ label, onConfirm, busy, stationId, slotNum }: { label: string; onConfirm: () => void; busy: boolean; stationId: string; slotNum: string }) {
