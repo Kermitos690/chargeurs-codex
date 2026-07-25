@@ -42,9 +42,10 @@
         <activity android:name=".ProvisioningActivity" android:exported="false" />
         <activity android:name=".HardwareDiagnosticActivity" android:exported="false" />
         <activity android:name=".SimpleQualificationActivity" android:exported="false" />
+        <activity android:name=".TabletControlAuditActivity" android:exported="false" />
 
         <activity
-            android:name=".TabletControlAuditActivity"
+            android:name=".TabletExtractionActivity"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
