@@ -1,5 +1,6 @@
 name: DTA21269 FreeTest local APK
 
+# Rebuilt after staging shadow backend readiness validation.
 on:
   push:
     branches:
