@@ -40,6 +40,9 @@ verify_jwt = false
 [functions.sync-cabinet-status]
 verify_jwt = false
 
+[functions.chargenow-readonly-audit]
+verify_jwt = true
+
 [functions.create-rental-session]
 verify_jwt = false
 
