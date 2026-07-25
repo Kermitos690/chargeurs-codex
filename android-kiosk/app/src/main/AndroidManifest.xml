@@ -34,7 +34,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@drawable/ic_launcher"
         android:roundIcon="@drawable/ic_launcher"
-        android:label="Chargeurs FreeTest"
+        android:label="Chargeurs Analyse DTA"
         android:theme="@style/Theme.ChargeursKiosk"
         android:supportsRtl="true"
         tools:targetApi="s">
@@ -47,6 +47,7 @@
 
         <activity
             android:name=".FreeTestActivity"
+            android:enabled="${freeTestLauncherEnabled}"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape">
@@ -59,7 +60,7 @@
         <activity
             android:name=".VendorAnalysisActivity"
             android:exported="true"
-            android:label="Chargeurs Analyse"
+            android:label="Chargeurs Analyse DTA"
             android:launchMode="singleTask"
             android:screenOrientation="landscape">
             <intent-filter>
