@@ -1,4 +1,4 @@
-name: DTA21269 FreeTest local APK
+name: DTA21269 targeted analyzer APK
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dta21269-freetest-local-${{ github.event.pull_request.number || github.ref }}
+  group: dta21269-targeted-analyzer-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
         working-directory: android-kiosk
         run: ./gradlew --no-daemon testDebugUnitTest
 
-      - name: Build FreeTest APK
+      - name: Build targeted analyzer APK
         working-directory: android-kiosk
         run: ./gradlew --no-daemon clean assembleDebug
 
@@ -48,23 +48,24 @@ jobs:
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           mkdir -p dist
-          cp "$apk" dist/Chargeurs-ch-DTA21269-Analyzer-v1.2.0.apk
-          sha256sum dist/Chargeurs-ch-DTA21269-Analyzer-v1.2.0.apk > dist/SHA256SUMS.txt
+          cp "$apk" dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk
+          sha256sum dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk > dist/SHA256SUMS.txt
           cat > dist/INSTALLATION.txt <<'TXT'
-          CHARGEURS.CH — DTA21269 ANALYSE PASSIVE
-          =======================================
+          CHARGEURS.CH — DTA21269 TARGETED ANALYZER
+          =========================================
 
-          Package : ch.chargeurs.kiosk.freetest
+          Package : ch.chargeurs.kiosk.analyzer
           Station : DTA21269
           Paiement : aucun / 0 CHF
-          Coexistence : BajieTouchPower et HappyNet restent installés
+          Coexistence : installation parallèle au FreeTest existant
 
-          Cette version conserve le FreeTest v1.1.0 et ajoute une seconde icône
-          « Chargeurs Analyse » qui :
-          - calcule les empreintes SHA-256 de l'APK fournisseur et de ses DEX/.so ;
-          - inventorie les bibliothèques natives et les ressources techniques ;
-          - recherche des indices CLOUDPOS_SERIAL, ttyS1, baud, 9600, CRC,
-            checksum, slot, eject, cabinet et battery ;
+          Cette version :
+          - exclut les ressources Stripe de l'analyse ;
+          - lit les tables de chaînes, classes, champs et méthodes des DEX ;
+          - cible PaymentEndActivity, initBatteryRental et jSerialComm ;
+          - cible getCommPort, openPort, writeBytes et setComPortParameters ;
+          - inventorie les binaires .so/.dll/.jnilib même hors de lib/ ;
+          - permet de modifier les termes de recherche sans reconstruire l'APK ;
           - exporte un JSON dans Téléchargements/Chargeurs ;
           - ne copie pas l'APK fournisseur ;
           - n'exécute aucun code fournisseur ;
@@ -72,13 +73,13 @@ jobs:
           - n'envoie aucun octet au PCB ;
           - ne peut pas éjecter de batterie.
 
-          Ne désinstallez pas BajieTouchPower ou HappyNet.
+          Ne désinstallez pas BajieTouchPower, HappyNet ou Chargeurs FreeTest.
           TXT
 
-      - name: Upload installable analyzer kit
+      - name: Upload targeted analyzer kit
         uses: actions/upload-artifact@v4
         with:
-          name: Chargeurs-ch-DTA21269-Analyzer-v1.2.0
+          name: Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0
           retention-days: 14
           if-no-files-found: error
           path: dist/*
