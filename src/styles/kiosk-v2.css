@@ -1,0 +1,69 @@
+@keyframes kiosk-v2-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(3vw, -3vh, 0) scale(1.08); }
+}
+
+@keyframes kiosk-v2-charge {
+  0% { transform: translateY(120%); opacity: .25; }
+  50% { opacity: .95; }
+  100% { transform: translateY(-120%); opacity: .2; }
+}
+
+@keyframes kiosk-v2-pulse {
+  0%, 100% { transform: scale(1); opacity: .68; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+.kiosk-v2-root {
+  min-height: 100vh;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 12% 12%, hsl(var(--primary) / .22), transparent 31%),
+    radial-gradient(circle at 88% 18%, hsl(var(--secondary) / .16), transparent 28%),
+    radial-gradient(circle at 68% 88%, hsl(var(--accent) / .14), transparent 32%),
+    linear-gradient(145deg, hsl(231 55% 5%), hsl(223 52% 8%) 55%, hsl(231 55% 5%));
+}
+
+.kiosk-v2-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .15;
+  background-image:
+    linear-gradient(hsl(var(--foreground) / .08) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--foreground) / .08) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.kiosk-v2-aurora {
+  position: fixed;
+  width: min(54vw, 780px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  filter: blur(90px);
+  opacity: .18;
+  pointer-events: none;
+  animation: kiosk-v2-drift 18s ease-in-out infinite;
+}
+
+.kiosk-v2-panel {
+  position: relative;
+  background: linear-gradient(145deg, hsl(220 48% 16% / .72), hsl(230 48% 9% / .54));
+  border: 1px solid hsl(var(--foreground) / .12);
+  box-shadow: 0 28px 90px hsl(230 70% 2% / .56), inset 0 1px 0 hsl(var(--foreground) / .13);
+  backdrop-filter: blur(30px) saturate(145%);
+  -webkit-backdrop-filter: blur(30px) saturate(145%);
+}
+
+.kiosk-v2-cta {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(120deg, hsl(var(--primary)), hsl(var(--accent)) 56%, hsl(var(--secondary)));
+  box-shadow: 0 20px 60px hsl(var(--primary) / .32), inset 0 1px 0 hsl(var(--foreground) / .42);
+}
+
+.kiosk-v2-qr-frame {
+  background: hsl(0 0% 100%);
+  box-shadow: 0 28px 80px hsl(230 70% 2% / .64), 0 0 60px hsl(var(--primary) / .22);
+}

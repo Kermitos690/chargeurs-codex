@@ -1,5 +1,11 @@
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
+import {
+  normalizeKioskBaseUrl,
+  randomOpaque,
+  sha256Hex,
+  validEnrollmentRequest,
+  validRequestedTestToken,
+} from "../_shared/kioskEnrollment.ts";
 
 Deno.test("kiosk enrollment accepts only high-entropy code and UUID v4", () => {
   assert(validEnrollmentRequest(
@@ -22,6 +28,30 @@ Deno.test("pairing tokens are prefixed and never stored in plaintext", async () 
   assert(code.startsWith("kc_"));
   assert(code.length >= 19);
   assertEquals((await sha256Hex(code)).length, 64);
+});
+
+Deno.test("device-proposed tokens use the diagnostic-only format", () => {
+  assert(validRequestedTestToken(
+    "kt_test_0123456789abcdefghijklmnopqrstuvwxyzABCDEFG",
+  ));
+  assertEquals(validRequestedTestToken("kt_live_not_allowed"), false);
+  assertEquals(validRequestedTestToken("kt_test_too-short"), false);
+});
+
+Deno.test("direct activation is pinned to staging diagnostic pilot stations", async () => {
+  const source = await Deno.readTextFile("supabase/functions/kiosk-enroll/index.ts");
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260724031000_staging_kiosk_self_enrollment.sql",
+  );
+
+  assert(source.includes('projectOrigin() === STAGING_SUPABASE_ORIGIN'));
+  assert(source.includes('appVersion.endsWith("-staging-diagnostic")'));
+  assert(source.includes('body.testSelfEnroll === true'));
+  assert(source.includes('db.rpc("self_enroll_staging_kiosk"'));
+  assert(migration.includes("environment = 'staging'"));
+  assert(migration.includes("is_pilot = true"));
+  assert(migration.includes("now() + interval '7 days'"));
+  assert(migration.includes("grant execute on function public.self_enroll_staging_kiosk"));
 });
 
 Deno.test("pairing administration binds organization and supports audited cancellation", async () => {

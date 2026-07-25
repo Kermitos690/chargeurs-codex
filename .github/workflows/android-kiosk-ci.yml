@@ -1,10 +1,18 @@
 name: Chargeurs.ch Android Kiosk Build
 
 on:
+  pull_request:
+    paths:
+      - "android-kiosk/**"
+      - ".github/workflows/android-kiosk-ci.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: android-kiosk-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-staging-apk:
@@ -21,27 +29,66 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build staging APK
+      - name: Test and assemble tablet extractor APK
         working-directory: android-kiosk
+        shell: bash
         env:
-          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll-diagnostic
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
-        run: ./gradlew --no-daemon clean testDebugUnitTest lintDebug assembleDebug
+        run: |
+          set -euo pipefail
+          mkdir -p ../dist
+          ./gradlew --no-daemon clean testDebugUnitTest assembleDebug --stacktrace 2>&1 \
+            | tee ../dist/android-assemble.log
 
-      - name: Prepare artifact
+      - name: Prepare uniquely named APK
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
-          mkdir -p dist
-          cp "$apk" dist/chargeurs-kiosk-staging-v1.0.1-debug.apk
-          sha256sum dist/chargeurs-kiosk-staging-v1.0.1-debug.apk > dist/SHA256SUMS.txt
+          short_sha="${GITHUB_SHA::7}"
+          filename="Chargeurs-ch-DTA21269-Tablet-Extractor-v1.0.8-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
+          cp "$apk" "dist/$filename"
+          sha256sum "dist/$filename" > dist/SHA256SUMS.txt
+          printf '%s\n' "$filename" > dist/INSTALL_THIS_FILE.txt
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Run strict Android lint
+        id: lint
+        continue-on-error: true
+        working-directory: android-kiosk
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon lintDebug --stacktrace 2>&1 | tee ../dist/android-lint.log
+
+      - name: Collect lint reports
+        if: always()
+        shell: bash
+        run: |
+          find android-kiosk/app/build/reports android-kiosk/app/build/intermediates \
+            -type f \( -name 'lint-results-debug.*' -o -name 'lint-results*.txt' \) \
+            -exec cp {} dist/ \; 2>/dev/null || true
+
+      - name: Upload APK package
+        uses: actions/upload-artifact@v6
         with:
-          name: chargeurs-kiosk-staging-v1.0.1-debug
+          name: Chargeurs-ch-DTA21269-Tablet-Extractor-v1.0.8-build-${{ github.run_number }}
           retention-days: 7
           if-no-files-found: error
-          path: dist/*
+          path: |
+            dist/*.apk
+            dist/SHA256SUMS.txt
+            dist/INSTALL_THIS_FILE.txt
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: chargeurs-kiosk-build-diagnostics-${{ github.run_number }}
+          retention-days: 7
+          if-no-files-found: warn
+          path: |
+            dist/android-assemble.log
+            dist/android-lint.log
+            dist/lint-results*

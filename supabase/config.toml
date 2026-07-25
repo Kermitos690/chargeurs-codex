@@ -58,6 +58,12 @@ verify_jwt = false
 [functions.kiosk-enroll]
 verify_jwt = false
 
+[functions.device-shadow-ingest]
+verify_jwt = false
+
+[functions.local-gateway-api]
+verify_jwt = false
+
 [functions.public-contact]
 verify_jwt = false
 

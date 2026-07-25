@@ -7,6 +7,8 @@ import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Kiosk from "./pages/Kiosk.tsx";
+import KioskV2 from "./pages/KioskV2.tsx";
+import KioskV2Showcase from "./pages/KioskV2Showcase.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
@@ -59,8 +61,11 @@ const App = () => (
             <Route path="/support" element={<Support />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<Kiosk />} />
-            <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
+            <Route path="/kiosk/:stationId" element={<KioskV2 />} />
+            <Route path="/kiosk/station/:stationId" element={<KioskV2 />} />
+            <Route path="/kiosk-v2/:stationId" element={<KioskV2 />} />
+            <Route path="/kiosk-showcase/:stationId" element={<KioskV2Showcase />} />
+            <Route path="/kiosk-legacy/:stationId" element={<Kiosk />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />

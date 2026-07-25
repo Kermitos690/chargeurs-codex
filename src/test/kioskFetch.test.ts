@@ -1,10 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildKioskAwareRequestInit,
   isKioskCabinetSyncRequest,
   isKioskQuoteRequest,
   isSafeKioskQuote,
+  readKioskToken,
 } from "@/lib/kioskFetch";
+
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
+
+describe("kiosk credential storage", () => {
+  it("rejects and clears a legacy pairing code stored as a kiosk token", () => {
+    localStorage.setItem("kiosk_token", "kc_u0jDsw9_example_pairing_code");
+    expect(readKioskToken()).toBeNull();
+    expect(localStorage.getItem("kiosk_token")).toBeNull();
+  });
+
+  it("prefers the native session token and accepts only kt_ credentials", () => {
+    localStorage.setItem("kiosk_token", "kt_local_fallback_token_1234567890");
+    sessionStorage.setItem("kiosk_token", "kt_native_session_token_123456789");
+    expect(readKioskToken()).toBe("kt_native_session_token_123456789");
+  });
+});
 
 describe("kiosk-aware Edge Function transport", () => {
   const syncUrl = "https://example.supabase.co/functions/v1/sync-cabinet-status";

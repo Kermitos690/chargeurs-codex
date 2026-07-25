@@ -1,0 +1,107 @@
+@keyframes kiosk-v2-scan {
+  0% { transform: translateY(-140%); opacity: 0; }
+  20%, 80% { opacity: .9; }
+  100% { transform: translateY(760%); opacity: 0; }
+}
+
+.kiosk-v2-battery-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: clamp(320px, 46vh, 600px);
+  isolation: isolate;
+}
+
+.kiosk-v2-battery-halo {
+  position: absolute;
+  width: min(72%, 440px);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, hsl(var(--primary) / .38), hsl(var(--secondary) / .09) 45%, transparent 72%);
+  filter: blur(16px);
+  animation: kiosk-v2-pulse 4.8s ease-in-out infinite;
+}
+
+.kiosk-v2-battery {
+  position: relative;
+  width: clamp(150px, 18vw, 250px);
+  aspect-ratio: .53;
+  border-radius: clamp(30px, 4vw, 52px);
+  padding: clamp(10px, 1.1vw, 15px);
+  transform: perspective(1100px) rotateY(-12deg) rotateX(5deg) rotateZ(2deg);
+  background: linear-gradient(150deg, hsl(218 30% 86%), hsl(220 15% 38%) 18%, hsl(225 22% 12%) 46%, hsl(218 23% 36%) 83%, hsl(214 28% 78%));
+  box-shadow: -24px 34px 70px hsl(230 80% 2% / .7), 18px 0 40px hsl(var(--primary) / .2), inset 2px 2px 2px hsl(var(--foreground) / .55);
+}
+
+.kiosk-v2-battery::before {
+  content: "";
+  position: absolute;
+  top: -2.3%;
+  left: 34%;
+  width: 32%;
+  height: 4.3%;
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(to right, hsl(219 20% 30%), hsl(215 20% 80%), hsl(219 20% 28%));
+}
+
+.kiosk-v2-battery-inner {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: clamp(24px, 3.2vw, 42px);
+  background: radial-gradient(circle at 35% 15%, hsl(var(--primary) / .26), transparent 36%), linear-gradient(160deg, hsl(225 46% 11%), hsl(231 56% 4%));
+  border: 1px solid hsl(var(--foreground) / .18);
+}
+
+.kiosk-v2-energy-stream {
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  height: 24%;
+  border-radius: 999px;
+  filter: blur(8px);
+  background: linear-gradient(to bottom, transparent, hsl(var(--secondary) / .9), hsl(var(--primary) / .35), transparent);
+  animation: kiosk-v2-charge 2.6s linear infinite;
+}
+
+.kiosk-v2-battery-logo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  text-align: center;
+  text-shadow: 0 0 24px hsl(var(--primary) / .65);
+}
+
+.kiosk-v2-scan-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 11%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, hsl(var(--secondary)), transparent);
+  box-shadow: 0 0 18px hsl(var(--secondary));
+  animation: kiosk-v2-scan 3.2s ease-in-out infinite;
+}
+
+.kiosk-v2-slot-beacon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(150px, 22vw, 240px);
+  aspect-ratio: 1;
+  border-radius: 36%;
+  background: linear-gradient(145deg, hsl(var(--success) / .26), hsl(var(--success) / .08));
+  border: 1px solid hsl(var(--success) / .45);
+  box-shadow: 0 0 80px hsl(var(--success) / .28), inset 0 1px 0 hsl(var(--foreground) / .22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-v2-root *, .kiosk-v2-root *::before, .kiosk-v2-root *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

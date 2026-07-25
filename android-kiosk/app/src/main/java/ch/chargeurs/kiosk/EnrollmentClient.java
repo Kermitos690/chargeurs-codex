@@ -17,17 +17,51 @@ public final class EnrollmentClient {
 
     private EnrollmentClient() {}
 
-    public static EnrollmentResult enroll(
+    public static EnrollmentResult enrollWithPairing(
         String endpoint,
         String pairingCode,
         String devicePublicId,
         String appVersion
     ) throws Exception {
-        String normalizedEndpoint = KioskConfigValidator.normalizeHttpsEndpoint(endpoint);
-        if (normalizedEndpoint == null) throw new IllegalArgumentException("ENROLLMENT_NOT_CONFIGURED");
         if (pairingCode == null || !pairingCode.matches("^kc_[A-Za-z0-9_-]{16,64}$")) {
             throw new IllegalArgumentException("INVALID_PAIRING_CODE");
         }
+        JSONObject request = new JSONObject()
+            .put("pairingCode", pairingCode)
+            .put("devicePublicId", devicePublicId)
+            .put("appVersion", appVersion);
+        return execute(endpoint, request, null);
+    }
+
+    public static EnrollmentResult selfEnrollDiagnostic(
+        String endpoint,
+        String stationId,
+        String devicePublicId,
+        String appVersion,
+        String requestedTestToken
+    ) throws Exception {
+        if (!KioskConfigValidator.isValidStationId(stationId)) {
+            throw new IllegalArgumentException("INVALID_STATION_ID");
+        }
+        if (!TestKioskToken.isValid(requestedTestToken)) {
+            throw new IllegalArgumentException("INVALID_TEST_TOKEN");
+        }
+        JSONObject request = new JSONObject()
+            .put("testSelfEnroll", true)
+            .put("stationId", stationId.trim())
+            .put("devicePublicId", devicePublicId)
+            .put("appVersion", appVersion)
+            .put("requestedKioskToken", requestedTestToken);
+        return execute(endpoint, request, requestedTestToken);
+    }
+
+    private static EnrollmentResult execute(
+        String endpoint,
+        JSONObject request,
+        String expectedToken
+    ) throws Exception {
+        String normalizedEndpoint = KioskConfigValidator.normalizeHttpsEndpoint(endpoint);
+        if (normalizedEndpoint == null) throw new IllegalArgumentException("ENROLLMENT_NOT_CONFIGURED");
 
         HttpsURLConnection connection = (HttpsURLConnection) new URL(normalizedEndpoint).openConnection();
         connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
@@ -39,10 +73,6 @@ public final class EnrollmentClient {
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Cache-Control", "no-store");
 
-        JSONObject request = new JSONObject()
-            .put("pairingCode", pairingCode)
-            .put("devicePublicId", devicePublicId)
-            .put("appVersion", appVersion);
         byte[] requestBytes = request.toString().getBytes(StandardCharsets.UTF_8);
         connection.setFixedLengthStreamingMode(requestBytes.length);
 
@@ -72,6 +102,9 @@ public final class EnrollmentClient {
             KioskConfig config = new KioskConfig(stationId, kioskToken, baseUrl);
             if (!config.isValid() || deviceId.trim().isEmpty()) {
                 throw new IllegalStateException("INVALID_ENROLLMENT_RESPONSE");
+            }
+            if (expectedToken != null && !expectedToken.equals(kioskToken)) {
+                throw new IllegalStateException("TEST_TOKEN_NOT_ACCEPTED");
             }
             return new EnrollmentResult(deviceId, config);
         } finally {

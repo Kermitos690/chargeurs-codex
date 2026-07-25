@@ -24,18 +24,32 @@ export function isValidKioskPairingCode(value: unknown): value is string {
   return typeof value === "string" && KIOSK_PAIRING_CODE_PATTERN.test(value.trim());
 }
 
+function removeInvalidStoredCredential(storage: Storage, value: string | null): void {
+  if (!value) return;
+  if (isValidKioskPairingCode(value) || !isValidKioskToken(value)) {
+    storage.removeItem(KIOSK_TOKEN_KEY);
+  }
+}
+
 /**
  * The native wrapper injects the credential into sessionStorage so it is not
  * persisted in the WebView profile. localStorage remains a deliberate browser
  * fallback for legacy/manual kiosk provisioning only.
  *
- * Pairing codes (kc_) are never accepted as runtime kiosk credentials. They
- * must first be redeemed by kiosk-enroll for a real station-bound token (kt_).
+ * Pairing codes (kc_) are never accepted as runtime kiosk credentials. Any
+ * legacy value found under the kiosk token key is removed automatically so the
+ * diagnostics screen cannot present a pairing code as an active token.
  */
 export function readKioskToken(): string | null {
   try {
-    const candidate = sessionStorage.getItem(KIOSK_TOKEN_KEY) ?? localStorage.getItem(KIOSK_TOKEN_KEY);
-    return isValidKioskToken(candidate) ? candidate.trim() : null;
+    const sessionCandidate = sessionStorage.getItem(KIOSK_TOKEN_KEY);
+    if (isValidKioskToken(sessionCandidate)) return sessionCandidate.trim();
+    removeInvalidStoredCredential(sessionStorage, sessionCandidate);
+
+    const localCandidate = localStorage.getItem(KIOSK_TOKEN_KEY);
+    if (isValidKioskToken(localCandidate)) return localCandidate.trim();
+    removeInvalidStoredCredential(localStorage, localCandidate);
+    return null;
   } catch {
     return null;
   }

@@ -19,7 +19,7 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
-val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
+val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll-diagnostic"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -34,8 +34,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 103
-        versionName = "1.0.3"
+        versionCode = 108
+        versionName = "1.0.8"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -66,8 +66,8 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-staging-diagnostic"
+            applicationIdSuffix = ".inspector"
+            versionNameSuffix = "-tablet-extractor"
             isDebuggable = true
             buildConfigField(
                 "String",

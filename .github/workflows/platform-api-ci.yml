@@ -1,13 +1,23 @@
 name: Platform API CI
 
 on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "supabase/config.toml"
+      - "supabase/functions/**"
+      - "supabase/migrations/**"
+      - "docs/openapi/**"
+      - ".github/workflows/platform-api-ci.yml"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: platform-api-ci-${{ github.ref }}
+  group: platform-api-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,6 +58,14 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Upload compiled kiosk preview
+        uses: actions/upload-artifact@v6
+        with:
+          name: chargeurs-kiosk-v2-preview-${{ github.run_number }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Validate OpenAPI document
         run: npx --yes @redocly/cli@1.25.5 lint docs/openapi/chargeurs-api-v1.yaml
 
@@ -56,19 +74,25 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Check Platform API functions
+      - name: Check Platform, enrollment and Local Gateway functions
         run: >-
           deno check --allow-import
           supabase/functions/platform-api/index.ts
           supabase/functions/api-key-admin/index.ts
+          supabase/functions/kiosk-enroll/index.ts
+          supabase/functions/device-shadow-ingest/index.ts
+          supabase/functions/local-gateway-api/index.ts
+          supabase/functions/_shared/kioskEnrollment.ts
           supabase/functions/_shared/platformApi.ts
           supabase/functions/_shared/apiClientAdmin.ts
+          supabase/functions/_shared/db.ts
 
-      - name: Run Platform API unit tests
+      - name: Run Platform and enrollment unit tests
         run: >-
-          deno test --allow-env --allow-net --no-check
+          deno test --allow-env --allow-net --allow-read --no-check
           supabase/functions/tests/platform_api.test.ts
           supabase/functions/tests/api_client_admin.test.ts
+          supabase/functions/tests/kiosk_enrollment.test.ts
 
       - name: Run isolated PostgreSQL migration contract
         run: >-
