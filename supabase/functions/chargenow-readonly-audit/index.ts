@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -25,6 +25,11 @@ type ProviderResult = {
   data: unknown;
   error: string | null;
   businessCode: string | number | null;
+};
+
+type CredentialsRow = {
+  secret_username?: unknown;
+  secret_password?: unknown;
 };
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -85,7 +90,7 @@ function businessCode(data: unknown): string | number | null {
   return typeof data.code === "string" || typeof data.code === "number" ? data.code : null;
 }
 
-async function requireAdmin(req: Request, db: ReturnType<typeof createClient>): Promise<string | null> {
+async function requireAdmin(req: Request, db: SupabaseClient): Promise<string | null> {
   const authorization = req.headers.get("Authorization") ?? "";
   const token = authorization.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
@@ -93,19 +98,20 @@ async function requireAdmin(req: Request, db: ReturnType<typeof createClient>): 
   if (error || !user) return null;
   const { data: roles } = await db.from("user_roles").select("role").eq("user_id", user.id);
   const allowed = new Set(["super_admin", "admin", "operations_admin"]);
-  return (roles ?? []).some((row: { role: string }) => allowed.has(row.role)) ? user.id : null;
+  const roleRows = (roles ?? []) as Array<{ role: string }>;
+  return roleRows.some((row) => allowed.has(row.role)) ? user.id : null;
 }
 
-async function loadCredentials(db: ReturnType<typeof createClient>): Promise<{ username: string; password: string } | null> {
+async function loadCredentials(db: SupabaseClient): Promise<{ username: string; password: string } | null> {
   const envUsername = (Deno.env.get("CHARGENOW_BASIC_USERNAME") ?? "").trim();
   const envPassword = Deno.env.get("CHARGENOW_BASIC_PASSWORD") ?? "";
   if (envUsername && envPassword) return { username: envUsername, password: envPassword };
 
   const { data, error } = await db.rpc("chargeurs_get_chargenow_credentials");
   if (error) throw new Error("CHARGENOW_VAULT_READ_FAILED");
-  const row = Array.isArray(data) ? data[0] : data;
-  const username = typeof row?.secret_username === "string" ? row.secret_username.trim() : "";
-  const password = typeof row?.secret_password === "string" ? row.secret_password : "";
+  const candidate = (Array.isArray(data) ? data[0] : data) as CredentialsRow | null;
+  const username = typeof candidate?.secret_username === "string" ? candidate.secret_username.trim() : "";
+  const password = typeof candidate?.secret_password === "string" ? candidate.secret_password : "";
   return username && password ? { username, password } : null;
 }
 
@@ -198,7 +204,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return json({ ok: false, error: "SUPABASE_ENV_MISSING" }, 500);
 
-  const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const db: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
   const actor = await requireAdmin(req, db);
   if (!actor) return json({ ok: false, error: "ADMIN_REQUIRED" }, 403);
 
