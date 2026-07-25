@@ -1,7 +1,10 @@
 name: DTA21269 FreeTest local APK
 
-# Rebuilt after staging shadow backend readiness validation.
 on:
+  pull_request:
+    paths:
+      - .github/workflows/dta21269-freetest-local.yml
+      - android-kiosk/**
   push:
     branches:
       - agent/dta21269-freetest-local
@@ -14,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dta21269-freetest-local
+  group: dta21269-freetest-local-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
