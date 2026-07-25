@@ -1,0 +1,76 @@
+name: DTA21269 FreeTest local APK
+
+on:
+  push:
+    branches:
+      - agent/dta21269-freetest-local
+    paths:
+      - .github/workflows/dta21269-freetest-local.yml
+      - android-kiosk/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21269-freetest-local
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Unit tests
+        working-directory: android-kiosk
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Build FreeTest APK
+        working-directory: android-kiosk
+        run: ./gradlew --no-daemon clean assembleDebug
+
+      - name: Verify APK and prepare delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          mkdir -p dist
+          cp "$apk" dist/Chargeurs-ch-DTA21269-FreeTest-v1.1.0.apk
+          sha256sum dist/Chargeurs-ch-DTA21269-FreeTest-v1.1.0.apk > dist/SHA256SUMS.txt
+          cat > dist/INSTALLATION.txt <<'TXT'
+          CHARGEURS.CH — DTA21269 FREETEST LOCAL
+          =====================================
+
+          Package : ch.chargeurs.kiosk.freetest
+          Station : DTA21269
+          Paiement : aucun / 0 CHF
+          Réseau : non requis pour l'interface locale
+          Coexistence : l'APK fournisseur reste installée
+
+          Cette version :
+          - inventorie la tablette, le réseau, l'APK fournisseur et /dev/ttyS1 ;
+          - crée des sessions FreeTest locales ;
+          - enregistre les phases supervisées ;
+          - exporte un rapport JSON dans Téléchargements/Chargeurs ;
+          - n'envoie aucun octet sur le port série ;
+          - ne peut pas encore éjecter une batterie.
+
+          Ne désinstallez pas BajieTouchPower ou HappyNet.
+          TXT
+
+      - name: Upload installable FreeTest kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chargeurs-ch-DTA21269-FreeTest-v1.1.0
+          retention-days: 14
+          if-no-files-found: error
+          path: dist/*
