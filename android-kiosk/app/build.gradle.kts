@@ -34,8 +34,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 130
-        versionName = "1.3.0"
+        versionCode = 140
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -44,6 +44,7 @@ android {
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
         manifestPlaceholders["freeTestLauncherEnabled"] = "true"
+        manifestPlaceholders["callGraphLauncherEnabled"] = "true"
     }
 
     buildFeatures {
@@ -83,6 +84,7 @@ android {
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
             manifestPlaceholders["freeTestLauncherEnabled"] = "false"
+            manifestPlaceholders["callGraphLauncherEnabled"] = "true"
         }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
@@ -91,6 +93,7 @@ android {
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
             manifestPlaceholders["freeTestLauncherEnabled"] = "true"
+            manifestPlaceholders["callGraphLauncherEnabled"] = "false"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

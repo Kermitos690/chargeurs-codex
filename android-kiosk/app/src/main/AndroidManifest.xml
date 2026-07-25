@@ -34,7 +34,7 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@drawable/ic_launcher"
         android:roundIcon="@drawable/ic_launcher"
-        android:label="Chargeurs Analyse DTA"
+        android:label="Chargeurs Graphe DTA"
         android:theme="@style/Theme.ChargeursKiosk"
         android:supportsRtl="true"
         tools:targetApi="s">
@@ -59,8 +59,16 @@
 
         <activity
             android:name=".VendorAnalysisActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="Chargeurs Analyse DTA"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".VendorCallGraphActivity"
+            android:enabled="${callGraphLauncherEnabled}"
+            android:exported="true"
+            android:label="Chargeurs Graphe DTA"
             android:launchMode="singleTask"
             android:screenOrientation="landscape">
             <intent-filter>

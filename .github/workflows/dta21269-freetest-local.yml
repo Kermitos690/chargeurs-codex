@@ -1,4 +1,4 @@
-name: DTA21269 targeted analyzer APK
+name: DTA21269 DEX call graph analyzer APK
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - agent/dta21269-freetest-local
+      - agent/dta21269-dex-callgraph
     paths:
       - .github/workflows/dta21269-freetest-local.yml
       - android-kiosk/**
@@ -17,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dta21269-targeted-analyzer-${{ github.event.pull_request.number || github.ref }}
+  group: dta21269-dex-callgraph-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,7 +38,7 @@ jobs:
         working-directory: android-kiosk
         run: ./gradlew --no-daemon testDebugUnitTest
 
-      - name: Build targeted analyzer APK
+      - name: Build DEX call graph analyzer APK
         working-directory: android-kiosk
         run: ./gradlew --no-daemon clean assembleDebug
 
@@ -48,38 +49,41 @@ jobs:
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           mkdir -p dist
-          cp "$apk" dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk
-          sha256sum dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk > dist/SHA256SUMS.txt
+          cp "$apk" dist/Chargeurs-ch-DTA21269-DEX-CallGraph-Analyzer-v1.4.0.apk
+          sha256sum dist/Chargeurs-ch-DTA21269-DEX-CallGraph-Analyzer-v1.4.0.apk > dist/SHA256SUMS.txt
           cat > dist/INSTALLATION.txt <<'TXT'
-          CHARGEURS.CH — DTA21269 TARGETED ANALYZER
-          =========================================
+          CHARGEURS.CH — DTA21269 DEX CALL GRAPH ANALYZER
+          =================================================
 
           Package : ch.chargeurs.kiosk.analyzer
           Station : DTA21269
+          Version : 1.4.0-local
           Paiement : aucun / 0 CHF
-          Coexistence : installation parallèle au FreeTest existant
+          Coexistence : installation parallèle au FreeTest et à BajieTouchPower
 
           Cette version :
           - exclut les ressources Stripe de l'analyse ;
           - lit les tables de chaînes, classes, champs et méthodes des DEX ;
-          - cible PaymentEndActivity, initBatteryRental et jSerialComm ;
-          - cible getCommPort, openPort, writeBytes et setComPortParameters ;
-          - inventorie les binaires .so/.dll/.jnilib même hors de lib/ ;
-          - permet de modifier les termes de recherche sans reconstruire l'APK ;
-          - exporte un JSON dans Téléchargements/Chargeurs ;
+          - lit passivement class_data_item, code_item et les instructions invoke ;
+          - construit le graphe d'appels des méthodes du paquet fournisseur ;
+          - cherche des chemins statiques depuis PaymentEndActivity et initBatteryRental ;
+          - cible getCommPort, openPort, writeBytes, readBytes et setComPortParameters ;
+          - affiche les littéraux de la méthode appelante uniquement comme contexte ;
+          - exporte un JSON schemaVersion 3 dans Téléchargements/Chargeurs ;
           - ne copie pas l'APK fournisseur ;
           - n'exécute aucun code fournisseur ;
           - n'ouvre pas /dev/ttyS1 ;
           - n'envoie aucun octet au PCB ;
+          - ne prétend pas que le protocole DTA est résolu ;
           - ne peut pas éjecter de batterie.
 
-          Ne désinstallez pas BajieTouchPower, HappyNet ou Chargeurs FreeTest.
+          Ne désinstallez pas com.szbjkj.bajietouchpower, HappyNet ou Chargeurs FreeTest.
           TXT
 
-      - name: Upload targeted analyzer kit
+      - name: Upload DEX call graph analyzer kit
         uses: actions/upload-artifact@v4
         with:
-          name: Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0
+          name: Chargeurs-ch-DTA21269-DEX-CallGraph-Analyzer-v1.4.0
           retention-days: 14
           if-no-files-found: error
           path: dist/*
