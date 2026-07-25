@@ -1,0 +1,134 @@
+name: Chargeurs.ch staging kiosk backend deploy
+
+on:
+  pull_request:
+    branches:
+      - agent/chargenow-local-diagnostics
+    paths:
+      - ".github/workflows/staging-kiosk-backend-deploy.yml"
+      - "supabase/config.toml"
+      - "supabase/functions/kiosk-enroll/**"
+      - "supabase/functions/device-shadow-ingest/**"
+      - "supabase/functions/local-gateway-api/**"
+      - "supabase/functions/_shared/**"
+      - "supabase/migrations/20260724021500_local_gateway_shadow_reports.sql"
+      - "supabase/migrations/20260724031000_staging_kiosk_self_enrollment.sql"
+  push:
+    branches:
+      - ops/deploy-staging-kiosk-20260724
+    paths:
+      - ".github/workflows/staging-kiosk-backend-deploy.yml"
+      - "supabase/config.toml"
+      - "supabase/functions/kiosk-enroll/**"
+      - "supabase/functions/device-shadow-ingest/**"
+      - "supabase/functions/local-gateway-api/**"
+      - "supabase/functions/_shared/**"
+      - "supabase/migrations/20260724021500_local_gateway_shadow_reports.sql"
+      - "supabase/migrations/20260724031000_staging_kiosk_self_enrollment.sql"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the two reviewed migrations and deploy the three reviewed functions"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargeurs-staging-kiosk-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_STAGING_DB_PASSWORD }}
+      CONFIGURED_STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+      SUPABASE_PROJECT_REF: xqepbqnaenoeyfjkjnzl
+      PRODUCTION_PROJECT_REF: ${{ vars.SUPABASE_PRODUCTION_PROJECT_REF }}
+    steps:
+      - name: Checkout reviewed staging branch
+        uses: actions/checkout@v6
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+
+      - name: Validate encrypted staging credentials and target
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing encrypted staging configuration: ${missing[*]}" >&2
+            exit 1
+          fi
+          test "$SUPABASE_PROJECT_REF" = "xqepbqnaenoeyfjkjnzl"
+          if [ -n "${CONFIGURED_STAGING_PROJECT_REF:-}" ]; then
+            test "$CONFIGURED_STAGING_PROJECT_REF" = "$SUPABASE_PROJECT_REF" || {
+              echo "Configured staging project does not match the reviewed target." >&2
+              exit 1
+            }
+          fi
+          if [ -n "${PRODUCTION_PROJECT_REF:-}" ]; then
+            test "$PRODUCTION_PROJECT_REF" != "$SUPABASE_PROJECT_REF" || {
+              echo "Production project refused." >&2
+              exit 1
+            }
+          fi
+
+      - name: Link dedicated staging project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Inspect pending migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list --linked --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all --dry-run | tee /tmp/dry-run.txt
+
+      - name: Apply reviewed migrations
+        if: github.event_name == 'workflow_dispatch' && inputs.apply == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all --yes
+          supabase migration list --linked --password "$SUPABASE_DB_PASSWORD" | tee /tmp/migrations-after.txt
+          grep -q "20260724021500" /tmp/migrations-after.txt
+          grep -q "20260724031000" /tmp/migrations-after.txt
+          supabase db lint --linked --schema public --level error --fail-on error
+
+      - name: Deploy reviewed Edge Functions
+        if: github.event_name == 'workflow_dispatch' && inputs.apply == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for function_name in kiosk-enroll device-shadow-ingest local-gateway-api; do
+            supabase functions deploy "$function_name" --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          done
+
+      - name: Smoke-test diagnostic self-enrollment route
+        if: github.event_name == 'workflow_dispatch' && inputs.apply == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="kt_test_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+          DEVICE_ID="$(python - <<'PY'
+          import uuid
+          print(uuid.uuid4())
+          PY
+          )"
+          RESPONSE="$(curl --fail-with-body --silent --show-error \
+            -X POST "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/kiosk-enroll" \
+            -H 'Content-Type: application/json' \
+            --data "{\"testSelfEnroll\":true,\"stationId\":\"DTA21269\",\"devicePublicId\":\"${DEVICE_ID}\",\"appVersion\":\"1.0.1-staging-diagnostic\",\"requestedKioskToken\":\"${TOKEN}\"}")"
+          echo "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); assert d.get("ok") is True and d.get("stationId") == "DTA21269" and d.get("testSelfEnrolled") is True'
