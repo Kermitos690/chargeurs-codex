@@ -34,8 +34,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 120
-        versionName = "1.2.0"
+        versionCode = 130
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -43,6 +43,7 @@ android {
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
+        manifestPlaceholders["freeTestLauncherEnabled"] = "true"
     }
 
     buildFeatures {
@@ -66,7 +67,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".freetest"
+            applicationIdSuffix = ".analyzer"
             versionNameSuffix = "-local"
             isDebuggable = true
             buildConfigField(
@@ -81,6 +82,7 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
+            manifestPlaceholders["freeTestLauncherEnabled"] = "false"
         }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
@@ -88,6 +90,7 @@ android {
             isShrinkResources = true
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
+            manifestPlaceholders["freeTestLauncherEnabled"] = "true"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
