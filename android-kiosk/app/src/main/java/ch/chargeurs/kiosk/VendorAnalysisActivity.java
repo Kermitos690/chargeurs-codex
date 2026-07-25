@@ -2,6 +2,7 @@ package ch.chargeurs.kiosk;
 
 import android.app.Activity;
 import android.content.ContentValues;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -10,11 +11,13 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -28,23 +31,33 @@ import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Passive vendor APK analysis. No vendor code execution and no serial I/O. */
+/** Reusable passive vendor APK analysis. No vendor execution and no serial I/O. */
 public final class VendorAnalysisActivity extends Activity {
     private static final String VENDOR_PACKAGE = "com.szbjkj.bajietouchpower";
+    private static final String PREFS = "vendor_analysis";
+    private static final String PREF_TERMS = "custom_terms";
+    private static final String DEFAULT_TERMS =
+        "PaymentEndActivity, initBatteryRental, writeBytes, readBytes, "
+            + "setComPortParameters, getCommPort, openPort, closePort, "
+            + "/dev/ttyS1, ttyS1, eject, slot, cabinet, crc, checksum, 9600, 115200";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private TextView statusView;
     private TextView detailView;
+    private EditText customTermsView;
     private Button analyzeButton;
     private Button exportButton;
     private JSONObject analysis;
+    private List<String> lastTerms = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,9 +79,9 @@ public final class VendorAnalysisActivity extends Activity {
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(text("Chargeurs.ch — Analyse fournisseur", 27, Color.WHITE, true));
+        root.addView(text("Chargeurs.ch — Analyse DTA ciblée", 27, Color.WHITE, true));
         TextView subtitle = text(
-            "DTA21269 · analyse statique locale · aucune écriture série",
+            "DTA21269 · DEX structuré · profil réutilisable · aucune écriture série",
             16,
             Color.rgb(170, 201, 255),
             false
@@ -76,13 +89,13 @@ public final class VendorAnalysisActivity extends Activity {
         subtitle.setPadding(0, dp(5), 0, dp(18));
         root.addView(subtitle);
 
-        statusView = text("Prêt pour l’analyse passive", 18, Color.rgb(255, 214, 102), true);
+        statusView = text("Prêt pour l’analyse DTA ciblée", 18, Color.rgb(255, 214, 102), true);
         statusView.setPadding(dp(14), dp(12), dp(14), dp(12));
         statusView.setBackgroundColor(Color.rgb(26, 42, 72));
         root.addView(statusView, matchWrap());
 
         TextView safety = text(
-            "Cette analyse ne lance pas le code fournisseur, ne copie pas son APK, n’ouvre pas /dev/ttyS1 et n’envoie aucun octet au contrôleur.",
+            "L’outil exclut les ressources Stripe, lit les tables DEX, inventorie les méthodes candidates et les binaires jSerialComm. Il ne lance pas le fournisseur, ne copie pas son APK, n’ouvre pas /dev/ttyS1 et n’envoie aucun octet.",
             15,
             Color.rgb(222, 231, 247),
             false
@@ -90,10 +103,28 @@ public final class VendorAnalysisActivity extends Activity {
         safety.setPadding(0, dp(16), 0, dp(12));
         root.addView(safety);
 
-        analyzeButton = actionButton("Analyser l’APK fournisseur", v -> runAnalysis());
+        TextView termsTitle = text("Termes supplémentaires — modifiables sans reconstruire l’APK", 15, Color.WHITE, true);
+        termsTitle.setPadding(0, dp(8), 0, dp(6));
+        root.addView(termsTitle);
+
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        customTermsView = new EditText(this);
+        customTermsView.setText(prefs.getString(PREF_TERMS, DEFAULT_TERMS));
+        customTermsView.setTextColor(Color.WHITE);
+        customTermsView.setHintTextColor(Color.rgb(150, 170, 200));
+        customTermsView.setHint("Mots-clés séparés par des virgules");
+        customTermsView.setTextSize(14);
+        customTermsView.setSingleLine(false);
+        customTermsView.setMinLines(3);
+        customTermsView.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        customTermsView.setPadding(dp(14), dp(12), dp(14), dp(12));
+        customTermsView.setBackgroundColor(Color.rgb(13, 29, 54));
+        root.addView(customTermsView, matchWrap());
+
+        analyzeButton = actionButton("Analyser le DEX fournisseur", v -> runAnalysis());
         root.addView(analyzeButton);
 
-        exportButton = actionButton("Exporter le rapport d’analyse", v -> exportAnalysis());
+        exportButton = actionButton("Exporter le rapport ciblé", v -> exportAnalysis());
         exportButton.setEnabled(false);
         root.addView(exportButton);
 
@@ -102,7 +133,7 @@ public final class VendorAnalysisActivity extends Activity {
         root.addView(title);
 
         detailView = text(
-            "L’analyse recherchera notamment : CLOUDPOS_SERIAL, /dev/ttyS1, baud, 9600, CRC, checksum, slot, eject, cabinet et battery.",
+            "Le profil recherche en priorité PaymentEndActivity, initBatteryRental, jSerialComm, getCommPort, openPort, writeBytes, setComPortParameters, ttyS1, baud, CRC, slot et eject.",
             14,
             Color.rgb(197, 214, 238),
             false
@@ -117,52 +148,87 @@ public final class VendorAnalysisActivity extends Activity {
     }
 
     private void runAnalysis() {
-        setBusy(true, "Analyse statique en cours…");
+        lastTerms = parseTerms(customTermsView.getText().toString());
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .edit()
+            .putString(PREF_TERMS, customTermsView.getText().toString())
+            .apply();
+
+        setBusy(true, "Analyse structurée des DEX en cours…");
         executor.execute(() -> {
-            JSONObject result = VendorApkAnalyzer.analyze(this, VENDOR_PACKAGE);
+            JSONObject result = VendorApkAnalyzer.analyze(this, VENDOR_PACKAGE, lastTerms);
             mainHandler.post(() -> {
                 analysis = result;
                 render(result);
                 exportButton.setEnabled(true);
-                setBusy(false, "Analyse passive terminée");
+                setBusy(false, "Analyse DTA ciblée terminée");
             });
         });
+    }
+
+    private List<String> parseTerms(String raw) {
+        List<String> result = new ArrayList<>();
+        if (raw == null) return result;
+        for (String value : raw.split("[,;\\n]")) {
+            String clean = value.trim();
+            if (!clean.isEmpty() && clean.length() <= 120) result.add(clean);
+        }
+        return result;
     }
 
     private void render(JSONObject result) {
         JSONObject archive = result.optJSONObject("archive");
         JSONArray dex = archive == null ? null : archive.optJSONArray("dexFiles");
-        JSONArray libraries = archive == null ? null : archive.optJSONArray("nativeLibraries");
-        JSONArray hits = archive == null ? null : archive.optJSONArray("keywordHits");
+        JSONArray binaries = archive == null ? null : archive.optJSONArray("nativeBinaries");
+        JSONArray strings = archive == null ? null : archive.optJSONArray("relevantStrings");
+        JSONArray classes = archive == null ? null : archive.optJSONArray("candidateClasses");
+        JSONArray methods = archive == null ? null : archive.optJSONArray("candidateMethods");
+        JSONArray fields = archive == null ? null : archive.optJSONArray("candidateFields");
 
-        String hash = result.optString("apkSha256", "indisponible");
         StringBuilder value = new StringBuilder();
         value.append("Version analyseur : ").append(BuildConfig.VERSION_NAME).append('\n');
-        value.append("Paquet fournisseur : ").append(result.optString("package", VENDOR_PACKAGE)).append('\n');
-        value.append("État              : ").append(result.optString("status", "?" )).append('\n');
-        value.append("APK lisible       : ").append(result.optBoolean("sourceReadable", false)).append('\n');
-        value.append("Taille APK        : ").append(result.optLong("apkSizeBytes", 0L)).append(" octets\n");
-        value.append("SHA-256           : ").append(hash).append('\n');
-        value.append("Entrées archive   : ").append(archive == null ? 0 : archive.optInt("entryCount", 0)).append('\n');
-        value.append("Fichiers DEX      : ").append(dex == null ? 0 : dex.length()).append('\n');
-        value.append("Bibliothèques .so : ").append(libraries == null ? 0 : libraries.length()).append('\n');
-        value.append("Indices trouvés   : ").append(hits == null ? 0 : hits.length()).append('\n');
-        value.append("APK copiée        : false\n");
-        value.append("Code exécuté      : false\n");
-        value.append("Port série ouvert : false\n");
-        value.append("Écriture série    : 0 octet\n");
+        value.append("Paquet analyseur  : ").append(getPackageName()).append('\n');
+        value.append("Paquet fournisseur: ").append(result.optString("package", VENDOR_PACKAGE)).append('\n');
+        value.append("État              : ").append(result.optString("status", "?")).append('\n');
+        value.append("Profil             : ").append(result.optString("profile", "?")).append('\n');
+        value.append("APK lisible        : ").append(result.optBoolean("sourceReadable", false)).append('\n');
+        value.append("Taille APK         : ").append(result.optLong("apkSizeBytes", 0L)).append(" octets\n");
+        value.append("SHA-256            : ").append(result.optString("apkSha256", "indisponible")).append('\n');
+        value.append("DEX analysés       : ").append(dex == null ? 0 : dex.length()).append('\n');
+        value.append("Binaires natifs    : ").append(binaries == null ? 0 : binaries.length()).append('\n');
+        value.append("Chaînes ciblées    : ").append(strings == null ? 0 : strings.length()).append('\n');
+        value.append("Classes candidates : ").append(classes == null ? 0 : classes.length()).append('\n');
+        value.append("Méthodes candidates: ").append(methods == null ? 0 : methods.length()).append('\n');
+        value.append("Champs candidats   : ").append(fields == null ? 0 : fields.length()).append('\n');
+        value.append("Scan tronqué       : ").append(archive != null && archive.optBoolean("scanTruncated", false)).append('\n');
+        value.append("APK copiée         : false\n");
+        value.append("Code exécuté       : false\n");
+        value.append("Port série ouvert  : false\n");
+        value.append("Écriture série     : 0 octet\n");
 
-        if (hits != null && hits.length() > 0) {
-            value.append("\nPremiers indices :\n");
-            for (int index = 0; index < Math.min(12, hits.length()); index++) {
-                JSONObject hit = hits.optJSONObject(index);
-                if (hit == null) continue;
-                value.append("- ").append(hit.optString("keyword", "?"))
-                    .append(" · ").append(hit.optString("entry", "?"))
-                    .append('\n');
+        appendMethods(value, methods, "HIGH", 20);
+        appendMethods(value, methods, "MEDIUM", 12);
+
+        if (binaries != null && binaries.length() > 0) {
+            value.append("\nBinaires série trouvés :\n");
+            for (int index = 0; index < Math.min(12, binaries.length()); index++) {
+                JSONObject item = binaries.optJSONObject(index);
+                if (item != null) value.append("- ").append(item.optString("name", "?")).append('\n');
             }
         }
         detailView.setText(value.toString());
+    }
+
+    private void appendMethods(StringBuilder value, JSONArray methods, String priority, int max) {
+        if (methods == null) return;
+        int shown = 0;
+        for (int index = 0; index < methods.length() && shown < max; index++) {
+            JSONObject item = methods.optJSONObject(index);
+            if (item == null || !priority.equals(item.optString("priority"))) continue;
+            if (shown == 0) value.append("\nMéthodes ").append(priority).append(" :\n");
+            value.append("- ").append(item.optString("signature", "?")).append('\n');
+            shown++;
+        }
     }
 
     private void exportAnalysis() {
@@ -170,27 +236,29 @@ public final class VendorAnalysisActivity extends Activity {
             Toast.makeText(this, "Lance d’abord l’analyse.", Toast.LENGTH_SHORT).show();
             return;
         }
-        setBusy(true, "Création du rapport…");
+        setBusy(true, "Création du rapport ciblé…");
         executor.execute(() -> {
             try {
                 JSONObject report = new JSONObject();
-                report.put("schemaVersion", 1);
-                report.put("mode", "vendor_apk_passive_static_analysis");
+                report.put("schemaVersion", 2);
+                report.put("mode", "vendor_apk_targeted_dex_analysis");
                 report.put("stationId", "DTA21269");
                 report.put("analyzerVersion", BuildConfig.VERSION_NAME);
+                report.put("analyzerPackage", getPackageName());
                 report.put("generatedAt", System.currentTimeMillis());
+                report.put("customTerms", new JSONArray(lastTerms));
                 report.put("serialPortOpened", false);
                 report.put("serialWrites", 0);
                 report.put("physicalEjectionEnabled", false);
                 report.put("vendorApkCopied", false);
                 report.put("analysis", analysis);
 
-                String filename = "DTA21269_VENDOR_ANALYSIS_"
+                String filename = "DTA21269_DTA_TARGETED_ANALYSIS_"
                     + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date())
                     + ".json";
                 Uri destination = saveDownload(filename, report.toString(2));
                 mainHandler.post(() -> {
-                    setBusy(false, "Rapport d’analyse exporté");
+                    setBusy(false, "Rapport ciblé exporté");
                     Toast.makeText(
                         this,
                         destination == null ? "Rapport enregistré dans le dossier de l’application." : "Rapport enregistré dans Téléchargements/Chargeurs.",
@@ -239,6 +307,7 @@ public final class VendorAnalysisActivity extends Activity {
     private void setBusy(boolean busy, String message) {
         statusView.setText(message);
         analyzeButton.setEnabled(!busy);
+        customTermsView.setEnabled(!busy);
         exportButton.setEnabled(!busy && analysis != null);
     }
 
