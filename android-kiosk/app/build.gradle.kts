@@ -34,8 +34,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 108
-        versionName = "1.0.8"
+        versionCode = 110
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -66,8 +66,8 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".inspector"
-            versionNameSuffix = "-tablet-extractor"
+            applicationIdSuffix = ".freetest"
+            versionNameSuffix = "-local"
             isDebuggable = true
             buildConfigField(
                 "String",
