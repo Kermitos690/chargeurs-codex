@@ -1,0 +1,85 @@
+name: DTA21269 targeted analyzer APK
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/dta21269-freetest-local.yml
+      - android-kiosk/**
+  push:
+    branches:
+      - agent/dta21269-freetest-local
+    paths:
+      - .github/workflows/dta21269-freetest-local.yml
+      - android-kiosk/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21269-targeted-analyzer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Unit tests
+        working-directory: android-kiosk
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Build targeted analyzer APK
+        working-directory: android-kiosk
+        run: ./gradlew --no-daemon clean assembleDebug
+
+      - name: Verify APK and prepare delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          mkdir -p dist
+          cp "$apk" dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk
+          sha256sum dist/Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0.apk > dist/SHA256SUMS.txt
+          cat > dist/INSTALLATION.txt <<'TXT'
+          CHARGEURS.CH — DTA21269 TARGETED ANALYZER
+          =========================================
+
+          Package : ch.chargeurs.kiosk.analyzer
+          Station : DTA21269
+          Paiement : aucun / 0 CHF
+          Coexistence : installation parallèle au FreeTest existant
+
+          Cette version :
+          - exclut les ressources Stripe de l'analyse ;
+          - lit les tables de chaînes, classes, champs et méthodes des DEX ;
+          - cible PaymentEndActivity, initBatteryRental et jSerialComm ;
+          - cible getCommPort, openPort, writeBytes et setComPortParameters ;
+          - inventorie les binaires .so/.dll/.jnilib même hors de lib/ ;
+          - permet de modifier les termes de recherche sans reconstruire l'APK ;
+          - exporte un JSON dans Téléchargements/Chargeurs ;
+          - ne copie pas l'APK fournisseur ;
+          - n'exécute aucun code fournisseur ;
+          - n'ouvre pas /dev/ttyS1 ;
+          - n'envoie aucun octet au PCB ;
+          - ne peut pas éjecter de batterie.
+
+          Ne désinstallez pas BajieTouchPower, HappyNet ou Chargeurs FreeTest.
+          TXT
+
+      - name: Upload targeted analyzer kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chargeurs-ch-DTA21269-Targeted-Analyzer-v1.3.0
+          retention-days: 14
+          if-no-files-found: error
+          path: dist/*
