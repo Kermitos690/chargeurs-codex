@@ -1,0 +1,137 @@
+name: ChargeNow Readonly Staging Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Push ChargeNow secrets to Supabase staging, deploy the read-only audit function, and test DTA21269"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargenow-readonly-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-audit:
+    if: inputs.apply == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_PROJECT_REF: xqepbqnaenoeyfjkjnzl
+      CONFIGURED_STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      CHARGENOW_BASIC_USERNAME: ${{ secrets.CHARGENOW_BASIC_USERNAME }}
+      CHARGENOW_BASIC_PASSWORD: ${{ secrets.CHARGENOW_BASIC_PASSWORD }}
+      CHARGENOW_API_BASE_URL: https://developer.chargenow.top/cdb-open-api/v1
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+
+      - name: Validate encrypted staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in SUPABASE_ACCESS_TOKEN CHARGENOW_BASIC_USERNAME CHARGENOW_BASIC_PASSWORD; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing encrypted staging secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+          if [ -n "${CONFIGURED_STAGING_PROJECT_REF:-}" ]; then
+            test "$CONFIGURED_STAGING_PROJECT_REF" = "$SUPABASE_PROJECT_REF" || {
+              echo "Configured staging project does not match the reviewed target." >&2
+              exit 1
+            }
+          fi
+          echo "::add-mask::$CHARGENOW_BASIC_USERNAME"
+          echo "::add-mask::$CHARGENOW_BASIC_PASSWORD"
+
+      - name: Push read-only ChargeNow secrets to Supabase staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase secrets set \
+            CHARGENOW_MODE=test \
+            CHARGENOW_API_BASE_URL="$CHARGENOW_API_BASE_URL" \
+            CHARGENOW_BASIC_USERNAME="$CHARGENOW_BASIC_USERNAME" \
+            CHARGENOW_BASIC_PASSWORD="$CHARGENOW_BASIC_PASSWORD" \
+            CHARGENOW_MUTATIONS_ENABLED=false \
+            CHARGENOW_READONLY_ALLOW_ALL_STATIONS=false \
+            CHARGENOW_TIMEOUT_MS=10000 \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy read-only audit function only
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions deploy chargenow-readonly-audit \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --use-api
+
+      - name: Test ChargeNow Basic authentication on DTA21269
+        id: provider_test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit-output
+          url="$CHARGENOW_API_BASE_URL/rent/cabinet/query?deviceId=DTA21269"
+          set +e
+          http_code="$(curl \
+            --silent --show-error \
+            --connect-timeout 10 --max-time 30 \
+            --user "$CHARGENOW_BASIC_USERNAME:$CHARGENOW_BASIC_PASSWORD" \
+            --header 'Accept: application/json' \
+            --output audit-output/provider-response.json \
+            --write-out '%{http_code}' \
+            "$url")"
+          curl_status=$?
+          set -e
+          HTTP_CODE="$http_code" CURL_STATUS="$curl_status" python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          body_path = Path("audit-output/provider-response.json")
+          raw = body_path.read_text(errors="replace") if body_path.exists() else ""
+          parsed = None
+          try:
+              parsed = json.loads(raw) if raw else None
+          except Exception:
+              pass
+
+          business_code = parsed.get("code") if isinstance(parsed, dict) else None
+          top_level_keys = sorted(parsed.keys()) if isinstance(parsed, dict) else []
+          summary = {
+              "stationId": "DTA21269",
+              "curlStatus": int(os.environ["CURL_STATUS"]),
+              "httpStatus": int(os.environ["HTTP_CODE"] or 0),
+              "businessCode": business_code,
+              "jsonRecognized": isinstance(parsed, dict),
+              "topLevelKeys": top_level_keys,
+              "responseBytes": len(raw.encode()),
+          }
+          Path("audit-output/summary.json").write_text(json.dumps(summary, indent=2))
+          print(json.dumps(summary))
+          PY
+          test "$curl_status" -eq 0
+
+      - name: Upload short-lived audit evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: chargenow-dta21269-readonly-audit-${{ github.run_number }}
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            audit-output/summary.json
+            audit-output/provider-response.json
