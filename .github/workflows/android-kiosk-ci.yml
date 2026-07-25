@@ -29,7 +29,7 @@ jobs:
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Test and assemble diagnostic APK
+      - name: Test and assemble tablet extractor APK
         working-directory: android-kiosk
         shell: bash
         env:
@@ -48,7 +48,7 @@ jobs:
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           short_sha="${GITHUB_SHA::7}"
-          filename="Chargeurs-ch-DTA21269-Qualification-v1.0.6-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
+          filename="Chargeurs-ch-DTA21269-Tablet-Extractor-v1.0.8-build-${GITHUB_RUN_NUMBER}-${short_sha}.apk"
           cp "$apk" "dist/$filename"
           sha256sum "dist/$filename" > dist/SHA256SUMS.txt
           printf '%s\n' "$filename" > dist/INSTALL_THIS_FILE.txt
@@ -73,7 +73,7 @@ jobs:
       - name: Upload APK package
         uses: actions/upload-artifact@v6
         with:
-          name: Chargeurs-ch-DTA21269-Qualification-v1.0.6-build-${{ github.run_number }}
+          name: Chargeurs-ch-DTA21269-Tablet-Extractor-v1.0.8-build-${{ github.run_number }}
           retention-days: 7
           if-no-files-found: error
           path: |
