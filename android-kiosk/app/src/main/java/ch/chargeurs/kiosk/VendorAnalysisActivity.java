@@ -38,7 +38,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Reusable passive vendor APK analysis. No vendor execution and no serial I/O. */
+/** Reusable passive vendor APK call-graph analysis. No vendor execution and no serial I/O. */
 public final class VendorAnalysisActivity extends Activity {
     private static final String VENDOR_PACKAGE = "com.szbjkj.bajietouchpower";
     private static final String PREFS = "vendor_analysis";
@@ -79,9 +79,9 @@ public final class VendorAnalysisActivity extends Activity {
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(text("Chargeurs.ch — Analyse DTA ciblée", 27, Color.WHITE, true));
+        root.addView(text("Chargeurs.ch — Graphe d’appels DTA", 27, Color.WHITE, true));
         TextView subtitle = text(
-            "DTA21269 · DEX structuré · profil réutilisable · aucune écriture série",
+            "DTA21269 · corps de méthodes DEX · chemins statiques vers jSerialComm · aucune écriture série",
             16,
             Color.rgb(170, 201, 255),
             false
@@ -89,13 +89,13 @@ public final class VendorAnalysisActivity extends Activity {
         subtitle.setPadding(0, dp(5), 0, dp(18));
         root.addView(subtitle);
 
-        statusView = text("Prêt pour l’analyse DTA ciblée", 18, Color.rgb(255, 214, 102), true);
+        statusView = text("Prêt pour l’analyse du graphe d’appels", 18, Color.rgb(255, 214, 102), true);
         statusView.setPadding(dp(14), dp(12), dp(14), dp(12));
         statusView.setBackgroundColor(Color.rgb(26, 42, 72));
         root.addView(statusView, matchWrap());
 
         TextView safety = text(
-            "L’outil exclut les ressources Stripe, lit les tables DEX, inventorie les méthodes candidates et les binaires jSerialComm. Il ne lance pas le fournisseur, ne copie pas son APK, n’ouvre pas /dev/ttyS1 et n’envoie aucun octet.",
+            "L’outil lit passivement les tables DEX, les corps de méthodes et les instructions invoke afin de relier PaymentEndActivity / initBatteryRental aux appels série. Il ne lance pas le fournisseur, ne copie pas son APK, n’ouvre pas /dev/ttyS1 et n’envoie aucun octet. Les littéraux affichés sont seulement le contexte de la méthode appelante, pas la preuve des arguments réellement transmis.",
             15,
             Color.rgb(222, 231, 247),
             false
@@ -121,10 +121,10 @@ public final class VendorAnalysisActivity extends Activity {
         customTermsView.setBackgroundColor(Color.rgb(13, 29, 54));
         root.addView(customTermsView, matchWrap());
 
-        analyzeButton = actionButton("Analyser le DEX fournisseur", v -> runAnalysis());
+        analyzeButton = actionButton("Analyser les appels DEX fournisseur", v -> runAnalysis());
         root.addView(analyzeButton);
 
-        exportButton = actionButton("Exporter le rapport ciblé", v -> exportAnalysis());
+        exportButton = actionButton("Exporter le rapport du graphe", v -> exportAnalysis());
         exportButton.setEnabled(false);
         root.addView(exportButton);
 
@@ -133,7 +133,7 @@ public final class VendorAnalysisActivity extends Activity {
         root.addView(title);
 
         detailView = text(
-            "Le profil recherche en priorité PaymentEndActivity, initBatteryRental, jSerialComm, getCommPort, openPort, writeBytes, setComPortParameters, ttyS1, baud, CRC, slot et eject.",
+            "Le profil recherche les corps de méthodes de com.szbjkj.bajietouchpower, inventorie leurs instructions invoke et tente de construire un chemin statique jusqu’à getCommPort, openPort, setComPortParameters, writeBytes et readBytes.",
             14,
             Color.rgb(197, 214, 238),
             false
@@ -154,14 +154,14 @@ public final class VendorAnalysisActivity extends Activity {
             .putString(PREF_TERMS, customTermsView.getText().toString())
             .apply();
 
-        setBusy(true, "Analyse structurée des DEX en cours…");
+        setBusy(true, "Analyse des corps de méthodes DEX en cours…");
         executor.execute(() -> {
             JSONObject result = VendorApkAnalyzer.analyze(this, VENDOR_PACKAGE, lastTerms);
             mainHandler.post(() -> {
                 analysis = result;
                 render(result);
                 exportButton.setEnabled(true);
-                setBusy(false, "Analyse DTA ciblée terminée");
+                setBusy(false, "Analyse du graphe d’appels terminée");
             });
         });
     }
@@ -178,12 +178,15 @@ public final class VendorAnalysisActivity extends Activity {
 
     private void render(JSONObject result) {
         JSONObject archive = result.optJSONObject("archive");
-        JSONArray dex = archive == null ? null : archive.optJSONArray("dexFiles");
-        JSONArray binaries = archive == null ? null : archive.optJSONArray("nativeBinaries");
-        JSONArray strings = archive == null ? null : archive.optJSONArray("relevantStrings");
-        JSONArray classes = archive == null ? null : archive.optJSONArray("candidateClasses");
-        JSONArray methods = archive == null ? null : archive.optJSONArray("candidateMethods");
-        JSONArray fields = archive == null ? null : archive.optJSONArray("candidateFields");
+        JSONArray dex = array(archive, "dexFiles");
+        JSONArray binaries = array(archive, "nativeBinaries");
+        JSONArray strings = array(archive, "relevantStrings");
+        JSONArray classes = array(archive, "candidateClasses");
+        JSONArray methods = array(archive, "candidateMethods");
+        JSONArray fields = array(archive, "candidateFields");
+        JSONArray calls = array(archive, "candidateCallSites");
+        JSONArray graph = array(archive, "vendorCallGraphEdges");
+        JSONArray chains = array(archive, "candidateCallChains");
 
         StringBuilder value = new StringBuilder();
         value.append("Version analyseur : ").append(BuildConfig.VERSION_NAME).append('\n');
@@ -194,20 +197,28 @@ public final class VendorAnalysisActivity extends Activity {
         value.append("APK lisible        : ").append(result.optBoolean("sourceReadable", false)).append('\n');
         value.append("Taille APK         : ").append(result.optLong("apkSizeBytes", 0L)).append(" octets\n");
         value.append("SHA-256            : ").append(result.optString("apkSha256", "indisponible")).append('\n');
-        value.append("DEX analysés       : ").append(dex == null ? 0 : dex.length()).append('\n');
-        value.append("Binaires natifs    : ").append(binaries == null ? 0 : binaries.length()).append('\n');
-        value.append("Chaînes ciblées    : ").append(strings == null ? 0 : strings.length()).append('\n');
-        value.append("Classes candidates : ").append(classes == null ? 0 : classes.length()).append('\n');
-        value.append("Méthodes candidates: ").append(methods == null ? 0 : methods.length()).append('\n');
-        value.append("Champs candidats   : ").append(fields == null ? 0 : fields.length()).append('\n');
+        value.append("DEX analysés       : ").append(length(dex)).append('\n');
+        value.append("Binaires natifs    : ").append(length(binaries)).append('\n');
+        value.append("Chaînes ciblées    : ").append(length(strings)).append('\n');
+        value.append("Classes candidates : ").append(length(classes)).append('\n');
+        value.append("Méthodes candidates: ").append(length(methods)).append('\n');
+        value.append("Champs candidats   : ").append(length(fields)).append('\n');
+        value.append("Sites d’appel      : ").append(length(calls)).append('\n');
+        value.append("Arêtes du graphe   : ").append(length(graph)).append('\n');
+        value.append("Chemins vers série : ").append(length(chains)).append('\n');
+        value.append("Statut chemins     : ")
+            .append(archive == null ? "?" : archive.optString("callChainStatus", "?"))
+            .append('\n');
         value.append("Scan tronqué       : ").append(archive != null && archive.optBoolean("scanTruncated", false)).append('\n');
+        value.append("Protocole résolu   : false\n");
         value.append("APK copiée         : false\n");
         value.append("Code exécuté       : false\n");
         value.append("Port série ouvert  : false\n");
         value.append("Écriture série     : 0 octet\n");
 
-        appendMethods(value, methods, "HIGH", 20);
-        appendMethods(value, methods, "MEDIUM", 12);
+        appendChains(value, chains, 10);
+        appendCalls(value, calls, "HIGH", 18);
+        appendMethods(value, methods, "HIGH", 16);
 
         if (binaries != null && binaries.length() > 0) {
             value.append("\nBinaires série trouvés :\n");
@@ -216,7 +227,73 @@ public final class VendorAnalysisActivity extends Activity {
                 if (item != null) value.append("- ").append(item.optString("name", "?")).append('\n');
             }
         }
+        value.append("\nAttention : un chemin statique confirme des appels dans le bytecode, pas les valeurs dynamiques ni la trame exacte envoyée au matériel.\n");
         detailView.setText(value.toString());
+    }
+
+    private JSONArray array(JSONObject parent, String key) {
+        return parent == null ? null : parent.optJSONArray(key);
+    }
+
+    private int length(JSONArray values) {
+        return values == null ? 0 : values.length();
+    }
+
+    private void appendChains(StringBuilder value, JSONArray chains, int max) {
+        if (chains == null) return;
+        int shown = 0;
+        for (int index = 0; index < chains.length() && shown < max; index++) {
+            JSONObject item = chains.optJSONObject(index);
+            if (item == null) continue;
+            if (shown == 0) value.append("\nChemins statiques prioritaires :\n");
+            value.append("- ")
+                .append(item.optString("start", "?"))
+                .append("\n  → ")
+                .append(item.optString("sink", "?"))
+                .append(" · profondeur ")
+                .append(item.optInt("depth", -1))
+                .append('\n');
+            JSONArray path = item.optJSONArray("methods");
+            if (path != null) {
+                for (int step = 0; step < path.length(); step++) {
+                    value.append("    ").append(step).append(": ").append(path.optString(step, "?")).append('\n');
+                }
+            }
+            shown++;
+        }
+    }
+
+    private void appendCalls(StringBuilder value, JSONArray calls, String priority, int max) {
+        if (calls == null) return;
+        int shown = 0;
+        for (int index = 0; index < calls.length() && shown < max; index++) {
+            JSONObject item = calls.optJSONObject(index);
+            if (item == null || !priority.equals(item.optString("priority"))) continue;
+            if (shown == 0) value.append("\nSites d’appel ").append(priority).append(" :\n");
+            value.append("- ").append(item.optString("caller", "?"))
+                .append("\n  → ").append(item.optString("callee", "?"))
+                .append(" · ").append(item.optString("opcode", "?"))
+                .append(" @+").append(item.optInt("codeByteOffset", -1)).append(" octets\n");
+            JSONArray literals = item.optJSONArray("methodStringLiterals");
+            if (literals != null && literals.length() > 0) {
+                value.append("  contexte chaînes: ");
+                for (int literal = 0; literal < Math.min(6, literals.length()); literal++) {
+                    if (literal > 0) value.append(" | ");
+                    value.append(literals.optString(literal, "?"));
+                }
+                value.append('\n');
+            }
+            JSONArray numbers = item.optJSONArray("methodNumericLiterals");
+            if (numbers != null && numbers.length() > 0) {
+                value.append("  contexte nombres: ");
+                for (int literal = 0; literal < Math.min(8, numbers.length()); literal++) {
+                    if (literal > 0) value.append(", ");
+                    value.append(numbers.optLong(literal));
+                }
+                value.append('\n');
+            }
+            shown++;
+        }
     }
 
     private void appendMethods(StringBuilder value, JSONArray methods, String priority, int max) {
@@ -236,12 +313,12 @@ public final class VendorAnalysisActivity extends Activity {
             Toast.makeText(this, "Lance d’abord l’analyse.", Toast.LENGTH_SHORT).show();
             return;
         }
-        setBusy(true, "Création du rapport ciblé…");
+        setBusy(true, "Création du rapport du graphe…");
         executor.execute(() -> {
             try {
                 JSONObject report = new JSONObject();
-                report.put("schemaVersion", 2);
-                report.put("mode", "vendor_apk_targeted_dex_analysis");
+                report.put("schemaVersion", 3);
+                report.put("mode", "vendor_apk_dex_callgraph_analysis");
                 report.put("stationId", "DTA21269");
                 report.put("analyzerVersion", BuildConfig.VERSION_NAME);
                 report.put("analyzerPackage", getPackageName());
@@ -251,14 +328,16 @@ public final class VendorAnalysisActivity extends Activity {
                 report.put("serialWrites", 0);
                 report.put("physicalEjectionEnabled", false);
                 report.put("vendorApkCopied", false);
+                report.put("vendorCodeExecuted", false);
+                report.put("protocolSolved", false);
                 report.put("analysis", analysis);
 
-                String filename = "DTA21269_DTA_TARGETED_ANALYSIS_"
+                String filename = "DTA21269_DEX_CALLGRAPH_ANALYSIS_"
                     + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date())
                     + ".json";
                 Uri destination = saveDownload(filename, report.toString(2));
                 mainHandler.post(() -> {
-                    setBusy(false, "Rapport ciblé exporté");
+                    setBusy(false, "Rapport du graphe exporté");
                     Toast.makeText(
                         this,
                         destination == null ? "Rapport enregistré dans le dossier de l’application." : "Rapport enregistré dans Téléchargements/Chargeurs.",
