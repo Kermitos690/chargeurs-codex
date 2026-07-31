@@ -34,6 +34,7 @@ public final class HardwareDiagnosticCollector {
             "status", storage.code(),
             "compatibilityMode", storage.mode(),
             "failureKind", storage.failureKind(),
+            "attempts", storage.attempts(),
             "repairApplied", storage.wasRepaired(),
             "containsToken", false
         ));

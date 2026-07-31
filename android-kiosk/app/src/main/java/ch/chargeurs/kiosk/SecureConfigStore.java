@@ -15,7 +15,9 @@ import java.security.KeyStoreException;
 import java.security.ProviderException;
 import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -33,6 +35,7 @@ import javax.crypto.spec.SecretKeySpec;
 public final class SecureConfigStore {
     private static final String PREFS = "chargeurs_kiosk_config";
     private static final String AES_KEY_ALIAS = "chargeurs_kiosk_token_key_v1";
+    private static final String AES_COMPAT_KEY_ALIAS = "chargeurs_kiosk_token_key_v2";
     private static final String RSA_KEY_ALIAS = "chargeurs_kiosk_token_wrap_key_v1";
     private static final String STATION = "station_id";
     private static final String BASE_URL = "base_url";
@@ -42,6 +45,7 @@ public final class SecureConfigStore {
     private static final String WRAPPED_CONTENT_KEY = "wrapped_content_key";
     private static final String STORAGE_PROBE = "storage_probe";
     private static final String MODE_AES_KEYSTORE = "AES_KEYSTORE";
+    private static final String MODE_AES_KEYSTORE_COMPAT = "AES_KEYSTORE_COMPAT";
     private static final String MODE_RSA_WRAPPED_AES = "RSA_WRAPPED_AES";
     private static final int GCM_TAG_BITS = 128;
     private static final int CONTENT_KEY_BYTES = 32;
@@ -140,10 +144,22 @@ public final class SecureConfigStore {
     }
 
     private StorageHealth probeBestSupportedStorage() {
+        List<StorageHealth> attempts = new ArrayList<>();
         StorageHealth primary = probeStorage(MODE_AES_KEYSTORE);
-        if (primary.ready || !primary.keyMaterialFailure) return primary;
-        StorageHealth compatible = probeStorage(MODE_RSA_WRAPPED_AES);
-        return compatible.ready ? compatible : primary.prefer(compatible);
+        attempts.add(primary);
+        if (primary.ready || !primary.keyMaterialFailure) return primary.withAttempts(attempts);
+
+        // This variant deliberately omits setRandomizedEncryptionRequired.
+        // GCM still gets a fresh IV on every encryption; the change only avoids
+        // a known Keymaster capability regression on certain industrial images.
+        StorageHealth aesCompatibility = probeStorage(MODE_AES_KEYSTORE_COMPAT);
+        attempts.add(aesCompatibility);
+        if (aesCompatibility.ready || !aesCompatibility.keyMaterialFailure) return aesCompatibility.withAttempts(attempts);
+
+        StorageHealth rsaCompatibility = probeStorage(MODE_RSA_WRAPPED_AES);
+        attempts.add(rsaCompatibility);
+        if (rsaCompatibility.ready) return rsaCompatibility.withAttempts(attempts);
+        return rsaCompatibility.withAttempts(attempts);
     }
 
     private StorageHealth probeStorage(String mode) {
@@ -179,7 +195,10 @@ public final class SecureConfigStore {
             }
             return new ContentKey(MODE_RSA_WRAPPED_AES, contentKey, Base64.encodeToString(wrapped, Base64.NO_WRAP));
         }
-        return new ContentKey(MODE_AES_KEYSTORE, getOrCreateAesKey(), null);
+        if (MODE_AES_KEYSTORE_COMPAT.equals(requestedMode)) {
+            return new ContentKey(MODE_AES_KEYSTORE_COMPAT, getOrCreateAesKey(AES_COMPAT_KEY_ALIAS, false), null);
+        }
+        return new ContentKey(MODE_AES_KEYSTORE, getOrCreateAesKey(AES_KEY_ALIAS, true), null);
     }
 
     private SecretKey resolveStoredContentKey(String mode) throws Exception {
@@ -190,8 +209,9 @@ public final class SecureConfigStore {
             if (bytes.length != CONTENT_KEY_BYTES) throw new KeyStoreException("INVALID_WRAPPED_CONTENT_KEY");
             return new SecretKeySpec(bytes, "AES");
         }
+        if (MODE_AES_KEYSTORE_COMPAT.equals(mode)) return getOrCreateAesKey(AES_COMPAT_KEY_ALIAS, false);
         if (!MODE_AES_KEYSTORE.equals(mode)) throw new KeyStoreException("UNKNOWN_CRYPTO_MODE");
-        return getOrCreateAesKey();
+        return getOrCreateAesKey(AES_KEY_ALIAS, true);
     }
 
     private String decrypt(SecretKey key, String encrypted, String iv) throws Exception {
@@ -212,6 +232,7 @@ public final class SecureConfigStore {
             KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
             keyStore.load(null);
             if (keyStore.containsAlias(AES_KEY_ALIAS)) keyStore.deleteEntry(AES_KEY_ALIAS);
+            if (keyStore.containsAlias(AES_COMPAT_KEY_ALIAS)) keyStore.deleteEntry(AES_COMPAT_KEY_ALIAS);
             if (keyStore.containsAlias(RSA_KEY_ALIAS)) keyStore.deleteEntry(RSA_KEY_ALIAS);
             return true;
         } catch (Exception ignored) {
@@ -219,20 +240,20 @@ public final class SecureConfigStore {
         }
     }
 
-    private SecretKey getOrCreateAesKey() throws Exception {
+    private SecretKey getOrCreateAesKey(String alias, boolean requestRandomizedEncryption) throws Exception {
         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
         keyStore.load(null);
-        if (keyStore.containsAlias(AES_KEY_ALIAS)) {
-            java.security.Key key = keyStore.getKey(AES_KEY_ALIAS, null);
+        if (keyStore.containsAlias(alias)) {
+            java.security.Key key = keyStore.getKey(alias, null);
             if (!(key instanceof SecretKey)) throw new KeyStoreException("CHARGEURS_AES_KEY_NOT_SECRET");
             return (SecretKey) key;
         }
         KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
-        generator.init(new KeyGenParameterSpec.Builder(AES_KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+        KeyGenParameterSpec.Builder specification = new KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setRandomizedEncryptionRequired(true)
-            .build());
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE);
+        if (requestRandomizedEncryption) specification.setRandomizedEncryptionRequired(true);
+        generator.init(specification.build());
         return generator.generateKey();
     }
 
@@ -299,23 +320,31 @@ public final class SecureConfigStore {
         private final boolean repaired;
         private final String mode;
         private final String failureKind;
+        private String attempts;
         private StorageHealth(boolean ready, String code, boolean keyMaterialFailure, boolean repaired, String mode, String failureKind) {
             this.ready = ready; this.code = code; this.keyMaterialFailure = keyMaterialFailure;
-            this.repaired = repaired; this.mode = mode; this.failureKind = failureKind;
+            this.repaired = repaired; this.mode = mode; this.failureKind = failureKind; this.attempts = "";
         }
         static StorageHealth ready(boolean repaired, String mode) { return new StorageHealth(true, repaired ? "KEYSTORE_REPAIRED" : "READY", false, repaired, mode, ""); }
         static StorageHealth failure(String code, boolean keyMaterialFailure, boolean repaired, String mode, String failureKind) {
             return new StorageHealth(false, code, keyMaterialFailure, repaired, mode, failureKind);
         }
-        StorageHealth prefer(StorageHealth alternative) {
-            if (!alternative.keyMaterialFailure) return alternative;
-            return new StorageHealth(false, code, true, repaired || alternative.repaired, mode, failureKind);
+        StorageHealth withAttempts(List<StorageHealth> values) {
+            StringBuilder builder = new StringBuilder();
+            for (StorageHealth value : values) {
+                if (builder.length() > 0) builder.append(" | ");
+                builder.append(value.mode).append(':').append(value.ready ? "READY" : value.failureKind);
+            }
+            StorageHealth copy = new StorageHealth(ready, code, keyMaterialFailure, repaired, mode, failureKind);
+            copy.attempts = builder.toString();
+            return copy;
         }
         public boolean isReady() { return ready; }
         public String code() { return code; }
         public boolean wasRepaired() { return repaired; }
         public String mode() { return mode; }
         public String failureKind() { return failureKind; }
+        public String attempts() { return attempts; }
     }
 
     public static final class SaveResult {

@@ -202,3 +202,21 @@ officiellement documenté.
   le statut « Stockage sécurisé prêt », puis seulement générer et saisir un
   nouveau code à six chiffres. Si le statut reste indisponible, relever le
   bloc `secureStorage` des Diagnostics ; il ne contient ni token ni code.
+
+## Correctif Keystore fondé sur le diagnostic tablette — 31 juillet 2026
+
+- Le diagnostic physique de 1.0.9 confirme une `ProviderException` lors de la
+  création AES AndroidKeyStore. L’APK fournisseur est présent, mais il ne
+  fournit aucun pont public réutilisable à une autre application.
+- L’APK staging 1.0.10 (`versionCode=110`) essaie désormais dans cet ordre :
+  AES/GCM AndroidKeyStore strict, AES/GCM AndroidKeyStore compatible sans
+  l’option Keymaster défaillante, puis AES aléatoire enveloppée par RSA dans
+  AndroidKeyStore. Tous les chemins restent chiffrés ; aucun token en clair ou
+  repli logiciel n’est ajouté.
+- Les Diagnostics exposent aussi `attempts`, une synthèse sans données sensibles
+  de chaque primitive testée, afin d’identifier exactement le prochain blocage
+  si l’image Android ne fournit vraiment aucune primitive Keystore utilisable.
+- Vérification locale réussie : `testDebugUnitTest`, `lintStaging`,
+  `assembleStaging` et signature APK v2. Artefact :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.10-staging.apk`,
+  SHA-256 `df38c7dd6e43ba918872955e2feb4d48313e6e01b660caf4b3c0a3426cf34b20`.
