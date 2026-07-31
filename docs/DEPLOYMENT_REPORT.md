@@ -20,7 +20,7 @@
 - Stripe Test : destination webhook `chargeurs-ch-staging-checkout` active sur
   `stripe-webhook`. Les fonctions `create-stripe-checkout`, `stripe-webhook`,
   `rental-admin-action`, `eject-after-payment`, `settle-rental-payment`,
-  `admin-maintenance-action` et `platform-api` ont été déployées en version 12.
+  `admin-maintenance-action` et `platform-api` ont été déployées en version 13.
   Leurs secrets sont stockés exclusivement dans le coffre Supabase.
 - Frontend Vercel :
   [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/BPJwYnnMK8yjXDnBoBkkaPUPGDSF),

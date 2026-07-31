@@ -33,7 +33,7 @@ P8 — Stripe Checkout Test configuré et webhook signé validé ; baseline de m
 - Stripe Test est configuré côté compte et Supabase : cartes, Apple Pay, Google
   Pay et TWINT activés, destination webhook limitée à sept événements, secrets
   dans le coffre Edge Functions. Les sept fonctions financières durcies sont en
-  version 12 et un événement signé a reçu HTTP 200.
+  version 13 et un événement signé a reçu HTTP 200.
 
 ## Current work
 
