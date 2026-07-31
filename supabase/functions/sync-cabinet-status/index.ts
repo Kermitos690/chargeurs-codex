@@ -202,8 +202,10 @@ Deno.serve(async (req) => {
       }).eq("station_id", st.station_id);
 
       // Upsert one slot row per battery currently present.
+      const observedSlots = new Set<number>();
       for (const battery of parsed.batteries) {
         if (battery.slotNum == null || !battery.batteryId) continue;
+        observedSlots.add(battery.slotNum);
         await db.from("slots").upsert({
           station_id: st.station_id,
           slot_num: battery.slotNum,
@@ -219,6 +221,27 @@ Deno.serve(async (req) => {
           power_level: battery.powerLevel,
           raw_data: battery.raw,
         }, { onConflict: "battery_id" });
+      }
+
+      // Reconcile slots that were occupied in the previous snapshot but are
+      // absent from the provider response. ChargeNow reports present
+      // batteries only; without this cleanup, a battery removed by a customer
+      // could remain falsely visible in the public inventory indefinitely.
+      const { data: previousSlots } = await db
+        .from("slots")
+        .select("slot_num, battery_id")
+        .eq("station_id", st.station_id);
+      for (const previous of previousSlots ?? []) {
+        if (observedSlots.has(previous.slot_num)) continue;
+        await db.from("slots")
+          .update({ status: "available", battery_id: null, raw_data: null })
+          .eq("station_id", st.station_id)
+          .eq("slot_num", previous.slot_num);
+        if (previous.battery_id) {
+          await db.from("batteries")
+            .update({ station_id: null, slot_num: null, status: "unknown" })
+            .eq("battery_id", previous.battery_id);
+        }
       }
 
       results.push({
