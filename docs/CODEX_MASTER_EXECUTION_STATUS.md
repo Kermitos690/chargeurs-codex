@@ -42,6 +42,11 @@ P6 — activation kiosk staging et gateway ChargeNow lecture seule déployées ;
 - Staging Supabase CLI access is confirmed for `xqepbqnaenoeyfjkjnzl`, but local and remote migration histories diverge: remote-only migrations `20260725042947`–`20260725050549` and `20260731055742`–`20260731055745`, plus local-only migrations `20260720003000`, `20260724060000`, `20260724061000` and the new numeric-enrollment migration. No migration-history repair or remote write was attempted.
 - Provider mutations, Stripe live and physical hardware operations are explicitly disabled.
 - Android SDK Platform 36 and Build Tools 36 require acceptance of the Android SDK licence. The licence was displayed and deliberately not accepted automatically.
+- The large multi-tenant extensions requested for MIFI, advertising, finance,
+  franchises and the expanded role catalogue are not yet implemented. They are
+  intentionally held behind the migration baseline: adding unreviewed tables or
+  enum values while local and remote histories diverge would make staging less
+  reproducible, not more complete.
 
 ## Tests and deployments
 
@@ -53,4 +58,7 @@ P6 — activation kiosk staging et gateway ChargeNow lecture seule déployées ;
 
 ## Next operation
 
-Continue the staging RBAC and account readiness work without attempting a live account invite, then prepare the controlled pairing-code hand-off only when the tablet is ready. Keep all supplier mutation flags disabled.
+Establish the migration baseline on a disposable database, then add the
+multi-tenant RBAC and module schema in additive, testable slices. Prepare the
+controlled pairing-code hand-off only when the tablet is ready. Keep all
+supplier mutation flags disabled.
