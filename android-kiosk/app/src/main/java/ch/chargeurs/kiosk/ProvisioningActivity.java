@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
@@ -19,6 +20,7 @@ import java.net.UnknownHostException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@SuppressLint("SetTextI18n")
 public final class ProvisioningActivity extends Activity {
     private EditText pairingCodeInput;
     private Button activateButton;

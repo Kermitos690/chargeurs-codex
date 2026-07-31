@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -19,6 +20,7 @@ import org.json.JSONObject;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@SuppressLint("SetTextI18n")
 public final class HardwareDiagnosticActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private TextView output;

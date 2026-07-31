@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
+import android.os.Environment;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -16,6 +17,7 @@ import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public final class HardwareDiagnosticCollector {
@@ -92,7 +94,7 @@ public final class HardwareDiagnosticCollector {
     private static JSONArray ttyInfo() {
         JSONArray result = new JSONArray();
         File[] files = new File("/dev").listFiles((dir, name) -> {
-            String lower = name.toLowerCase();
+            String lower = name.toLowerCase(Locale.ROOT);
             return lower.startsWith("tty") || lower.contains("serial") || lower.contains("uart") || lower.contains("rs485") || lower.contains("wch");
         });
         if (files == null) return result;
@@ -112,9 +114,9 @@ public final class HardwareDiagnosticCollector {
     private static JSONArray configInfo() {
         JSONArray result = new JSONArray();
         for (String path : new String[]{
-            "/sdcard/Documents/bajie_config",
+            new File(Environment.getExternalStorageDirectory(), "Documents/bajie_config").getPath(),
             "/storage/emulated/0/Documents/bajie_config",
-            "/mnt/sdcard/Documents/bajie_config"
+            new File(Environment.getExternalStorageDirectory(), "Documents/bajie_config").getPath()
         }) {
             File directory = new File(path);
             JSONObject item = new JSONObject();

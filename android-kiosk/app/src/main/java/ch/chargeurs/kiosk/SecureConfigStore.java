@@ -91,7 +91,7 @@ public final class SecureConfigStore {
     }
 
     public synchronized void clear() {
-        preferences.edit().clear().commit();
+        preferences.edit().clear().apply();
     }
 
     private boolean saveDebugFallback(KioskConfig config) {

@@ -39,6 +39,7 @@ import android.window.OnBackInvokedDispatcher;
 
 import org.json.JSONObject;
 
+@SuppressLint("ObsoleteSdkInt")
 public final class MainActivity extends Activity {
     private static final long WATCHDOG_INTERVAL_MS = 30_000L;
     private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
