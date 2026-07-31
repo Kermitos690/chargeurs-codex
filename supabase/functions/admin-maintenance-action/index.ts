@@ -3,9 +3,27 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import {
-  ejectByRepair, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
+  areChargeNowMutationsEnabled, ejectByRepair, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
 } from "../_shared/chargenow.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
+
+type OneTimeMaintenanceEjectionPermit = {
+  id: string;
+  stationId: string;
+  slotNum: number;
+  expiresAt: string;
+};
+
+function maintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
+  try {
+    const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT") ?? "") as Partial<OneTimeMaintenanceEjectionPermit>;
+    if (typeof parsed.id !== "string" || typeof parsed.stationId !== "string" || !Number.isInteger(parsed.slotNum)
+      || typeof parsed.expiresAt !== "string" || Number.isNaN(Date.parse(parsed.expiresAt))) return null;
+    return parsed as OneTimeMaintenanceEjectionPermit;
+  } catch {
+    return null;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -66,6 +84,37 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: "VALID_SLOT_REQUIRED" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    // A physical repair ejection is never unlocked by the broad provider flag
+    // alone. It needs an exact, short-lived server-only permit. No client can
+    // select a different cabinet or slot, and the permit is consumed after one
+    // recorded attempt (including an ambiguous timeout).
+    let oneTimePermit: OneTimeMaintenanceEjectionPermit | null = null;
+    if (actionType === "eject_by_repair") {
+      const permit = maintenanceEjectionPermit();
+      const permitMatches = permit
+        && permit.stationId === stationId
+        && permit.slotNum === Number(slotNum)
+        && Date.parse(permit.expiresAt) > Date.now();
+      if (!areChargeNowMutationsEnabled() || !permitMatches) {
+        return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      oneTimePermit = permit;
+      const { count, error: priorAttemptError } = await db.from("maintenance_actions")
+        .select("id", { count: "exact", head: true })
+        .eq("action_type", "eject_by_repair")
+        .contains("params", { oneTimePermitId: permit.id });
+      if (priorAttemptError) throw priorAttemptError;
+      if ((count ?? 0) > 0) {
+        return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_ALREADY_ATTEMPTED" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    if (["operation_pop", "config_event_push"].includes(actionType)) {
+      return new Response(JSON.stringify({ ok: false, error: "PHYSICAL_MUTATION_NOT_PERMITTED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     if (actionType === "config_event_push") {
       try {
         const parsed = new URL(String(eventPushUrl ?? ""));
@@ -105,7 +154,7 @@ Deno.serve(async (req) => {
     });
     await db.from("maintenance_actions").insert({
       station_id: stationId, action_type: actionType,
-      params: { slotNum, eventPushUrl }, result: result.data ?? { error: result.error }, performed_by: adminId,
+      params: { slotNum, eventPushUrl, ...(oneTimePermit ? { oneTimePermitId: oneTimePermit.id } : {}) }, result: result.data ?? { error: result.error }, performed_by: adminId,
     });
 
     return new Response(JSON.stringify({ ok: result.ok, result: result.data, error: result.error }), {

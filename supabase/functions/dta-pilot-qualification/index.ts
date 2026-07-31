@@ -3,6 +3,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 import { adminClient, auditLog, logApi, requireAdmin } from "../_shared/db.ts";
 import {
   areChargeNowMutationsEnabled,
+  areHardwareEjectionsEnabled,
   cabinetQuery,
   chargeNowMode,
   ejectByRent,
@@ -324,7 +325,7 @@ Deno.serve(async (req) => {
       if (Deno.env.get("DTA21269_FREEPAY_ENABLED") !== "true") return json({ ok: false, error: "FREEPAY_ENVIRONMENT_GATE_DISABLED" }, 409);
       if (!isChargeNowConfigured()) return json({ ok: false, error: "CHARGENOW_NOT_CONFIGURED" }, 503);
       if (chargeNowMode() !== "test") return json({ ok: false, error: "CHARGENOW_TEST_MODE_REQUIRED" }, 409);
-      if (!areChargeNowMutationsEnabled()) return json({ ok: false, error: "CHARGENOW_MUTATIONS_DISABLED" }, 409);
+      if (!areHardwareEjectionsEnabled()) return json({ ok: false, error: "HARDWARE_EJECTION_DISABLED" }, 409);
 
       const { data: activeRun, error: activeError } = await db.from("hardware_qualification_runs")
         .select("id,state")

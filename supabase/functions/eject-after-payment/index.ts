@@ -4,7 +4,7 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
-import { ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
+import { areHardwareEjectionsEnabled, ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
@@ -288,6 +288,9 @@ Deno.serve(async (req) => {
     if (!isChargeNowConfigured()) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CHARGENOW_NOT_CONFIGURED");
       return reply({ ok: false, error: "CHARGENOW_NOT_CONFIGURED", compensation }, 503);
+    }
+    if (!areHardwareEjectionsEnabled()) {
+      return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED" }, 409);
     }
 
     const slotDecision = resolveRentSlot(

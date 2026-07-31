@@ -34,6 +34,12 @@ export function areChargeNowMutationsEnabled(): boolean {
   return Deno.env.get("CHARGENOW_MUTATIONS_ENABLED") === "true";
 }
 
+// A supplier mutation gate alone is deliberately insufficient for a customer
+// rental: a staged maintenance trial must never make paid-rental ejection live.
+export function areHardwareEjectionsEnabled(): boolean {
+  return areChargeNowMutationsEnabled() && Deno.env.get("HARDWARE_EJECTION_ENABLED") === "true";
+}
+
 export function chargeNowMode(): "test" | "live" {
   return CHARGENOW_MODE === "live" ? "live" : "test";
 }
