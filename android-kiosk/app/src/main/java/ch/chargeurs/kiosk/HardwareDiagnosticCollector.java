@@ -32,6 +32,8 @@ public final class HardwareDiagnosticCollector {
         put(report, "secureStorage", JsonObjects.of(
             "ready", storage.isReady(),
             "status", storage.code(),
+            "compatibilityMode", storage.mode(),
+            "failureKind", storage.failureKind(),
             "repairApplied", storage.wasRepaired(),
             "containsToken", false
         ));

@@ -181,3 +181,24 @@ officiellement documenté.
   staging `dpl_6qT4wpAM24wHauy6wXTt7FbqbAhd` est `Ready`.
 - Les nouveaux liens doivent être demandés après ce déploiement ; les anciens
   liens PKCE restent volontairement invalides et ne sont pas réutilisables.
+
+## Correctif de compatibilité du stockage sécurisé — 31 juillet 2026
+
+- L’essai physique de l’APK 1.0.8 a atteint l’écran d’activation mais a
+  signalé que le stockage sécurisé n’était pas prêt. Le code n’a donc pas été
+  transmis à `kiosk-enroll` et n’a pas été consommé.
+- L’APK staging 1.0.9 (`versionCode=109`) conserve l’exigence de stockage
+  chiffré. Elle essaie d’abord AES/GCM dans AndroidKeyStore, puis, seulement si
+  cette capacité est défaillante, chiffre le token avec une clé AES aléatoire
+  enveloppée par une clé RSA privée maintenue dans AndroidKeyStore. Il n’existe
+  aucun repli logiciel ou en clair.
+- Les Diagnostics indiquent maintenant le mode de compatibilité employé et une
+  catégorie d’erreur non sensible si les deux primitives Keystore échouent.
+- Vérification locale réussie : `testDebugUnitTest`, `lintStaging` et
+  `assembleStaging`; signature APK v2 vérifiée. Artefact debug-signé staging :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.9-staging.apk` (903 Ko,
+  SHA-256 `060ac4be44603b4ce361e2c0f51e26a289a80818e954ecc8e503e031e6195d6d`).
+- Validation physique restante : installer 1.0.9 comme mise à jour, attendre
+  le statut « Stockage sécurisé prêt », puis seulement générer et saisir un
+  nouveau code à six chiffres. Si le statut reste indisponible, relever le
+  bloc `secureStorage` des Diagnostics ; il ne contient ni token ni code.
