@@ -18,6 +18,7 @@ P4 — station-first kiosk provisioning UI and implementation inventory.
 - ChargeNow audit V2 has been reviewed as an independent functional reference, not vendor backend evidence.
 - Frontend targeted role/state tests: 14 passed.
 - Deno kiosk enrollment and security tests: 9 passed.
+- Full Deno Edge Function contract suite: 174 passed.
 - Typecheck and production frontend build: passed.
 - The Deno test scripts now declare `--allow-read`; source-inspection kiosk tests had been blocked only by the missing local test permission.
 - Station detail now exposes station-first kiosk attribution using the existing, hashed, one-time, organization-bound pairing-code backend. It shows existing kiosks and supports administrative revocation; it does not create a provider or hardware mutation.
