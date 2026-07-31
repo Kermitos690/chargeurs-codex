@@ -25,6 +25,7 @@ P1/P3 — numeric kiosk activation implemented locally; staging migration baseli
 - The primary activation format is now exactly six numeric digits, including a leading zero. The Android provisioning screen now uses a dedicated touch keypad instead of an alphanumeric field; QR remains optional in the admin UI.
 - A new additive migration adds a server-side attempt ledger, 10-minute device/station/source limits, progressive delay, and no-plaintext-code storage. It has not been applied to staging while migration drift is reconciled.
 - Java 17 was found locally at Homebrew's `openjdk@17`; Gradle now starts successfully with it.
+- The diagnostic Android GitHub workflow is manual-only; an Android source push no longer starts a paid hosted build automatically.
 
 ## Current work
 
@@ -34,7 +35,7 @@ P1/P3 — numeric kiosk activation implemented locally; staging migration baseli
 
 ## Blockers
 
-- Staging Supabase CLI access is confirmed for `xqepbqnaenoeyfjkjnzl`, but local and remote migration histories diverge: remote-only migrations from 20260725/20260731 and local-only migrations from 20260720/20260724 must be baselined before a safe push.
+- Staging Supabase CLI access is confirmed for `xqepbqnaenoeyfjkjnzl`, but local and remote migration histories diverge: remote-only migrations `20260725042947`–`20260725050549` and `20260731055742`–`20260731055745`, plus local-only migrations `20260720003000`, `20260724060000`, `20260724061000` and the new numeric-enrollment migration. No migration-history repair or remote write was attempted.
 - Provider mutations, Stripe live and physical hardware operations are explicitly disabled.
 - Android SDK Platform 36 and Build Tools 36 require acceptance of the Android SDK licence. The licence was displayed and deliberately not accepted automatically.
 
@@ -43,8 +44,8 @@ P1/P3 — numeric kiosk activation implemented locally; staging migration baseli
 - No staging deployment or database migration has been run in this execution.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
 - The Java-runtime blocker is resolved. The remaining Android blocker is the missing licensed Android SDK 36; no APK was built, installed or published.
-- Production dependency audit reports two moderate React Router advisories. A dependency upgrade is available but has not been applied automatically; it needs a dedicated compatibility pass.
+- Production dependency audit reports two moderate React Router advisories. A compatibility trial of `react-router-dom@7.18.1` was reverted because the current audit then reported two high-severity RSC-mode advisories; no dependency lockfile change was retained.
 
 ## Next operation
 
-Commit the focused six-digit kiosk change after the frontend suite/build, then reconcile Supabase migration drift before any staging deployment. Keep all supplier mutation flags disabled.
+Commit the manual-only Android CI cost control, then create a read-only reconciliation artefact for the Supabase migration drift before any staging deployment. Keep all supplier mutation flags disabled.

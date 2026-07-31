@@ -1,29 +1,19 @@
-name: Android kiosk DTA diagnostic APK — one-time build
+name: Android kiosk DTA diagnostic APK — manual build
 
+# Cost control: Android builds are explicitly dispatched only. A branch push or
+# draft pull request must never consume a hosted Android runner automatically.
 on:
-  push:
-    branches:
-      - agent/finalize-chargeurs-platform
-    paths:
-      - .github/workflows/android-kiosk-diagnostic-once.yml
-      - android-kiosk/**
-  pull_request:
-    branches:
-      - main
-    paths:
-      - .github/workflows/android-kiosk-diagnostic-once.yml
-      - android-kiosk/**
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-kiosk-dta-diagnostic-once
+  group: android-kiosk-dta-diagnostic-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-diagnostic-apk:
-    if: github.event_name == 'push' || github.head_ref == 'agent/finalize-chargeurs-platform'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
