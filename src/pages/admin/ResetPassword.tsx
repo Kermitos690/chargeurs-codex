@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { passwordRecoveryAuth } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export default function ResetPassword() {
       window.history.replaceState({}, document.title, `${cleanUrl.pathname}${cleanUrl.search}`);
     };
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: subscription } = passwordRecoveryAuth.auth.onAuthStateChange((event, session) => {
       if (
         session &&
         (event === "INITIAL_SESSION" ||
@@ -70,7 +70,7 @@ export default function ResetPassword() {
 
       const code = url.searchParams.get("code");
       if (code) {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        const { data, error } = await passwordRecoveryAuth.auth.exchangeCodeForSession(code);
         if (!active) return;
         if (error || !data.session) {
           markInvalid(error?.message);
@@ -84,7 +84,7 @@ export default function ResetPassword() {
       const accessToken = hashParameters.get("access_token");
       const refreshToken = hashParameters.get("refresh_token");
       if (accessToken && refreshToken) {
-        const { data, error } = await supabase.auth.setSession({
+        const { data, error } = await passwordRecoveryAuth.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
@@ -98,7 +98,7 @@ export default function ResetPassword() {
         return;
       }
 
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await passwordRecoveryAuth.auth.getSession();
       if (!active) return;
       if (error) {
         markInvalid(error.message);
@@ -132,10 +132,11 @@ export default function ResetPassword() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await passwordRecoveryAuth.auth.updateUser({ password });
       if (error) throw error;
+      await passwordRecoveryAuth.auth.signOut({ scope: "local" });
       toast.success("Mot de passe mis à jour.");
-      nav("/admin");
+      nav("/admin/login");
     } catch (err) {
       toast.error((err as Error).message ?? "Erreur");
     } finally {

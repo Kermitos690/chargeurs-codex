@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { passwordRecoveryAuth, supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -47,7 +47,7 @@ export default function AccountAuth() {
     setLoading(true);
     try {
       if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await passwordRecoveryAuth.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/compte/reset-password`,
         });
         if (error) throw error;

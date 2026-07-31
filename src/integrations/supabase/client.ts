@@ -5,6 +5,7 @@ import { kioskAwareFetch } from '@/lib/kioskFetch';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +15,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // Reset-password links are handled explicitly by the short-lived recovery
+    // client below. Prevent the normal PKCE client from trying to exchange an
+    // implicit recovery token before that page can validate and clear it.
+    detectSessionInUrl: !isPasswordRecoveryRoute,
     flowType: 'pkce',
   },
   global: {
@@ -22,4 +26,23 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     // function. It is never added to database, auth, Stripe or other requests.
     fetch: kioskAwareFetch,
   },
+});
+
+/**
+ * Password-recovery emails must work when opened from Gmail, Safari or a
+ * different device than the one that requested them. A PKCE verifier is local
+ * to the requesting browser, so it is unsuitable for that specific hand-off.
+ *
+ * This client is used only to request and complete password recovery. Recovery
+ * tokens stay in the URL fragment, are cleared immediately after setSession,
+ * are never persisted and are signed out locally after the password changes.
+ */
+export const passwordRecoveryAuth = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    flowType: 'implicit',
+  },
+  global: { fetch: kioskAwareFetch },
 });
