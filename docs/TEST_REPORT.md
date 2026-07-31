@@ -19,6 +19,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Stripe runtime | tests ciblés + suite Edge | 4 nouveaux tests fail-closed ; clé live, mode non-test et secret webhook absent refusés |
 | Stripe webhook staging | événement Test `checkout.session.expired` | livraison signée `200 OK`, 31 juillet 2026 à 16:42 CEST |
 | Récupération inter-navigateur | typecheck, 68 tests, build Vite et inspection du bundle staging | client recovery implicite/non persistant servi ; aucun e-mail de test envoyé |
+| Orientation administrateur | typecheck, 68 tests, build Vite et Vercel staging `dpl_FYKwaeo9daMJUzjSpbtxBETcg8QC` | un rôle de back-office est dirigé vers `/admin`; chargement/erreur dashboard visibles |
 
 ## Couverture kiosk à six chiffres
 

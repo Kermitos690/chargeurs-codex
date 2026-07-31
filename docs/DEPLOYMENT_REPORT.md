@@ -65,3 +65,16 @@
 - Le client PKCE principal reste utilisé pour les sessions ordinaires. Aucun
   e-mail de réinitialisation, mot de passe ni session n’a été créé durant la
   vérification de déploiement.
+
+## Correctif orientation du compte administrateur — 31 juillet 2026, 20:05 CEST
+
+- Commit applicatif : `5a70bb6` ; déploiement staging :
+  `dpl_FYKwaeo9daMJUzjSpbtxBETcg8QC`, état `Ready`.
+- URL inspectable :
+  `https://chargeurs-ch-staging-7ap7kscb1-gaetans-projects-4974c31a.vercel.app`.
+  L’alias `https://chargeurs-ch-staging.vercel.app` pointe vers ce déploiement.
+- Une connexion depuis « Mon compte » consulte désormais les rôles propres au
+  compte connecté : un rôle de back-office est orienté vers `/admin`, un
+  client reste dans `/compte`. La vérification backend/RLS n’est pas modifiée.
+- `/admin` répond via l’alias staging. Typecheck, 68 tests Vitest et build Vite
+  ont réussi avant le déploiement. Aucune donnée distante n’a été modifiée.
