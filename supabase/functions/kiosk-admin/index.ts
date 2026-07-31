@@ -6,7 +6,7 @@
 // the kiosk's station_id — preventing one kiosk from impersonating another.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, requireAdmin, auditLog } from "../_shared/db.ts";
-import { randomOpaque, sha256Hex } from "../_shared/kioskEnrollment.ts";
+import { newSixDigitPairingCode, sha256Hex } from "../_shared/kioskEnrollment.ts";
 
 function newToken(): string {
   const bytes = new Uint8Array(32);
@@ -15,7 +15,7 @@ function newToken(): string {
 }
 
 function newPairingCode(): string {
-  return randomOpaque("kc_", 18);
+  return newSixDigitPairingCode();
 }
 
 Deno.serve(async (req) => {
@@ -72,17 +72,27 @@ Deno.serve(async (req) => {
         });
       }
 
-      const pairingCode = newPairingCode();
       const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
-      const { data, error } = await db.from("kiosk_pairing_codes").insert({
-        station_id: stationId,
-        organization_id: station.organization_id,
-        label: label ?? null,
-        code_hash: await sha256Hex(pairingCode),
-        expires_at: expiresAt,
-        created_by: adminId,
-      }).select("id,station_id,organization_id,created_at,expires_at").single();
-      if (error) throw error;
+      // Six digits give a finite code space. A unique hash collision with an
+      // older code is harmless but must not turn into a 500: generate a fresh
+      // value and retry a bounded number of times. The plaintext value never
+      // enters an audit record or log.
+      let pairingCode = "";
+      let data: { id: string; station_id: string; organization_id: string; created_at: string; expires_at: string } | null = null;
+      for (let attempt = 0; attempt < 5 && !data; attempt += 1) {
+        pairingCode = newPairingCode();
+        const { data: inserted, error } = await db.from("kiosk_pairing_codes").insert({
+          station_id: stationId,
+          organization_id: station.organization_id,
+          label: label ?? null,
+          code_hash: await sha256Hex(pairingCode),
+          expires_at: expiresAt,
+          created_by: adminId,
+        }).select("id,station_id,organization_id,created_at,expires_at").single();
+        if (!error && inserted) data = inserted;
+        else if (error?.code !== "23505") throw error;
+      }
+      if (!data) return json({ ok: false, error: "PAIRING_CODE_GENERATION_RETRY" }, 503);
       await auditLog(db, {
         actor: adminId,
         action: "kiosk.pairing_code.created",

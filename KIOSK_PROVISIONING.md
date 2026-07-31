@@ -5,19 +5,19 @@
 1. Créer/valider la station réelle dans le back-office.
 2. Confirmer son identifiant fournisseur, numéro de série, établissement et profil tarifaire canonique.
 3. Vérifier que les locations bêta restent fermées.
-4. Dans « Tablettes kiosque », générer un code d'appairage de 15 minutes maximum.
+4. Depuis la fiche de station, choisir « Attribuer un kiosk » et générer un code numérique de six chiffres (10 minutes par défaut, 15 minutes maximum).
 
 ## Sur la tablette
 
 1. Installer l'APK signé par Chargeurs.ch.
-2. Ouvrir l'application et saisir le code `kc_…` affiché une seule fois.
+2. Ouvrir l'application et saisir le code numérique à six chiffres affiché une seule fois. Un zéro initial est significatif.
 3. L'application crée une identité publique locale, appelle l'URL HTTPS d'enrôlement et stocke le token reçu via Android Keystore.
 4. Le code devient immédiatement inutilisable et n'est jamais enregistré en clair côté serveur.
 5. Vérifier l'écran kiosque, l'identifiant de station, la version APK, la connexion et le statut matériel.
 
 ## Renouvellement sûr
 
-Le code n'est jamais généré par l'APK : il est créé côté serveur après contrôle
+Le code n'est jamais généré par l'APK : il est créé côté serveur avec un générateur cryptographique après contrôle
 administrateur, puis conservé uniquement sous forme de hash. Le back-office affiche
 un compte à rebours et le bouton « Renouveler le code maintenant ». Un renouvellement
 invalide immédiatement tout ancien code encore actif pour cette station. Si le code

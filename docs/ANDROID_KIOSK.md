@@ -19,10 +19,10 @@ Un artefact GitHub Actions ne doit pas être présenté comme un APK de producti
 Le wrapper :
 
 1. démarre sur une activité de provisionnement si aucune configuration n'existe ;
-2. demande l'identifiant de station, le token kiosk et le domaine HTTPS ;
-3. valide la station avec la même forme que le frontend ;
-4. chiffre le token avec une clé AES/GCM détenue par Android Keystore ;
-5. charge uniquement la route `https://<domaine>/kiosk/<station>` ;
+2. demande exclusivement un code numérique temporaire à six chiffres ;
+3. laisse le serveur déterminer la station, l'organisation et le domaine HTTPS ;
+4. chiffre le token kiosk reçu avec une clé AES/GCM détenue par Android Keystore ;
+5. charge uniquement la route `https://<domaine>/kiosk/<station>` retournée par le serveur ;
 6. injecte le verrou de station et le token dans le stockage du domaine web ;
 7. masque le navigateur natif jusqu'à la fin de l'injection ;
 8. bloque les navigations principales hors du domaine configuré ;
@@ -41,14 +41,14 @@ Le token kiosk ne doit jamais être ajouté au code, au manifeste, à une captur
 
 Première installation :
 
-1. installer l'APK de test sur une tablette dédiée ;
-2. ouvrir l'application ;
-3. saisir l'identifiant de la borne ;
-4. saisir le token kiosk individuel créé par l'administration ;
-5. vérifier le domaine HTTPS ;
-6. activer la borne ;
-7. confirmer que le kiosk ouvre automatiquement la bonne route ;
-8. vérifier côté serveur que le token est lié à cette station uniquement.
+1. depuis la fiche de station du back-office, choisir **Attribuer un kiosk** ;
+2. générer le code numérique temporaire à six chiffres (10 minutes par défaut, 15 minutes maximum) ;
+3. installer l'APK de test sur une tablette dédiée et ouvrir l'application ;
+4. saisir les six chiffres sur le pavé tactile intégré ;
+5. confirmer que le kiosk ouvre automatiquement la route de la station préattribuée ;
+6. vérifier côté serveur que le token reçu est lié à cette station uniquement.
+
+La tablette ne peut jamais choisir une station en saisissant son identifiant. Le code peut commencer par `0`, est haché côté serveur, est révocable, à usage unique et un renouvellement invalide le code précédent. Cinq échecs maximum sont admis par appareil, station et origine réseau avant un délai serveur progressif.
 
 Après activation, l'écran public ne permet pas de changer de station. Pour reprovisionner, l'opérateur doit utiliser la gestion du terminal ou effacer les données de l'application, puis entrer un nouveau token.
 
@@ -120,7 +120,7 @@ Le projet utilise :
 - Gradle 9.4.1 ;
 - JDK 17 ;
 - compile/target SDK 36 ;
-- minimum SDK 23.
+- minimum SDK 26.
 
 Build local avec Gradle installé :
 

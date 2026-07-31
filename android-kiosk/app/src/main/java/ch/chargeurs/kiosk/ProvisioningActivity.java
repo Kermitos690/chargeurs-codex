@@ -5,11 +5,10 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.EditText;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -22,10 +21,11 @@ import java.util.concurrent.Executors;
 
 @SuppressLint("SetTextI18n")
 public final class ProvisioningActivity extends Activity {
-    private EditText pairingCodeInput;
+    private TextView pairingCodeDisplay;
     private Button activateButton;
     private SecureConfigStore store;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final StringBuilder activationCode = new StringBuilder(6);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,10 +65,31 @@ public final class ProvisioningActivity extends Activity {
         help.setGravity(Gravity.CENTER);
         content.addView(help, matchWrap(0, dp(24)));
 
-        pairingCodeInput = field(getString(R.string.pairing_code));
-        pairingCodeInput.setSingleLine(true);
-        pairingCodeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        content.addView(pairingCodeInput, matchWrap(0, dp(24)));
+        pairingCodeDisplay = text("", 30, Color.WHITE);
+        pairingCodeDisplay.setGravity(Gravity.CENTER);
+        pairingCodeDisplay.setLetterSpacing(0.12f);
+        pairingCodeDisplay.setBackgroundColor(Color.rgb(19, 34, 66));
+        pairingCodeDisplay.setPadding(dp(16), dp(14), dp(16), dp(14));
+        pairingCodeDisplay.setContentDescription(getString(R.string.pairing_code));
+        content.addView(pairingCodeDisplay, matchWrap(0, dp(14)));
+        updateCodeDisplay();
+
+        GridLayout keypad = new GridLayout(this);
+        keypad.setColumnCount(3);
+        keypad.setUseDefaultMargins(true);
+        for (String key : new String[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "Effacer", "0", "⌫" }) {
+            Button button = new Button(this);
+            button.setText(key);
+            button.setTextSize(key.length() == 1 ? 24 : 14);
+            button.setAllCaps(false);
+            button.setOnClickListener(view -> onKeypadKey(key));
+            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+            params.width = 0;
+            params.height = dp(62);
+            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            keypad.addView(button, params);
+        }
+        content.addView(keypad, matchWrap(0, dp(18)));
 
         activateButton = new Button(this);
         activateButton.setText(R.string.activate);
@@ -105,9 +126,9 @@ public final class ProvisioningActivity extends Activity {
     }
 
     private void provision() {
-        String pairingCode = pairingCodeInput.getText().toString().trim();
-        if (!pairingCode.matches("^kc_[A-Za-z0-9_-]{16,64}$")) {
-            pairingCodeInput.setError(getString(R.string.invalid_pairing_code));
+        String pairingCode = activationCode.toString();
+        if (!EnrollmentClient.isValidPairingCode(pairingCode)) {
+            Toast.makeText(this, R.string.invalid_pairing_code, Toast.LENGTH_LONG).show();
             return;
         }
         if (KioskConfigValidator.normalizeHttpsEndpoint(BuildConfig.ENROLLMENT_URL) == null) {
@@ -130,7 +151,7 @@ public final class ProvisioningActivity extends Activity {
                 )) throw new IllegalStateException("KIOSK_ORIGIN_MISMATCH");
                 if (!store.save(result.config())) throw new IllegalStateException("STORAGE_FAILED");
                 runOnUiThread(() -> {
-                    pairingCodeInput.setText("");
+                    clearCode();
                     launchKiosk();
                 });
             } catch (Exception error) {
@@ -139,8 +160,7 @@ public final class ProvisioningActivity extends Activity {
                     if (message.startsWith("Code refusé par le serveur")) {
                         // Never leave an expired/consumed code in the field:
                         // the operator must enter a freshly issued code.
-                        pairingCodeInput.setText("");
-                        pairingCodeInput.requestFocus();
+                        clearCode();
                     }
                     activateButton.setEnabled(true);
                     activateButton.setText(R.string.activate);
@@ -157,7 +177,11 @@ public final class ProvisioningActivity extends Activity {
         String code = error.getMessage() == null ? "UNKNOWN_ERROR" : error.getMessage().trim();
         switch (code) {
             case "PAIRING_CODE_INVALID_OR_EXPIRED":
-                return "Code refusé par le serveur : expiré, déjà utilisé ou non reconnu.";
+                // The server intentionally avoids an oracle that reveals
+                // whether a code was used, revoked or merely mistyped.
+                return "Code incorrect, expiré, déjà utilisé ou révoqué.";
+            case "TOO_MANY_ENROLLMENT_ATTEMPTS":
+                return "Trop de tentatives. Attendez avant de réessayer.";
             case "DEVICE_BOUND_TO_ANOTHER_STATION":
                 return "Cette tablette est déjà liée à une autre borne. Révoquez-la dans le back-office.";
             case "PAIRING_CONFIGURATION_INVALID":
@@ -184,14 +208,31 @@ public final class ProvisioningActivity extends Activity {
         finish();
     }
 
-    private EditText field(String hint) {
-        EditText input = new EditText(this);
-        input.setHint(hint);
-        input.setTextColor(Color.WHITE);
-        input.setHintTextColor(Color.rgb(148, 163, 192));
-        input.setBackgroundColor(Color.rgb(19, 34, 66));
-        input.setPadding(dp(16), dp(4), dp(16), dp(4));
-        return input;
+    private void onKeypadKey(String key) {
+        if ("Effacer".equals(key)) {
+            clearCode();
+        } else if ("⌫".equals(key)) {
+            if (activationCode.length() > 0) activationCode.deleteCharAt(activationCode.length() - 1);
+            updateCodeDisplay();
+        } else if (activationCode.length() < 6 && key.length() == 1 && Character.isDigit(key.charAt(0))) {
+            activationCode.append(key);
+            updateCodeDisplay();
+        }
+    }
+
+    private void clearCode() {
+        activationCode.setLength(0);
+        updateCodeDisplay();
+    }
+
+    private void updateCodeDisplay() {
+        StringBuilder visual = new StringBuilder();
+        for (int index = 0; index < 6; index += 1) {
+            if (index > 0) visual.append(' ');
+            visual.append(index < activationCode.length() ? activationCode.charAt(index) : '○');
+        }
+        pairingCodeDisplay.setText(visual.toString());
+        pairingCodeDisplay.setContentDescription(getString(R.string.pairing_code) + ": " + activationCode.length() + " sur 6 chiffres saisis");
     }
 
     private TextView text(String value, int size, int color) {

@@ -12,7 +12,7 @@ const EXPECTED_KIOSK_QUOTE = {
 } as const;
 
 const KIOSK_TOKEN_PATTERN = /^kt_[A-Za-z0-9_-]{24,128}$/;
-const KIOSK_PAIRING_CODE_PATTERN = /^kc_[A-Za-z0-9_-]{16,64}$/;
+const KIOSK_PAIRING_CODE_PATTERN = /^\d{6}$/;
 
 type TokenReader = () => string | null;
 
@@ -29,7 +29,7 @@ export function isValidKioskPairingCode(value: unknown): value is string {
  * persisted in the WebView profile. localStorage remains a deliberate browser
  * fallback for legacy/manual kiosk provisioning only.
  *
- * Pairing codes (kc_) are never accepted as runtime kiosk credentials. They
+ * Six-digit pairing codes are never accepted as runtime kiosk credentials. They
  * must first be redeemed by kiosk-enroll for a real station-bound token (kt_).
  */
 export function readKioskToken(): string | null {

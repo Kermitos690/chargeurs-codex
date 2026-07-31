@@ -2,9 +2,9 @@
 <resources>
     <string name="app_name">Chargeurs.ch Kiosk</string>
     <string name="provision_title">Activation de la borne</string>
-    <string name="provision_help">Créez un code d’appairage temporaire dans le back-office, puis saisissez-le ici. La borne et son identité sont attribuées par le serveur.</string>
-    <string name="pairing_code">Code d’appairage temporaire</string>
-    <string name="invalid_pairing_code">Le code d’appairage est invalide.</string>
+    <string name="provision_help">Créez un code numérique temporaire à six chiffres dans le back-office, puis saisissez-le ici. La borne et son identité sont attribuées par le serveur.</string>
+    <string name="pairing_code">Code d’appairage temporaire à six chiffres</string>
+    <string name="invalid_pairing_code">Saisissez exactement six chiffres.</string>
     <string name="enrollment_not_configured">L’URL d’appairage n’est pas configurée dans cette version de l’APK.</string>
     <string name="enrollment_failed">L’appairage a échoué. Vérifiez le code, sa date d’expiration et la connexion Internet.</string>
     <string name="enrollment_in_progress">Appairage en cours…</string>

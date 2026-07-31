@@ -57,7 +57,7 @@ export default function AdminStationDetail() {
     if (!stationId) return;
     setProvisioning(true);
     const { data, error } = await supabase.functions.invoke("kiosk-admin", {
-      body: { action: "create_pairing_code", stationId, label: `Station ${stationId}`, ttlMinutes: 15 },
+      body: { action: "create_pairing_code", stationId, label: `Station ${stationId}`, ttlMinutes: 10 },
     });
     setProvisioning(false);
     if (error || !data?.ok) { toast.error(data?.error ?? error?.message ?? "Création du code impossible"); return; }
@@ -138,7 +138,7 @@ export default function AdminStationDetail() {
         {pairing && (
           <div className="mt-5 grid gap-4 rounded-xl border border-primary/30 bg-primary/5 p-4 md:grid-cols-[auto_1fr]">
             <QRCodeSVG value={pairing.pairingCode} size={144} includeMargin />
-            <div className="space-y-2"><p className="font-semibold">Code à usage unique lié à {pairing.stationId}</p><code className="block break-all rounded bg-background p-3 text-sm">{pairing.pairingCode}</code><p className="text-xs text-muted-foreground">Expire le {new Date(pairing.expiresAt).toLocaleString()} · Organisation : {pairing.organizationName}</p><p className="text-xs text-muted-foreground">Dans l’APK, ouvrir l’activation puis scanner ce QR ou saisir le code. Endpoint : {enrollmentUrl || "configuré dans l’APK"}</p><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(pairing.pairingCode).then(() => toast.success("Code copié"))} className="gap-1"><Copy className="h-3.5 w-3.5" />Copier le code</Button></div>
+            <div className="space-y-2"><p className="font-semibold">Code numérique à usage unique lié à {pairing.stationId}</p><code className="block rounded bg-background p-3 text-2xl tracking-[0.3em]">{pairing.pairingCode}</code><p className="text-xs text-muted-foreground">Expire le {new Date(pairing.expiresAt).toLocaleString()} · Organisation : {pairing.organizationName}</p><p className="text-xs text-muted-foreground">Saisissez les six chiffres sur le pavé tactile de l’APK. Le QR reste une option technique secondaire. Endpoint : {enrollmentUrl || "configuré dans l’APK"}</p><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(pairing.pairingCode).then(() => toast.success("Code copié"))} className="gap-1"><Copy className="h-3.5 w-3.5" />Copier le code</Button></div>
           </div>
         )}
       </section>

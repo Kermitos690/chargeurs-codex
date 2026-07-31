@@ -25,7 +25,7 @@ public final class EnrollmentClient {
     ) throws Exception {
         String normalizedEndpoint = KioskConfigValidator.normalizeHttpsEndpoint(endpoint);
         if (normalizedEndpoint == null) throw new IllegalArgumentException("ENROLLMENT_NOT_CONFIGURED");
-        if (pairingCode == null || !pairingCode.matches("^kc_[A-Za-z0-9_-]{16,64}$")) {
+        if (!isValidPairingCode(pairingCode)) {
             throw new IllegalArgumentException("INVALID_PAIRING_CODE");
         }
 
@@ -77,6 +77,10 @@ public final class EnrollmentClient {
         } finally {
             connection.disconnect();
         }
+    }
+
+    static boolean isValidPairingCode(String pairingCode) {
+        return pairingCode != null && pairingCode.matches("^\\d{6}$");
     }
 
     private static String readLimited(InputStream input) throws Exception {

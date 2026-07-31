@@ -29,6 +29,19 @@ function publicBaseUrl(): string | null {
   return normalizeKioskBaseUrl(Deno.env.get("KIOSK_PUBLIC_BASE_URL") ?? "");
 }
 
+async function enrollmentSourceHash(req: Request, devicePublicId: string): Promise<string | null> {
+  const salt = Deno.env.get("KIOSK_ENROLLMENT_RATE_LIMIT_SALT")
+    ?? Deno.env.get("INTERNAL_FUNCTION_SECRET");
+  if (!salt || salt.length < 32) return null;
+  // Reverse proxies vary; only a one-way, keyed digest is stored. When an IP
+  // header is absent, device identity still provides a safe rate-limit key.
+  const forwarded = req.headers.get("cf-connecting-ip")
+    ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? `device:${devicePublicId}`;
+  return sha256Hex(`${salt}:${forwarded}`);
+}
+
 async function recoverInterruptedEnrollment(
   db: ReturnType<typeof adminClient>,
   params: {
@@ -130,6 +143,9 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "INVALID_ENROLLMENT_REQUEST" }, 400);
     }
 
+    const sourceHash = await enrollmentSourceHash(req, devicePublicId);
+    if (!sourceHash) return json({ ok: false, error: "KIOSK_ENROLLMENT_NOT_CONFIGURED" }, 503);
+
     const kioskToken = randomOpaque("kt_", 32);
     const codeHash = await sha256Hex(pairingCode);
     const tokenHash = await sha256Hex(kioskToken);
@@ -139,6 +155,7 @@ Deno.serve(async (req) => {
       p_token_hash: tokenHash,
       p_device_public_id: devicePublicId,
       p_app_version: appVersion,
+      p_source_hash: sourceHash,
     });
     if (error) {
       console.error("kiosk enrollment RPC unavailable", error.code ?? "RPC_ERROR");

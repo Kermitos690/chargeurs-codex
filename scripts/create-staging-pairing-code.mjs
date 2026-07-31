@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const required = (name) => {
@@ -42,9 +42,25 @@ const organization = Array.isArray(station.organization)
   : station.organization;
 if (organization?.slug !== "chargeurs-ch") throw new Error("OWNER_ORGANIZATION_MISMATCH");
 
-const code = `kc_${randomBytes(18).toString("base64url")}`;
+// `randomInt` is cryptographically secure and preserves leading zeroes after
+// padding. This script prints the value exactly once for the physical tablet.
+const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
 const codeHash = createHash("sha256").update(code).digest("hex");
-const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+const ttlMinutes = Number(process.env.STAGING_PAIRING_TTL_MINUTES ?? 10);
+if (!Number.isInteger(ttlMinutes) || ttlMinutes < 5 || ttlMinutes > 15) {
+  throw new Error("STAGING_PAIRING_TTL_INVALID");
+}
+const expiresAt = new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+
+// Match the back-office safety property: a renewal makes every unused code
+// for this station unusable before the new code is issued. This fallback is
+// intended only for controlled staging recovery, not routine administration.
+const { error: invalidateError } = await client
+  .from("kiosk_pairing_codes")
+  .update({ used_at: new Date().toISOString() })
+  .eq("station_id", station.station_id)
+  .is("used_at", null);
+if (invalidateError) throw new Error("PAIRING_CODE_INVALIDATION_FAILED");
 
 const { data: pairing, error: pairingError } = await client
   .from("kiosk_pairing_codes")
