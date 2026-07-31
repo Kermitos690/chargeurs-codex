@@ -46,7 +46,7 @@ P6 — activation kiosk staging et gateway ChargeNow lecture seule déployées ;
 ## Tests and deployments
 
 - Staging Supabase: additive kiosk migration applied directly; `kiosk-admin` and `kiosk-enroll` deployed. No production deployment, provider mutation, Stripe live action, hardware command or code redemption occurred.
-- Vercel staging deployment is READY. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
+- Vercel staging deployment is READY on `e47fdaf`. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
 - The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `f9822ce` with `apksigner verify` and produced an uninstalled staging debug APK. Runtime behavior remains unverified until a physical tablet test.
 - The former React Router 6 moderate advisories are removed by the 7.18.1 upgrade. npm still flags two React Server Components advisories; there is no RSC server, route module or import in the deployed SPA, but this must be reassessed before any future RSC adoption.

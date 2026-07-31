@@ -6,7 +6,7 @@
 - Projet Supabase : `xqepbqnaenoeyfjkjnzl`.
 - Projet Vercel : `chargeurs-ch-staging`.
 - Branche source : `agent/finalize-chargeurs-platform`.
-- Commit déployé : `d27602a`.
+- Commit déployé : `e47fdaf`.
 
 ## Composants déployés
 
@@ -18,8 +18,8 @@
 - Fonctions Edge `kiosk-admin` et `kiosk-enroll` : version 13.
 - Fonctions Edge `sync-cabinet-status` : version 18, `dta-pilot-qualification` : version 5 et `chargenow-admin` : version 11. Elles n'autorisent désormais qu'O1 (`GET /rent/cabinet/query`) vers l'API fournisseur ; les mutations et routes non confirmées répondent fail-closed.
 - Frontend Vercel :
-  [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/d9zXYSTbK4BZVu7aDoR4C5HQM5eH),
-  URL attribuée `https://chargeurs-ch-staging-e0k3nuaav-gaetans-projects-4974c31a.vercel.app`,
+  [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/BPJwYnnMK8yjXDnBoBkkaPUPGDSF),
+  URL attribuée `https://chargeurs-ch-staging-j753dq8vn-gaetans-projects-4974c31a.vercel.app`,
   alias staging `https://chargeurs-ch-staging.vercel.app`.
 
 ## Vérifications effectuées
