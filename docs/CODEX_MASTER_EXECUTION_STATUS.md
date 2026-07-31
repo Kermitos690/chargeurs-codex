@@ -37,6 +37,8 @@ P4 — station-first kiosk provisioning UI and implementation inventory.
 
 - No staging deployment or database migration has been run in this execution.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
+- Android local verification is blocked before Gradle starts because this machine has no Java Runtime installed. No APK was built, installed or published.
+- Production dependency audit reports two moderate React Router advisories. A dependency upgrade is available but has not been applied automatically; it needs a dedicated compatibility pass.
 
 ## Next operation
 
