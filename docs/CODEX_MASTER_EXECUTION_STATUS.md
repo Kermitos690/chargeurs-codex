@@ -10,7 +10,7 @@
 
 ## Active phase
 
-P4 — staging kiosk activation deployed; frontend/Android delivery validation in progress.
+P4 — activation kiosk staging déployée ; preuve Android CI et baseline de migrations en cours.
 
 ## Completed before this master execution
 
@@ -23,7 +23,7 @@ P4 — staging kiosk activation deployed; frontend/Android delivery validation i
 - The Deno test scripts now declare `--allow-read`; source-inspection kiosk tests had been blocked only by the missing local test permission.
 - Station detail now exposes station-first kiosk attribution using the existing, hashed, one-time, organization-bound pairing-code backend. It shows existing kiosks and supports administrative revocation; it does not create a provider or hardware mutation.
 - The primary activation format is now exactly six numeric digits, including a leading zero. The Android provisioning screen now uses a dedicated touch keypad instead of an alphanumeric field; QR remains optional in the admin UI.
-- A new additive migration adds a server-side attempt ledger, 10-minute device/station/source limits, progressive delay, and no-plaintext-code storage. It has not been applied to staging while migration drift is reconciled.
+- A new additive migration adds a server-side attempt ledger, 10-minute device/station/source limits, progressive delay, and no-plaintext-code storage.
 - Java 17 was found locally at Homebrew's `openjdk@17`; Gradle now starts successfully with it.
 - The diagnostic Android GitHub workflow is manual-only; an Android source push no longer starts a paid hosted build automatically.
 - The additive numeric-enrollment migration was applied directly to the dedicated staging project after source review because `db push` remains blocked by unrelated historical drift. It created only a private attempt ledger, indexes, additive columns and overloaded server-only redemption functions.
@@ -32,9 +32,8 @@ P4 — staging kiosk activation deployed; frontend/Android delivery validation i
 
 ## Current work
 
-- Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again.
-- Deploy the committed frontend to staging and verify the protected administrator path.
-- Run Android validation after the Android SDK licence is explicitly accepted and SDK 36 installed, or use the manual GitHub artifact workflow.
+- Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
+- Verify the current manual Android GitHub artifact workflow and archive its build evidence when it completes.
 - Upgrade React Router in a separate compatibility-tested commit to resolve the two production moderate advisories.
 
 ## Blockers
@@ -48,9 +47,9 @@ P4 — staging kiosk activation deployed; frontend/Android delivery validation i
 - Staging Supabase: additive kiosk migration applied directly; `kiosk-admin` and `kiosk-enroll` deployed. No production deployment, provider mutation, Stripe live action, hardware command or code redemption occurred.
 - Vercel staging deployment is READY. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
-- The Java-runtime blocker is resolved. The remaining Android blocker is the missing licensed Android SDK 36; no APK was built, installed or published.
+- The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `b59b6b8` and produced an uninstalled staging debug APK. A follow-up manual workflow adds `apksigner verify` as build evidence.
 - Production dependency audit reports two moderate React Router advisories. A compatibility trial of `react-router-dom@7.18.1` was reverted because the current audit then reported two high-severity RSC-mode advisories; no dependency lockfile change was retained.
 
 ## Next operation
 
-Commit the manual-only Android CI cost control, then create a read-only reconciliation artefact for the Supabase migration drift before any staging deployment. Keep all supplier mutation flags disabled.
+Collect the manual Android CI result, then commit the migration reconciliation evidence. Keep all supplier mutation flags disabled.

@@ -34,6 +34,9 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          test -n "$apksigner_path"
+          "$apksigner_path" verify --verbose "$apk"
           mkdir -p dist
           cp "$apk" dist/chargeurs-kiosk-staging-v1.0.1-debug.apk
           sha256sum dist/chargeurs-kiosk-staging-v1.0.1-debug.apk > dist/SHA256SUMS.txt
