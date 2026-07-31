@@ -12,8 +12,8 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, auditLog, logApi } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { refundPaymentIntentBalance } from "../_shared/stripeRefundRuntime.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
-const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
 
@@ -381,7 +381,8 @@ Deno.serve(async (req) => {
 
     if (action === "refund") {
       if (!isSuper) return json({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED" }, 403);
-      if (!STRIPE_KEY) return json({ ok: false, error: "STRIPE_NOT_CONFIGURED" }, 503);
+      const stripeRuntime = validateStripeTestRuntime();
+      if (!stripeRuntime.ok) return json({ ok: false, error: stripeRuntime.error }, 503);
       const state = await orchestratorState(db, rentalSessionId);
       if (["released", "active"].includes(String(state)) && !session.returned_at) {
         return json({ ok: false, error: "BATTERY_NOT_RETURNED" }, 409);
@@ -396,7 +397,7 @@ Deno.serve(async (req) => {
       if (paymentReadError) throw paymentReadError;
       if (!payment?.stripe_payment_intent_id) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
 
-      const stripe = new Stripe(STRIPE_KEY, {
+      const stripe = new Stripe(stripeRuntime.secretKey, {
         apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient(),
       });
       const providerIds: string[] = [];

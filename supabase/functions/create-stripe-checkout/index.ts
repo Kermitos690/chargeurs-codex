@@ -12,8 +12,8 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_shared/pricingSnapshot.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
-const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
 const EXPIRY_MINUTES = 30;
 
@@ -49,7 +49,10 @@ Deno.serve(async (req) => {
     if (sessionError) throw sessionError;
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
-    if (!STRIPE_KEY) return json({ ok: false, configured: false, error: "STRIPE_NOT_CONFIGURED" }, 503);
+    const stripeRuntime = validateStripeTestRuntime();
+    if (!stripeRuntime.ok) {
+      return json({ ok: false, configured: false, error: stripeRuntime.error }, 503);
+    }
 
     const base = configuredAppUrl();
     if (!base) return json({ ok: false, configured: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
@@ -138,7 +141,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const stripe = new Stripe(STRIPE_KEY, {
+    const stripe = new Stripe(stripeRuntime.secretKey, {
       apiVersion: "2024-12-18.acacia",
       httpClient: Stripe.createFetchHttpClient(),
     });

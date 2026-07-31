@@ -17,6 +17,11 @@
   fonction de redemption. Elle ne supprime aucune donnée ni table.
 - Fonctions Edge `kiosk-admin` et `kiosk-enroll` : version 13.
 - Fonctions Edge `sync-cabinet-status` : version 18, `dta-pilot-qualification` : version 5 et `chargenow-admin` : version 11. Elles n'autorisent désormais qu'O1 (`GET /rent/cabinet/query`) vers l'API fournisseur ; les mutations et routes non confirmées répondent fail-closed.
+- Stripe Test : destination webhook `chargeurs-ch-staging-checkout` active sur
+  `stripe-webhook`. Les fonctions `create-stripe-checkout`, `stripe-webhook`,
+  `rental-admin-action`, `eject-after-payment`, `settle-rental-payment`,
+  `admin-maintenance-action` et `platform-api` ont été déployées en version 12.
+  Leurs secrets sont stockés exclusivement dans le coffre Supabase.
 - Frontend Vercel :
   [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/BPJwYnnMK8yjXDnBoBkkaPUPGDSF),
   URL attribuée `https://chargeurs-ch-staging-j753dq8vn-gaetans-projects-4974c31a.vercel.app`,
@@ -33,6 +38,9 @@
 - L'inspection Vercel retourne `Ready` pour le déploiement ci-dessus.
 - Recherche ciblée dans le HTML servi : aucun secret serveur, identifiant
   ChargeNow, clé Stripe secrète ni service role détecté.
+- Un événement Stripe Test signé `checkout.session.expired` a été livré au
+  webhook staging avec `200 OK`. Une requête volontairement non signée reste
+  refusée par HTTP 400 / `MISSING_SIGNATURE`.
 
 ## Limites et rollback
 

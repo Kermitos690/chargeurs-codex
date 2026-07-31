@@ -7,13 +7,15 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Frontend | `npm run test` | 68 tests réussis, 16 fichiers |
 | TypeScript | `npm run typecheck` | réussi |
 | Frontend production | `npm run build` | réussi ; avertissement de bundle > 500 kB à traiter |
-| Lint | `npm run lint` | 0 erreur ; 13 avertissements préexistants |
-| Edge Functions | `npm run test:integration` | 175 tests réussis |
+| Lint | `npm run lint` | 0 erreur ; 12 avertissements préexistants |
+| Edge Functions | `npm run test:integration` | 179 tests réussis |
 | Enrollment ciblé | `deno test ...kiosk_enrollment.test.ts` | 6 tests réussis |
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
 | Android | workflow GitHub manuel sur `f9822ce` | `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `apksigner verify` réussis |
 | React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
-| Gateway ChargeNow | `npm run test:integration` | 175 tests réussis ; O1 GET seul autorisé vers le fournisseur |
+| Gateway ChargeNow | `npm run test:integration` | 179 tests réussis ; O1 GET seul autorisé vers le fournisseur |
+| Stripe runtime | tests ciblés + suite Edge | 4 nouveaux tests fail-closed ; clé live, mode non-test et secret webhook absent refusés |
+| Stripe webhook staging | événement Test `checkout.session.expired` | livraison signée `200 OK`, 31 juillet 2026 à 16:42 CEST |
 
 ## Couverture kiosk à six chiffres
 
@@ -28,7 +30,8 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 
 ## Non exécuté volontairement
 
-- Paiement Stripe live ou test avec carte.
+- Paiement Stripe live ou test avec carte. Le webhook Stripe Test signé a été
+  validé séparément, sans paiement ni autorisation bancaire.
 - Mutation ChargeNow, éjection, redémarrage ou firmware.
 - APK debug staging : construit et vérifié par GitHub Actions, puis copié localement dans `/Users/k4n/Downloads/Chargeurs_CH_Kiosk_Staging_f9822ce.apk`. Il reste non installé et non publié.
 - Génération d'un code réel : différée pour ne pas le laisser expirer avant la

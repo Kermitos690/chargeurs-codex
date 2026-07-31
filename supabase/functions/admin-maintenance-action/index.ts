@@ -5,6 +5,7 @@ import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import {
   ejectByRepair, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
 } from "../_shared/chargenow.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -21,8 +22,9 @@ Deno.serve(async (req) => {
 
     // Real backend health probe (no secrets exposed, only booleans).
     if (actionType === "health_check") {
-      const stripe = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
-      const webhookSecret = Boolean(Deno.env.get("STRIPE_WEBHOOK_SECRET"));
+      const stripeRuntime = validateStripeTestRuntime({ requireWebhookSecret: true });
+      const stripe = stripeRuntime.ok;
+      const webhookSecret = stripeRuntime.ok;
       const chargenow = isChargeNowConfigured();
       // Webhook is "live" only if the secret is set AND at least one verified
       // Stripe webhook event has been processed.

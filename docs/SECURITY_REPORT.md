@@ -8,7 +8,9 @@
 | Réutilisation d'un code | Hash, expiration, liaison station/organisation, consumption atomique et renouvellement invalidant | migration + fonctions Edge | déployé staging |
 | Brute force de code court | Limites sur appareil, station et origine hachée ; pause progressive ; aucun code brut journalisé | migration + test de contrat | déployé staging |
 | Coût CI Android automatique | workflow diagnostic devenu manuel | workflow GitHub | corrigé |
-| Route fournisseur non confirmée | retrait des appels vers hôte alternatif ; allowlist O1 GET uniquement | 175 tests Deno + déploiement Edge staging | déployé staging |
+| Route fournisseur non confirmée | retrait des appels vers hôte alternatif ; allowlist O1 GET uniquement | 179 tests Deno + déploiement Edge staging | déployé staging |
+| Clé Stripe live utilisable malgré le flag | validation centralisée exigeant mode test, live=false et préfixe de clé test | 4 tests dédiés + 179 tests Edge | déployé staging |
+| Webhook Stripe falsifié | secret `whsec_`, signature sur le corps brut et inbox idempotente | événement Stripe Test signé 200 ; requête sans signature 400 | déployé staging |
 
 ## Dépendances frontend
 
@@ -35,3 +37,6 @@
 - Aucun test matériel ni fournisseur mutatif n'a été exécuté ; les flags restent
   fermés (`CHARGENOW_MUTATIONS_ENABLED=false`, Stripe live désactivé, éjection
   matérielle désactivée).
+- Le staging utilise actuellement la clé secrète standard du compte Stripe Test.
+  Une clé restreinte dédiée reste préférable avant le pilote ; elle devra
+  autoriser Checkout Sessions, Payment Intents, Payment Methods et refunds.

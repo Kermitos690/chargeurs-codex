@@ -1,4 +1,5 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
+import { validateStripeTestRuntime } from "./stripeRuntimeConfig.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, logApi, snapshotHash } from "./db.ts";
 import { planSettlement, resolveSettlementStrategy } from "./settlement.ts";
@@ -698,8 +699,8 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   if (!authorizedInternalCaller(req)) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-  if (!stripeKey) return json({ ok: false, error: "STRIPE_NOT_CONFIGURED" }, 503);
+  const stripeRuntime = validateStripeTestRuntime();
+  if (!stripeRuntime.ok) return json({ ok: false, error: stripeRuntime.error }, 503);
 
   const db = adminClient();
   let rentalSessionId = "";
@@ -735,7 +736,7 @@ export async function handleSettlementRequest(req: Request): Promise<Response> {
     const session = await claimSettlement(db, rentalSessionId);
     if (!session) return json({ ok: true, already_in_progress: true }, 202);
 
-    const stripe = new Stripe(stripeKey, {
+    const stripe = new Stripe(stripeRuntime.secretKey, {
       apiVersion: "2024-12-18.acacia",
       httpClient: Stripe.createFetchHttpClient(),
     });

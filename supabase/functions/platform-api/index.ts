@@ -18,6 +18,7 @@ import {
   type AuthedClient,
   type PlatformApiScope,
 } from "../_shared/platformApi.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STATION_ID_RE = /^[A-Za-z0-9_-]{4,32}$/;
@@ -228,7 +229,7 @@ async function healthDetails(_req: Request, { db }: RouteContext): Promise<Respo
     dependencies: {
       database: databaseError ? "down" : "up",
       chargenow_configured: Boolean(Deno.env.get("CHARGENOW_BASIC_AUTH") || Deno.env.get("CHARGENOW_BASIC_USERNAME")),
-      stripe_configured: Boolean(Deno.env.get("STRIPE_SECRET_KEY")),
+      stripe_configured: validateStripeTestRuntime({ requireWebhookSecret: true }).ok,
     },
   });
 }

@@ -13,9 +13,8 @@ import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
 import { evaluatePaymentMatch } from "../_shared/payments.ts";
 import { resolveSettlementStrategy } from "../_shared/settlement.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
-const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-const WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
 
 type DB = ReturnType<typeof adminClient>;
 type RentalSession = Record<string, any>;
@@ -299,17 +298,18 @@ Deno.serve(async (req) => {
   const signature = req.headers.get("stripe-signature");
   const raw = await req.text();
 
-  if (!STRIPE_KEY || !WEBHOOK_SECRET) return json({ error: "STRIPE_NOT_CONFIGURED" }, 503);
+  const stripeRuntime = validateStripeTestRuntime({ requireWebhookSecret: true });
+  if (!stripeRuntime.ok) return json({ error: stripeRuntime.error }, 503);
   if (!signature) return json({ error: "MISSING_SIGNATURE" }, 400);
 
-  const stripe = new Stripe(STRIPE_KEY, {
+  const stripe = new Stripe(stripeRuntime.secretKey, {
     apiVersion: "2024-12-18.acacia",
     httpClient: Stripe.createFetchHttpClient(),
   });
 
   let event: Stripe.Event;
   try {
-    event = await stripe.webhooks.constructEventAsync(raw, signature, WEBHOOK_SECRET);
+    event = await stripe.webhooks.constructEventAsync(raw, signature, stripeRuntime.webhookSecret);
   } catch {
     return json({ error: "INVALID_SIGNATURE" }, 400);
   }

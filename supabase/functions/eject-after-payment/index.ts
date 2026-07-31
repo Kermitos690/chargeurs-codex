@@ -1,6 +1,7 @@
 // Internal battery release after a trusted Stripe authorization/prepayment.
 // Canonical lifecycle: authorized → release_requested → released → active.
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
 import { ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
@@ -111,8 +112,8 @@ async function compensateBeforeHardwareRequest(
 ): Promise<{ compensated: boolean; action: string }> {
   const sessionId = String(session.id);
   const paymentIntentId = String(session.stripe_payment_intent_id ?? "");
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-  if (!paymentIntentId || !stripeKey) {
+  const stripeRuntime = validateStripeTestRuntime();
+  if (!paymentIntentId || !stripeRuntime.ok) {
     await markSupportRequired(
       db,
       session,
@@ -123,7 +124,7 @@ async function compensateBeforeHardwareRequest(
     return { compensated: false, action: "manual_review" };
   }
 
-  const stripe = new Stripe(stripeKey, {
+  const stripe = new Stripe(stripeRuntime.secretKey, {
     apiVersion: "2024-12-18.acacia",
     httpClient: Stripe.createFetchHttpClient(),
   });
