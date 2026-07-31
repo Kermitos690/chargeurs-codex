@@ -3,27 +3,10 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import {
-  areChargeNowMutationsEnabled, ejectByRepair, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
+  ejectByRepairWithOneTimePermit, oneTimeMaintenanceEjectionPermit, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
+  type OneTimeMaintenanceEjectionPermit,
 } from "../_shared/chargenow.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
-
-type OneTimeMaintenanceEjectionPermit = {
-  id: string;
-  stationId: string;
-  slotNum: number;
-  expiresAt: string;
-};
-
-function maintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
-  try {
-    const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT") ?? "") as Partial<OneTimeMaintenanceEjectionPermit>;
-    if (typeof parsed.id !== "string" || typeof parsed.stationId !== "string" || !Number.isInteger(parsed.slotNum)
-      || typeof parsed.expiresAt !== "string" || Number.isNaN(Date.parse(parsed.expiresAt))) return null;
-    return parsed as OneTimeMaintenanceEjectionPermit;
-  } catch {
-    return null;
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -91,12 +74,12 @@ Deno.serve(async (req) => {
     // recorded attempt (including an ambiguous timeout).
     let oneTimePermit: OneTimeMaintenanceEjectionPermit | null = null;
     if (actionType === "eject_by_repair") {
-      const permit = maintenanceEjectionPermit();
+      const permit = oneTimeMaintenanceEjectionPermit();
       const permitMatches = permit
         && permit.stationId === stationId
         && permit.slotNum === Number(slotNum)
         && Date.parse(permit.expiresAt) > Date.now();
-      if (!areChargeNowMutationsEnabled() || !permitMatches) {
+      if (!permitMatches) {
         return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -138,7 +121,7 @@ Deno.serve(async (req) => {
         result = await eventPushConfig(eventPushUrl);
         break;
       case "eject_by_repair": // ⚠️ DANGEROUS
-        result = await ejectByRepair(stationId, Number(slotNum));
+        result = await ejectByRepairWithOneTimePermit(stationId, Number(slotNum));
         break;
       case "operation_pop": // ⚠️ DANGEROUS
         result = await operationPop(stationId, Number(slotNum));

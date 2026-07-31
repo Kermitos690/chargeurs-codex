@@ -62,15 +62,33 @@ export interface ApiResult<T = unknown> {
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
+export type OneTimeMaintenanceEjectionPermit = {
+  id: string;
+  stationId: string;
+  slotNum: number;
+  expiresAt: string;
+};
+
+export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
+  try {
+    const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT") ?? "") as Partial<OneTimeMaintenanceEjectionPermit>;
+    if (typeof parsed.id !== "string" || typeof parsed.stationId !== "string" || !Number.isInteger(parsed.slotNum)
+      || typeof parsed.expiresAt !== "string" || Number.isNaN(Date.parse(parsed.expiresAt))) return null;
+    return parsed as OneTimeMaintenanceEjectionPermit;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T = unknown>(
   method: string,
   path: string,
-  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean } = {},
+  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean } = {},
 ): Promise<ApiResult<T>> {
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
   }
-  if (opts.mutation && !areChargeNowMutationsEnabled()) {
+  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 
@@ -185,6 +203,19 @@ export const operationPop = (cabinetid: string, slotNum: number) =>
 // C2 — Eject By Repair (query: cabinetid, slotNum). 0/null = eject all.
 export const ejectByRepair = (cabinetid: string, slotNum: number) =>
   request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true });
+
+// The only route allowed to bypass the broad mutation flag. Its target is
+// fixed by a short-lived, server-only permit; every other mutation remains
+// governed by CHARGENOW_MUTATIONS_ENABLED.
+export const ejectByRepairWithOneTimePermit = (cabinetid: string, slotNum: number) => {
+  const permit = oneTimeMaintenanceEjectionPermit();
+  if (!permit || permit.stationId !== cabinetid || permit.slotNum !== slotNum || Date.parse(permit.expiresAt) <= Date.now()) {
+    return Promise.resolve<ApiResult>({ ok: false, status: 0, data: null, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" });
+  }
+  return request("POST", "/cabinet/ejectByRepair", {
+    query: { cabinetid, slotNum }, mutation: true, oneTimeMaintenanceEjection: true,
+  });
+};
 
 // C3 — Eject By Rent (query: cabinetid, rentOrderId, slotNum).
 // Slot 0 is ambiguous in the supplier material. It is refused unless the

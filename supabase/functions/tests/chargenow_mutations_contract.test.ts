@@ -309,6 +309,35 @@ Deno.test("C2 ejectByRepair — builds POST with cabinetid/slotNum (mock only)",
 });
 Deno.test("C2 ejectByRepair — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRepair("DTA21269", 1)));
 
+Deno.test("C2 one-time maintenance permit bypasses no other mutation gate", async () => {
+  const previousMutations = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  const previousPermit = Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  Deno.env.set("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT", JSON.stringify({
+    id: "permit-test-1", stationId: "DTA21269", slotNum: 1, expiresAt: "2099-01-01T00:00:00.000Z",
+  }));
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const allowed = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1);
+    assertEquals(allowed.ok, true);
+    assertEquals(s.calls.length, 1);
+    const blocked = await cn.ejectByRepairWithOneTimePermit("DTA21269", 2);
+    assertEquals(blocked.ok, false);
+    assertEquals(blocked.error, "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED");
+    assertEquals(s.calls.length, 1);
+    const otherMutation = await cn.orderCreate({ deviceId: "DTA21269" });
+    assertEquals(otherMutation.ok, false);
+    assertEquals(otherMutation.error, "CHARGENOW_MUTATIONS_DISABLED");
+    assertEquals(s.calls.length, 1);
+  } finally {
+    s.restore();
+    if (previousMutations === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previousMutations);
+    if (previousPermit === undefined) Deno.env.delete("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+    else Deno.env.set("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT", previousPermit);
+  }
+});
+
 // ----------------------------------------------------------------
 // C3 — Eject By Rent (POST /cabinet/ejectByRent) — BLOCKED_BY_SAFETY
 // ----------------------------------------------------------------
