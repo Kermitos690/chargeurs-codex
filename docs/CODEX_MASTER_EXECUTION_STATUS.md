@@ -28,6 +28,7 @@ P4 — staging kiosk activation deployed; frontend/Android delivery validation i
 - The diagnostic Android GitHub workflow is manual-only; an Android source push no longer starts a paid hosted build automatically.
 - The additive numeric-enrollment migration was applied directly to the dedicated staging project after source review because `db push` remains blocked by unrelated historical drift. It created only a private attempt ledger, indexes, additive columns and overloaded server-only redemption functions.
 - Staging `kiosk-admin` and `kiosk-enroll` are deployed at function version 13. An intentionally malformed enrollment request returns controlled HTTP 400 / `INVALID_ENROLLMENT_REQUEST`; it neither generated nor consumed a code.
+- Vercel staging was deployed successfully. `/`, `/admin`, `/kiosk/DTA21269` and the PWA manifest respond through `https://chargeurs-ch-staging.vercel.app`; see `docs/DEPLOYMENT_REPORT.md`.
 
 ## Current work
 
@@ -45,6 +46,7 @@ P4 — staging kiosk activation deployed; frontend/Android delivery validation i
 ## Tests and deployments
 
 - Staging Supabase: additive kiosk migration applied directly; `kiosk-admin` and `kiosk-enroll` deployed. No production deployment, provider mutation, Stripe live action, hardware command or code redemption occurred.
+- Vercel staging deployment is READY. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
 - The Java-runtime blocker is resolved. The remaining Android blocker is the missing licensed Android SDK 36; no APK was built, installed or published.
 - Production dependency audit reports two moderate React Router advisories. A compatibility trial of `react-router-dom@7.18.1` was reverted because the current audit then reported two high-severity RSC-mode advisories; no dependency lockfile change was retained.
