@@ -28,6 +28,13 @@ public final class HardwareDiagnosticCollector {
         put(report, "device", deviceInfo());
         put(report, "vendorApp", VendorAppCompatibility.inspect(context));
         put(report, "chargeursApp", packageInfo(context, context.getPackageName()));
+        SecureConfigStore.StorageHealth storage = new SecureConfigStore(context).inspect();
+        put(report, "secureStorage", JsonObjects.of(
+            "ready", storage.isReady(),
+            "status", storage.code(),
+            "repairApplied", storage.wasRepaired(),
+            "containsToken", false
+        ));
         put(report, "usb", usbInfo(context));
         put(report, "tty", ttyInfo());
         put(report, "procTtyDrivers", command("cat /proc/tty/drivers"));

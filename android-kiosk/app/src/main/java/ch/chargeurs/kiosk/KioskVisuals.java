@@ -11,6 +11,7 @@ import android.widget.TextView;
 public final class KioskVisuals {
     public static final int WHITE = Color.rgb(250, 252, 255);
     public static final int MUTED = Color.rgb(178, 192, 222);
+    public static final int WARNING = Color.rgb(255, 194, 92);
     public static final int PANEL = Color.argb(196, 26, 38, 73);
     public static final int PANEL_BORDER = Color.argb(68, 207, 228, 255);
     private static final int BLUE = Color.rgb(51, 139, 255);

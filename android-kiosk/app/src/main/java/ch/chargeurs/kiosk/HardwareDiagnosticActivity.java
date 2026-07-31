@@ -55,7 +55,7 @@ public final class HardwareDiagnosticActivity extends Activity {
         content.addView(title, matchWrap(dp(8), dp(12)));
 
         TextView help = new TextView(this);
-        help.setText("Lecture uniquement : ports série, USB, pilotes, firmware Android et présence de l’APK fournisseur. Aucune commande n’est envoyée à la borne.");
+        help.setText("Lecture uniquement : stockage sécurisé local, ports série, USB, pilotes, firmware Android et présence de l’APK fournisseur. Aucune commande n’est envoyée à la borne.");
         help.setTextSize(14);
         help.setTextColor(Color.rgb(190, 202, 226));
         help.setGravity(Gravity.CENTER);

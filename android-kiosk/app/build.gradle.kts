@@ -36,8 +36,11 @@ android {
         targetSdk = 36
         // Incremented for the provider-bridge diagnostic update so the
         // staging APK can be installed as an in-place update.
-        versionCode = 106
-        versionName = "1.0.6"
+        // 1.0.7 adds a mandatory secure-storage preflight before a one-time
+        // enrollment code can be redeemed, plus a one-time repair path for a
+        // broken key belonging to this application only.
+        versionCode = 107
+        versionName = "1.0.7"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

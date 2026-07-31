@@ -24,9 +24,12 @@ import java.util.concurrent.Executors;
 public final class ProvisioningActivity extends Activity {
     private final TextView[] pairingCodeCells = new TextView[6];
     private Button activateButton;
+    private TextView secureStorageStatus;
     private SecureConfigStore store;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final StringBuilder activationCode = new StringBuilder(6);
+    private boolean storageReady;
+    private boolean enrollmentInFlight;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +45,7 @@ public final class ProvisioningActivity extends Activity {
         if (existing != null) store.clear();
         KioskVisuals.applyKioskWindow(this);
         setContentView(buildView());
+        checkSecureStorageBeforeEnrollment();
     }
 
     private FrameLayout buildView() {
@@ -82,6 +86,10 @@ public final class ProvisioningActivity extends Activity {
         TextView help = text(getString(R.string.provision_help), 16, KioskVisuals.MUTED);
         help.setGravity(Gravity.CENTER);
         content.addView(help, matchWrap(0, dp(24)));
+
+        secureStorageStatus = text(getString(R.string.secure_storage_checking), 14, KioskVisuals.MUTED);
+        secureStorageStatus.setGravity(Gravity.CENTER);
+        content.addView(secureStorageStatus, matchWrap(0, dp(16)));
 
         LinearLayout codeCells = new LinearLayout(this);
         codeCells.setGravity(Gravity.CENTER);
@@ -125,6 +133,7 @@ public final class ProvisioningActivity extends Activity {
         activateButton.setAllCaps(false);
         activateButton.setBackground(KioskVisuals.primaryButton(dp(28)));
         activateButton.setOnClickListener(view -> provision());
+        activateButton.setEnabled(false);
         content.addView(activateButton, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(56)
@@ -157,6 +166,32 @@ public final class ProvisioningActivity extends Activity {
         return root;
     }
 
+    private void checkSecureStorageBeforeEnrollment() {
+        storageReady = false;
+        updateActivateButton();
+        executor.execute(() -> {
+            SecureConfigStore.StorageHealth health = store.prepareForEnrollment();
+            new LocalAuditLog(this).record("kiosk.secure_storage.preflight", JsonObjects.of(
+                "ready", health.isReady(),
+                "status", health.code(),
+                "repaired", health.wasRepaired()
+            ));
+            runOnUiThread(() -> {
+                storageReady = health.isReady();
+                if (health.isReady()) {
+                    secureStorageStatus.setText(health.wasRepaired()
+                        ? getString(R.string.secure_storage_repaired)
+                        : getString(R.string.secure_storage_ready));
+                    secureStorageStatus.setTextColor(KioskVisuals.MUTED);
+                } else {
+                    secureStorageStatus.setText(getString(R.string.secure_storage_unavailable, health.code()));
+                    secureStorageStatus.setTextColor(KioskVisuals.WARNING);
+                }
+                updateActivateButton();
+            });
+        });
+    }
+
     private void provision() {
         String pairingCode = activationCode.toString();
         if (!EnrollmentClient.isValidPairingCode(pairingCode)) {
@@ -167,11 +202,21 @@ public final class ProvisioningActivity extends Activity {
             Toast.makeText(this, R.string.enrollment_not_configured, Toast.LENGTH_LONG).show();
             return;
         }
+        if (!storageReady) {
+            Toast.makeText(this, R.string.secure_storage_must_be_ready, Toast.LENGTH_LONG).show();
+            return;
+        }
 
-        activateButton.setEnabled(false);
+        enrollmentInFlight = true;
+        updateActivateButton();
         activateButton.setText(R.string.enrollment_in_progress);
         executor.execute(() -> {
             try {
+                // Repeat the preflight immediately before the request. A code
+                // is one-time, so we never submit it to the server while this
+                // device cannot prove that it can retain the resulting token.
+                SecureConfigStore.StorageHealth health = store.prepareForEnrollment();
+                if (!health.isReady()) throw new IllegalStateException("STORAGE_PREFLIGHT_" + health.code());
                 EnrollmentResult result = EnrollmentClient.enroll(
                     BuildConfig.ENROLLMENT_URL,
                     pairingCode,
@@ -181,7 +226,8 @@ public final class ProvisioningActivity extends Activity {
                 if (!KioskConfigValidator.matchesPinnedBaseUrl(
                     result.config().baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
                 )) throw new IllegalStateException("KIOSK_ORIGIN_MISMATCH");
-                if (!store.save(result.config())) throw new IllegalStateException("STORAGE_FAILED");
+                SecureConfigStore.SaveResult saved = store.save(result.config());
+                if (!saved.isSaved()) throw new EnrollmentStorageWriteException(saved.code());
                 runOnUiThread(() -> {
                     clearCode();
                     launchKiosk();
@@ -189,12 +235,13 @@ public final class ProvisioningActivity extends Activity {
             } catch (Exception error) {
                 String message = enrollmentErrorMessage(error);
                 runOnUiThread(() -> {
-                    if (message.startsWith("Code refusé par le serveur")) {
+                    if (message.startsWith("Code incorrect") || error instanceof EnrollmentStorageWriteException) {
                         // Never leave an expired/consumed code in the field:
                         // the operator must enter a freshly issued code.
                         clearCode();
                     }
-                    activateButton.setEnabled(true);
+                    enrollmentInFlight = false;
+                    updateActivateButton();
                     activateButton.setText(R.string.activate);
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 });
@@ -205,8 +252,14 @@ public final class ProvisioningActivity extends Activity {
     private String enrollmentErrorMessage(Exception error) {
         if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible.";
         if (error instanceof SocketTimeoutException) return "Le serveur d’appairage ne répond pas à temps.";
+        if (error instanceof EnrollmentStorageWriteException) {
+            return "Le serveur a accepté l’activation, mais le token n’a pas pu être conservé sur cette tablette. Le code est désormais consommé : installez la mise à jour, ouvrez Diagnostics, puis générez un nouveau code.";
+        }
 
         String code = error.getMessage() == null ? "UNKNOWN_ERROR" : error.getMessage().trim();
+        if (code.startsWith("STORAGE_PREFLIGHT_")) {
+            return "Le stockage sécurisé de la tablette n’est pas prêt. Ouvrez Diagnostics avant d’utiliser un code d’activation.";
+        }
         switch (code) {
             case "PAIRING_CODE_INVALID_OR_EXPIRED":
                 // The server intentionally avoids an oracle that reveals
@@ -222,8 +275,6 @@ public final class ProvisioningActivity extends Activity {
                 return "Service d’appairage temporairement indisponible.";
             case "KIOSK_ORIGIN_MISMATCH":
                 return "Le serveur a renvoyé une mauvaise adresse kiosk.";
-            case "STORAGE_FAILED":
-                return "Activation reçue, mais la tablette n’a pas pu enregistrer le token localement.";
             case "INVALID_ENROLLMENT_RESPONSE":
                 return "Réponse d’activation incomplète reçue du serveur.";
             default:
@@ -263,6 +314,13 @@ public final class ProvisioningActivity extends Activity {
             pairingCodeCells[index].setText(filled ? String.valueOf(activationCode.charAt(index)) : "");
             pairingCodeCells[index].setBackground(KioskVisuals.codeCell(filled, dp(14)));
         }
+        updateActivateButton();
+    }
+
+    private void updateActivateButton() {
+        if (activateButton != null) {
+            activateButton.setEnabled(storageReady && !enrollmentInFlight && activationCode.length() == 6);
+        }
     }
 
     private TextView text(String value, int size, int color) {
@@ -296,5 +354,11 @@ public final class ProvisioningActivity extends Activity {
     protected void onDestroy() {
         executor.shutdownNow();
         super.onDestroy();
+    }
+
+    private static final class EnrollmentStorageWriteException extends Exception {
+        EnrollmentStorageWriteException(String code) {
+            super(code == null || code.trim().isEmpty() ? "SECURE_STORAGE_UNAVAILABLE" : code);
+        }
     }
 }
