@@ -1,7 +1,7 @@
 # APK Android staging — rapport de build
 
 Date du build : 31 juillet 2026 (Europe/Zurich)
-Commit source Android : `689a0d9` (branche `agent/finalize-chargeurs-platform`)
+Commit source Android : `93d2905` (branche `agent/finalize-chargeurs-platform`)
 
 | Artefact | Application ID | Version | Taille | SHA-256 |
 |---|---|---:|---:|---|
@@ -11,6 +11,7 @@ Commit source Android : `689a0d9` (branche `agent/finalize-chargeurs-platform`)
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r2.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 934 KiB | `e0d4939638cc45a5d26a6aa9b3fed40fbe737ac205b5a709fa07f8a46a70ceac` |
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.5-staging.apk` | `ch.chargeurs.kiosk.staging` | `1.0.5-staging` (`105`) | 895 KiB | `1a1417a13c467b4ef1f99bb568da34794ed4638135c017160ef298630657771f` |
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.6-staging.apk` | `ch.chargeurs.kiosk.staging` | `1.0.6-staging` (`106`) | 918 020 octets | `1227a3e51ba4aab90ba7c96bfe8948e6cd5f6f18f1b41120df2c61309225e994` |
+| `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.7-staging.apk` | `ch.chargeurs.kiosk.staging` | `1.0.7-staging` (`107`) | 922 668 octets | `93dc4c4da9ea084bfae63b08adac502e65aa7318df380cee9e1c636c2de9328c` |
 
 Les APK staging listées sont installables et signées avec la clé debug Android
 (signature v2 vérifiée). Le build staging active le cycle HOME/boot dédié à la
@@ -65,6 +66,24 @@ des chaînes de secrets embarqués (`sk_live`, service role, ChargeNow Basic Aut
 - le diagnostic web ne montre plus aucun préfixe de token kiosk et, dans
   l’enveloppe Android, ne permet plus le collage manuel d’un token ;
 - SHA-256 : `1227a3e51ba4aab90ba7c96bfe8948e6cd5f6f18f1b41120df2c61309225e994`.
+
+### Version installable 1.0.7
+
+- `versionCode=107` : mise à jour directe au-dessus des versions staging 1.0.5
+  et 1.0.6, avec le même identifiant d’application et la même signature debug ;
+- contrôle préalable obligatoire du Keystore et des préférences privées avant
+  l’envoi d’un code à usage unique au backend ;
+- si une ancienne clé Android propre à Chargeurs est invalide, une seule
+  réparation locale la remplace ; aucune donnée de l’APK fournisseur ni aucun
+  token en clair n’est lu, conservé ou transmis ;
+- un échec après réponse serveur est explicitement distingué d’un code refusé,
+  et le code est effacé de l’interface afin d’empêcher une réutilisation ;
+- le diagnostic affiche seulement `secureStorage.ready` et un code d’état non
+  sensible, jamais le token kiosk ;
+- contrôles réussis : `testDebugUnitTest` (14 tests), `lintDebug`,
+  `lintStaging`, `assembleDebug`, `assembleStaging`, signature v2, inventaire
+  des permissions et recherche de marqueurs de secrets ;
+- SHA-256 : `93dc4c4da9ea084bfae63b08adac502e65aa7318df380cee9e1c636c2de9328c`.
 
 La validation sur tablette réelle (tactile, boot, persistance Keystore, QR avec
 téléphone) reste à effectuer manuellement. La release compilée est unsigned

@@ -10,8 +10,8 @@
 
 ## Active phase
 
-P17 — APK kiosque staging 1.0.6 : activation numérique, compatibilité tablette
-et diagnostic non intrusif du pont matériel fournisseur.
+P17 — APK kiosque staging 1.0.7 : persistance sécurisée de l’activation,
+compatibilité tablette et diagnostic non intrusif du pont matériel fournisseur.
 
 ## Completed before this master execution
 
@@ -75,6 +75,15 @@ et diagnostic non intrusif du pont matériel fournisseur.
 - La vue de diagnostic frontend masque désormais entièrement le token kiosk et
   ne permet pas de le saisir manuellement lorsque l’application tourne dans
   l’enveloppe Android native.
+- Après un essai réel, le backend a confirmé que le code six chiffres était
+  accepté et liait bien une tablette à `DTA21269`, mais l’APK 1.0.5 ne pouvait
+  pas enregistrer localement le token. La version 1.0.7 (`versionCode=107`)
+  ajoute un pré-contrôle bloquant du Keystore et des préférences avant de
+  consommer un code, une réparation unique limitée à la clé Chargeurs invalide,
+  une vérification de lecture après écriture et un diagnostic sans token. Les
+  tests unitaires (14), lint debug/staging, builds debug/staging et signature
+  v2 passent localement. Artefact attendu :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.7-staging.apk`.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
 - Installer l’APK staging `1.0.6` sur la tablette. Si elle s’arrête encore,
   relever le diagnostic visible (ou la version Android et l’état d’Android
@@ -104,9 +113,10 @@ et diagnostic non intrusif du pont matériel fournisseur.
 
 ## Next operation
 
-Installer `Chargeurs_CH_Kiosk_1.0.6-staging.apk` sur la tablette au-dessus de
-la 1.0.5, puis ouvrir **Diagnostic matériel automatique** depuis l’écran
-d’activation. Cette étape observe uniquement les métadonnées de l’agent
-fournisseur et les candidats de ports ; elle ne doit ni lancer ni arrêter
-l’agent Bajie/ChargeNow. Un pont physique complet reste conditionné par un SDK,
-un service système ou un protocole DTA/RS485 officiellement documenté.
+Installer `Chargeurs_CH_Kiosk_1.0.7-staging.apk` sur la tablette au-dessus de
+la 1.0.5, attendre le statut « Stockage sécurisé prêt » depuis l’écran
+d’activation, puis générer un **nouveau** code. Cette étape observe uniquement
+les métadonnées de l’agent fournisseur et les candidats de ports ; elle ne doit
+ni lancer ni arrêter l’agent Bajie/ChargeNow. Un pont physique complet reste
+conditionné par un SDK, un service système ou un protocole DTA/RS485
+officiellement documenté.
