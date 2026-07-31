@@ -34,13 +34,15 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 103
-        versionName = "1.0.3"
+        versionCode = 104
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
         buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
+        buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
+        buildConfigField("String", "BUILD_ENVIRONMENT", "\"staging\"")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
     }
@@ -67,7 +69,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-staging-diagnostic"
+            versionNameSuffix = "-diagnostic"
             isDebuggable = true
             buildConfigField(
                 "String",
@@ -81,6 +83,15 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
+        }
+        create("staging") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            // This artifact remains debug-signed and test-only, but exercises
+            // the real dedicated-device lifecycle (HOME alias + boot receiver).
+            manifestPlaceholders["kioskHomeEnabled"] = "true"
+            manifestPlaceholders["bootReceiverEnabled"] = "true"
         }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")

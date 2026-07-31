@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar progress;
     private TextView networkBanner;
+    private View splashBrand;
     private KioskConfig config;
     private boolean credentialsInjected;
     private boolean heartbeatPending;
@@ -89,11 +90,7 @@ public final class MainActivity extends Activity {
             new UnconfiguredCabinetProtocolAdapter()
         );
 
-        getWindow().addFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                | WindowManager.LayoutParams.FLAG_SECURE
-                | WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
+        KioskVisuals.applyKioskWindow(this);
         registerBackBlocking();
         enterImmersiveMode();
         setContentView(buildRoot());
@@ -104,7 +101,21 @@ public final class MainActivity extends Activity {
 
     private FrameLayout buildRoot() {
         container = new FrameLayout(this);
-        container.setBackgroundColor(Color.rgb(8, 17, 38));
+        container.addView(new KioskAmbientBackground(this), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        TextView splash = KioskVisuals.brandText(this, 30);
+        splash.setGravity(Gravity.CENTER);
+        splash.setText(R.string.splash_connecting);
+        splash.setLineSpacing(dp(8), 1f);
+        splashBrand = splash;
+        FrameLayout.LayoutParams splashParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        splashParams.gravity = Gravity.CENTER;
+        container.addView(splash, splashParams);
+        KioskVisuals.fadeIn(splash);
 
         progress = new ProgressBar(this);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(dp(56), dp(56));
@@ -116,7 +127,7 @@ public final class MainActivity extends Activity {
         networkBanner.setTextColor(Color.WHITE);
         networkBanner.setTextSize(15);
         networkBanner.setGravity(Gravity.CENTER);
-        networkBanner.setBackgroundColor(Color.rgb(165, 46, 46));
+        networkBanner.setBackgroundColor(Color.rgb(181, 59, 52));
         networkBanner.setPadding(dp(12), dp(8), dp(12), dp(8));
         networkBanner.setVisibility(View.GONE);
         FrameLayout.LayoutParams bannerParams = new FrameLayout.LayoutParams(
@@ -203,6 +214,9 @@ public final class MainActivity extends Activity {
 
                 progress.setVisibility(View.GONE);
                 webView.setVisibility(View.VISIBLE);
+                if (splashBrand != null) splashBrand.animate().alpha(0f).setDuration(220L).withEndAction(
+                    () -> splashBrand.setVisibility(View.GONE)
+                ).start();
                 heartbeatPending = false;
             }
 
@@ -264,6 +278,10 @@ public final class MainActivity extends Activity {
             webView = null;
         }
         progress.setVisibility(View.VISIBLE);
+        if (splashBrand != null) {
+            splashBrand.setVisibility(View.VISIBLE);
+            KioskVisuals.fadeIn(splashBrand);
+        }
         handler.postDelayed(this::createWebView, 750L);
     }
 
@@ -334,7 +352,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        enterImmersiveMode();
+        KioskVisuals.applyKioskWindow(this);
         DevicePolicyManager policy = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
         KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
         if (policy != null

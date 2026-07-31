@@ -65,6 +65,13 @@ public final class NativeBridge {
 
     @JavascriptInterface
     public String requestLocalEjection(String signedAuthorization) {
+        // This staging APK intentionally has no physical-command path. Keeping
+        // the bridge method preserves the future contract while making any web
+        // request fail closed, including one with a valid server authorization.
+        if (!isPhysicalEjectionEnabled()) {
+            auditLog.record("ejection.disabled", JsonObjects.of("environment", BuildConfig.BUILD_ENVIRONMENT));
+            return error("HARDWARE_EJECTION_DISABLED");
+        }
         try {
             EjectionAuthorization authorization = authorizationVerifier.verify(signedAuthorization);
             if (!replayStore.claim(authorization.commandId(), authorization.expiresAtSeconds())) {
@@ -78,6 +85,10 @@ public final class NativeBridge {
             auditLog.record("ejection.authorization_rejected", JsonObjects.of("code", safeCode(exception)));
             return error(safeCode(exception));
         }
+    }
+
+    static boolean isPhysicalEjectionEnabled() {
+        return BuildConfig.HARDWARE_EJECTION_ENABLED;
     }
 
     private static String error(String code) {

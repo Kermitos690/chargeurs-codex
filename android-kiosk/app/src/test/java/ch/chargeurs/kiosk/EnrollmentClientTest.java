@@ -17,4 +17,10 @@ public final class EnrollmentClientTest {
         assertFalse(EnrollmentClient.isValidPairingCode("abcdef"));
         assertFalse(EnrollmentClient.isValidPairingCode("kc_0123456789abcdef"));
     }
+
+    @Test
+    public void preservesALeadingZeroAsAValidDigit() {
+        assertTrue(EnrollmentClient.isValidPairingCode("004821"));
+        assertFalse(EnrollmentClient.isValidPairingCode("04821"));
+    }
 }

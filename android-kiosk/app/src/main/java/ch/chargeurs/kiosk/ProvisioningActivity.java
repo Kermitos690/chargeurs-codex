@@ -3,11 +3,12 @@ package ch.chargeurs.kiosk;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -21,7 +22,7 @@ import java.util.concurrent.Executors;
 
 @SuppressLint("SetTextI18n")
 public final class ProvisioningActivity extends Activity {
-    private TextView pairingCodeDisplay;
+    private final TextView[] pairingCodeCells = new TextView[6];
     private Button activateButton;
     private SecureConfigStore store;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -39,62 +40,90 @@ public final class ProvisioningActivity extends Activity {
             return;
         }
         if (existing != null) store.clear();
+        KioskVisuals.applyKioskWindow(this);
         setContentView(buildView());
     }
 
-    private ScrollView buildView() {
+    private FrameLayout buildView() {
         int padding = dp(24);
+        FrameLayout root = new FrameLayout(this);
+        root.addView(new KioskAmbientBackground(this), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(8, 17, 38));
+        scroll.setClipToPadding(false);
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(padding, padding * 2, padding, padding);
+        content.setPadding(padding, padding, padding, padding);
+        content.setBackground(KioskVisuals.glassPanel(dp(28)));
         scroll.addView(content, new ScrollView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+        FrameLayout.LayoutParams scrollParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        scrollParams.gravity = Gravity.CENTER;
+        scrollParams.setMargins(dp(20), dp(20), dp(20), dp(20));
+        root.addView(scroll, scrollParams);
 
-        TextView title = text(getString(R.string.provision_title), 30, Color.WHITE);
+        TextView brand = KioskVisuals.brandText(this, 24);
+        brand.setGravity(Gravity.CENTER);
+        content.addView(brand, matchWrap(dp(8), dp(22)));
+
+        TextView title = text(getString(R.string.provision_title), 30, KioskVisuals.WHITE);
         title.setGravity(Gravity.CENTER);
         content.addView(title, matchWrap(0, dp(18)));
 
-        TextView help = text(getString(R.string.provision_help), 16, Color.rgb(190, 202, 226));
+        TextView help = text(getString(R.string.provision_help), 16, KioskVisuals.MUTED);
         help.setGravity(Gravity.CENTER);
         content.addView(help, matchWrap(0, dp(24)));
 
-        pairingCodeDisplay = text("", 30, Color.WHITE);
-        pairingCodeDisplay.setGravity(Gravity.CENTER);
-        pairingCodeDisplay.setLetterSpacing(0.12f);
-        pairingCodeDisplay.setBackgroundColor(Color.rgb(19, 34, 66));
-        pairingCodeDisplay.setPadding(dp(16), dp(14), dp(16), dp(14));
-        pairingCodeDisplay.setContentDescription(getString(R.string.pairing_code));
-        content.addView(pairingCodeDisplay, matchWrap(0, dp(14)));
+        LinearLayout codeCells = new LinearLayout(this);
+        codeCells.setGravity(Gravity.CENTER);
+        for (int index = 0; index < pairingCodeCells.length; index += 1) {
+            TextView cell = text("", 28, KioskVisuals.WHITE);
+            cell.setGravity(Gravity.CENTER);
+            cell.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            cell.setContentDescription(getString(R.string.pairing_code));
+            LinearLayout.LayoutParams cellParams = new LinearLayout.LayoutParams(0, dp(58), 1f);
+            cellParams.setMargins(index == 0 ? 0 : dp(5), 0, 0, 0);
+            codeCells.addView(cell, cellParams);
+            pairingCodeCells[index] = cell;
+        }
+        content.addView(codeCells, matchWrap(0, dp(18)));
         updateCodeDisplay();
 
         GridLayout keypad = new GridLayout(this);
         keypad.setColumnCount(3);
-        keypad.setUseDefaultMargins(true);
+        keypad.setUseDefaultMargins(false);
         for (String key : new String[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "Effacer", "0", "⌫" }) {
             Button button = new Button(this);
             button.setText(key);
+            button.setTextColor(KioskVisuals.WHITE);
             button.setTextSize(key.length() == 1 ? 24 : 14);
             button.setAllCaps(false);
+            button.setBackground(KioskVisuals.secondaryButton(dp(18)));
             button.setOnClickListener(view -> onKeypadKey(key));
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0;
             params.height = dp(62);
             params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            params.setMargins(dp(4), dp(4), dp(4), dp(4));
             keypad.addView(button, params);
         }
         content.addView(keypad, matchWrap(0, dp(18)));
 
         activateButton = new Button(this);
         activateButton.setText(R.string.activate);
+        activateButton.setTextColor(KioskVisuals.WHITE);
         activateButton.setTextSize(17);
         activateButton.setAllCaps(false);
+        activateButton.setBackground(KioskVisuals.primaryButton(dp(28)));
         activateButton.setOnClickListener(view -> provision());
         content.addView(activateButton, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -103,7 +132,9 @@ public final class ProvisioningActivity extends Activity {
 
         Button diagnosticButton = new Button(this);
         diagnosticButton.setText("Diagnostic matériel automatique");
+        diagnosticButton.setTextColor(KioskVisuals.WHITE);
         diagnosticButton.setAllCaps(false);
+        diagnosticButton.setBackground(KioskVisuals.secondaryButton(dp(28)));
         diagnosticButton.setOnClickListener(view -> startActivity(
             new Intent(this, HardwareDiagnosticActivity.class)
         ));
@@ -117,12 +148,13 @@ public final class ProvisioningActivity extends Activity {
         TextView warning = text(
             getString(R.string.reprovision_warning),
             13,
-            Color.rgb(148, 163, 192)
+            KioskVisuals.MUTED
         );
         warning.setGravity(Gravity.CENTER);
         content.addView(warning, matchWrap(0, dp(12)));
 
-        return scroll;
+        KioskVisuals.fadeIn(content);
+        return root;
     }
 
     private void provision() {
@@ -226,13 +258,11 @@ public final class ProvisioningActivity extends Activity {
     }
 
     private void updateCodeDisplay() {
-        StringBuilder visual = new StringBuilder();
         for (int index = 0; index < 6; index += 1) {
-            if (index > 0) visual.append(' ');
-            visual.append(index < activationCode.length() ? activationCode.charAt(index) : '○');
+            boolean filled = index < activationCode.length();
+            pairingCodeCells[index].setText(filled ? String.valueOf(activationCode.charAt(index)) : "");
+            pairingCodeCells[index].setBackground(KioskVisuals.codeCell(filled, dp(14)));
         }
-        pairingCodeDisplay.setText(visual.toString());
-        pairingCodeDisplay.setContentDescription(getString(R.string.pairing_code) + ": " + activationCode.length() + " sur 6 chiffres saisis");
     }
 
     private TextView text(String value, int size, int color) {
@@ -254,6 +284,12 @@ public final class ProvisioningActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        KioskVisuals.applyKioskWindow(this);
     }
 
     @Override
