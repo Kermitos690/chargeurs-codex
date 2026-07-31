@@ -8,6 +8,7 @@ Commit source Android : `0290920` + démarrage robuste r1 (branche `agent/finali
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 895 KiB | `d9f6636437d33531125d8cbe9cca113bf18ff958f1ab0e91cf1de255e5728383` |
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-debug.apk` | `ch.chargeurs.kiosk.debug` | `1.0.4-diagnostic` (`104`) | 895 KiB | `5115c0c56ca0f92eb61b205b62963f42f879ead1c5cd36ea93b34a004f1abf64` |
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r1.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 934 KiB | `075d783fc97d286dc8d0e2b8b01ad35cb4d8cfd9d08dd7b8d3f53fed9006f232` |
+| `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r2.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 934 KiB | `e0d4939638cc45a5d26a6aa9b3fed40fbe737ac205b5a709fa07f8a46a70ceac` |
 
 Les deux APK sont installables et signées avec la clé debug Android (signature
 v2 vérifiée). Le build staging active le cycle HOME/boot dédié à la borne ; le
@@ -35,6 +36,14 @@ Contrôles exécutés : `testDebugUnitTest`, `lintDebug`, `lintStaging`,
   utilisable, au lieu de fermer silencieusement l’application ;
 - signature debug staging, vérification v2 réussie ;
 - SHA-256 : `075d783fc97d286dc8d0e2b8b01ad35cb4d8cfd9d08dd7b8d3f53fed9006f232`.
+
+### Correctif r2
+
+- retire les références directes aux APIs `WindowInsetsController` et
+  `OnBackInvokedDispatcher` du chemin de démarrage ;
+- conserve le plein écran par les flags immersifs compatibles API 26+ ;
+- tests et vérification de signature v2 réussis ;
+- SHA-256 : `e0d4939638cc45a5d26a6aa9b3fed40fbe737ac205b5a709fa07f8a46a70ceac`.
 
 La validation sur tablette réelle (tactile, boot, persistance Keystore, QR avec
 téléphone) reste à effectuer manuellement. La release compilée est unsigned
