@@ -38,6 +38,7 @@ type PairingCode = {
 };
 
 type RevealedPairing = {
+  id: string;
   code: string;
   createdAt: string;
   expiresAt: string;
@@ -67,7 +68,22 @@ export default function AdminKioskDevices() {
 
   const [revealedToken, setRevealedToken] = useState<{ id: string; token: string } | null>(null);
   const [revealedPairing, setRevealedPairing] = useState<RevealedPairing | null>(null);
+  const [pairingSecondsLeft, setPairingSecondsLeft] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!revealedPairing) {
+      setPairingSecondsLeft(0);
+      return;
+    }
+    const update = () => setPairingSecondsLeft(Math.max(
+      0,
+      Math.ceil((new Date(revealedPairing.expiresAt).getTime() - Date.now()) / 1000),
+    ));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [revealedPairing]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,6 +120,7 @@ export default function AdminKioskDevices() {
     }, "provision");
     if (data?.pairingCode) {
       setRevealedPairing({
+        id: data.pairingCodeId,
         code: data.pairingCode,
         createdAt: data.createdAt,
         expiresAt: data.expiresAt,
@@ -113,6 +130,29 @@ export default function AdminKioskDevices() {
       });
       setLabel("");
       toast.success("Code d’appairage créé — il est temporaire et à usage unique.");
+    }
+  };
+
+  const renewPairing = async () => {
+    if (!revealedPairing) return;
+    const data = await mutate("create_pairing_code", {
+      stationId: revealedPairing.stationId,
+      label: "Tablette pilote staging",
+      ttlMinutes: 15,
+    }, "renew-pairing");
+    if (data?.pairingCode) {
+      setRevealedPairing({
+        id: data.pairingCodeId,
+        code: data.pairingCode,
+        createdAt: data.createdAt,
+        expiresAt: data.expiresAt,
+        stationId: data.stationId,
+        stationName: data.stationName,
+        organizationName: data.organizationName,
+      });
+      setCopied(false);
+      toast.success("Nouveau code créé — l’ancien est invalidé.");
+      await load();
     }
   };
 
@@ -175,18 +215,26 @@ export default function AdminKioskDevices() {
       )}
 
       {revealedPairing && (
-        <div className="glass-strong liquid-border rounded-2xl border-success/40 p-6">
-          <p className="mb-2 text-sm font-medium text-success">Code affiché une seule fois — saisissez-le dans l’APK avant son expiration.</p>
+        <div className={`glass-strong liquid-border rounded-2xl p-6 ${pairingSecondsLeft > 0 ? "border-success/40" : "border-destructive/50"}`}>
+          <p className={`mb-2 text-sm font-medium ${pairingSecondsLeft > 0 ? "text-success" : "text-destructive"}`}>
+            {pairingSecondsLeft > 0
+              ? "Code affiché une seule fois — saisissez-le dans l’APK avant son expiration."
+              : "Ce code est expiré et ne peut plus appairer de tablette."}
+          </p>
           <p className="mb-3 text-sm text-muted-foreground">
             {revealedPairing.stationName} ({revealedPairing.stationId}) · {revealedPairing.organizationName}<br />
-            Créé {new Date(revealedPairing.createdAt).toLocaleString("fr-CH")} · expire {new Date(revealedPairing.expiresAt).toLocaleString("fr-CH")}
+            Créé {new Date(revealedPairing.createdAt).toLocaleString("fr-CH")} · expire {new Date(revealedPairing.expiresAt).toLocaleString("fr-CH")} · {pairingSecondsLeft > 0 ? `reste ${Math.floor(pairingSecondsLeft / 60)} min ${pairingSecondsLeft % 60}s` : "à renouveler"}
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-lg bg-background/60 p-3 font-mono text-lg tracking-wider">{revealedPairing.code}</code>
-            <Button onClick={() => copyToken(revealedPairing.code)} variant="outline" className="gap-2 rounded-full">
+            <code className={`flex-1 overflow-x-auto rounded-lg bg-background/60 p-3 font-mono text-lg tracking-wider ${pairingSecondsLeft === 0 ? "opacity-50 line-through" : ""}`}>{revealedPairing.code}</code>
+            <Button onClick={() => copyToken(revealedPairing.code)} variant="outline" disabled={pairingSecondsLeft === 0} className="gap-2 rounded-full">
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copié" : "Copier"}
             </Button>
           </div>
+          <Button onClick={renewPairing} disabled={busy === "renew-pairing"} variant="outline" className="mt-3 gap-2 rounded-full">
+            {busy === "renew-pairing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {pairingSecondsLeft > 0 ? "Renouveler le code maintenant" : "Générer un nouveau code"}
+          </Button>
           <button onClick={() => setRevealedPairing(null)} className="mt-3 text-xs text-muted-foreground hover:text-foreground">J’ai saisi le code, masquer</button>
         </div>
       )}

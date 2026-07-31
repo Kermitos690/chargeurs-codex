@@ -52,6 +52,26 @@ Deno.serve(async (req) => {
       if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
       if (!station.organization_id) return json({ ok: false, error: "STATION_ORGANIZATION_MISSING" }, 409);
 
+      // Keep only one usable code per station. This makes a renewal safe: a
+      // code copied earlier can no longer be redeemed after a new one is
+      // issued, while used codes remain immutable for audit purposes.
+      const invalidatedAt = new Date().toISOString();
+      const { data: invalidatedCodes, error: invalidationError } = await db
+        .from("kiosk_pairing_codes")
+        .update({ used_at: invalidatedAt })
+        .eq("station_id", stationId)
+        .is("used_at", null)
+        .select("id");
+      if (invalidationError) throw invalidationError;
+      for (const invalidated of invalidatedCodes ?? []) {
+        await auditLog(db, {
+          actor: adminId,
+          action: "kiosk.pairing_code.superseded",
+          target: invalidated.id,
+          data: { station_id: stationId },
+        });
+      }
+
       const pairingCode = newPairingCode();
       const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
       const { data, error } = await db.from("kiosk_pairing_codes").insert({
@@ -72,6 +92,7 @@ Deno.serve(async (req) => {
       const organization = Array.isArray(station.organization) ? station.organization[0] : station.organization;
       return json({
         ok: true,
+        pairingCodeId: data.id,
         pairingCode,
         createdAt: data.created_at,
         expiresAt,

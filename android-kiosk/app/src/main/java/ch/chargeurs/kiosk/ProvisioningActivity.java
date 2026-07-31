@@ -136,6 +136,12 @@ public final class ProvisioningActivity extends Activity {
             } catch (Exception error) {
                 String message = enrollmentErrorMessage(error);
                 runOnUiThread(() -> {
+                    if (message.startsWith("Code refusé par le serveur")) {
+                        // Never leave an expired/consumed code in the field:
+                        // the operator must enter a freshly issued code.
+                        pairingCodeInput.setText("");
+                        pairingCodeInput.requestFocus();
+                    }
                     activateButton.setEnabled(true);
                     activateButton.setText(R.string.activate);
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
