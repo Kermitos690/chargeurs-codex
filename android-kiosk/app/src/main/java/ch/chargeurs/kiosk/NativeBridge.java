@@ -31,7 +31,8 @@ public final class NativeBridge {
             "appVersion", BuildConfig.VERSION_NAME,
             "deviceId", devicePublicId,
             "stationId", config.stationId(),
-            "hardware", cabinetController.status()
+            "hardware", cabinetController.status(),
+            "vendorCompatibility", VendorAppCompatibility.inspect(activity)
         ).toString();
     }
 
@@ -45,7 +46,20 @@ public final class NativeBridge {
 
     @JavascriptInterface
     public String getHardwareStatus() {
-        return cabinetController.status().toString();
+        return getHardwareIntegrationStatus();
+    }
+
+    /**
+     * Metadata-only provider compatibility state for the hidden diagnostics
+     * view. It cannot see or take over another app's network/serial session.
+     */
+    @JavascriptInterface
+    public String getHardwareIntegrationStatus() {
+        return JsonObjects.of(
+            "cabinet", cabinetController.status(),
+            "vendorCompatibility", VendorAppCompatibility.inspect(activity),
+            "physicalEjectionEnabled", isPhysicalEjectionEnabled()
+        ).toString();
     }
 
     @JavascriptInterface

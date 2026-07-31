@@ -34,10 +34,10 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Incremented for the legacy-tablet startup compatibility hotfix so
-        // the staging APK can be installed as an in-place update.
-        versionCode = 105
-        versionName = "1.0.5"
+        // Incremented for the provider-bridge diagnostic update so the
+        // staging APK can be installed as an in-place update.
+        versionCode = 106
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

@@ -340,7 +340,8 @@ public final class MainActivity extends Activity {
                 "appVersion", BuildConfig.VERSION_NAME,
                 "stationId", config.stationId(),
                 "deviceId", DeviceIdentity.getOrCreate(this),
-                "hardware", hardwareStatus
+                "hardware", hardwareStatus,
+                "vendorCompatibility", VendorAppCompatibility.inspect(this)
             ).toString())
             .setPositiveButton(R.string.diagnostics_close, null)
             .show());

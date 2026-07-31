@@ -1,8 +1,6 @@
 package ch.chargeurs.kiosk;
 
 import android.content.Context;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
@@ -21,8 +19,6 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public final class HardwareDiagnosticCollector {
-    private static final String VENDOR_PACKAGE = "com.szbjkj.bajietouchpower";
-
     private HardwareDiagnosticCollector() {}
 
     public static JSONObject collect(Context context) {
@@ -30,13 +26,18 @@ public final class HardwareDiagnosticCollector {
         put(report, "generatedAt", System.currentTimeMillis());
         put(report, "appVersion", BuildConfig.VERSION_NAME);
         put(report, "device", deviceInfo());
-        put(report, "vendorApp", packageInfo(context, VENDOR_PACKAGE));
+        put(report, "vendorApp", VendorAppCompatibility.inspect(context));
         put(report, "chargeursApp", packageInfo(context, context.getPackageName()));
         put(report, "usb", usbInfo(context));
         put(report, "tty", ttyInfo());
         put(report, "procTtyDrivers", command("cat /proc/tty/drivers"));
-        put(report, "serialProperties", command("getprop | grep -Ei 'serial|uart|tty|rs485|dta|bajie|wch'"));
+        put(report, "serialProperties", "REDACTED_TO_AVOID_DEVICE_IDENTIFIERS");
         put(report, "bajieConfig", configInfo());
+        put(report, "integrationReadiness", JsonObjects.of(
+            "cloudApi", "BACKEND_ONLY",
+            "localDtaBridge", "NOT_CONFIGURED",
+            "physicalControl", "REQUIRES_OFFICIAL_VENDOR_CONTRACT"
+        ));
         put(report, "safeReadOnly", true);
         return report;
     }
@@ -61,13 +62,13 @@ public final class HardwareDiagnosticCollector {
         JSONObject result = new JSONObject();
         put(result, "package", packageName);
         try {
-            PackageInfo info = context.getPackageManager().getPackageInfo(packageName, 0);
+            android.content.pm.PackageInfo info = context.getPackageManager().getPackageInfo(packageName, 0);
             put(result, "installed", true);
             put(result, "versionName", info.versionName == null ? "" : info.versionName);
             put(result, "versionCode", Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode);
             put(result, "firstInstallTime", info.firstInstallTime);
             put(result, "lastUpdateTime", info.lastUpdateTime);
-        } catch (PackageManager.NameNotFoundException ignored) {
+        } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
             put(result, "installed", false);
         }
         return result;
@@ -115,27 +116,20 @@ public final class HardwareDiagnosticCollector {
         JSONArray result = new JSONArray();
         for (String path : new String[]{
             new File(Environment.getExternalStorageDirectory(), "Documents/bajie_config").getPath(),
-            "/storage/emulated/0/Documents/bajie_config",
-            new File(Environment.getExternalStorageDirectory(), "Documents/bajie_config").getPath()
+            "/storage/emulated/0/Documents/bajie_config"
         }) {
             File directory = new File(path);
             JSONObject item = new JSONObject();
             put(item, "path", path);
             put(item, "exists", directory.exists());
             put(item, "readable", directory.canRead());
-            JSONArray entries = new JSONArray();
             File[] files = directory.listFiles();
-            if (files != null) {
-                Arrays.sort(files, Comparator.comparing(File::getName));
-                for (File file : files) {
-                    JSONObject child = new JSONObject();
-                    put(child, "name", file.getName());
-                    put(child, "directory", file.isDirectory());
-                    put(child, "length", file.length());
-                    entries.put(child);
-                }
-            }
-            put(item, "entries", entries);
+            // Do not enumerate names or contents from another application's
+            // shared configuration directory. File names can contain account
+            // identifiers or implementation details and are not needed to
+            // decide whether a documented bridge is available.
+            put(item, "entryCount", files == null ? 0 : files.length);
+            put(item, "contents", "NOT_READ");
             result.put(item);
         }
         return result;
