@@ -62,8 +62,11 @@ P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et b
   supported API range. `testDebugUnitTest`, `lintStaging` and
   `assembleStaging` passed. Artifact:
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r2.apk`.
+- The installable hotfix is now versionCode 105 / versionName 1.0.5 so Android
+  accepts it as an in-place update. Artifact:
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.5-staging.apk`.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
-- Install the `r2` staging APK on the physical tablet. If it still exits, report
+- Install the `1.0.5` staging APK on the physical tablet. If it still exits, report
   the startup diagnostic shown on screen (or the tablet Android version and
   whether Android System WebView/Chrome is enabled); do not retry the old APK.
 - React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
