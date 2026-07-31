@@ -3,7 +3,7 @@
 ## Bloquants externes
 
 - Le protocole série BJP/DTA/RS485 et l'API locale autorisée ne sont pas fournis. L'application Android détecte le matériel en lecture seule mais refuse toute éjection locale (`NOT_CONFIGURED`).
-- Le secret ChargeNow officiel n'est volontairement pas présent dans le dépôt et doit encore être fourni par canal sécurisé pour exécuter la synchronisation en lecture seule.
+- Le secret ChargeNow officiel n'est volontairement pas présent dans le dépôt. Il est configuré dans le coffre Supabase staging pour les synchronisations Edge en lecture seule ; il ne doit jamais être recopié ailleurs.
 - Les clés Stripe test ne sont pas disponibles dans cette session. Le staging Supabase et l'hébergement Vercel existent ; aucun environnement Supabase de production n'a été créé.
 - Aucun test physique ni paiement live n'a été exécuté automatiquement.
 - La release Android de production exige la clé de signature du propriétaire.

@@ -193,6 +193,10 @@ Deno.serve(async (req) => {
       await db.from("stations").update({
         status,
         online,
+        provider_shop_id: parsed.providerShopId ?? undefined,
+        // Preserve the provider's human-readable location when it is known;
+        // local shop/partner linkage remains an explicit admin decision.
+        location_name: parsed.providerShopAddress ?? parsed.providerShopName ?? undefined,
         signal: parsed.signal,
         rentable_count: rentable,
         returnable_count: returnable,

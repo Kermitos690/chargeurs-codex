@@ -68,6 +68,21 @@ BEGIN
     RAISE EXCEPTION 'FAIL anon can execute has_role'; END IF;
   IF NOT has_function_privilege('authenticated', 'public.has_role(uuid,app_role)', 'EXECUTE') THEN
     RAISE EXCEPTION 'FAIL authenticated cannot execute has_role (RLS would break)'; END IF;
+  IF has_function_privilege('anon', 'public.api_quota_hit(uuid,integer,integer)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.api_quota_hit(uuid,integer,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL browser role can execute api_quota_hit';
+  END IF;
+  IF NOT has_function_privilege('service_role', 'public.api_quota_hit(uuid,integer,integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL service_role cannot execute api_quota_hit';
+  END IF;
+  IF has_function_privilege('anon', 'public.enforce_kiosk_beta_release_gate()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.enforce_kiosk_beta_release_gate()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL browser role can execute trigger-only beta gate';
+  END IF;
+  IF has_function_privilege('anon', 'public.price_profile_record_version()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.price_profile_record_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL browser role can execute trigger-only pricing history writer';
+  END IF;
   RAISE NOTICE 'PASS pricing/role function grants locked down';
 
   -- raw_data hidden from anon; availability visible

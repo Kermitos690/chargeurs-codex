@@ -1,6 +1,6 @@
 # Rapport final de livraison
 
-Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation vérifiée localement d'une validation externe ou physique. Un écran seul n'est jamais considéré comme terminé.
+Date de consolidation : 31 juillet 2026. Ce rapport distingue l'implémentation vérifiée localement d'une validation externe ou physique. Un écran seul n'est jamais considéré comme terminé.
 
 ## Plateforme
 
@@ -40,12 +40,12 @@ Date de consolidation : 19 juillet 2026. Ce rapport distingue l'implémentation 
 | Fonction | Statut | Preuve/condition |
 |---|---|---|
 | Projet Android, Gradle Wrapper, debug/release/AAB | TERMINÉ — CLÉ EXTERNE REQUISE | builds locaux ; release production exige keystore |
-| Enrôlement, Keystore, origine WebView, boot/watchdog | TERMINÉ ET TESTÉ | code/tests/lint Android locaux |
+| Enrôlement, Keystore, origine WebView, boot/watchdog | TERMINÉ — TEST MATÉRIEL REQUIS | code inspecté ; tests Android non relançables sur cette machine sans Java 17 |
 | Lock-task Device Owner | TERMINÉ — TEST MATÉRIEL REQUIS | support applicatif ; DPC/tablette requis |
 | Pont natif et autorisation JWS anti-rejeu | TERMINÉ — TEST MATÉRIEL REQUIS | vérification implémentée ; protocole réel absent |
 | CI/CD | TERMINÉ — CLÉ EXTERNE REQUISE | workflows manuels/ciblés validés localement ; exécution GitHub et secrets d'environnement requis |
-| Frontend staging Vercel | TERMINÉ ET TESTÉ | `https://chargeurs-ch-staging.vercel.app`, routes `/admin`, `/kiosk` et route pilote HTTP 200 ; build du commit `fb4de66` |
-| Supabase staging | TERMINÉ ET TESTÉ | `chargeurs-ch-staging` (`xqepbqnaenoeyfjkjnzl`, Zurich), 46 migrations appliquées et 22 Edge Functions déployées |
+| Frontend staging Vercel | TERMINÉ — REDÉPLOIEMENT REQUIS | les routes répondent HTTP 200, mais l'alias sert encore un commit antérieur ; un déploiement propre du SHA courant est requis |
+| Supabase staging | TERMINÉ ET TESTÉ | `chargeurs-ch-staging` (`xqepbqnaenoeyfjkjnzl`, Europe), 77 migrations et 27 Edge Functions ; fonctions et grants critiques vérifiés |
 
 ## Décision de mise en production
 
@@ -54,16 +54,14 @@ Le dépôt est consolidé et prêt pour la phase de branchement externe, mais l'
 ## Validation locale exécutée
 
 - frontend : lint sans erreur (13 avertissements Fast Refresh/hooks connus), typecheck, 68 tests et build PWA ;
-- backend : `deno check` de toutes les Edge Functions et 163 tests Deno ;
+- backend : `deno check` ciblé des fonctions modifiées et 174 tests Deno ;
 - dépendances npm de production : 0 vulnérabilité signalée ;
-- Android : tests unitaires, lint debug et APK debug staging ; release de production non reconstruite sans keystore propriétaire ;
-- APK debug : signature v1/v2 vérifiée ; release/AAB volontairement non signés sans keystore propriétaire ;
+- Android : artefact debug staging existant inspecté ; les tests/lint/build ne sont pas relançables ici sans Java 17 ;
+- APK debug : artefact disponible ; signature/reconstruction et release/AAB restent à vérifier avec Java 17 et la clé propriétaire ;
 - SQL : migrations appliquées sur le staging distant ; suite centrale, RLS, snapshot tarifaire et appairage atomique validés ;
 - Edge Functions déployées ; `kiosk-enroll` répond de façon contrôlée avec HTTP 400 sur une requête invalide ;
 - aucun paiement live ni ordre matériel réel n'a été lancé.
 
 SHA-256 des artefacts locaux :
 
-- `app-debug.apk` staging : `4b0745edbdf5cd9115df950e4854f6efa44b439b7d22f16da1df845a074bf25e`
-- `app-release-unsigned.apk` : `2a9b4c371560a02a6d1a1017825f8c344194a95de023cc984a663f9ddadfb1df`
-- `app-release.aab` : `9b9b5185bf636da5d4ba64b19559d45f7a990954862becfa0911af66b9282c3c`
+- `app-debug.apk` staging : `d6a8a6414cf806067794ffd6338c3104a11e362974b9fdf006f90341b3e552a9`

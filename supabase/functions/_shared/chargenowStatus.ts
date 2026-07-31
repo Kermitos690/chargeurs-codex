@@ -8,6 +8,9 @@ export type ChargeNowBattery = {
 export type ParsedCabinetStatus = {
   recognized: boolean;
   online: boolean | null;
+  providerShopId?: string | null;
+  providerShopName?: string | null;
+  providerShopAddress?: string | null;
   totalCount: number | null;
   rentableCount: number;
   returnableCount: number | null;
@@ -103,6 +106,7 @@ function normalizeBattery(value: unknown): ChargeNowBattery | null {
 export function parseChargeNowCabinetStatus(value: unknown): ParsedCabinetStatus {
   const payload = unwrapChargeNowPayload(value);
   const cabinet = firstRecord(payload, ["cabinet", "device", "cabinetInfo", "deviceInfo"]) ?? payload;
+  const shop = firstRecord(payload, ["shop", "shopInfo", "store"]);
 
   const onlineCandidates = [
     firstDefined(cabinet, ["online", "isOnline", "onlineStatus", "networkStatus", "connectStatus", "status"]),
@@ -138,6 +142,23 @@ export function parseChargeNowCabinetStatus(value: unknown): ParsedCabinetStatus
   const signal = asNumber(firstDefined(cabinet, ["signal", "signalStrength", "rssi"]))
     ?? asNumber(firstDefined(payload, ["signal", "signalStrength", "rssi"]));
 
+  // Keep provider identity separate from the local partner/shop relation. The
+  // provider shop can be observed safely during read-only sync and reconciled
+  // later by an operator without guessing a local organisation relationship.
+  const rawProviderShopId = firstDefined(cabinet, ["shopId", "shopID", "storeId"])
+    ?? firstDefined(shop ?? {}, ["id", "shopId", "storeId"]);
+  const providerShopId = rawProviderShopId == null || String(rawProviderShopId).trim() === ""
+    ? null
+    : String(rawProviderShopId).trim();
+  const rawProviderShopName = firstDefined(shop ?? {}, ["name", "shopName", "storeName"]);
+  const providerShopName = rawProviderShopName == null || String(rawProviderShopName).trim() === ""
+    ? null
+    : String(rawProviderShopName).trim();
+  const rawProviderShopAddress = firstDefined(shop ?? {}, ["address", "location", "fullAddress"]);
+  const providerShopAddress = rawProviderShopAddress == null || String(rawProviderShopAddress).trim() === ""
+    ? null
+    : String(rawProviderShopAddress).trim();
+
   const recognized = online !== null
     || totalCount !== null
     || providerRentable !== null
@@ -148,6 +169,9 @@ export function parseChargeNowCabinetStatus(value: unknown): ParsedCabinetStatus
   return {
     recognized,
     online,
+    providerShopId,
+    providerShopName,
+    providerShopAddress,
     totalCount,
     rentableCount,
     returnableCount,

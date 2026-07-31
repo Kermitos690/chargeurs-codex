@@ -131,6 +131,8 @@ async function persistPilotStatus(db: SupabaseClient, parsed: ParsedCabinetStatu
   const { error: stationError } = await db.from("stations").update({
     status,
     online: parsed.online === true,
+    provider_shop_id: parsed.providerShopId ?? undefined,
+    location_name: parsed.providerShopAddress ?? parsed.providerShopName ?? undefined,
     signal: parsed.signal,
     rentable_count: parsed.rentableCount,
     returnable_count: parsed.returnableCount ?? 0,

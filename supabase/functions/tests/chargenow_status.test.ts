@@ -20,6 +20,21 @@ Deno.test("ChargeNow status parser accepts documented boolean fields", () => {
   assertEquals(parsed.batteries[0].batteryId, "BAT-1");
 });
 
+Deno.test("ChargeNow status parser preserves provider shop identity", () => {
+  const parsed = parseChargeNowCabinetStatus({
+    code: 0,
+    data: {
+      cabinet: { id: "DTA21269", shopId: "SHOP-1", online: true, slots: 4 },
+      shop: { id: "SHOP-1", name: "Test Shop", address: "Rte de Berne 222" },
+      batteries: [],
+    },
+  });
+
+  assertEquals(parsed.providerShopId, "SHOP-1");
+  assertEquals(parsed.providerShopName, "Test Shop");
+  assertEquals(parsed.providerShopAddress, "Rte de Berne 222");
+});
+
 Deno.test("ChargeNow status parser accepts numeric/string provider values", () => {
   const parsed = parseChargeNowCabinetStatus({
     code: "0",
