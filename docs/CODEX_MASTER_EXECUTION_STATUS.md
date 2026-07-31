@@ -125,6 +125,28 @@ ni lancer ni arrêter l’agent Bajie/ChargeNow. Un pont physique complet reste
 conditionné par un SDK, un service système ou un protocole DTA/RS485
 officiellement documenté.
 
+## Console Super Admin — opérations ChargeNow documentées (31 juillet 2026)
+
+- Le rôle `super_admin` dispose désormais, via la console **Intégrations et
+  couverture API**, d'un accès aux 35 opérations identifiées dans la
+  documentation Open API ChargeNow. Les routes internes n'inventent pas
+  d'endpoint fournisseur : `O7` reste explicitement
+  `PROVIDER_ENDPOINT_MISSING`.
+- La console lance aussi une suite de **16 lectures** séquentielles, avec des
+  identifiants tirés uniquement des réponses appartenant à l'organisation. Une
+  lecture de détail est marquée `sample_required` si aucune commande, stratégie
+  ou boutique source n'est disponible ; elle n'est jamais devinée.
+- Les mutations restent réservées à un super-admin authentifié. Une exécution
+  réelle exige une confirmation saisie exactement, et le mode maintenance est
+  requis pour les opérations dangereuses. L'activation globale
+  `CHARGENOW_MUTATIONS_ENABLED` reste `false` : l'exception est limitée à la
+  console serveur après contrôle du rôle et de cette confirmation, afin de
+  préserver les parcours kiosque et paiement fail-closed.
+- Vérification locale : `deno check`, 44 tests Deno (contrats fournisseur et
+  matrice), typecheck TypeScript, 68 tests Vitest et build PWA réussis. Aucun
+  appel fournisseur ni commande matérielle n'a été envoyé pendant cette
+  vérification locale.
+
 ## Correctif d’orientation du compte administrateur — 31 juillet 2026
 
 - Cause confirmée : le formulaire public « Mon compte » envoyait tout compte

@@ -60,6 +60,12 @@ export interface ApiResult<T = unknown> {
   error: string | null;
 }
 
+// Only the super-admin operation console may pass this context. It is never
+// accepted from a browser payload by the provider client itself; the Edge
+// function establishes it after verifying the authenticated role and typed
+// confirmation for the exact operation.
+export type SuperAdminMutationContext = { superAdminConfirmed?: boolean };
+
 type Query = Record<string, string | number | boolean | undefined | null>;
 
 export type OneTimeMaintenanceEjectionPermit = {
@@ -83,12 +89,12 @@ export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPe
 async function request<T = unknown>(
   method: string,
   path: string,
-  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean } = {},
+  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean; superAdminMutation?: boolean } = {},
 ): Promise<ApiResult<T>> {
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
   }
-  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection) {
+  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection && !opts.superAdminMutation) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 
@@ -148,10 +154,10 @@ export const cabinetQuery = (deviceId: string) =>
 // PROVIDER_ENDPOINT_MISSING until ChargeNow confirms an official contract.
 
 // O2 — Create Rent Order (query params: deviceId, callbackURL)
-export const orderCreate = (args: { deviceId: string; callbackURL?: string }) =>
+export const orderCreate = (args: { deviceId: string; callbackURL?: string }, context: SuperAdminMutationContext = {}) =>
   request("POST", "/rent/order/create", {
     query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 
 // O3 — Query Rent Order Status (query: tradeNo)
@@ -159,9 +165,9 @@ export const orderQuery = (tradeNo: string) =>
   request("POST", "/rent/order/query", { query: { tradeNo } });
 
 // O4 — Mark Order Completed / Close (query: tradeNo)
-export const orderClose = (args: { tradeNo: string } | string) => {
+export const orderClose = (args: { tradeNo: string } | string, context: SuperAdminMutationContext = {}) => {
   const tradeNo = typeof args === "string" ? args : args.tradeNo;
-  return request("POST", "/rent/order/close", { query: { tradeNo }, mutation: true });
+  return request("POST", "/rent/order/close", { query: { tradeNo }, mutation: true, superAdminMutation: context.superAdminConfirmed });
 };
 
 // O5 — Get Order Detail (query: tradeNo)
@@ -188,21 +194,21 @@ export type CabinetOperationType =
   | "heartbeat" | "lock" | "unlock" | "lockStopCharge" | "report";
 export const cabinetOperation = (args: {
   cabinetid: string; slotNum?: number; operationType: CabinetOperationType; reason?: string;
-}) =>
+}, context: SuperAdminMutationContext = {}) =>
   request("POST", "/cabinet/operation", {
     query: {
       cabinetid: args.cabinetid, slotNum: args.slotNum,
       operationType: args.operationType, reason: args.reason ?? "admin",
     },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 // Back-compat helper used by older callers.
-export const operationPop = (cabinetid: string, slotNum: number) =>
-  cabinetOperation({ cabinetid, slotNum, operationType: "pop" });
+export const operationPop = (cabinetid: string, slotNum: number, context: SuperAdminMutationContext = {}) =>
+  cabinetOperation({ cabinetid, slotNum, operationType: "pop" }, context);
 
 // C2 — Eject By Repair (query: cabinetid, slotNum). 0/null = eject all.
-export const ejectByRepair = (cabinetid: string, slotNum: number) =>
-  request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true });
+export const ejectByRepair = (cabinetid: string, slotNum: number, context: SuperAdminMutationContext = {}) =>
+  request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // The only route allowed to bypass the broad mutation flag. Its target is
 // fixed by a short-lived, server-only permit; every other mutation remains
@@ -225,6 +231,7 @@ export const ejectByRent = (
   cabinetid: string,
   slotNum: number,
   rentOrderId?: string,
+  context: SuperAdminMutationContext = {},
 ): Promise<ApiResult> => {
   const slot = resolveRentSlot(slotNum, Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE"));
   if (!slot.ok) {
@@ -232,7 +239,7 @@ export const ejectByRent = (
   }
   return request("POST", "/cabinet/ejectByRent", {
     query: { cabinetid, rentOrderId, slotNum: slot.slotNum },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 };
 
@@ -257,22 +264,22 @@ export const slotByCabinetId = (cabinetId: string) =>
   request("GET", `/cabinet/slotByCabinetId/${encodeURIComponent(cabinetId)}`);
 
 // C9 — Bind Device To Shop
-export const bind2shop = (qrcode: string, newshopid: string) =>
-  request("POST", `/cabinet/bind2shop/${encodeURIComponent(qrcode)}/${encodeURIComponent(newshopid)}`, { mutation: true });
+export const bind2shop = (qrcode: string, newshopid: string, context: SuperAdminMutationContext = {}) =>
+  request("POST", `/cabinet/bind2shop/${encodeURIComponent(qrcode)}/${encodeURIComponent(newshopid)}`, { mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // C10 — Update Cabinet Advertising
 export const bindAd = (body: {
   cabinetIdList: string[]; isRestart?: boolean; adConfigList: unknown[];
-}) => request("POST", "/cabinet/bindAd", { body, mutation: true });
+}, context: SuperAdminMutationContext = {}) => request("POST", "/cabinet/bindAd", { body, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // C11 — Unbind Device From Shop
-export const unbindShop = (deviceIds: string[]) =>
-  request("POST", "/cabinet/unbindShop", { body: deviceIds, mutation: true });
+export const unbindShop = (deviceIds: string[], context: SuperAdminMutationContext = {}) =>
+  request("POST", "/cabinet/unbindShop", { body: deviceIds, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // C12 — Publish Advertisement
 export const publishAd = (body: {
   cabinetIdList: string[]; restart?: boolean; adConfigList: unknown[];
-}) => request("POST", "/cabinet/publishAd", { body, mutation: true });
+}, context: SuperAdminMutationContext = {}) => request("POST", "/cabinet/publishAd", { body, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // ============================================================
 // ADVANCE API — SHOP (S1-S5)
@@ -285,16 +292,16 @@ export const shopDetail = (shopid: string) =>
   request("GET", `/shop/detail/${encodeURIComponent(shopid)}`);
 
 // S3 — Create New Shop
-export const shopCreate = (body: Record<string, unknown>) =>
-  request("POST", "/shop/create", { body, mutation: true });
+export const shopCreate = (body: Record<string, unknown>, context: SuperAdminMutationContext = {}) =>
+  request("POST", "/shop/create", { body, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // S4 — Update Shop
-export const shopUpdate = (body: Record<string, unknown>) =>
-  request("PUT", "/shop/update", { body, mutation: true });
+export const shopUpdate = (body: Record<string, unknown>, context: SuperAdminMutationContext = {}) =>
+  request("PUT", "/shop/update", { body, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // S5 — Delete Shop
-export const shopDelete = (shopid: string) =>
-  request("DELETE", `/shop/delete/${encodeURIComponent(shopid)}`, { mutation: true });
+export const shopDelete = (shopid: string, context: SuperAdminMutationContext = {}) =>
+  request("DELETE", `/shop/delete/${encodeURIComponent(shopid)}`, { mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // ============================================================
 // ADVANCE API — PRICE STRATEGY (P1-P6)
@@ -320,24 +327,24 @@ export const priceStrategySave = (body: {
   timeoutDay?: number; freeMinutes?: number; dayUseFreeCount?: number; price?: number;
   priceTime?: number; priceUnit?: number; dailyMaxPrice?: number;
   priceStrategyDetailList?: PriceStrategyDetailRow[];
-}) => request("POST", "/shop/priceStrategy/saveOrUpdate", { body, mutation: true });
+}, context: SuperAdminMutationContext = {}) => request("POST", "/shop/priceStrategy/saveOrUpdate", { body, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // P4 — Delete Price Strategy (body: array of priceIds)
-export const priceStrategyDelete = (priceIds: number[]) =>
-  request("POST", "/shop/priceStrategy/delete", { body: priceIds, mutation: true });
+export const priceStrategyDelete = (priceIds: number[], context: SuperAdminMutationContext = {}) =>
+  request("POST", "/shop/priceStrategy/delete", { body: priceIds, mutation: true, superAdminMutation: context.superAdminConfirmed });
 
 // P5 — Shop Bind Price Strategy
-export const priceStrategyBind = (args: { shopId: string; priceId: number; customType?: number }) =>
+export const priceStrategyBind = (args: { shopId: string; priceId: number; customType?: number }, context: SuperAdminMutationContext = {}) =>
   request("POST", "/shop/priceStrategy/bindShop", {
     body: { shopId: args.shopId, priceId: args.priceId, customType: args.customType ?? 0 },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 
 // P6 — Shop Unbind Price Strategy
-export const priceStrategyUnbind = (args: { shopId: string; customType?: number }) =>
+export const priceStrategyUnbind = (args: { shopId: string; customType?: number }, context: SuperAdminMutationContext = {}) =>
   request("POST", "/shop/priceStrategy/unbindShop", {
     body: { shopId: args.shopId, customType: args.customType ?? 0 },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 
 // ============================================================
@@ -352,10 +359,10 @@ export const orderList = (filters: Query = {}) =>
 // ============================================================
 export interface EventSubscription { event: string; pushUrl?: string; enable?: boolean; }
 // E1 — Configure event push
-export const eventPushConfig = (pushUrl: string, eventSubscriptions?: EventSubscription[]) =>
+export const eventPushConfig = (pushUrl: string, eventSubscriptions?: EventSubscription[], context: SuperAdminMutationContext = {}) =>
   request("POST", "/cabinet/eventPush/config", {
     body: { pushUrl, eventSubscriptions: eventSubscriptions ?? [] },
-    mutation: true,
+    mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 
 // E2 — Get current event push config

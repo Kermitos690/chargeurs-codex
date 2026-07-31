@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, CheckCircle2, XCircle, ShieldAlert, Clock, PlayCircle, Download, Search } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, ShieldAlert, Clock, PlayCircle, Download, Search, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 interface Row {
@@ -28,6 +30,17 @@ const STATE_LABELS: Record<string, string> = {
   unusable: "Inutilisable",
   not_relevant: "Non pertinente",
 };
+
+const MUTATING_CODES = new Set(["O2", "O4", "C1", "C2", "C3", "C9", "C10", "C11", "C12", "S3", "S4", "S5", "P3", "P4", "P5", "P6", "E1"]);
+const SENSITIVE_CODES = new Set(["A1"]);
+
+function expectedConfirmation(code: string, params: Record<string, unknown>) {
+  const cabinetId = String(params.cabinetid ?? params.cabinetId ?? params.deviceId ?? "").trim().toUpperCase();
+  const slotNum = Number(params.slotNum);
+  if (code === "C2" && cabinetId && slotNum === 0) return `EJECTER TOUT ${cabinetId}`;
+  if (["C1", "C2", "C3"].includes(code) && cabinetId && Number.isInteger(slotNum)) return `EXECUTER ${code} ${cabinetId} SLOT ${slotNum}`;
+  return `EXECUTER ${code}`;
+}
 
 const stateBadge = (s: string | null) => {
   const label = s ? STATE_LABELS[s] ?? s : "—";
@@ -71,6 +84,12 @@ export default function AdminApiCoverage() {
   const [moduleF, setModuleF] = useState("all");
   const [stateF, setStateF] = useState("all");
   const [consumerF, setConsumerF] = useState("all");
+  const [selected, setSelected] = useState<Row | null>(null);
+  const [paramsText, setParamsText] = useState("{}");
+  const [confirmation, setConfirmation] = useState("");
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const { isSuperAdmin } = useAuth();
 
   const load = async () => {
     setLoading(true);
@@ -122,6 +141,42 @@ export default function AdminApiCoverage() {
   };
   const exportCsv = () => download(`chargenow-api-matrix-${Date.now()}.csv`, toCsv(filtered), "text/csv");
 
+  const openOperation = (row: Row) => {
+    setSelected(row);
+    setParamsText(row.code === "C2" ? '{\n  "cabinetid": "DTA21269",\n  "slotNum": 1\n}' : "{}");
+    setConfirmation("");
+    setMaintenanceMode(row.dangerous);
+  };
+
+  const runOperation = async (dryRun: boolean) => {
+    if (!selected) return;
+    let params: Record<string, unknown>;
+    try {
+      const parsed = JSON.parse(paramsText);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error();
+      params = parsed as Record<string, unknown>;
+    } catch {
+      toast.error("Les paramètres doivent être un objet JSON valide.");
+      return;
+    }
+    setExecuting(true);
+    const { data, error } = await supabase.functions.invoke("chargenow-admin", {
+      body: {
+        action: "invoke", code: selected.code, params, dryRun,
+        maintenanceMode, confirm: !dryRun, confirmation,
+      },
+    });
+    setExecuting(false);
+    if (error) toast.error("L’appel au backend a échoué.");
+    else if ((data as { ok?: boolean })?.ok) {
+      toast.success(dryRun ? "Simulation enregistrée : aucune commande fournisseur envoyée." : "Résultat fournisseur enregistré.");
+      await load();
+      if (!dryRun) setSelected(null);
+    } else {
+      toast.error((data as { error?: string })?.error ?? "Opération refusée par le backend.");
+    }
+  };
+
   const selCls = "rounded-xl border border-border bg-background px-3 py-2 text-sm";
 
   return (
@@ -136,7 +191,7 @@ export default function AdminApiCoverage() {
           <Button onClick={exportCsv} variant="outline" className="gap-2"><Download className="h-4 w-4" />CSV</Button>
           <Button onClick={runSafe} disabled={running} className="gap-2 bg-gradient-primary">
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-            Vérifier O1 (lecture autorisée)
+            Tester les lectures fournisseur
           </Button>
         </div>
       </div>
@@ -189,7 +244,7 @@ export default function AdminApiCoverage() {
                 <th className="p-3">Route interne</th><th className="p-3">État</th>
                 <th className="p-3">Mock</th><th className="p-3">Live</th><th className="p-3">Preuve</th>
                 <th className="p-3">Test</th><th className="p-3">Idemp.</th><th className="p-3">Retry</th>
-                <th className="p-3">Risque</th><th className="p-3">Erreur</th>
+                <th className="p-3">Risque</th><th className="p-3">Erreur</th><th className="p-3">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -202,7 +257,6 @@ export default function AdminApiCoverage() {
                   <td className="p-3 max-w-[220px] text-xs text-muted-foreground">{r.business_function ?? "—"}</td>
                   <td className="p-3"><Badge variant="outline">{r.http_method}</Badge></td>
                   <td className="p-3 font-mono text-xs text-muted-foreground">{r.path}</td>
-                  <td className="p-3 text-xs">{r.consumer ?? "—"}</td>
                   <td className="p-3 font-mono text-xs text-muted-foreground">{r.internal_route ?? "—"}</td>
                   <td className="p-3">{stateBadge(r.integration_state)}</td>
                   <td className="p-3">{testBadge(r.mock_test_status)}</td>
@@ -213,6 +267,10 @@ export default function AdminApiCoverage() {
                   <td className="p-3 text-xs">{r.retry_policy ?? "—"}</td>
                   <td className="p-3 max-w-[180px] text-xs text-muted-foreground">{r.risk ?? "—"}</td>
                   <td className="p-3 max-w-[160px] truncate text-xs text-muted-foreground" title={r.last_error ?? ""}>{r.last_error ?? "—"}</td>
+                  <td className="p-3">
+                    {isSuperAdmin ? <Button size="sm" variant="outline" onClick={() => openOperation(r)} className="gap-1"><TerminalSquare className="h-3.5 w-3.5" />Ouvrir</Button>
+                      : <span className="text-xs text-muted-foreground">super-admin requis</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -224,6 +282,30 @@ export default function AdminApiCoverage() {
         <strong> unverified</strong> = code présent mais non prouvé en réel · <strong>blocked_by_safety</strong> = opération destructive, non exécutée volontairement (mode maintenance + confirmation requis).
         Les opérations <ShieldAlert className="inline h-3 w-3 text-amber-500" /> sont destructives et protégées par dry-run.
       </p>
+      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Console fournisseur — {selected?.code} · {selected?.name}</DialogTitle>
+            <DialogDescription>
+              Opération officiellement documentée : <code>{selected?.http_method} {selected?.path}</code>. Le backend valide le rôle, la confirmation et le code métier fournisseur.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block text-sm font-medium">Paramètres JSON</label>
+          <textarea value={paramsText} onChange={(e) => setParamsText(e.target.value)} spellCheck={false} className="min-h-44 w-full rounded-xl border border-border bg-background p-3 font-mono text-xs" />
+          {selected && (MUTATING_CODES.has(selected.code) || SENSITIVE_CODES.has(selected.code)) && (
+            <div className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+              {selected.dangerous && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} /> Mode maintenance activé</label>}
+              <p className="text-sm text-muted-foreground">Pour exécuter réellement, recopiez exactement : <strong>{(() => { try { return expectedConfirmation(selected.code, JSON.parse(paramsText)); } catch { return `EXECUTER ${selected.code}`; } })()}</strong></p>
+              <Input value={confirmation} onChange={(e) => setConfirmation(e.target.value)} placeholder="Confirmation explicite" autoComplete="off" />
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setSelected(null)} disabled={executing}>Fermer</Button>
+            <Button variant="secondary" onClick={() => runOperation(true)} disabled={executing}>{executing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simuler"}</Button>
+            <Button variant="destructive" onClick={() => runOperation(false)} disabled={executing || !selected || ((MUTATING_CODES.has(selected.code) || SENSITIVE_CODES.has(selected.code)) && !confirmation.trim())}>Exécuter</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

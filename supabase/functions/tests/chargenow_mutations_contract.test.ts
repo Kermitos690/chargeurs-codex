@@ -50,6 +50,22 @@ Deno.test("mutations are blocked centrally unless the feature flag is exactly tr
   }
 });
 
+Deno.test("a super-admin-confirmed invocation can execute one documented mutation while the global flag stays closed", async () => {
+  const previous = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.orderClose("ORDER-TEST", { superAdminConfirmed: true });
+    assertEquals(result.ok, true);
+    assertEquals(s.calls.length, 1);
+    assert(s.calls[0].url.includes("/rent/order/close"));
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previous);
+  }
+});
+
 // Generic helper: run an op, assert success mapping + auth header present.
 async function expectSuccess(
   run: () => Promise<ApiResult>,
