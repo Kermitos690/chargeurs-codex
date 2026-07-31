@@ -19,4 +19,5 @@
     <string name="navigation_blocked_title">Navigation bloquée</string>
     <string name="navigation_blocked_message">Le kiosk a refusé une page hors du domaine autorisé ou une connexion non sécurisée.</string>
     <string name="reload">Recharger</string>
+    <string name="startup_error">Chargeurs.ch\n\nDémarrage impossible\n\nCode : %1$s\nVérifiez Android System WebView/Chrome, puis redémarrez la tablette.\n\nDiagnostic : %2$s</string>
 </resources>

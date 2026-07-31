@@ -52,8 +52,15 @@ P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et b
 - No Android device was attached (`adb` unavailable), so touch behaviour,
   boot receiver, Lock Task policy, Keystore persistence and a real QR scan are
   explicitly awaiting controlled physical validation.
+- A follow-up staging rebuild (`r1`) adds a zero-size rendering guard for the
+  animated background and a visible startup diagnostic when the tablet has no
+  usable Android System WebView. `testDebugUnitTest`, `lintStaging` and
+  `assembleStaging` passed. The replacement artifact is
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r1.apk`.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
-- Archive the verified Android staging APK and keep the Android runtime test pending a physical tablet.
+- Install the `r1` staging APK on the physical tablet. If it still exits, report
+  the startup diagnostic shown on screen (or the tablet Android version and
+  whether Android System WebView/Chrome is enabled); do not retry the old APK.
 - React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
 - La suite Edge compte désormais 179 tests réussis. Un validateur central bloque
   toute clé Stripe live ou toute configuration qui ne fixe pas explicitement

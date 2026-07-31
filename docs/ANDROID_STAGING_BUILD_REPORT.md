@@ -1,12 +1,13 @@
 # APK Android staging — rapport de build
 
 Date du build : 31 juillet 2026 (Europe/Zurich)
-Commit source Android : `0290920` (branche `agent/finalize-chargeurs-platform`)
+Commit source Android : `0290920` + démarrage robuste r1 (branche `agent/finalize-chargeurs-platform`)
 
 | Artefact | Application ID | Version | Taille | SHA-256 |
 |---|---|---:|---:|---|
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 895 KiB | `d9f6636437d33531125d8cbe9cca113bf18ff958f1ab0e91cf1de255e5728383` |
 | `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-debug.apk` | `ch.chargeurs.kiosk.debug` | `1.0.4-diagnostic` (`104`) | 895 KiB | `5115c0c56ca0f92eb61b205b62963f42f879ead1c5cd36ea93b34a004f1abf64` |
+| `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging-r1.apk` | `ch.chargeurs.kiosk.staging` | `1.0.4-staging` (`104`) | 934 KiB | `075d783fc97d286dc8d0e2b8b01ad35cb4d8cfd9d08dd7b8d3f53fed9006f232` |
 
 Les deux APK sont installables et signées avec la clé debug Android (signature
 v2 vérifiée). Le build staging active le cycle HOME/boot dédié à la borne ; le
@@ -26,6 +27,14 @@ Configuration compilée dans le staging :
 Contrôles exécutés : `testDebugUnitTest`, `lintDebug`, `lintStaging`,
 `assembleDebug`, `assembleStaging`, `lintRelease`, `assembleRelease`,
 `apksigner verify`, inventaire des permissions et recherche de secrets embarqués.
+
+### Correctif r1
+
+- protège le rendu animé contre une passe Android de taille nulle ;
+- affiche un diagnostic contrôlé si la tablette ne fournit pas de WebView
+  utilisable, au lieu de fermer silencieusement l’application ;
+- signature debug staging, vérification v2 réussie ;
+- SHA-256 : `075d783fc97d286dc8d0e2b8b01ad35cb4d8cfd9d08dd7b8d3f53fed9006f232`.
 
 La validation sur tablette réelle (tactile, boot, persistance Keystore, QR avec
 téléphone) reste à effectuer manuellement. La release compilée est unsigned

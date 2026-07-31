@@ -143,7 +143,15 @@ public final class MainActivity extends Activity {
     private void createWebView() {
         if (container == null || isFinishing()) return;
 
-        webView = new WebView(this);
+        try {
+            webView = new WebView(this);
+        } catch (RuntimeException error) {
+            // Some industrial Android images ship without a usable System
+            // WebView (or have it disabled). Keep the kiosk process alive and
+            // show a safe, actionable diagnostic instead of closing abruptly.
+            showStartupError("WEBVIEW_UNAVAILABLE", error);
+            return;
+        }
         webView.setBackgroundColor(Color.rgb(8, 17, 38));
         webView.setVisibility(View.INVISIBLE);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
@@ -168,7 +176,12 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.getSettings().setSafeBrowsingEnabled(true);
         }
-        webView.addJavascriptInterface(new NativeBridge(this, config, cabinetController), "ChargeursNative");
+        try {
+            webView.addJavascriptInterface(new NativeBridge(this, config, cabinetController), "ChargeursNative");
+        } catch (RuntimeException error) {
+            showStartupError("NATIVE_BRIDGE_UNAVAILABLE", error);
+            return;
+        }
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
             Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_SHORT).show()
@@ -248,7 +261,37 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT
         );
         container.addView(webView, 0, webParams);
-        webView.loadUrl(config.kioskUrl());
+        try {
+            webView.loadUrl(config.kioskUrl());
+        } catch (RuntimeException error) {
+            showStartupError("WEBVIEW_LOAD_FAILED", error);
+        }
+    }
+
+    private void showStartupError(String code, Throwable error) {
+        if (isFinishing()) return;
+        if (webView != null) {
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) parent.removeView(webView);
+            webView.destroy();
+            webView = null;
+        }
+        if (progress != null) progress.setVisibility(View.GONE);
+        TextView diagnostic = new TextView(this);
+        diagnostic.setText(getString(
+            R.string.startup_error,
+            code,
+            error.getClass().getSimpleName()
+        ));
+        diagnostic.setTextColor(KioskVisuals.WHITE);
+        diagnostic.setTextSize(18);
+        diagnostic.setGravity(Gravity.CENTER);
+        diagnostic.setPadding(dp(28), dp(28), dp(28), dp(28));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        );
+        container.addView(diagnostic, params);
     }
 
     private void injectCredentialsAndReload(WebView view) {

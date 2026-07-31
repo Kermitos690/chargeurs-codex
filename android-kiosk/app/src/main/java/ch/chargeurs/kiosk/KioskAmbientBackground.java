@@ -44,6 +44,11 @@ public final class KioskAmbientBackground extends View {
         canvas.drawColor(NAVY);
         float w = getWidth();
         float h = getHeight();
+        // A view can receive one zero-sized draw pass while the window is
+        // attaching (notably on older OEM launchers). RadialGradient rejects
+        // a zero radius, so leave the solid background in place until the
+        // first real layout pass instead of crashing the kiosk process.
+        if (w <= 0f || h <= 0f) return;
         drawGlow(canvas, w * (.18f + .05f * phase), h * (.20f - .04f * phase), Math.max(w, h) * .72f, Color.argb(92, 0, 111, 255));
         drawGlow(canvas, w * (.82f - .06f * phase), h * (.16f + .05f * phase), Math.max(w, h) * .64f, Color.argb(78, 139, 72, 255));
         drawGlow(canvas, w * (.70f + .04f * phase), h * (.82f - .04f * phase), Math.max(w, h) * .68f, Color.argb(72, 16, 207, 240));
