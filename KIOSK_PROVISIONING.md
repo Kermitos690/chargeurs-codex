@@ -5,7 +5,7 @@
 1. Créer/valider la station réelle dans le back-office.
 2. Confirmer son identifiant fournisseur, numéro de série, établissement et profil tarifaire canonique.
 3. Vérifier que les locations bêta restent fermées.
-4. Dans « Tablettes kiosque », générer un code d'appairage de 5 à 60 minutes.
+4. Dans « Tablettes kiosque », générer un code d'appairage de 15 minutes maximum.
 
 ## Sur la tablette
 
@@ -14,6 +14,15 @@
 3. L'application crée une identité publique locale, appelle l'URL HTTPS d'enrôlement et stocke le token reçu via Android Keystore.
 4. Le code devient immédiatement inutilisable et n'est jamais enregistré en clair côté serveur.
 5. Vérifier l'écran kiosque, l'identifiant de station, la version APK, la connexion et le statut matériel.
+
+## Renouvellement sûr
+
+Le code n'est jamais généré par l'APK : il est créé côté serveur après contrôle
+administrateur, puis conservé uniquement sous forme de hash. Le back-office affiche
+un compte à rebours et le bouton « Renouveler le code maintenant ». Un renouvellement
+invalide immédiatement tout ancien code encore actif pour cette station. Si le code
+expire pendant la saisie, l'APK efface le champ et demande un nouveau code ; il ne
+réessaie jamais avec un secret expiré et ne peut pas s'auto-enrôler.
 
 ## Contrôles
 

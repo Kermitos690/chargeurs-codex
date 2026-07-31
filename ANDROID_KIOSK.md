@@ -13,6 +13,8 @@
 - démarrage après boot, plein écran, blocage retour, watchdog et reprise réseau ;
 - lock-task réel uniquement lorsque l'application est autorisée par un Device Policy Controller ;
 - diagnostic natif en lecture seule des ports série et périphériques USB.
+- expiration d'un code d'activation gérée en échec fermé : le champ est effacé et
+  l'opérateur doit saisir le code fraîchement renouvelé depuis le back-office.
 
 ## Pont natif
 
