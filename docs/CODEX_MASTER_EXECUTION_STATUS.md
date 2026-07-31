@@ -125,6 +125,23 @@ ni lancer ni arrêter l’agent Bajie/ChargeNow. Un pont physique complet reste
 conditionné par un SDK, un service système ou un protocole DTA/RS485
 officiellement documenté.
 
+## Correctif d’orientation du compte administrateur — 31 juillet 2026
+
+- Cause confirmée : le formulaire public « Mon compte » envoyait tout compte
+  authentifié vers `/compte`, y compris un `super_admin`. Cette vue est
+  volontairement centrée sur les locations client et ne présente pas la
+  navigation du back-office.
+- Le formulaire consulte désormais uniquement les rôles du compte connecté et
+  envoie un rôle autorisé vers `/admin`; les comptes clients restent sur
+  `/compte`. La protection RLS/backend de `/admin` reste l’autorité finale.
+- La vue client affiche aussi un bouton explicite « Back-office » dès qu’un
+  rôle administratif est confirmé. Le menu mobile admin affiche maintenant le
+  libellé « Menu », pas seulement une icône.
+- Le tableau de bord admin affiche un chargement et une alerte de lecture
+  plutôt que des compteurs silencieusement vides lorsqu’une requête est refusée
+  ou indisponible.
+- Vérification locale : typecheck, 68 tests Vitest et build Vite réussis.
+
 ## Correctif d’accès staging — 31 juillet 2026
 
 - La récupération de mot de passe PKCE échouait lorsqu’un lien demandé dans un

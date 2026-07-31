@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { canView } from "@/lib/roles";
 
 type Mode = "login" | "signup" | "forgot";
 
@@ -21,6 +22,26 @@ export default function AccountAuth() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  /**
+   * Customer and back-office authentication share Supabase Auth.  The
+   * destination must nevertheless be based on the server-managed role, not on
+   * the URL from which the person happened to sign in.
+   */
+  const navigateAfterPasswordSignIn = async (userId: string) => {
+    const { data: roleRows, error: roleError } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId);
+
+    // A role lookup failure must not turn a normal customer login into an
+    // access failure.  Backend/RLS remain the authority for /admin.
+    if (!roleError && canView((roleRows ?? []).map((row) => row.role))) {
+      nav("/admin", { replace: true });
+      return;
+    }
+    nav("/compte", { replace: true });
+  };
 
   const signInWithGoogle = async () => {
     setGoogleLoading(true);
@@ -62,8 +83,11 @@ export default function AccountAuth() {
         if (error) throw error;
         toast.success("Compte créé. Vérifiez votre email si une confirmation est requise.");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        if (!data.user) throw new Error("Connexion incomplète. Réessayez.");
+        await navigateAfterPasswordSignIn(data.user.id);
+        return;
       }
       nav("/compte");
     } catch (err) {

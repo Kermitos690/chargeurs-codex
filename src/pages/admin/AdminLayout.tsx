@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -67,8 +67,7 @@ export default function AdminLayout() {
     );
   }
   if (!user) {
-    navigate("/admin/login", { replace: true });
-    return null;
+    return <Navigate to="/admin/login" replace />;
   }
   if (!isAdmin) {
     return (
@@ -113,8 +112,8 @@ export default function AdminLayout() {
           <BrandLogo size="sm" />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Ouvrir le menu" className="border border-border">
-                <Menu className="h-5 w-5" />
+              <Button variant="ghost" aria-label="Ouvrir le menu" className="gap-2 border border-border px-3">
+                <Menu className="h-5 w-5" /> <span>Menu</span>
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="glass-strong w-[85vw] max-w-sm border-border p-0">
