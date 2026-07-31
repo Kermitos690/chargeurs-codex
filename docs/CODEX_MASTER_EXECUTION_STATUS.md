@@ -239,3 +239,24 @@ officiellement documenté.
   `assembleStaging` et signature APK v2. Artefact :
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.11-staging.apk`,
   SHA-256 `7d6a7059fa9cb95e0989295e827fa9459536f80c059cbe79a15ad5bb87b55401`.
+
+## Correctif WebView après appairage — 31 juillet 2026
+
+- L’appairage de DTA21269 a bien réussi et le kiosk a émis un heartbeat. Le
+  plein écran bleu postérieur est donc un défaut de rendu WebView, non un
+  échec du code à six chiffres.
+- Le bundle Vite cible maintenant Chromium 61 (Android 8 / `minSdk 26`) ; le
+  wrapper Android ne registre plus de service worker, ce qui évite qu’un cache
+  PWA obsolète conserve un ancien app shell.
+- Le WebView confirme désormais `kioskUiReady` après un état React utilisable.
+  Sans ce signal sous 20 secondes, ou si le renderer s’arrête, l’APK affiche un
+  diagnostic contrôlé au lieu d’un écran bleu vide. Les diagnostics indiquent
+  le package et la version du WebView sans code, token ou secret.
+- Vercel staging `dpl_7HwR6hLPG4tQBAVRWnWCbn65Q6bT` est `Ready` et l’alias
+  `https://chargeurs-ch-staging.vercel.app` lui a été affecté.
+- Vérifications réussies : typecheck, 68 tests Vitest, build Vite,
+  `testDebugUnitTest`, `lintStaging`, `assembleStaging`, signature v2.
+- APK : `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.12-staging.apk`
+  (`versionCode=112`, `versionName=1.0.12-staging`, 927 364 octets, SHA-256
+  `38bcbfcbc4c393af71fa4188f0ba0f9e50cd8e36d8618913c662c22ae875dc1d`).
+  Elle conserve l’appairage 1.0.11 : aucun nouveau code n’est nécessaire.

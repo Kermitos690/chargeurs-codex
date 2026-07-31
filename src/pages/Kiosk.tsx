@@ -30,6 +30,9 @@ type Quote = {
   daily_cap_cents: number; unreturned_fee_cents: number;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
+type NativeKioskWindow = Window & {
+  ChargeursNative?: { kioskUiReady?: () => void };
+};
 
 // Human messages per internal rental_session.state (FR — default kiosk lang).
 const STATE_MSG: Record<string, { phase: Phase; title: string; sub: string }> = {
@@ -215,6 +218,18 @@ export default function Kiosk() {
     const i = setInterval(loadStation, 15000);
     return () => clearInterval(i);
   }, [stationId, loadStation, loadQuote]);
+
+  // Tell the native host that React has rendered a usable kiosk state. This
+  // avoids leaving an operator with a bare native background when an old or
+  // disabled System WebView cannot execute the bundle.
+  useEffect(() => {
+    if (phase === "loading") return;
+    try {
+      (window as NativeKioskWindow).ChargeursNative?.kioskUiReady?.();
+    } catch {
+      // Browser kiosks intentionally have no native bridge.
+    }
+  }, [phase]);
 
   // Tick for the countdown.
   useEffect(() => {

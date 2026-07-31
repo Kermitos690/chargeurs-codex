@@ -89,3 +89,20 @@ La validation sur tablette réelle (tactile, boot, persistance Keystore, QR avec
 téléphone) reste à effectuer manuellement. La release compilée est unsigned
 faute de clé de signature propriétaire ; elle n’est pas livrée comme APK
 installable.
+
+### Version installable 1.0.12
+
+- `versionCode=112`, `versionName=1.0.12-staging` : mise à jour directe de la
+  1.0.11 staging, avec le même identifiant et la même signature debug.
+- Le bundle frontend cible Chromium 61 ; le wrapper n’utilise pas de service
+  worker, afin d’éviter un shell périmé dans le WebView de la tablette.
+- Si React ne rend pas un état exploitable sous 20 secondes, ou si le renderer
+  se ferme, l’APK affiche une erreur actionnable au lieu d’un écran bleu vide.
+- Les diagnostics affichent le fournisseur WebView actif sans token, code ni
+  identifiant fournisseur.
+- Artefact : `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.12-staging.apk`
+  (927 364 octets, SHA-256
+  `38bcbfcbc4c393af71fa4188f0ba0f9e50cd8e36d8618913c662c22ae875dc1d`).
+- Contrôles réussis : `testDebugUnitTest`, `lintStaging`, `assembleStaging` et
+  `apksigner verify` (signature v2). Écran/tactile restent à valider sur la
+  tablette réelle.

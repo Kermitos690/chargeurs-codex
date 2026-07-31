@@ -36,10 +36,10 @@ android {
         targetSdk = 36
         // Incremented for the provider-bridge diagnostic update so the
         // staging APK can be installed as an in-place update.
-        // 1.0.11 adds the explicitly approved, staging-only device-bound
-        // compatibility mode for vendor Android images without AndroidKeyStore.
-        versionCode = 111
-        versionName = "1.0.11"
+        // 1.0.12 restores legacy System WebView compatibility and reports a
+        // clear recovery state instead of a blank native screen.
+        versionCode = 112
+        versionName = "1.0.12"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

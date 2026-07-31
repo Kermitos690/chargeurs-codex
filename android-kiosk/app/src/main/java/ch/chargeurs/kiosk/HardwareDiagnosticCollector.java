@@ -5,6 +5,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Environment;
+import android.webkit.WebView;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -28,6 +29,7 @@ public final class HardwareDiagnosticCollector {
         put(report, "device", deviceInfo());
         put(report, "vendorApp", VendorAppCompatibility.inspect(context));
         put(report, "chargeursApp", packageInfo(context, context.getPackageName()));
+        put(report, "webView", webViewInfo());
         SecureConfigStore.StorageHealth storage = new SecureConfigStore(context).inspect();
         put(report, "secureStorage", JsonObjects.of(
             "ready", storage.isReady(),
@@ -81,6 +83,25 @@ public final class HardwareDiagnosticCollector {
             put(result, "lastUpdateTime", info.lastUpdateTime);
         } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
             put(result, "installed", false);
+        }
+        return result;
+    }
+
+    private static JSONObject webViewInfo() {
+        JSONObject result = new JSONObject();
+        try {
+            android.content.pm.PackageInfo info = WebView.getCurrentWebViewPackage();
+            if (info == null) {
+                put(result, "available", false);
+                return result;
+            }
+            put(result, "available", true);
+            put(result, "package", info.packageName);
+            put(result, "versionName", info.versionName == null ? "" : info.versionName);
+            put(result, "versionCode", Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode);
+        } catch (RuntimeException error) {
+            put(result, "available", false);
+            put(result, "error", error.getClass().getSimpleName());
         }
         return result;
     }

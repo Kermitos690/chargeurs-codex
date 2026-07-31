@@ -26,6 +26,7 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -39,6 +40,7 @@ import org.json.JSONObject;
 public final class MainActivity extends Activity {
     private static final long WATCHDOG_INTERVAL_MS = 30_000L;
     private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
+    private static final long WEB_UI_READY_TIMEOUT_MS = 20_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private FrameLayout container;
@@ -49,9 +51,17 @@ public final class MainActivity extends Activity {
     private KioskConfig config;
     private boolean credentialsInjected;
     private boolean heartbeatPending;
+    private boolean kioskUiReady;
+    private boolean startupErrorShown;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
     private CabinetController cabinetController;
+
+    private final Runnable kioskUiReadyTimeout = () -> {
+        if (!kioskUiReady && !isFinishing()) {
+            showStartupError("KIOSK_UI_NOT_RENDERED", new IllegalStateException("UI_READY_TIMEOUT"));
+        }
+    };
 
     private final Runnable watchdog = new Runnable() {
         @Override
@@ -137,6 +147,9 @@ public final class MainActivity extends Activity {
     @SuppressLint("SetJavaScriptEnabled")
     private void createWebView() {
         if (container == null || isFinishing()) return;
+        kioskUiReady = false;
+        startupErrorShown = false;
+        handler.removeCallbacks(kioskUiReadyTimeout);
 
         try {
             webView = new WebView(this);
@@ -210,6 +223,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (view != webView || startupErrorShown) return;
                 if (!KioskConfigValidator.isAllowedUrl(url, config.baseUrl())) {
                     showBlockedNavigation();
                     return;
@@ -247,7 +261,21 @@ public final class MainActivity extends Activity {
                 if (request.isForMainFrame()) {
                     networkBanner.setVisibility(View.VISIBLE);
                     progress.setVisibility(View.VISIBLE);
+                    handler.removeCallbacks(kioskUiReadyTimeout);
+                    showStartupError(
+                        "WEBVIEW_MAIN_FRAME_ERROR",
+                        new IllegalStateException("WEBVIEW_ERROR_" + error.getErrorCode())
+                    );
                 }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                handler.removeCallbacks(kioskUiReadyTimeout);
+                showStartupError("WEBVIEW_RENDERER_STOPPED", new IllegalStateException(
+                    detail.didCrash() ? "RENDERER_CRASHED" : "RENDERER_KILLED"
+                ));
+                return true;
             }
         });
 
@@ -258,13 +286,16 @@ public final class MainActivity extends Activity {
         container.addView(webView, 0, webParams);
         try {
             webView.loadUrl(config.kioskUrl());
+            handler.postDelayed(kioskUiReadyTimeout, WEB_UI_READY_TIMEOUT_MS);
         } catch (RuntimeException error) {
             showStartupError("WEBVIEW_LOAD_FAILED", error);
         }
     }
 
     private void showStartupError(String code, Throwable error) {
-        if (isFinishing()) return;
+        if (isFinishing() || startupErrorShown) return;
+        startupErrorShown = true;
+        handler.removeCallbacks(kioskUiReadyTimeout);
         if (webView != null) {
             ViewGroup parent = (ViewGroup) webView.getParent();
             if (parent != null) parent.removeView(webView);
@@ -289,6 +320,13 @@ public final class MainActivity extends Activity {
         container.addView(diagnostic, params);
     }
 
+    void markKioskUiReady() {
+        runOnUiThread(() -> {
+            kioskUiReady = true;
+            handler.removeCallbacks(kioskUiReadyTimeout);
+        });
+    }
+
     private void injectCredentialsAndReload(WebView view) {
         String script = "(function(){"
             + "localStorage.setItem('kiosk_locked_station'," + JSONObject.quote(config.stationId()) + ");"
@@ -305,6 +343,8 @@ public final class MainActivity extends Activity {
     private void recreateWebView() {
         heartbeatPending = false;
         credentialsInjected = false;
+        kioskUiReady = false;
+        handler.removeCallbacks(kioskUiReadyTimeout);
         if (webView != null) {
             ViewGroup parent = (ViewGroup) webView.getParent();
             if (parent != null) parent.removeView(webView);

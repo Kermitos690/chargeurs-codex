@@ -78,3 +78,15 @@
   client reste dans `/compte`. La vérification backend/RLS n’est pas modifiée.
 - `/admin` répond via l’alias staging. Typecheck, 68 tests Vitest et build Vite
   ont réussi avant le déploiement. Aucune donnée distante n’a été modifiée.
+
+## Correctif WebView kiosk — 31 juillet 2026, 22:14 CEST
+
+- Staging uniquement ; aucune migration, Edge Function, configuration Stripe
+  ou configuration ChargeNow n’a été modifiée.
+- Déploiement `dpl_7HwR6hLPG4tQBAVRWnWCbn65Q6bT`, état `Ready` :
+  `https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/7HwR6hLPG4tQBAVRWnWCbn65Q6bT`.
+- L’alias `https://chargeurs-ch-staging.vercel.app` cible ce déploiement et
+  sert le bundle `assets/index-Bnc-yZa9.js` avec sa feuille CSS associée.
+- Correctif publié : compatibilité Chromium 61 pour Android WebView et pas de
+  service worker dans le wrapper natif. Typecheck, 68 tests Vitest et build
+  Vite ont réussi avant le déploiement.

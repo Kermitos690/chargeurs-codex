@@ -67,6 +67,16 @@ public final class NativeBridge {
         return BuildConfig.VERSION_NAME;
     }
 
+    /**
+     * The web kiosk calls this only after React rendered an actionable state.
+     * It carries no credential and lets the native host replace a blank WebView
+     * with an actionable recovery screen on legacy tablet firmware.
+     */
+    @JavascriptInterface
+    public void kioskUiReady() {
+        activity.markKioskUiReady();
+    }
+
     @JavascriptInterface
     public void openDiagnostics() {
         activity.showNativeDiagnostics(cabinetController.status());

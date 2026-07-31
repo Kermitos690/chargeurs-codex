@@ -6,6 +6,13 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // The embedded tablet runs Android 8+ (minSdk 26), whose System WebView
+  // can be substantially older than Vite's moving browser baseline.  Keep
+  // the kiosk bundle compatible with Chromium 61 instead of shipping syntax
+  // that renders a native WebView as an empty page before React can recover.
+  build: {
+    target: "chrome61",
+  },
   define: {
     __APP_BUILD__: JSON.stringify(new Date().toISOString()),
   },
