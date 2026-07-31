@@ -33,6 +33,7 @@ public final class HardwareDiagnosticCollector {
             "ready", storage.isReady(),
             "status", storage.code(),
             "compatibilityMode", storage.mode(),
+            "securityLevel", storage.securityLevel(),
             "failureKind", storage.failureKind(),
             "attempts", storage.attempts(),
             "repairApplied", storage.wasRepaired(),

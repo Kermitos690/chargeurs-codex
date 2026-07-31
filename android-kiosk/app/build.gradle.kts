@@ -36,16 +36,17 @@ android {
         targetSdk = 36
         // Incremented for the provider-bridge diagnostic update so the
         // staging APK can be installed as an in-place update.
-        // 1.0.10 keeps secure storage mandatory and adds a vendor-compatible
-        // AndroidKeyStore AES/GCM variant before the RSA-wrapped fallback.
-        versionCode = 110
-        versionName = "1.0.10"
+        // 1.0.11 adds the explicitly approved, staging-only device-bound
+        // compatibility mode for vendor Android images without AndroidKeyStore.
+        versionCode = 111
+        versionName = "1.0.11"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
         buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
         buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
+        buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "false")
         buildConfigField("String", "BUILD_ENVIRONMENT", "\"staging\"")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
@@ -80,6 +81,7 @@ android {
                 "ENROLLMENT_URL",
                 quotedBuildConfig(enrollmentUrl.get().ifBlank { stagingEnrollmentUrl }),
             )
+            buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",
@@ -96,6 +98,7 @@ android {
             // the real dedicated-device lifecycle (HOME alias + boot receiver).
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
+            buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
         }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")

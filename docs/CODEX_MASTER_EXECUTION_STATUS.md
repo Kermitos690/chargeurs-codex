@@ -220,3 +220,22 @@ officiellement documenté.
   `assembleStaging` et signature APK v2. Artefact :
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.10-staging.apk`,
   SHA-256 `df38c7dd6e43ba918872955e2feb4d48313e6e01b660caf4b3c0a3426cf34b20`.
+
+## Mode de compatibilité autorisé pour la tablette staging — 31 juillet 2026
+
+- Le propriétaire a explicitement autorisé une solution de compatibilité pour
+  cette tablette, après confirmation que les variantes AES et RSA
+  AndroidKeyStore échouent toutes par `ProviderException`.
+- L’APK 1.0.11 utilise, uniquement en staging, un token AES/GCM dans le
+  stockage privé de l’application. Sa clé est dérivée localement de l’Android
+  ID propre à cette application, du certificat de signature, du package et
+  d’un sel aléatoire par installation. L’Android ID n’est ni transmis, ni
+  journalisé. Le token reste révocable côté serveur et l’intégrité est assurée
+  par GCM. Cette option est explicitement désactivée dans le build release.
+- Elle est moins résistante à une extraction depuis un appareil rooté que
+  AndroidKeyStore ; ce risque est accepté pour le staging de cette tablette,
+  mais ne doit pas être transposé à la production sans contrôle fournisseur.
+- Vérification locale réussie : `testDebugUnitTest`, `lintStaging`,
+  `assembleStaging` et signature APK v2. Artefact :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.11-staging.apk`,
+  SHA-256 `7d6a7059fa9cb95e0989295e827fa9459536f80c059cbe79a15ad5bb87b55401`.

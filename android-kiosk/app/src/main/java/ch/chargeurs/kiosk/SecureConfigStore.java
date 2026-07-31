@@ -1,9 +1,15 @@
 package ch.chargeurs.kiosk;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.provider.Settings;
 import android.util.Base64;
 
 import java.nio.charset.StandardCharsets;
@@ -12,6 +18,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
+import java.security.MessageDigest;
 import java.security.ProviderException;
 import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
@@ -47,14 +54,18 @@ public final class SecureConfigStore {
     private static final String MODE_AES_KEYSTORE = "AES_KEYSTORE";
     private static final String MODE_AES_KEYSTORE_COMPAT = "AES_KEYSTORE_COMPAT";
     private static final String MODE_RSA_WRAPPED_AES = "RSA_WRAPPED_AES";
+    private static final String MODE_LEGACY_DEVICE_BOUND = "LEGACY_DEVICE_BOUND";
+    private static final String LEGACY_DEVICE_SALT = "legacy_device_salt";
     private static final int GCM_TAG_BITS = 128;
     private static final int CONTENT_KEY_BYTES = 32;
     private static final byte[] PROBE_PLAINTEXT = "chargeurs-storage-probe-v2".getBytes(StandardCharsets.UTF_8);
 
     private final SharedPreferences preferences;
+    private final Context appContext;
 
     public SecureConfigStore(Context context) {
-        preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        appContext = context.getApplicationContext();
+        preferences = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     /** Proves that the local primitives used by enrollment are available. */
@@ -159,6 +170,16 @@ public final class SecureConfigStore {
         StorageHealth rsaCompatibility = probeStorage(MODE_RSA_WRAPPED_AES);
         attempts.add(rsaCompatibility);
         if (rsaCompatibility.ready) return rsaCompatibility.withAttempts(attempts);
+
+        if (BuildConfig.LEGACY_DEVICE_BOUND_STORAGE_ENABLED) {
+            // The vendor Android image has demonstrated that AndroidKeyStore is
+            // unavailable to third-party packages. This staging-only escape
+            // hatch still encrypts/authenticates the token; it is deliberately
+            // weaker against a rooted device and is never enabled in release.
+            StorageHealth legacy = probeStorage(MODE_LEGACY_DEVICE_BOUND);
+            attempts.add(legacy);
+            return legacy.withAttempts(attempts);
+        }
         return rsaCompatibility.withAttempts(attempts);
     }
 
@@ -198,6 +219,12 @@ public final class SecureConfigStore {
         if (MODE_AES_KEYSTORE_COMPAT.equals(requestedMode)) {
             return new ContentKey(MODE_AES_KEYSTORE_COMPAT, getOrCreateAesKey(AES_COMPAT_KEY_ALIAS, false), null);
         }
+        if (MODE_LEGACY_DEVICE_BOUND.equals(requestedMode)) {
+            if (!BuildConfig.LEGACY_DEVICE_BOUND_STORAGE_ENABLED) {
+                throw new KeyStoreException("LEGACY_STORAGE_DISABLED");
+            }
+            return new ContentKey(MODE_LEGACY_DEVICE_BOUND, getOrCreateLegacyDeviceBoundKey(), null);
+        }
         return new ContentKey(MODE_AES_KEYSTORE, getOrCreateAesKey(AES_KEY_ALIAS, true), null);
     }
 
@@ -208,6 +235,12 @@ public final class SecureConfigStore {
             byte[] bytes = rsaCipher(Cipher.DECRYPT_MODE).doFinal(Base64.decode(wrapped, Base64.NO_WRAP));
             if (bytes.length != CONTENT_KEY_BYTES) throw new KeyStoreException("INVALID_WRAPPED_CONTENT_KEY");
             return new SecretKeySpec(bytes, "AES");
+        }
+        if (MODE_LEGACY_DEVICE_BOUND.equals(mode)) {
+            if (!BuildConfig.LEGACY_DEVICE_BOUND_STORAGE_ENABLED) {
+                throw new KeyStoreException("LEGACY_STORAGE_DISABLED");
+            }
+            return getOrCreateLegacyDeviceBoundKey();
         }
         if (MODE_AES_KEYSTORE_COMPAT.equals(mode)) return getOrCreateAesKey(AES_COMPAT_KEY_ALIAS, false);
         if (!MODE_AES_KEYSTORE.equals(mode)) throw new KeyStoreException("UNKNOWN_CRYPTO_MODE");
@@ -224,6 +257,7 @@ public final class SecureConfigStore {
         preferences.edit()
             .remove(STATION).remove(BASE_URL).remove(TOKEN_CIPHER).remove(TOKEN_IV)
             .remove(CRYPTO_MODE).remove(WRAPPED_CONTENT_KEY).remove(STORAGE_PROBE)
+            .remove(LEGACY_DEVICE_SALT)
             .apply();
     }
 
@@ -262,6 +296,69 @@ public final class SecureConfigStore {
         Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
         cipher.init(mode, mode == Cipher.ENCRYPT_MODE ? pair.getPublic() : pair.getPrivate());
         return cipher;
+    }
+
+    /**
+     * Staging compatibility mode for a vendor image with no usable
+     * AndroidKeyStore provider. The secret is still AES/GCM encrypted in the
+     * app-private sandbox and bound to the app-scoped Android ID, application
+     * package and signing certificate. The random per-install salt makes the
+     * derived key unique; it is not treated as secret. A rooted device remains
+     * able to recover it, which is why release builds keep this path disabled.
+     */
+    @SuppressLint("HardwareIds") // Used only locally to derive staging compatibility encryption; never sent or logged.
+    private SecretKey getOrCreateLegacyDeviceBoundKey() throws Exception {
+        String androidId = Settings.Secure.getString(
+            appContext.getContentResolver(),
+            Settings.Secure.ANDROID_ID
+        );
+        if (androidId == null || androidId.trim().isEmpty()) {
+            throw new KeyStoreException("ANDROID_ID_UNAVAILABLE");
+        }
+        byte[] salt = getOrCreateLegacySalt();
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        digest.update("chargeurs-kiosk-staging-device-bound-v1".getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        digest.update(appContext.getPackageName().getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        digest.update(androidId.trim().getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        digest.update(signingCertificateDigest());
+        digest.update((byte) 0);
+        digest.update(salt);
+        return new SecretKeySpec(digest.digest(), "AES");
+    }
+
+    private byte[] getOrCreateLegacySalt() throws Exception {
+        String stored = preferences.getString(LEGACY_DEVICE_SALT, null);
+        if (stored != null && !stored.isEmpty()) {
+            byte[] decoded = Base64.decode(stored, Base64.NO_WRAP);
+            if (decoded.length >= 16) return decoded;
+        }
+        byte[] created = new byte[32];
+        new SecureRandom().nextBytes(created);
+        if (!preferences.edit().putString(LEGACY_DEVICE_SALT, Base64.encodeToString(created, Base64.NO_WRAP)).commit()) {
+            throw new KeyStoreException("LEGACY_SALT_WRITE_FAILED");
+        }
+        return created;
+    }
+
+    private byte[] signingCertificateDigest() throws Exception {
+        PackageManager packageManager = appContext.getPackageManager();
+        Signature[] signatures;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageInfo info = packageManager.getPackageInfo(
+                appContext.getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES
+            );
+            signatures = info.signingInfo == null ? null : info.signingInfo.getApkContentsSigners();
+        } else {
+            PackageInfo info = packageManager.getPackageInfo(
+                appContext.getPackageName(), PackageManager.GET_SIGNATURES
+            );
+            signatures = info.signatures;
+        }
+        if (signatures == null || signatures.length == 0) throw new KeyStoreException("SIGNING_CERTIFICATE_UNAVAILABLE");
+        return MessageDigest.getInstance("SHA-256").digest(signatures[0].toByteArray());
     }
 
     private KeyPair getOrCreateRsaKeyPair() throws Exception {
@@ -345,6 +442,11 @@ public final class SecureConfigStore {
         public String mode() { return mode; }
         public String failureKind() { return failureKind; }
         public String attempts() { return attempts; }
+        public String securityLevel() {
+            return MODE_LEGACY_DEVICE_BOUND.equals(mode)
+                ? "STAGING_COMPATIBILITY_PRIVATE_APP_STORAGE"
+                : "ANDROID_KEYSTORE";
+        }
     }
 
     public static final class SaveResult {
