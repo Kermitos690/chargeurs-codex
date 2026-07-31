@@ -13,6 +13,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
 | Android | workflow GitHub manuel sur `f9822ce` | `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `apksigner verify` réussis |
 | React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
+| Gateway ChargeNow | `npm run test:integration` | 175 tests réussis ; O1 GET seul autorisé vers le fournisseur |
 
 ## Couverture kiosk à six chiffres
 

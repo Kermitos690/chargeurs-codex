@@ -9,7 +9,6 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin, verifyKioskDevice } from "../_shared/db.ts";
 import {
   cabinetQuery,
-  cabinetQueryPost,
   isChargeNowConfigured,
   type ApiResult,
 } from "../_shared/chargenow.ts";
@@ -32,7 +31,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 });
 
 type ProviderAttempt = {
-  transport: "primary_get" | "alternate_post";
+  transport: "primary_get";
   endpoint: string;
   result: ApiResult;
   parsed: ParsedCabinetStatus | null;
@@ -141,24 +140,6 @@ Deno.serve(async (req) => {
         service: "chargenow", endpoint: primaryAttempt.endpoint, method: "GET",
         status_code: primaryResult.status, request: { deviceId }, response: primaryResult.data, error: primaryResult.error,
       });
-
-      // The supplier documentation also exposes a POST variant on its alternate
-      // host. Use it only as a read-only fallback when the primary answer failed
-      // or could not be recognized; never duplicate a valid primary request.
-      if (!usableAttempt(primaryAttempt)) {
-        const alternateResult = await cabinetQueryPost(deviceId);
-        const alternateAttempt: ProviderAttempt = {
-          transport: "alternate_post",
-          endpoint: "/rent/cabinet/query",
-          result: alternateResult,
-          parsed: alternateResult.data == null ? null : parseChargeNowCabinetStatus(alternateResult.data),
-        };
-        attempts.push(alternateAttempt);
-        await logApi(db, {
-          service: "chargenow-alt", endpoint: alternateAttempt.endpoint, method: "POST",
-          status_code: alternateResult.status, request: { deviceId }, response: alternateResult.data, error: alternateResult.error,
-        });
-      }
 
       const chosen = attempts.find(usableAttempt);
       const providerReachable = attempts.some((attempt) => attempt.result.status > 0);

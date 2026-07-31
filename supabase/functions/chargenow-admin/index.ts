@@ -10,6 +10,7 @@ import * as cn from "../_shared/chargenow.ts";
 const DANGEROUS = new Set([
   "C1", "C2", "C3", "C9", "C10", "C11", "C12", "S5", "P4", "E1",
 ]);
+const APPROVED_LIVE_READS = new Set(["O1"]);
 
 const TEST_STATION = "DTA21277"; // live, online test cabinet (Gaetan Test Shop)
 
@@ -26,7 +27,7 @@ async function dispatch(code: string, p: Record<string, unknown>): Promise<Resul
     case "O4": return await cn.orderClose(s("tradeNo"));
     case "O5": return await cn.orderDetail(s("tradeNo"));
     case "O6": return await cn.cabinetListGeo({ coordType: s("coordType", "GCJ-02"), zoomLevel: s("zoomLevel", "5"), lat: s("lat", "46.54"), lng: s("lng", "6.67"), showPrice: true });
-    case "O7": return await cn.cabinetQueryPost(s("deviceId", TEST_STATION));
+    case "O7": return { ok: false, status: 0, data: null, error: "PROVIDER_ENDPOINT_MISSING" };
     case "C1": return await cn.cabinetOperation({ cabinetid: s("cabinetid", TEST_STATION), slotNum: n("slotNum"), operationType: (s("operationType", "heartbeat") as cn.CabinetOperationType), reason: s("reason", "admin") });
     case "C2": return await cn.ejectByRepair(s("cabinetid", TEST_STATION), n("slotNum"));
     case "C3": return await cn.ejectByRent(s("cabinetid", TEST_STATION), n("slotNum"), s("rentOrderId") || undefined);
@@ -58,13 +59,10 @@ async function dispatch(code: string, p: Record<string, unknown>): Promise<Resul
   }
 }
 
-// Codes that are safe to run live automatically (non-destructive).
-const SAFE_LIVE = ["O1", "O5", "O6", "O7", "C4", "C5", "C6", "C7", "C8", "S1", "S2", "P1", "P2", "R1", "E2"];
-
-// Mutations that are NON-destructive and may be exercised live (Level B):
-//   O3 — query order status (idempotent read of a trade).
-// All other mutations create/alter/eject and are NOT auto-run live.
-const SAFE_LIVE_MUTATIONS = ["O3"];
+// Only the explicitly approved documented read operation may be triggered from
+// staging. Other supplier operations stay represented in the coverage model,
+// but require a confirmed contract before they can be exercised.
+const SAFE_LIVE = ["O1"];
 
 // Mutation classification used to seed Level A / Level C verdicts.
 const MUTATION_META: Record<string, { name: string; dangerous: boolean }> = {
@@ -139,15 +137,12 @@ Deno.serve(async (req) => {
       for (const code of SAFE_LIVE) {
         const res = await dispatch(code, paramFor[code] ?? {});
         results[code] = res;
-        // O7 is a documented duplicate of O1 on an alternate host; treat its
-        // route as covered when O1 passed, but keep the raw result as proof.
-        const effectiveOk = code === "O7" ? (results["O1"]?.ok ?? res.ok) : res.ok;
         await db.from("api_coverage").update({
-          live_test_status: effectiveOk ? "pass" : "fail",
+          live_test_status: res.ok ? "pass" : "fail",
           mock_test_status: "pass",
           live_result: res.data as object,
           last_error: res.error,
-          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, note: code === "O7" ? "Alternate-host variant of O1" : undefined },
+          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId },
         }).eq("code", code);
         await logApi(db, { service: "chargenow", endpoint: `coverage:${code}`, method: "GET", status_code: res.status, response: res.data, error: res.error });
       }
@@ -190,47 +185,8 @@ Deno.serve(async (req) => {
 
     // ---- Level B: run ONLY the non-destructive mutations live (no payment) ----
     if (action === "run_safe_live_mutations") {
-      const results: Record<string, Result> = {};
-      let realTradeNo = "";
-      try {
-        const ol = await cn.orderList({});
-        realTradeNo = String((ol.data as { page?: { records?: Array<{ pOrderid?: string }> } })?.page?.records?.[0]?.pOrderid ?? "");
-      } catch { /* ignore */ }
-      const paramFor: Record<string, Record<string, unknown>> = { O3: { tradeNo: realTradeNo } };
-      for (const code of SAFE_LIVE_MUTATIONS) {
-        const t0 = Date.now();
-        const params = paramFor[code] ?? {};
-        const res = await dispatch(code, params);
-        const dt = Date.now() - t0;
-        results[code] = res;
-        const correlation = `live-${code}-${Date.now()}`;
-        await db.from("test_runs").insert({
-          endpoint_code: code,
-          endpoint_name: MUTATION_META[code]?.name ?? code,
-          level: "B",
-          verdict: res.ok ? "live_verified" : "failed",
-          environment: "live",
-          cabinet_id: null,
-          correlation_id: correlation,
-          request_redacted: redactForLog(params),
-          response_redacted: redactForLog(res.data),
-          status_code: res.status,
-          duration_ms: dt,
-          physical_test_required: true,
-          error: res.error,
-          performed_by: adminId,
-        });
-        await db.from("api_coverage").update({
-          live_test_status: res.ok ? "pass" : "fail",
-          live_result: res.data as object,
-          last_error: res.error,
-          proof_state: res.ok ? "live_verified" : "unverified",
-          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, correlation },
-        }).eq("code", code);
-        await logApi(db, { service: "chargenow", endpoint: `mutation:${code}`, method: "POST", status_code: res.status, request: params, response: res.data, error: res.error });
-      }
-      return new Response(JSON.stringify({ ok: true, results }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: false, error: "PROVIDER_MUTATION_DISABLED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ---- Single op invoke ----
@@ -240,6 +196,14 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const params = (body.params as Record<string, unknown>) ?? {};
+
+    if (!APPROVED_LIVE_READS.has(code)) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: DANGEROUS.has(code) ? "PROVIDER_MUTATION_DISABLED" : "PROVIDER_ENDPOINT_MISSING",
+        code,
+      }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // A1 (oauth2Login) relays credentials to ChargeNow — super_admin only.
     if (code === "A1") {

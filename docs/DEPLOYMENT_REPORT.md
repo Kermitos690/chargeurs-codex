@@ -6,7 +6,7 @@
 - Projet Supabase : `xqepbqnaenoeyfjkjnzl`.
 - Projet Vercel : `chargeurs-ch-staging`.
 - Branche source : `agent/finalize-chargeurs-platform`.
-- Commit de référence : `4d0811f` (le déploiement Vercel a utilisé le même code applicatif, avec la documentation locale non déployée).
+- Commit déployé : `d27602a`.
 
 ## Composants déployés
 
@@ -16,9 +16,10 @@
   codes d'appairage, les index associés et la surcharge cinq-arguments de la
   fonction de redemption. Elle ne supprime aucune donnée ni table.
 - Fonctions Edge `kiosk-admin` et `kiosk-enroll` : version 13.
+- Fonctions Edge `sync-cabinet-status` : version 18, `dta-pilot-qualification` : version 5 et `chargenow-admin` : version 11. Elles n'autorisent désormais qu'O1 (`GET /rent/cabinet/query`) vers l'API fournisseur ; les mutations et routes non confirmées répondent fail-closed.
 - Frontend Vercel :
-  [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/DnmtPCzcBbEVrcU2iTqANSDFi5aP),
-  URL attribuée `https://chargeurs-ch-staging-nhc1wn3z2-gaetans-projects-4974c31a.vercel.app`,
+  [déploiement inspectable](https://vercel.com/gaetans-projects-4974c31a/chargeurs-ch-staging/d9zXYSTbK4BZVu7aDoR4C5HQM5eH),
+  URL attribuée `https://chargeurs-ch-staging-e0k3nuaav-gaetans-projects-4974c31a.vercel.app`,
   alias staging `https://chargeurs-ch-staging.vercel.app`.
 
 ## Vérifications effectuées
@@ -29,6 +30,7 @@
 - La table de tentatives et les colonnes de contrôle existent dans staging.
 - Les routes `/`, `/admin` et `/kiosk/DTA21269` répondent toutes par HTTP 200
   via l'alias staging ; le manifeste PWA répond également.
+- L'inspection Vercel retourne `Ready` pour le déploiement ci-dessus.
 - Recherche ciblée dans le HTML servi : aucun secret serveur, identifiant
   ChargeNow, clé Stripe secrète ni service role détecté.
 

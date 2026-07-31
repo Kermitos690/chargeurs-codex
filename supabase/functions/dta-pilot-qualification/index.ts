@@ -4,7 +4,6 @@ import { adminClient, auditLog, logApi, requireAdmin } from "../_shared/db.ts";
 import {
   areChargeNowMutationsEnabled,
   cabinetQuery,
-  cabinetQueryPost,
   chargeNowMode,
   ejectByRent,
   isChargeNowConfigured,
@@ -36,7 +35,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 });
 
 type ProviderAttempt = {
-  transport: "primary_get" | "alternate_post";
+  transport: "primary_get";
   result: ApiResult;
   parsed: ParsedCabinetStatus | null;
 };
@@ -92,24 +91,6 @@ async function fetchPilotStatus(db: SupabaseClient) {
     response: primary.data,
     error: primary.error,
   });
-
-  if (!usable(attempts[0])) {
-    const alternate = await cabinetQueryPost(DTA_PILOT_STATION_ID);
-    attempts.push({
-      transport: "alternate_post",
-      result: alternate,
-      parsed: alternate.data == null ? null : parseChargeNowCabinetStatus(alternate.data),
-    });
-    await logApi(db, {
-      service: "chargenow-alt",
-      endpoint: "/rent/cabinet/query",
-      method: "POST",
-      status_code: alternate.status,
-      request: { deviceId: DTA_PILOT_STATION_ID, purpose: "battery_qualification" },
-      response: alternate.data,
-      error: alternate.error,
-    });
-  }
 
   const selected = attempts.find(usable) ?? null;
   if (selected?.parsed) {

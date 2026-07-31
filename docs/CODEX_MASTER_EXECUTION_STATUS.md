@@ -10,7 +10,7 @@
 
 ## Active phase
 
-P4 — activation kiosk staging déployée ; preuve Android CI et baseline de migrations en cours.
+P6 — activation kiosk staging et gateway ChargeNow lecture seule déployées ; baseline de migrations en cours.
 
 ## Completed before this master execution
 
@@ -28,6 +28,7 @@ P4 — activation kiosk staging déployée ; preuve Android CI et baseline de mi
 - The diagnostic Android GitHub workflow is manual-only; an Android source push no longer starts a paid hosted build automatically.
 - The additive numeric-enrollment migration was applied directly to the dedicated staging project after source review because `db push` remains blocked by unrelated historical drift. It created only a private attempt ledger, indexes, additive columns and overloaded server-only redemption functions.
 - Staging `kiosk-admin` and `kiosk-enroll` are deployed at function version 13. An intentionally malformed enrollment request returns controlled HTTP 400 / `INVALID_ENROLLMENT_REQUEST`; it neither generated nor consumed a code.
+- The ChargeNow gateway is restricted to the explicitly approved `GET /rent/cabinet/query` call on the documented host. Alternate hosts and every supplier mutation are fail-closed; the coverage screen keeps their internal representations without claiming a live connection.
 - Vercel staging was deployed successfully. `/`, `/admin`, `/kiosk/DTA21269` and the PWA manifest respond through `https://chargeurs-ch-staging.vercel.app`; see `docs/DEPLOYMENT_REPORT.md`.
 
 ## Current work

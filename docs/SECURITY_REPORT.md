@@ -8,6 +8,7 @@
 | Réutilisation d'un code | Hash, expiration, liaison station/organisation, consumption atomique et renouvellement invalidant | migration + fonctions Edge | déployé staging |
 | Brute force de code court | Limites sur appareil, station et origine hachée ; pause progressive ; aucun code brut journalisé | migration + test de contrat | déployé staging |
 | Coût CI Android automatique | workflow diagnostic devenu manuel | workflow GitHub | corrigé |
+| Route fournisseur non confirmée | retrait des appels vers hôte alternatif ; allowlist O1 GET uniquement | 175 tests Deno + déploiement Edge staging | déployé staging |
 
 ## Dépendances frontend
 

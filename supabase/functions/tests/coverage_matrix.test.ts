@@ -37,11 +37,11 @@ Deno.test("every dangerous code is gated in the DANGEROUS set", () => {
   }
 });
 
-Deno.test("safe-live list only contains non-destructive read codes", () => {
+Deno.test("safe-live list contains only the explicitly approved documented read", () => {
   const m = src.match(/const SAFE_LIVE = \[([\s\S]*?)\]/);
   assert(m, "SAFE_LIVE list not found");
-  const dangerous = ["C1", "C2", "C3", "C9", "C10", "C11", "C12", "S5", "P4", "E1"];
-  for (const code of dangerous) {
-    assert(!m![1].includes(`"${code}"`), `Destructive op ${code} must NOT be auto-run live`);
-  }
+  assertEquals(m![1].trim(), '"O1"');
+  assert(src.includes('case "O7": return { ok: false, status: 0, data: null, error: "PROVIDER_ENDPOINT_MISSING" }'));
+  assert(src.includes('const APPROVED_LIVE_READS = new Set(["O1"])'));
+  assert(src.includes('error: DANGEROUS.has(code) ? "PROVIDER_MUTATION_DISABLED" : "PROVIDER_ENDPOINT_MISSING"'));
 });

@@ -44,20 +44,16 @@ La documentation Apifox est parfois incohérente entre `Basic` et `Bearer`. Le c
 
 Le compte du dashboard web n'est pas présumé être un compte OpenAccount tant qu'un test en lecture seule ne l'a pas confirmé.
 
-## Endpoints de lecture prioritaires
+## Endpoint fournisseur activé en staging
 
 | Fonction Chargeurs.ch | Endpoint ChargeNow | Méthode | Usage |
 |---|---|---:|---|
 | Snapshot principal borne | `/rent/cabinet/query?deviceId=...` | GET | Borne, magasin, prix et batteries dans une réponse |
-| Détail technique borne | `/cabinet/detail/{cabinetId}` | GET | Complément fournisseur, sans dépendance pour le pilote |
-| Batteries par borne | `/cabinet/batteryListByCabinetId/{cabinetId}` | GET | Inventaire fournisseur détaillé |
-| Slots par borne | `/cabinet/slotByCabinetId/{cabinetId}` | GET | État fournisseur détaillé des emplacements |
-| Magasin | `/shop/detail/{shopId}` | GET | Coordonnées et configuration du lieu |
-| Stratégie tarifaire | `/shop/priceStrategy/detail/{priceId}` | GET | Paramètres de tarification lorsque l'identifiant est connu |
-| Commandes | `/order/page` | POST | Historique, uniquement après validation du schéma réel |
-| Configuration événements | `/eventPush/config` | GET | Vérification du mécanisme de callbacks, sans modification |
 
-Le snapshot principal est la seule route exigée pour déclarer la borne observable. Les autres routes enrichissent le résultat mais ne transforment pas un échec partiel en état fictif.
+Les autres opérations observées ou documentées restent modélisées dans le centre
+de couverture interne, mais elles sont signalées `PROVIDER_ENDPOINT_MISSING` ou
+`PROVIDER_MUTATION_DISABLED` tant que ChargeNow n'a pas confirmé le contrat à
+utiliser. Aucun hôte alternatif ou endpoint déduit n'est appelé.
 
 ## Modèle canonique Chargeurs.ch
 
@@ -142,4 +138,5 @@ La phase lecture seule est validée lorsque le backend Chargeurs.ch peut, pour D
 4. distinguer clairement panne réseau, rejet d'authentification, borne inconnue et réponse non reconnue ;
 5. enregistrer un historique de synchronisation sans provoquer d'éjection, location ou paiement.
 
-La phase suivante sera un cycle `FreeTest` à `0 CHF` avec commande explicitement autorisée, puis Stripe Test. La suppression de ChargeNow n'interviendra qu'après validation du pilote natif `/dev/ttyS1`.
+Toute phase matérielle ultérieure exige une autorisation explicite séparée ;
+elle ne fait pas partie de la présente validation staging en lecture seule.

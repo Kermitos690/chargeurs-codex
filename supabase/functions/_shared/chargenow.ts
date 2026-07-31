@@ -118,27 +118,10 @@ export const oauth2Login = (username: string, passwordSha256: string) =>
 export const cabinetQuery = (deviceId: string) =>
   request("GET", "/rent/cabinet/query", { query: { deviceId } });
 
-// O7 — Get Device Info (POST variant; documented on an alternate host).
-const ALT_BASE_URL = Deno.env.get("CHARGENOW_ALT_BASE_URL") ?? "https://bangbanghelp.top/cdb-open-api/v1";
-export const cabinetQueryPost = async (deviceId: string): Promise<ApiResult> => {
-  const url = new URL(ALT_BASE_URL.replace(/\/$/, "") + "/rent/cabinet/query");
-  url.searchParams.set("deviceId", deviceId);
-  try {
-    const res = await fetch(url.toString(), {
-      method: "POST",
-      headers: { Authorization: authHeader(), Accept: "application/json" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const text = await res.text();
-    let data: unknown = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    const bizCode = (data as { code?: number } | null)?.code;
-    const ok = res.ok && (bizCode === undefined || bizCode === 0);
-    return { ok, status: res.status, data: data as unknown, error: ok ? null : `HTTP_${res.status}` };
-  } catch (e) {
-    return { ok: false, status: 0, data: null, error: String(e) };
-  }
-};
+// An alternate POST variant has been observed in supplier material, but is not
+// enabled here. Chargeurs.ch only calls the explicitly approved documented
+// staging operation on CHARGENOW_API_BASE_URL. The coverage UI keeps O7 as
+// PROVIDER_ENDPOINT_MISSING until ChargeNow confirms an official contract.
 
 // O2 — Create Rent Order (query params: deviceId, callbackURL)
 export const orderCreate = (args: { deviceId: string; callbackURL?: string }) =>

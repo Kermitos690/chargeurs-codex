@@ -136,7 +136,7 @@ export default function AdminApiCoverage() {
           <Button onClick={exportCsv} variant="outline" className="gap-2"><Download className="h-4 w-4" />CSV</Button>
           <Button onClick={runSafe} disabled={running} className="gap-2 bg-gradient-primary">
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-            Tests live (non destructifs)
+            Vérifier O1 (lecture autorisée)
           </Button>
         </div>
       </div>
