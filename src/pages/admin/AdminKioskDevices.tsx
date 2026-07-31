@@ -34,6 +34,8 @@ type PairingCode = {
   used_at: string | null;
   used_by_device_id: string | null;
   created_at: string;
+  failed_attempt_count?: number;
+  last_failed_attempt_at?: string | null;
   organization?: { slug: string; legal_name: string } | null;
 };
 
@@ -64,7 +66,7 @@ export default function AdminKioskDevices() {
 
   const [stationId, setStationId] = useState("");
   const [label, setLabel] = useState("");
-  const [pairingMinutes, setPairingMinutes] = useState("15");
+  const [pairingMinutes, setPairingMinutes] = useState("10");
 
   const [revealedToken, setRevealedToken] = useState<{ id: string; token: string } | null>(null);
   const [revealedPairing, setRevealedPairing] = useState<RevealedPairing | null>(null);
@@ -116,7 +118,7 @@ export default function AdminKioskDevices() {
   const provision = async () => {
     if (!stationId) { toast.error("Choisissez une borne"); return; }
     const data = await mutate("create_pairing_code", {
-      stationId, label: label || null, ttlMinutes: Number(pairingMinutes || 15),
+      stationId, label: label || null, ttlMinutes: Number(pairingMinutes || 10),
     }, "provision");
     if (data?.pairingCode) {
       setRevealedPairing({
@@ -138,7 +140,7 @@ export default function AdminKioskDevices() {
     const data = await mutate("create_pairing_code", {
       stationId: revealedPairing.stationId,
       label: "Tablette pilote staging",
-      ttlMinutes: 15,
+      ttlMinutes: 10,
     }, "renew-pairing");
     if (data?.pairingCode) {
       setRevealedPairing({
@@ -271,6 +273,7 @@ export default function AdminKioskDevices() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {code.label ?? "Tablette"} · {code.organization?.legal_name ?? code.organization_id} · créé {new Date(code.created_at).toLocaleString("fr-CH")} · expire {new Date(code.expires_at).toLocaleString("fr-CH")}
+                  {typeof code.failed_attempt_count === "number" && code.failed_attempt_count > 0 ? ` · ${code.failed_attempt_count}/5 tentatives refusées` : ""}
                 </p>
               </div>
               {canWrite && active && (

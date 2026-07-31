@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
         .select("id,station_id,organization_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at,device_public_id,app_version,enrolled_at,revoked_at")
         .order("created_at", { ascending: false }),
         db.from("kiosk_pairing_codes")
-        .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at,organization:organizations(slug,legal_name)")
+        .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at,failed_attempt_count,last_failed_attempt_at,organization:organizations(slug,legal_name)")
         .order("created_at", { ascending: false }),
       ]);
       if (deviceError || pairingError) throw deviceError ?? pairingError;
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
     if (action === "create_pairing_code") {
       if (!stationId) return json({ ok: false, error: "MISSING_STATION" }, 400);
-      const minutes = Math.max(5, Math.min(15, Number(ttlMinutes ?? 15)));
+      const minutes = Math.max(5, Math.min(15, Number(ttlMinutes ?? 10)));
       const { data: station } = await db.from("stations")
         .select("station_id,name,organization_id,organization:organizations(slug,legal_name)")
         .eq("station_id", stationId).maybeSingle();

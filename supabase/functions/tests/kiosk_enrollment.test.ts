@@ -38,6 +38,7 @@ Deno.test("pairing administration binds organization and supports audited cancel
   assert(source.includes('action: "kiosk.pairing_code.cancelled"'));
   assert(source.includes('code_hash: await sha256Hex(pairingCode)'));
   assert(source.includes("newSixDigitPairingCode"));
+  assert(source.includes("ttlMinutes ?? 10"));
 });
 
 Deno.test("kiosk enrollment applies a keyed source rate limit without logging plaintext", async () => {
