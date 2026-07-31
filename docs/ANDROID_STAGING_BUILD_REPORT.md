@@ -1,6 +1,7 @@
 # APK Android staging — rapport de build
 
 Date du build : 31 juillet 2026 (Europe/Zurich)
+Commit source Android : `0290920` (branche `agent/finalize-chargeurs-platform`)
 
 | Artefact | Application ID | Version | Taille | SHA-256 |
 |---|---|---:|---:|---|
