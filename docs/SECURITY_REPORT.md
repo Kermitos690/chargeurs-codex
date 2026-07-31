@@ -11,6 +11,7 @@
 | Route fournisseur non confirmée | retrait des appels vers hôte alternatif ; allowlist O1 GET uniquement | 179 tests Deno + déploiement Edge staging | déployé staging |
 | Clé Stripe live utilisable malgré le flag | validation centralisée exigeant mode test, live=false et préfixe de clé test | 4 tests dédiés + 179 tests Edge | déployé staging |
 | Webhook Stripe falsifié | secret `whsec_`, signature sur le corps brut et inbox idempotente | événement Stripe Test signé 200 ; requête sans signature 400 | déployé staging |
+| Code kiosk consommé avant persistance tablette | pré-contrôle AndroidKeyStore/préférences, rotation locale unique de la seule clé Chargeurs invalide, puis lecture de confirmation | APK staging 1.0.7 : 14 tests, lint debug/staging, build et signature v2 | corrigé localement ; validation tablette requise |
 
 ## Dépendances frontend
 
@@ -32,8 +33,10 @@
   npm signale encore deux avis React Server Components ; aucun serveur, module
   ou import RSC n'est utilisé par cette SPA, mais cela doit être réévalué avant
   toute adoption de RSC.
-- L'APK staging 1.0.6 est construit et sa signature v2 est vérifiée localement,
-  mais son comportement runtime reste à confirmer sur la tablette réelle.
+- L'APK staging 1.0.7 est construit, contrôlé et signé v2 localement ; son
+  comportement runtime (Keystore fournisseur, tactile, boot et WebView) reste
+  à confirmer sur la tablette réelle. Le pré-contrôle évite désormais de
+  consommer un nouveau code si ce stockage est indisponible.
 - L’APK fournisseur peut être détectée uniquement par ses métadonnées Android.
   Son processus, son port série, ses fichiers et sa connexion persistante ne
   sont pas accessibles à Chargeurs.ch sans contrat fournisseur public ; toute

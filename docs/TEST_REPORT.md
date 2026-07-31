@@ -13,6 +13,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
 | Android | workflow GitHub manuel sur `f9822ce` | `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `apksigner verify` réussis |
 | Android 1.0.6 | Java 17 local | `testDebugUnitTest`, `lintStaging`, `assembleStaging` et signature v2 réussis |
+| Android 1.0.7 | Java 17 local | build propre : 14 tests, `lintDebug`, `lintStaging`, `assembleDebug`, `assembleStaging`, signature v2 et scan de marqueurs de secrets réussis |
 | React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
 | Gateway ChargeNow | `npm run test:integration` | 179 tests réussis ; O1 GET seul autorisé vers le fournisseur |
 | Stripe runtime | tests ciblés + suite Edge | 4 nouveaux tests fail-closed ; clé live, mode non-test et secret webhook absent refusés |
@@ -29,12 +30,30 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 - Limites appareil, station et origine réseau : migration staging appliquée ;
   test SQL réel à exécuter après création contrôlée d'un code.
 
+## Persistance locale APK 1.0.7
+
+- Le scénario réel « code accepté côté serveur, token non enregistré côté
+  tablette » a été constaté avec l’APK 1.0.5 : le code est alors consommé et
+  l’appareil créé sans heartbeat local.
+- Avant tout POST d’enrôlement, 1.0.7 effectue désormais un aller-retour
+  AES-GCM AndroidKeyStore et un test d’écriture/suppression de préférence non
+  sensible. Le bouton **Activer** est désactivé tant que ce contrôle échoue.
+- Si l’alias appartenant uniquement à Chargeurs est invalide, le build tente
+  une seule rotation locale et contrôle de nouveau l’écriture. Aucun fallback
+  en clair n’existe.
+- Après une réponse serveur, le token est relu et comparé avant l’ouverture du
+  kiosk. Un échec post-réponse efface le code visuel et demande un nouveau code,
+  au lieu d’inciter l’opérateur à réessayer un code déjà consommé.
+
 ## Non exécuté volontairement
 
 - Paiement Stripe live ou test avec carte. Le webhook Stripe Test signé a été
   validé séparément, sans paiement ni autorisation bancaire.
 - Mutation ChargeNow, éjection, redémarrage ou firmware.
-- APK debug staging : construit et vérifié par GitHub Actions, puis copié localement dans `/Users/k4n/Downloads/Chargeurs_CH_Kiosk_Staging_f9822ce.apk`. Il reste non installé et non publié.
+- APK staging 1.0.7 : construit et vérifié localement, puis copié dans
+  `/Users/k4n/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.7-staging.apk`.
+  Aucun appareil ADB n’était connecté, donc installation et test tactile restent
+  physiques et documentés.
 - Génération d'un code réel : différée pour ne pas le laisser expirer avant la
   saisie sur la tablette.
 

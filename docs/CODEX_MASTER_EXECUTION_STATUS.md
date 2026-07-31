@@ -84,6 +84,10 @@ compatibilité tablette et diagnostic non intrusif du pont matériel fournisseur
   tests unitaires (14), lint debug/staging, builds debug/staging et signature
   v2 passent localement. Artefact attendu :
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.7-staging.apk`.
+- L’artefact 1.0.7 a été copié et contrôlé dans Downloads : 922 668 octets,
+  SHA-256 `93dc4c4da9ea084bfae63b08adac502e65aa7318df380cee9e1c636c2de9328c`.
+  Aucun appareil ADB n’était connecté au Mac lors du contrôle ; l’installation
+  USB et la validation physique restent la prochaine étape.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
 - Installer l’APK staging `1.0.6` sur la tablette. Si elle s’arrête encore,
   relever le diagnostic visible (ou la version Android et l’état d’Android
