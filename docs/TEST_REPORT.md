@@ -11,12 +11,12 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Edge Functions | `npm run test:integration` | 175 tests réussis |
 | Enrollment ciblé | `deno test ...kiosk_enrollment.test.ts` | 6 tests réussis |
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
-| Android | workflow GitHub manuel sur `b59b6b8` | `testDebugUnitTest`, `lintDebug` et `assembleDebug` réussis |
+| Android | workflow GitHub manuel sur `f9822ce` | `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `apksigner verify` réussis |
 | React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
 
 ## Couverture kiosk à six chiffres
 
-- L'artefact debug staging contrôlé fait 912 980 octets et son SHA-256 est `b8b7f51f689cfa49a2a1d6f7a55e37b8c04475fb4e7a1c61e41b388001d76468`.
+- L'artefact debug staging contrôlé fait 912 980 octets et son SHA-256 est `6bd42cfe274ce87ca1147c76a1535ae2fe6d7f17c70ea936364e5a1cf684f6e2`. La vérification APK v2 est réussie ; aucune installation ni publication n'a été effectuée.
 - Code numérique exactement six chiffres, y compris `004821` : testé.
 - Longueur incorrecte, lettres, espaces et décimales : refusés par tests.
 - Hash SHA-256 uniquement en persistance : vérifié par inspection et test.
@@ -29,6 +29,6 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 
 - Paiement Stripe live ou test avec carte.
 - Mutation ChargeNow, éjection, redémarrage ou firmware.
-- APK debug staging : construit par GitHub Actions, archive contrôlée et non installée. Une vérification `apksigner` est ajoutée au workflow manuel et doit être prouvée par la prochaine exécution.
+- APK debug staging : construit et vérifié par GitHub Actions, puis copié localement dans `/Users/k4n/Downloads/Chargeurs_CH_Kiosk_Staging_f9822ce.apk`. Il reste non installé et non publié.
 - Génération d'un code réel : différée pour ne pas le laisser expirer avant la
   saisie sur la tablette.

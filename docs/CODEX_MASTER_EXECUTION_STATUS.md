@@ -33,7 +33,7 @@ P4 — activation kiosk staging déployée ; preuve Android CI et baseline de mi
 ## Current work
 
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
-- Verify the current manual Android GitHub artifact workflow and archive its build evidence when it completes.
+- Archive the verified Android staging APK and keep the Android runtime test pending a physical tablet.
 - React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
 
 ## Blockers
@@ -47,9 +47,9 @@ P4 — activation kiosk staging déployée ; preuve Android CI et baseline de mi
 - Staging Supabase: additive kiosk migration applied directly; `kiosk-admin` and `kiosk-enroll` deployed. No production deployment, provider mutation, Stripe live action, hardware command or code redemption occurred.
 - Vercel staging deployment is READY. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
-- The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `b59b6b8` and produced an uninstalled staging debug APK. A follow-up manual workflow adds `apksigner verify` as build evidence.
+- The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `f9822ce` with `apksigner verify` and produced an uninstalled staging debug APK. Runtime behavior remains unverified until a physical tablet test.
 - The former React Router 6 moderate advisories are removed by the 7.18.1 upgrade. npm still flags two React Server Components advisories; there is no RSC server, route module or import in the deployed SPA, but this must be reassessed before any future RSC adoption.
 
 ## Next operation
 
-Collect the manual Android CI result, then commit the migration reconciliation evidence. Keep all supplier mutation flags disabled.
+Continue the staging RBAC and account readiness work without attempting a live account invite, then prepare the controlled pairing-code hand-off only when the tablet is ready. Keep all supplier mutation flags disabled.

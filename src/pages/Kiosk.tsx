@@ -154,6 +154,13 @@ export default function Kiosk() {
     });
   }, [stationId]);
 
+  const reset = useCallback(() => {
+    idemRef.current = null;
+    setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
+    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null);
+    void loadStation();
+  }, [loadStation]);
+
   // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
   // different cabinet id in the URL is treated as a mismatch (no silent switch).
   useEffect(() => {
@@ -226,7 +233,7 @@ export default function Kiosk() {
     if (phase !== "success") return;
     const t = setTimeout(() => reset(), 12000);
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, reset]);
 
   // Best-effort fullscreen on first user interaction (kiosk tablets).
   const goFullscreen = useCallback(() => {
@@ -287,13 +294,6 @@ export default function Kiosk() {
       setExpiresAt(c.expires_at ? new Date(c.expires_at).getTime() : null);
       setPhase("qr");
     } catch { setPhase("error"); }
-  };
-
-  const reset = () => {
-    idemRef.current = null;
-    setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
-    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null);
-    loadStation();
   };
 
   const available = station?.rentable_count ?? 0;
