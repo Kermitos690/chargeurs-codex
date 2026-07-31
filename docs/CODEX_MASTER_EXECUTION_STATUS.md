@@ -43,6 +43,9 @@ P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et b
   no-ejection build flag. `testDebugUnitTest`, `lintDebug`, `lintStaging`,
   `assembleDebug` and `assembleStaging` passed. The copied staging APK is
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging.apk`.
+- Exact hashes, application IDs, permissions and release-signing limitation are
+  recorded in `docs/ANDROID_STAGING_BUILD_REPORT.md`. A debug APK copy is also
+  available beside the staging artifact in `~/Downloads/Chargeurs_CH_APK/`.
 - The artifact is debug-signed for staging only. `apksigner verify` confirms
   APK Signature Scheme v2. Its `applicationId` is
   `ch.chargeurs.kiosk.staging`, minSdk is 26 and targetSdk is 36.
