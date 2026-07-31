@@ -29,6 +29,7 @@ public final class ProvisioningActivity extends Activity {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final StringBuilder activationCode = new StringBuilder(6);
     private boolean storageReady;
+    private boolean storageCheckInFlight;
     private boolean enrollmentInFlight;
 
     @Override
@@ -168,6 +169,7 @@ public final class ProvisioningActivity extends Activity {
 
     private void checkSecureStorageBeforeEnrollment() {
         storageReady = false;
+        storageCheckInFlight = true;
         updateActivateButton();
         executor.execute(() -> {
             SecureConfigStore.StorageHealth health = store.prepareForEnrollment();
@@ -177,6 +179,7 @@ public final class ProvisioningActivity extends Activity {
                 "repaired", health.wasRepaired()
             ));
             runOnUiThread(() -> {
+                storageCheckInFlight = false;
                 storageReady = health.isReady();
                 if (health.isReady()) {
                     secureStorageStatus.setText(health.wasRepaired()
@@ -203,7 +206,12 @@ public final class ProvisioningActivity extends Activity {
             return;
         }
         if (!storageReady) {
-            Toast.makeText(this, R.string.secure_storage_must_be_ready, Toast.LENGTH_LONG).show();
+            if (storageCheckInFlight) {
+                Toast.makeText(this, "Vérification du stockage sécurisé en cours…", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, R.string.secure_storage_must_be_ready, Toast.LENGTH_LONG).show();
+                checkSecureStorageBeforeEnrollment();
+            }
             return;
         }
 
@@ -319,8 +327,16 @@ public final class ProvisioningActivity extends Activity {
 
     private void updateActivateButton() {
         if (activateButton != null) {
-            activateButton.setEnabled(storageReady && !enrollmentInFlight && activationCode.length() == 6);
+            // Keep the action reachable once six digits are present. When the
+            // AndroidKeyStore preflight is not ready, provision() gives an
+            // immediate visible reason and retries the preflight; it never
+            // sends the one-time code before secure storage is proven.
+            activateButton.setEnabled(isActivationButtonEnabled(activationCode.length(), enrollmentInFlight));
         }
+    }
+
+    static boolean isActivationButtonEnabled(int codeLength, boolean enrollmentInFlight) {
+        return codeLength == 6 && !enrollmentInFlight;
     }
 
     private TextView text(String value, int size, int color) {
