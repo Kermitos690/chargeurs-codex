@@ -52,3 +52,16 @@
 - Rollback frontend : promouvoir le déploiement Vercel précédent. Rollback de
   fonction : redéployer le commit précédent après une revue ; la migration est
   additive et ne doit pas être supprimée.
+
+## Correctif récupération de mot de passe — 31 juillet 2026, 19:57 CEST
+
+- Commit : `4450c1c` ; projet Vercel staging uniquement.
+- Déploiement : `dpl_6qT4wpAM24wHauy6wXTt7FbqbAhd`, état `Ready` ; alias
+  `https://chargeurs-ch-staging.vercel.app` conservé.
+- Les demandes de récupération utilisent désormais un client d’authentification
+  dédié en flux implicite et non persistant. Le lien peut être ouvert depuis
+  Gmail/Safari ou un autre appareil ; le fragment d’URL est nettoyé aussitôt
+  après l’établissement de la session de récupération.
+- Le client PKCE principal reste utilisé pour les sessions ordinaires. Aucun
+  e-mail de réinitialisation, mot de passe ni session n’a été créé durant la
+  vérification de déploiement.

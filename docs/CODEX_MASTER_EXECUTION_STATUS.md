@@ -124,3 +124,14 @@ les métadonnées de l’agent fournisseur et les candidats de ports ; elle ne d
 ni lancer ni arrêter l’agent Bajie/ChargeNow. Un pont physique complet reste
 conditionné par un SDK, un service système ou un protocole DTA/RS485
 officiellement documenté.
+
+## Correctif d’accès staging — 31 juillet 2026
+
+- La récupération de mot de passe PKCE échouait lorsqu’un lien demandé dans un
+  navigateur était ouvert dans Gmail/Safari ou sur un autre appareil : le
+  verifier PKCE n’existait pas dans ce stockage local.
+- Commit `4450c1c` déploie un client de récupération isolé, implicite et non
+  persistant pour les seuls e-mails de réinitialisation. Le déploiement Vercel
+  staging `dpl_6qT4wpAM24wHauy6wXTt7FbqbAhd` est `Ready`.
+- Les nouveaux liens doivent être demandés après ce déploiement ; les anciens
+  liens PKCE restent volontairement invalides et ne sont pas réutilisables.
