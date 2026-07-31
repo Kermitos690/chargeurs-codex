@@ -34,7 +34,7 @@ P4 — activation kiosk staging déployée ; preuve Android CI et baseline de mi
 
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
 - Verify the current manual Android GitHub artifact workflow and archive its build evidence when it completes.
-- Upgrade React Router in a separate compatibility-tested commit to resolve the two production moderate advisories.
+- React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
 
 ## Blockers
 
@@ -48,7 +48,7 @@ P4 — activation kiosk staging déployée ; preuve Android CI et baseline de mi
 - Vercel staging deployment is READY. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 13 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
 - The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `b59b6b8` and produced an uninstalled staging debug APK. A follow-up manual workflow adds `apksigner verify` as build evidence.
-- Production dependency audit reports two moderate React Router advisories. A compatibility trial of `react-router-dom@7.18.1` was reverted because the current audit then reported two high-severity RSC-mode advisories; no dependency lockfile change was retained.
+- The former React Router 6 moderate advisories are removed by the 7.18.1 upgrade. npm still flags two React Server Components advisories; there is no RSC server, route module or import in the deployed SPA, but this must be reassessed before any future RSC adoption.
 
 ## Next operation
 

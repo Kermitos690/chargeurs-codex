@@ -12,6 +12,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Enrollment ciblé | `deno test ...kiosk_enrollment.test.ts` | 6 tests réussis |
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
 | Android | workflow GitHub manuel sur `b59b6b8` | `testDebugUnitTest`, `lintDebug` et `assembleDebug` réussis |
+| React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
 
 ## Couverture kiosk à six chiffres
 
