@@ -7,6 +7,7 @@ import android.app.KeyguardManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -27,6 +28,8 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebSettings;
+import android.webkit.WebStorage;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
@@ -41,6 +44,8 @@ public final class MainActivity extends Activity {
     private static final long WATCHDOG_INTERVAL_MS = 30_000L;
     private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
     private static final long WEB_UI_READY_TIMEOUT_MS = 20_000L;
+    private static final String WEB_RUNTIME_PREFS = "chargeurs_web_runtime";
+    private static final String WEB_RUNTIME_VERSION = "last_runtime_version";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private FrameLayout container;
@@ -53,6 +58,7 @@ public final class MainActivity extends Activity {
     private boolean heartbeatPending;
     private boolean kioskUiReady;
     private boolean startupErrorShown;
+    private boolean resetWebRuntimeOnFirstLoad;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
     private CabinetController cabinetController;
@@ -99,6 +105,7 @@ public final class MainActivity extends Activity {
         KioskVisuals.applyKioskWindow(this);
         registerBackBlocking();
         setContentView(buildRoot());
+        resetWebRuntimeOnFirstLoad = shouldResetWebRuntime();
         registerConnectivityMonitoring();
         createWebView();
         handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
@@ -176,6 +183,16 @@ public final class MainActivity extends Activity {
         webView.getSettings().setSupportMultipleWindows(false);
         webView.getSettings().setMediaPlaybackRequiresUserGesture(true);
         webView.getSettings().setSaveFormData(false);
+        if (resetWebRuntimeOnFirstLoad) {
+            // A prior kiosk release registered a root-scoped PWA worker. On
+            // industrial WebViews it can continue to serve an obsolete shell
+            // after an APK update. The durable pairing credential lives in
+            // SecureConfigStore, outside WebView data, so this reset cannot
+            // deprovision the station.
+            webView.clearCache(true);
+            webView.clearHistory();
+            webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+        }
         webView.getSettings().setUserAgentString(
             webView.getSettings().getUserAgentString()
                 + " ChargeursKiosk/"
@@ -240,6 +257,7 @@ public final class MainActivity extends Activity {
                     () -> splashBrand.setVisibility(View.GONE)
                 ).start();
                 heartbeatPending = false;
+                resetWebRuntimeOnFirstLoad = false;
             }
 
             @Override
@@ -325,6 +343,21 @@ public final class MainActivity extends Activity {
             kioskUiReady = true;
             handler.removeCallbacks(kioskUiReadyTimeout);
         });
+    }
+
+    private boolean shouldResetWebRuntime() {
+        SharedPreferences prefs = getSharedPreferences(WEB_RUNTIME_PREFS, MODE_PRIVATE);
+        String current = BuildConfig.VERSION_NAME;
+        String previous = prefs.getString(WEB_RUNTIME_VERSION, "");
+        if (current.equals(previous)) return false;
+        try {
+            WebStorage.getInstance().deleteAllData();
+        } catch (RuntimeException ignored) {
+            // The no-cache initial load below still prevents a normal WebView
+            // cache from masking the new staging application.
+        }
+        prefs.edit().putString(WEB_RUNTIME_VERSION, current).apply();
+        return true;
     }
 
     private void injectCredentialsAndReload(WebView view) {

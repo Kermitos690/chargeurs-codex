@@ -106,3 +106,17 @@ installable.
 - Contrôles réussis : `testDebugUnitTest`, `lintStaging`, `assembleStaging` et
   `apksigner verify` (signature v2). Écran/tactile restent à valider sur la
   tablette réelle.
+
+### Version installable 1.0.13
+
+- `versionCode=113`, `versionName=1.0.13-staging` : mise à jour directe de
+  1.0.11 ou 1.0.12, même identifiant et signature debug.
+- À la première ouverture après cette mise à jour seulement, les données
+  WebView/PWA sont purgées et le premier chargement ne peut pas utiliser le
+  cache. Le jeton d’appairage reste dans le stockage natif `SecureConfigStore`
+  et la tablette ne doit pas demander de nouveau code.
+- Artefact : `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.13-staging.apk`
+  (927 776 octets, SHA-256
+  `cad022c28d3a74dc22e677c791bbb949c6ca3a02f7a383bf2aea5fcd959e0425`).
+- Contrôles réussis : `testDebugUnitTest`, `lintStaging`, `assembleStaging`,
+  `apksigner verify` (signature v2). Test écran/tactile requis sur tablette.

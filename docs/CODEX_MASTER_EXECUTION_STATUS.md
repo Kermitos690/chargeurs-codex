@@ -260,3 +260,24 @@ officiellement documenté.
   (`versionCode=112`, `versionName=1.0.12-staging`, 927 364 octets, SHA-256
   `38bcbfcbc4c393af71fa4188f0ba0f9e50cd8e36d8618913c662c22ae875dc1d`).
   Elle conserve l’appairage 1.0.11 : aucun nouveau code n’est nécessaire.
+
+## Correction de configuration Vercel et purge WebView — 31 juillet 2026
+
+- Le déploiement staging initial `dpl_7HwR6hLPG4tQBAVRWnWCbn65Q6bT` était
+  incomplet : il avait été construit dans un environnement Vercel personnalisé
+  sans variables `VITE_SUPABASE_*`. Il a produit une page blanche
+  `supabaseUrl is required` et ne doit plus être utilisé.
+- Les seules variables publiques nécessaires au navigateur ont été configurées
+  dans Vercel Preview. Le déploiement `dpl_6WbRftsof1cWc8VmCrxtUE2s7iUn` est
+  `Ready`; l’alias staging pointe vers lui. La vérification HTTP confirme que
+  le bundle public contient l’URL Supabase staging attendue, sans secret.
+- Une installation 1.0.13 supprime une fois les données WebView/PWA obsolètes
+  au changement de version puis force le premier chargement réseau. Le token
+  d’appairage n’est pas dans WebView : `SecureConfigStore` et la liaison
+  DTA21269 sont préservés.
+- Artefact à tester :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.13-staging.apk`
+  (`versionCode=113`, 927 776 octets, SHA-256
+  `cad022c28d3a74dc22e677c791bbb949c6ca3a02f7a383bf2aea5fcd959e0425`).
+  `testDebugUnitTest`, `lintStaging`, `assembleStaging` et signature v2 ont
+  réussi. Validation tablette toujours requise.

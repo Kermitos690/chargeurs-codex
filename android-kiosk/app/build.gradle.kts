@@ -36,10 +36,10 @@ android {
         targetSdk = 36
         // Incremented for the provider-bridge diagnostic update so the
         // staging APK can be installed as an in-place update.
-        // 1.0.12 restores legacy System WebView compatibility and reports a
-        // clear recovery state instead of a blank native screen.
-        versionCode = 112
-        versionName = "1.0.12"
+        // 1.0.13 additionally clears stale WebView/PWA storage once after an
+        // in-place update, without affecting the native station pairing.
+        versionCode = 113
+        versionName = "1.0.13"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

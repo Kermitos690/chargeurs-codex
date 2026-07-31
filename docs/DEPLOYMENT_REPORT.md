@@ -90,3 +90,18 @@
 - Correctif publié : compatibilité Chromium 61 pour Android WebView et pas de
   service worker dans le wrapper natif. Typecheck, 68 tests Vitest et build
   Vite ont réussi avant le déploiement.
+
+## Correctif configuration Vercel — 31 juillet 2026, 22:28 CEST
+
+- Le déploiement précédent ciblait un environnement Vercel personnalisé sans
+  variables Vite et entraînait `supabaseUrl is required` dans le navigateur.
+  Il est écarté et ne constitue pas un déploiement staging valide.
+- Les variables publiques `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PROJECT_ID`,
+  `VITE_APP_ENV`, `VITE_ROUTER_MODE` et `VITE_ENABLE_STRIPE_TERMINAL` sont
+  maintenant définies uniquement dans Vercel Preview. Aucune clé de service,
+  Stripe secrète ou secret ChargeNow n’a été configuré côté Vercel.
+- Déploiement valide : `dpl_6WbRftsof1cWc8VmCrxtUE2s7iUn`, état `Ready` ;
+  l’alias `https://chargeurs-ch-staging.vercel.app` lui est affecté.
+- Contrôle HTTP : le bundle `assets/index-Cuhxv-s1.js` expose l’URL Supabase
+  publique du staging et aucune valeur sensible.
