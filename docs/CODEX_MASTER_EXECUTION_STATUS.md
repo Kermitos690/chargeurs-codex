@@ -10,7 +10,7 @@
 
 ## Active phase
 
-P8 — Stripe Checkout Test configuré et webhook signé validé ; baseline de migrations toujours en cours.
+P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et build local.
 
 ## Completed before this master execution
 
@@ -37,6 +37,18 @@ P8 — Stripe Checkout Test configuré et webhook signé validé ; baseline de m
 
 ## Current work
 
+- Android kiosk staging 1.0.4 was rebuilt locally on 2026-07-31 with Java
+  17.0.19 and Android SDK 36. It has a native liquid-gradient splash,
+  six-cell numeric activation keypad, large touch controls and an explicit
+  no-ejection build flag. `testDebugUnitTest`, `lintDebug`, `lintStaging`,
+  `assembleDebug` and `assembleStaging` passed. The copied staging APK is
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.4-staging.apk`.
+- The artifact is debug-signed for staging only. `apksigner verify` confirms
+  APK Signature Scheme v2. Its `applicationId` is
+  `ch.chargeurs.kiosk.staging`, minSdk is 26 and targetSdk is 36.
+- No Android device was attached (`adb` unavailable), so touch behaviour,
+  boot receiver, Lock Task policy, Keystore persistence and a real QR scan are
+  explicitly awaiting controlled physical validation.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
 - Archive the verified Android staging APK and keep the Android runtime test pending a physical tablet.
 - React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
@@ -48,7 +60,6 @@ P8 — Stripe Checkout Test configuré et webhook signé validé ; baseline de m
 
 - Staging Supabase CLI access is confirmed for `xqepbqnaenoeyfjkjnzl`, but local and remote migration histories diverge: remote-only migrations `20260725042947`–`20260725050549` and `20260731055742`–`20260731055745`, plus local-only migrations `20260720003000`, `20260724060000`, `20260724061000` and the new numeric-enrollment migration. No migration-history repair or remote write was attempted.
 - Provider mutations, Stripe live and physical hardware operations are explicitly disabled.
-- Android SDK Platform 36 and Build Tools 36 require acceptance of the Android SDK licence. The licence was displayed and deliberately not accepted automatically.
 - The large multi-tenant extensions requested for MIFI, advertising, finance,
   franchises and the expanded role catalogue are not yet implemented. They are
   intentionally held behind the migration baseline: adding unreviewed tables or
@@ -60,16 +71,11 @@ P8 — Stripe Checkout Test configuré et webhook signé validé ; baseline de m
 - Staging Supabase: additive kiosk migration applied directly; `kiosk-admin` and `kiosk-enroll` deployed. No production deployment, provider mutation, Stripe live action, hardware command or code redemption occurred.
 - Vercel staging deployment is READY on `e47fdaf`. Local evidence is recorded in `docs/DEPLOYMENT_REPORT.md`, `docs/TEST_REPORT.md` and `docs/SECURITY_REPORT.md`.
 - Existing lint command passes with 12 pre-existing warnings; strict zero-warning lint remains a technical-debt item outside this focused change.
-- The Java-runtime blocker is resolved. Local SDK 36 remains unavailable because its licence was not accepted automatically, but the manual GitHub Android workflow succeeded on `f9822ce` with `apksigner verify` and produced an uninstalled staging debug APK. Runtime behavior remains unverified until a physical tablet test.
+- Java 17, Android SDK Platform 36 and Build Tools 36 are available locally. The current APK source builds with `testDebugUnitTest`, `lintDebug` and `assembleDebug`; an APK runtime test still requires a physical tablet.
 - The former React Router 6 moderate advisories are removed by the 7.18.1 upgrade. npm still flags two React Server Components advisories; there is no RSC server, route module or import in the deployed SPA, but this must be reassessed before any future RSC adoption.
 
 ## Next operation
 
-Establish the migration baseline on a disposable database, then add the
-multi-tenant RBAC and module schema in additive, testable slices. Prepare the
-controlled pairing-code hand-off only when the tablet is ready. Keep all
-supplier mutation flags disabled.
-
-Pour Stripe, exécuter ensuite une location staging complète avec carte de test,
-contrôler le PaymentIntent, le QR et le remboursement, tout en laissant
-l'éjection matérielle désactivée.
+Build and verify the dedicated `staging` APK, copy it to Downloads and perform
+the first controlled tablet installation. The APK uses the existing staging
+frontend and enrollment endpoint; physical ejection is compile-time disabled.
