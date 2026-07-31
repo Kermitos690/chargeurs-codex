@@ -32,8 +32,12 @@
   npm signale encore deux avis React Server Components ; aucun serveur, module
   ou import RSC n'est utilisé par cette SPA, mais cela doit être réévalué avant
   toute adoption de RSC.
-- L'APK ne peut pas encore être construit localement faute de licence SDK
-  Android acceptée. Aucune assertion sur son comportement runtime n'est faite.
+- L'APK staging 1.0.6 est construit et sa signature v2 est vérifiée localement,
+  mais son comportement runtime reste à confirmer sur la tablette réelle.
+- L’APK fournisseur peut être détectée uniquement par ses métadonnées Android.
+  Son processus, son port série, ses fichiers et sa connexion persistante ne
+  sont pas accessibles à Chargeurs.ch sans contrat fournisseur public ; toute
+  tentative de contournement reste hors périmètre et bloquée.
 - Aucun test matériel ni fournisseur mutatif n'a été exécuté ; les flags restent
   fermés (`CHARGENOW_MUTATIONS_ENABLED=false`, Stripe live désactivé, éjection
   matérielle désactivée).

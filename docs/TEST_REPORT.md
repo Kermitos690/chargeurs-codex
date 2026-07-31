@@ -12,6 +12,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Enrollment ciblé | `deno test ...kiosk_enrollment.test.ts` | 6 tests réussis |
 | Staging kiosk | POST malformé vers `kiosk-enroll` | HTTP 400 contrôlé |
 | Android | workflow GitHub manuel sur `f9822ce` | `testDebugUnitTest`, `lintDebug`, `assembleDebug` et `apksigner verify` réussis |
+| Android 1.0.6 | Java 17 local | `testDebugUnitTest`, `lintStaging`, `assembleStaging` et signature v2 réussis |
 | React Router 7.18.1 | typecheck, Vitest, build Vite | 68 tests réussis ; SPA sans RSC |
 | Gateway ChargeNow | `npm run test:integration` | 179 tests réussis ; O1 GET seul autorisé vers le fournisseur |
 | Stripe runtime | tests ciblés + suite Edge | 4 nouveaux tests fail-closed ; clé live, mode non-test et secret webhook absent refusés |
@@ -36,3 +37,14 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 - APK debug staging : construit et vérifié par GitHub Actions, puis copié localement dans `/Users/k4n/Downloads/Chargeurs_CH_Kiosk_Staging_f9822ce.apk`. Il reste non installé et non publié.
 - Génération d'un code réel : différée pour ne pas le laisser expirer avant la
   saisie sur la tablette.
+
+## Diagnostic fournisseur intégré à l’APK 1.0.6
+
+- `VendorAppCompatibilityTest` : 3 tests unitaires réussis ; l’APK fournisseur
+  absente, désactivée ou présente sans pont public sont distinguées sans
+  présumer de son état de connexion.
+- Les tests ChargeNow de contrat (13) et de callbacks (11) réussissent en mock
+  sécurisé : code métier non nul refusé, callbacks sans secret refusés, retour
+  incomplet sans transition de location.
+- Aucune requête fournisseur réelle, mutation matérielle ou opération
+  financière n’a été exécutée pour ces contrôles.

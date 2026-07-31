@@ -10,7 +10,8 @@
 
 ## Active phase
 
-P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et build local.
+P17 — APK kiosque staging 1.0.6 : activation numérique, compatibilité tablette
+et diagnostic non intrusif du pont matériel fournisseur.
 
 ## Completed before this master execution
 
@@ -65,10 +66,19 @@ P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et b
 - The installable hotfix is now versionCode 105 / versionName 1.0.5 so Android
   accepts it as an in-place update. Artifact:
   `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.5-staging.apk`.
+- La version 1.0.6 (`versionCode=106`) est construite et vérifiée. Elle ajoute
+  un diagnostic limité aux métadonnées de l’APK Bajie/ChargeNow et explique
+  explicitement qu’une autre application Android ne peut pas réutiliser sa
+  session série ou réseau. Artefact :
+  `~/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.6-staging.apk` ; SHA-256
+  `1227a3e51ba4aab90ba7c96bfe8948e6cd5f6f18f1b41120df2c61309225e994`.
+- La vue de diagnostic frontend masque désormais entièrement le token kiosk et
+  ne permet pas de le saisir manuellement lorsque l’application tourne dans
+  l’enveloppe Android native.
 - Reconcile local and remote Supabase migration histories into a reproducible baseline before using `db push` again; the observed plan is in `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
-- Install the `1.0.5` staging APK on the physical tablet. If it still exits, report
-  the startup diagnostic shown on screen (or the tablet Android version and
-  whether Android System WebView/Chrome is enabled); do not retry the old APK.
+- Installer l’APK staging `1.0.6` sur la tablette. Si elle s’arrête encore,
+  relever le diagnostic visible (ou la version Android et l’état d’Android
+  System WebView/Chrome), sans revenir à un APK plus ancien.
 - React Router 7.18.1 has passed typecheck, the 68 frontend tests and the Vite build. Its remaining npm advisories concern React Server Components, a mode not used by this SPA; the exception is recorded in `docs/SECURITY_REPORT.md`.
 - La suite Edge compte désormais 179 tests réussis. Un validateur central bloque
   toute clé Stripe live ou toute configuration qui ne fixe pas explicitement
@@ -94,6 +104,9 @@ P17 — APK kiosque staging 1.0.4 : interface native, activation numérique et b
 
 ## Next operation
 
-Build and verify the dedicated `staging` APK, copy it to Downloads and perform
-the first controlled tablet installation. The APK uses the existing staging
-frontend and enrollment endpoint; physical ejection is compile-time disabled.
+Installer `Chargeurs_CH_Kiosk_1.0.6-staging.apk` sur la tablette au-dessus de
+la 1.0.5, puis ouvrir **Diagnostic matériel automatique** depuis l’écran
+d’activation. Cette étape observe uniquement les métadonnées de l’agent
+fournisseur et les candidats de ports ; elle ne doit ni lancer ni arrêter
+l’agent Bajie/ChargeNow. Un pont physique complet reste conditionné par un SDK,
+un service système ou un protocole DTA/RS485 officiellement documenté.
