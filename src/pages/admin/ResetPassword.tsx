@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { recoveryLinkErrorMessage } from "@/lib/passwordRecovery";
 
 type RecoveryStatus = "checking" | "ready" | "invalid";
 
@@ -29,7 +30,7 @@ export default function ResetPassword() {
 
     const markInvalid = (message?: string) => {
       if (!active) return;
-      setErrorMessage(message || "Ce lien est invalide, expiré ou a déjà été utilisé.");
+      setErrorMessage(recoveryLinkErrorMessage(message));
       setStatus("invalid");
     };
 
