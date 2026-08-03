@@ -391,3 +391,18 @@ officiellement documenté.
 - La protection Auth contre les mots de passe divulgués est désactivée dans
   Supabase. Son activation est une action de dashboard à effectuer avant la
   création d'invitations de test.
+
+## APK staging 1.0.15 reconstruite localement — 3 août 2026
+
+- Java 17 et le SDK Android présents sur le Mac sont maintenant utilisés
+  explicitement pour Gradle, sans changer le PATH système.
+- `testDebugUnitTest`, `lintStaging` et `assembleStaging` ont réussi. La
+  signature v2 est vérifiée ; l'artefact reste volontairement debug-signé.
+- APK installable :
+  `/Users/k4n/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.15-staging.apk`
+  (928 356 octets, SHA-256
+  `d3ed89af14e037f7de01e54801394e51b42f05518bcf3031eea9a25ba81e2446`).
+- Package : `ch.chargeurs.kiosk.staging`, `versionCode=115`,
+  `versionName=1.0.15-staging`, `minSdk=26`, `targetSdk=36`.
+- Validation matérielle restante : installation sur la tablette, tactile,
+  WebView après appairage, persistance après reboot et scan QR Stripe test.

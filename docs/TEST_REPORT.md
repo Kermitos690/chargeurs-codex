@@ -25,6 +25,7 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Centre de test expurgé | Vitest, typecheck, build Vite | 78 tests réussis dans 20 fichiers ; logs filtrés par corrélation et expurgés avant export |
 | Rôles staging | Vitest ciblé, typecheck, build Vite | 6 tests réussis ; les rôles non disponibles dans l'énumération staging ne sont pas attribuables dans l'UI |
 | Codes publics de location & sécurité RPC | `deno test --allow-read --allow-env --allow-net --no-check supabase/functions/tests/` | 191 tests Deno réussis ; générateur cryptographique et contrat de migration vérifiés localement |
+| Android kiosk 1.0.15 | Java 17 + SDK Android local, `testDebugUnitTest lintStaging assembleStaging` | réussi ; APK staging signée v2 et contrôlée avec `apksigner` |
 
 ## Couverture kiosk à six chiffres
 
@@ -52,6 +53,18 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
   kiosk. Un échec post-réponse efface le code visuel et demande un nouveau code,
   au lieu d’inciter l’opérateur à réessayer un code déjà consommé.
 
+## APK staging 1.0.15 — artefact courant
+
+- L'artefact local compilé le 3 août 2026 est
+  `/Users/k4n/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.15-staging.apk`.
+- `versionCode=115`, `versionName=1.0.15-staging`, package
+  `ch.chargeurs.kiosk.staging`, `minSdk=26`, `targetSdk=36`.
+- Taille : 928 356 octets ; SHA-256 :
+  `d3ed89af14e037f7de01e54801394e51b42f05518bcf3031eea9a25ba81e2446`.
+- `apksigner verify` confirme une signature v2 de debug. L'APK n'est pas une
+  release de production et aucune installation ou validation tactile n'a été
+  effectuée depuis cette session.
+
 ## Non exécuté volontairement
 
 - La migration `20260803203905_harden_public_rpc_access.sql` n'est pas
@@ -61,10 +74,8 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 - Paiement Stripe live ou test avec carte. Le webhook Stripe Test signé a été
   validé séparément, sans paiement ni autorisation bancaire.
 - Mutation ChargeNow, éjection, redémarrage ou firmware.
-- APK staging 1.0.7 : construit et vérifié localement, puis copié dans
-  `/Users/k4n/Downloads/Chargeurs_CH_APK/Chargeurs_CH_Kiosk_1.0.7-staging.apk`.
-  Aucun appareil ADB n’était connecté, donc installation et test tactile restent
-  physiques et documentés.
+- Aucun appareil ADB n’était connecté, donc l'installation de l'APK 1.0.15 et
+  les tests tactile/WebView/reboot restent physiques et documentés.
 - Génération d'un code réel : différée pour ne pas le laisser expirer avant la
   saisie sur la tablette.
 
