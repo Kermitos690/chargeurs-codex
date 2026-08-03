@@ -12,9 +12,14 @@ import Pay from "./pages/Pay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
+import PublicStation from "./pages/public/PublicStation.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
 import AccountLayout from "./pages/account/AccountLayout.tsx";
-import AccountDashboard from "./pages/account/AccountDashboard.tsx";
+import AccountHome from "./pages/account/AccountHome.tsx";
+import AccountRentals from "./pages/account/AccountRentals.tsx";
+import AccountPayments from "./pages/account/AccountPayments.tsx";
+import AccountSupport from "./pages/account/AccountSupport.tsx";
+import AccountProfile from "./pages/account/AccountProfile.tsx";
 import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
@@ -57,6 +62,7 @@ const App = () => (
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<Kiosk />} />
@@ -67,7 +73,11 @@ const App = () => (
             <Route path="/compte/login" element={<AccountAuth />} />
             <Route path="/compte/reset-password" element={<AccountResetPassword />} />
             <Route path="/compte" element={<AccountLayout />}>
-              <Route index element={<AccountDashboard />} />
+              <Route index element={<AccountHome />} />
+              <Route path="locations" element={<AccountRentals />} />
+              <Route path="paiements" element={<AccountPayments />} />
+              <Route path="support" element={<AccountSupport />} />
+              <Route path="profil" element={<AccountProfile />} />
             </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />

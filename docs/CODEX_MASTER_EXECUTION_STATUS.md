@@ -173,6 +173,30 @@ officiellement documenté.
   confirmation explicite distincte. Aucun compte, rôle ou invitation n’a été
   modifié pendant cette tentative.
 
+## Kiosk Checkout et sécurité de sortie — 3 août 2026
+
+- Le commit `189dbb9` lie désormais la création et la divulgation d’un Stripe
+  Checkout à l’exact kiosk actif de la station de la location. Un kiosk révoqué,
+  d’une autre station ou d’une autre organisation ne reçoit donc pas d’URL de
+  paiement.
+- Si un paiement staging est confirmé alors que l’éjection est désactivée, le
+  cycle passe explicitement à `needs_support`, avec incident et audit
+  idempotents. Il n’y a ni boucle d’attente, ni commande matérielle, ni
+  remboursement automatique implicite.
+- Validation locale : `deno check` des quatre modules concernés et 47 tests de
+  contrats passés. Les fonctions `create-stripe-checkout`,
+  `eject-after-payment` et `chargenow-admin` sont déployées vers
+  `xqepbqnaenoeyfjkjnzl`. Les contrôles HTTP non mutables répondent
+  respectivement `405`, `405` et `401`, confirmant leur publication.
+
+## Coûts GitHub Actions — 3 août 2026
+
+- Le workflow DTA qui échouait à chaque push a été rendu manuel dans le commit
+  `0b0f65a` puis désactivé côté GitHub, avec douze anciens workflows de
+  diagnostic/hotfix absents du dépôt courant. Les workflows conservés sont
+  uniquement manuels ; aucun build ou déploiement ne démarre désormais sur un
+  simple push de cette branche.
+
 ## Console Super Admin — opérations ChargeNow documentées (31 juillet 2026)
 
 - Le rôle `super_admin` dispose désormais, via la console **Intégrations et

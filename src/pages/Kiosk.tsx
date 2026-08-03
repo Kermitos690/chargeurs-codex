@@ -301,6 +301,7 @@ export default function Kiosk() {
       setSessionId(rentalSessionId);
       const { data: co } = await supabase.functions.invoke("create-stripe-checkout", {
         body: { rentalSessionId, origin: window.location.origin },
+        headers: { "X-Kiosk-Token": kioskToken },
       });
       const c = co as { ok?: boolean; checkout_url?: string; public_session_code?: string; expires_at?: string };
       if (!c?.ok || !c?.checkout_url) { setPhase("error"); return; }

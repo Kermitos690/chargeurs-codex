@@ -13,6 +13,7 @@ import {
   Undo2, CreditCard, Smartphone, Apple, MapPin, Mail, HelpCircle, Clock3, Building2,
 } from "lucide-react";
 import { formatChf, PUBLIC_PRICING } from "@/lib/publicPricing";
+import { publicStationPath } from "./public/publicStationData";
 
 const STEPS = [
   { icon: MapPin, title: "Trouvez une borne", text: "Repérez une borne Chargeurs.ch dans un bar, restaurant, hôtel ou lieu partenaire." },
@@ -96,7 +97,7 @@ export default function Index() {
           <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes publiées et connectées apparaissent automatiquement à partir des données de la plateforme.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleStations.map((station) => (
-              <Link key={station.station_id} to={`/kiosk/${station.station_id}`} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
+              <Link key={station.station_id} to={publicStationPath(station.station_id)} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
                 <div className="flex items-start justify-between gap-3">
                   <MonitorSmartphone className="h-7 w-7 text-primary" />
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${station.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{station.online ? "Disponible" : "Hors ligne"}</span>
@@ -104,7 +105,7 @@ export default function Index() {
                 <div className="mt-4 font-mono text-xs text-muted-foreground">{station.station_id}</div>
                 <div className="text-lg font-bold">{station.name}</div>
                 {station.location_name && <div className="text-sm text-muted-foreground">{station.location_name}</div>}
-                <div className="mt-4 inline-flex items-center gap-1 text-sm text-primary">Ouvrir le kiosque <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></div>
+                <div className="mt-4 inline-flex items-center gap-1 text-sm text-primary">Voir la borne <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></div>
               </Link>
             ))}
           </div>
