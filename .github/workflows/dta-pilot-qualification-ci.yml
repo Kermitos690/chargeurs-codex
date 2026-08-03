@@ -1,27 +1,8 @@
 name: DTA21269 battery qualification CI
 
+# Cost control: qualification can contact staging dependencies and is never run
+# automatically. Launch it explicitly only for a deliberate pilot qualification.
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "supabase/functions/dta-pilot-qualification/**"
-      - "supabase/functions/dta-pilot-callback/**"
-      - "supabase/functions/_shared/dtaPilot*.ts"
-      - "supabase/functions/tests/dta_pilot.test.ts"
-      - "supabase/migrations/2026072406*.sql"
-      - "supabase/config.toml"
-      - ".github/workflows/dta-pilot-qualification-ci.yml"
-  push:
-    branches: [main]
-    paths:
-      - "supabase/functions/dta-pilot-qualification/**"
-      - "supabase/functions/dta-pilot-callback/**"
-      - "supabase/functions/_shared/dtaPilot*.ts"
-      - "supabase/functions/tests/dta_pilot.test.ts"
-      - "supabase/migrations/2026072406*.sql"
-      - "supabase/config.toml"
-      - ".github/workflows/dta-pilot-qualification-ci.yml"
   workflow_dispatch:
 
 permissions:
