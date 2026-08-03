@@ -153,3 +153,14 @@
 - La migration SQL associée à la restriction des helpers de rôle est
   volontairement non appliquée : voir
   `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
+
+## Frontend staging — rôles explicites — 3 août 2026
+
+- Commit déployé : `65dd17e` sur le projet Vercel explicitement nommé
+  `chargeurs-ch-staging`. L'URL d'inspection est protégée par le SSO Vercel ;
+  aucune URL de production Chargeurs.ch n'a été ciblée.
+- L'alias `https://chargeurs-ch-staging.vercel.app` a répondu HTTP 200 aux
+  routes `/admin` et `/kiosk/DTA21269` après le déploiement.
+- L'écran utilisateurs distingue les rôles immédiatement attribuables des
+  rôles en attente de migration/RLS. Aucun compte, rôle ou donnée staging n'a
+  été créé par ce déploiement.
