@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe("customer signup", () => {
-  it("requires legal acceptance and waits for email confirmation before opening the private account", async () => {
+  it("requires legal acceptance and shows a non-enumerating confirmation message before opening the private account", async () => {
     auth.signUp.mockResolvedValue({ data: { session: null }, error: null });
     const container = mount();
 
@@ -76,8 +76,9 @@ describe("customer signup", () => {
         data: expect.objectContaining({ display_name: "" }),
       }),
     }));
-    expect(document.body.textContent).toContain("Confirmez votre adresse email");
+    expect(document.body.textContent).toContain("Vérifiez votre adresse email");
     expect(document.body.textContent).toContain("client@example.test");
+    expect(document.body.textContent).toContain("Si un compte existe déjà");
   });
 
   it("does not advertise Google sign-in until it is configured", () => {
