@@ -1,4 +1,4 @@
-# Installation — Chargeurs.ch Kiosk staging 1.0.7
+# Installation — Chargeurs.ch Kiosk staging 1.0.15
 
 ## Périmètre et sécurité
 
@@ -13,7 +13,7 @@ le staging.
 
 ## Installation manuelle sur la tablette
 
-1. Copier `Chargeurs_CH_Kiosk_1.0.7-staging.apk` sur la tablette par USB.
+1. Copier `Chargeurs_CH_Kiosk_1.0.15-staging.apk` sur la tablette par USB.
 2. Dans Android, autoriser temporairement l'installation depuis le gestionnaire
    de fichiers utilisé. Ne pas autoriser des sources inconnues de manière
    permanente si le mode de gestion de la tablette le permet.
@@ -35,10 +35,13 @@ le staging.
    générer un code à six chiffres. Vérifier son expiration avant de le saisir.
 8. Saisir les six chiffres exclusivement avec le pavé tactile, y compris un
    éventuel zéro initial, puis toucher **Activer**.
-9. Vérifier l'écran d'accueil de la borne, le tarif et l'indicateur réseau.
+9. Ouvrir cinq fois le coin supérieur gauche puis **Diagnostics** et vérifier
+   `versionName: 1.0.15-staging` et `versionCode: 115`. Si la tablette indique
+   encore une version antérieure, l'installation n'a pas remplacé l’APK.
+10. Vérifier l'écran d'accueil de la borne, le tarif et l'indicateur réseau.
    Un paiement de test peut afficher le QR Stripe ; aucune batterie ne sera
    éjectée par cette version.
-10. Redémarrer la tablette. La borne doit rouvrir l'application et conserver sa
+11. Redémarrer la tablette. La borne doit rouvrir l'application et conserver sa
    liaison. Si un gestionnaire MDM est utilisé, l'ajouter à la liste autorisée
    pour le mode Lock Task et le démarrage après boot.
 
@@ -48,7 +51,7 @@ Avec le débogage USB autorisé et une tablette physiquement connectée :
 
 ```sh
 adb devices
-adb install -r Chargeurs_CH_Kiosk_1.0.7-staging.apk
+adb install -r Chargeurs_CH_Kiosk_1.0.15-staging.apk
 adb shell monkey -p ch.chargeurs.kiosk.staging 1
 ```
 
@@ -60,9 +63,23 @@ la liaison locale. Vérifier d'abord le modèle et la version Android avec
 
 Si une version antérieure a affiché « Activation reçue, mais la tablette n’a pas
 pu enregistrer le token », le serveur a déjà consommé ce code. Installez d’abord
-la 1.0.7 au-dessus de l’APK existante, vérifiez le statut de stockage sécurisé,
+la 1.0.15 au-dessus de l’APK existante, vérifiez le statut de stockage sécurisé,
 puis générez **un nouveau code**. Le nouveau code permet au backend de reprendre
 la même tablette sans exposer ni réutiliser l’ancien token.
+
+## Écran bleu ou vide
+
+L’APK 1.0.15 corrige durablement la superposition qui masquait la WebView dans
+les versions précédentes. Si un écran bleu reste affiché plus de 25 secondes :
+
+1. vérifier la version dans Diagnostics ;
+2. vérifier que l’URL kiosk est `https://chargeurs-ch-staging.vercel.app` ;
+3. toucher **Redémarrer l’application** dans Diagnostics ;
+4. relever uniquement le code de diagnostic affiché, jamais le token kiosk ;
+5. ne pas régénérer de code d’activation si la liaison est déjà présente.
+
+Un écran bleu persistant en 1.0.15 doit être traité comme un échec physique
+WebView/réseau à documenter, pas comme une activation à recommencer.
 
 ## Révocation ou remplacement
 
