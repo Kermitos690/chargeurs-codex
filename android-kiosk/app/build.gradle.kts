@@ -34,12 +34,11 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Incremented for the provider-bridge diagnostic update so the
-        // staging APK can be installed as an in-place update.
-        // 1.0.13 additionally clears stale WebView/PWA storage once after an
-        // in-place update, without affecting the native station pairing.
-        versionCode = 113
-        versionName = "1.0.13"
+        // 1.0.15 fixes the permanent WebView z-order regression directly in
+        // the source tree. It can therefore be installed over 1.0.13/1.0.14
+        // without relying on a CI-only source rewrite.
+        versionCode = 115
+        versionName = "1.0.15"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

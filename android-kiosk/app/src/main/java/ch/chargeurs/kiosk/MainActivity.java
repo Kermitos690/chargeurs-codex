@@ -44,6 +44,9 @@ public final class MainActivity extends Activity {
     private static final long WATCHDOG_INTERVAL_MS = 30_000L;
     private static final long WATCHDOG_TIMEOUT_MS = 15_000L;
     private static final long WEB_UI_READY_TIMEOUT_MS = 20_000L;
+    // The ambient background occupies index 0. The WebView must be above it
+    // and below the native splash/progress/network controls added afterwards.
+    private static final int WEB_VIEW_LAYER_INDEX = 1;
     private static final String WEB_RUNTIME_PREFS = "chargeurs_web_runtime";
     private static final String WEB_RUNTIME_VERSION = "last_runtime_version";
 
@@ -53,11 +56,14 @@ public final class MainActivity extends Activity {
     private ProgressBar progress;
     private TextView networkBanner;
     private View splashBrand;
+    private View startupErrorView;
     private KioskConfig config;
     private boolean credentialsInjected;
     private boolean heartbeatPending;
     private boolean kioskUiReady;
     private boolean startupErrorShown;
+    private String lastStartupErrorCode = "";
+    private boolean networkRecoveryScheduled;
     private boolean resetWebRuntimeOnFirstLoad;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
@@ -156,7 +162,12 @@ public final class MainActivity extends Activity {
         if (container == null || isFinishing()) return;
         kioskUiReady = false;
         startupErrorShown = false;
+        lastStartupErrorCode = "";
         handler.removeCallbacks(kioskUiReadyTimeout);
+        if (startupErrorView != null) {
+            container.removeView(startupErrorView);
+            startupErrorView = null;
+        }
 
         try {
             webView = new WebView(this);
@@ -301,7 +312,7 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         );
-        container.addView(webView, 0, webParams);
+        container.addView(webView, WEB_VIEW_LAYER_INDEX, webParams);
         try {
             webView.loadUrl(config.kioskUrl());
             handler.postDelayed(kioskUiReadyTimeout, WEB_UI_READY_TIMEOUT_MS);
@@ -313,6 +324,7 @@ public final class MainActivity extends Activity {
     private void showStartupError(String code, Throwable error) {
         if (isFinishing() || startupErrorShown) return;
         startupErrorShown = true;
+        lastStartupErrorCode = code;
         handler.removeCallbacks(kioskUiReadyTimeout);
         if (webView != null) {
             ViewGroup parent = (ViewGroup) webView.getParent();
@@ -335,6 +347,7 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         );
+        startupErrorView = diagnostic;
         container.addView(diagnostic, params);
     }
 
@@ -429,7 +442,17 @@ public final class MainActivity extends Activity {
         networkCallback = new ConnectivityManager.NetworkCallback() {
             @Override
             public void onAvailable(Network network) {
-                runOnUiThread(() -> networkBanner.setVisibility(View.GONE));
+                runOnUiThread(() -> {
+                    networkBanner.setVisibility(View.GONE);
+                    if (shouldRecoverAfterNetworkAvailable(lastStartupErrorCode, startupErrorShown)
+                        && !networkRecoveryScheduled) {
+                        networkRecoveryScheduled = true;
+                        handler.postDelayed(() -> {
+                            networkRecoveryScheduled = false;
+                            if (!isFinishing() && isNetworkAvailable()) recreateWebView();
+                        }, 500L);
+                    }
+                });
             }
 
             @Override
@@ -513,5 +536,13 @@ public final class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    static int webViewLayerIndex() {
+        return WEB_VIEW_LAYER_INDEX;
+    }
+
+    static boolean shouldRecoverAfterNetworkAvailable(String startupErrorCode, boolean startupErrorVisible) {
+        return startupErrorVisible && "WEBVIEW_MAIN_FRAME_ERROR".equals(startupErrorCode);
     }
 }
