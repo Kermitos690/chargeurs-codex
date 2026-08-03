@@ -60,10 +60,8 @@ export interface ApiResult<T = unknown> {
   error: string | null;
 }
 
-// Only the super-admin operation console may pass this context. It is never
-// accepted from a browser payload by the provider client itself; the Edge
-// function establishes it after verifying the authenticated role and typed
-// confirmation for the exact operation.
+// Administrative confirmation is still required by the calling Edge Function,
+// but it can never bypass the global provider-mutation kill switch.
 export type SuperAdminMutationContext = { superAdminConfirmed?: boolean };
 
 type Query = Record<string, string | number | boolean | undefined | null>;
@@ -94,7 +92,7 @@ async function request<T = unknown>(
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
   }
-  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection && !opts.superAdminMutation) {
+  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 

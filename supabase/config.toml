@@ -5,6 +5,10 @@ site_url = "https://chargeurs-ch-staging.vercel.app"
 additional_redirect_urls = [
   "https://chargeurs-ch-staging.vercel.app/admin",
   "https://chargeurs-ch-staging.vercel.app/admin/reset-password",
+  "https://chargeurs-ch-staging.vercel.app/compte",
+  "https://chargeurs-ch-staging.vercel.app/compte/reset-password",
+  # Legacy aliases kept temporarily for recovery links already issued before
+  # the French customer routes were introduced.
   "https://chargeurs-ch-staging.vercel.app/account",
   "https://chargeurs-ch-staging.vercel.app/account/reset-password",
 ]

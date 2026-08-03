@@ -16,7 +16,7 @@ const MUTATING_CODES = new Set([
 ]);
 const SENSITIVE_CODES = new Set(["A1"]);
 
-const TEST_STATION = "DTA21277"; // live, online test cabinet (Gaetan Test Shop)
+const TEST_STATION = "DTA21269"; // dedicated Chargeurs.ch staging pilot
 
 type Result = { ok: boolean; status: number; data: unknown; error: string | null };
 
@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
       endpoint_name: MUTATION_META[code]?.name ?? code,
       level: isDangerous ? "C" : "B",
       verdict: res.ok ? "live_verified" : "failed",
-      environment: "live",
+      environment: cn.chargeNowMode(),
       cabinet_id: cabinetId,
       correlation_id: correlation,
       request_redacted: redactForLog(params),

@@ -1,0 +1,96 @@
+import {
+  assert,
+  assertEquals,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { evaluateCheckoutKioskBinding } from "../create-stripe-checkout/kioskBinding.ts";
+
+const SESSION = {
+  station_id: "DTA21269",
+  kiosk_device_id: "kiosk-1",
+  state: "created",
+};
+const DEVICE = { id: "kiosk-1", station_id: "DTA21269" };
+
+Deno.test("Checkout binding accepts only the exact kiosk and station", () => {
+  assertEquals(evaluateCheckoutKioskBinding(SESSION, DEVICE), {
+    ok: true,
+    stationId: "DTA21269",
+    kioskDeviceId: "kiosk-1",
+  });
+});
+
+Deno.test("Checkout binding refuses an inter-station kiosk", () => {
+  assertEquals(
+    evaluateCheckoutKioskBinding(SESSION, {
+      ...DEVICE,
+      station_id: "DTA21277",
+    }),
+    { ok: false, status: 403, error: "KIOSK_STATION_MISMATCH" },
+  );
+});
+
+Deno.test("Checkout binding refuses a different kiosk on the same station", () => {
+  assertEquals(
+    evaluateCheckoutKioskBinding(SESSION, { ...DEVICE, id: "kiosk-2" }),
+    { ok: false, status: 403, error: "KIOSK_SESSION_MISMATCH" },
+  );
+});
+
+Deno.test("Checkout binding refuses a paid or terminal rental", () => {
+  assertEquals(
+    evaluateCheckoutKioskBinding(
+      { ...SESSION, state: "payment_succeeded" },
+      DEVICE,
+    ),
+    { ok: false, status: 409, error: "SESSION_NOT_PAYABLE" },
+  );
+  assertEquals(
+    evaluateCheckoutKioskBinding(
+      { ...SESSION, state: "needs_support" },
+      DEVICE,
+    ),
+    { ok: false, status: 409, error: "SESSION_NOT_PAYABLE" },
+  );
+});
+
+Deno.test("Checkout endpoint authenticates before disclosing or creating a Checkout URL", async () => {
+  const source = await Deno.readTextFile(
+    "supabase/functions/create-stripe-checkout/index.ts",
+  );
+  const authAt = source.indexOf("await verifyKioskDevice(req, db, stationId)");
+  const bindingAt = source.indexOf(
+    "evaluateCheckoutKioskBinding(session, kioskAuth.device)",
+  );
+  const cachedUrlAt = source.indexOf("session.checkout_url &&");
+  const stripeCreateAt = source.indexOf("stripe.checkout.sessions.create");
+  assert(authAt >= 0);
+  assert(bindingAt > authAt);
+  assert(cachedUrlAt > bindingAt);
+  assert(stripeCreateAt > bindingAt);
+  assert(source.includes("x-kiosk-token"));
+  assertEquals(source.includes("body.kioskToken"), false);
+});
+
+Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
+  const source = await Deno.readTextFile(
+    "supabase/functions/eject-after-payment/index.ts",
+  );
+  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled())");
+  const providerConfigAt = source.indexOf("if (!isChargeNowConfigured())");
+  const hardwareAt = source.indexOf("hardwareCommandIssued = true");
+  assert(gateAt >= 0);
+  assert(providerConfigAt > gateAt);
+  assert(hardwareAt > gateAt);
+  assert(source.includes("await markHardwareReleaseBlocked(db, session)"));
+  assert(source.includes('state: "needs_support"'));
+  assert(source.includes("automatic_refund: false"));
+  assert(source.includes("terminal: true"));
+  assert(source.includes('eventType: "rental_failed"'));
+  assert(source.includes("release_blocked:${session.id}:${code}"));
+
+  const disabledBranch = source.slice(gateAt, providerConfigAt);
+  assertEquals(
+    disabledBranch.includes("compensateBeforeHardwareRequest"),
+    false,
+  );
+});

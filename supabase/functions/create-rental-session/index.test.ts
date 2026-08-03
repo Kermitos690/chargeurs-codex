@@ -4,21 +4,26 @@
 // authentication, strict station binding, idempotency and rate limiting.
 //
 // Secrets are NEVER hardcoded:
-//   - SUPABASE_URL + anon key are loaded from the root .env (dotenv).
+//   - SUPABASE_URL + publishable key are injected explicitly by the staging
+//     integration-test job. Local/unit-only runs skip these remote checks.
 //   - A valid kiosk token may be provided via KIOSK_TEST_TOKEN (+ KIOSK_TEST_STATION
 //     and KIOSK_TEST_OTHER_STATION). When absent, the auth-positive / binding /
 //     idempotency / rate-limit tests are skipped so no credential lives in the repo.
-import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
-const SUPABASE_URL = Deno.env.get("VITE_SUPABASE_URL")!;
-const ANON = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("VITE_SUPABASE_URL") ?? "";
+const ANON = Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY") ?? "";
 const FN_URL = `${SUPABASE_URL}/functions/v1/create-rental-session`;
 
 const VALID_TOKEN = Deno.env.get("KIOSK_TEST_TOKEN") ?? "";
 const STATION = Deno.env.get("KIOSK_TEST_STATION") ?? "DTA21269";
 const OTHER_STATION = Deno.env.get("KIOSK_TEST_OTHER_STATION") ?? "DTA21277";
-const hasCred = VALID_TOKEN.length >= 24;
+const hasRemote = /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(SUPABASE_URL) && ANON.length >= 20;
+const hasCred = hasRemote && VALID_TOKEN.length >= 24;
+
+function remoteTest(name: string, fn: () => Promise<void>): void {
+  Deno.test({ name, ignore: !hasRemote, fn });
+}
 
 async function call(
   body: Record<string, unknown>,
@@ -38,19 +43,19 @@ async function call(
   return { status: res.status, json };
 }
 
-Deno.test("no kiosk token => 401 KIOSK_AUTH_REQUIRED", async () => {
+remoteTest("no kiosk token => 401 KIOSK_AUTH_REQUIRED", async () => {
   const { status, json } = await call({ stationId: STATION });
   assertEquals(status, 401);
   assertEquals(json.error, "KIOSK_AUTH_REQUIRED");
 });
 
-Deno.test("too-short token => 401 KIOSK_AUTH_REQUIRED", async () => {
+remoteTest("too-short token => 401 KIOSK_AUTH_REQUIRED", async () => {
   const { status, json } = await call({ stationId: STATION }, { "X-Kiosk-Token": "short" });
   assertEquals(status, 401);
   assertEquals(json.error, "KIOSK_AUTH_REQUIRED");
 });
 
-Deno.test("unknown but well-formed token => 401 KIOSK_AUTH_INVALID", async () => {
+remoteTest("unknown but well-formed token => 401 KIOSK_AUTH_INVALID", async () => {
   const { status, json } = await call(
     { stationId: STATION },
     { "X-Kiosk-Token": "zz_unknown_token_with_enough_length_000000" },
@@ -59,7 +64,7 @@ Deno.test("unknown but well-formed token => 401 KIOSK_AUTH_INVALID", async () =>
   assertEquals(json.error, "KIOSK_AUTH_INVALID");
 });
 
-Deno.test("missing/invalid stationId => 400 MISSING_STATION", async () => {
+remoteTest("missing/invalid stationId => 400 MISSING_STATION", async () => {
   const { status, json } = await call({}, { "X-Kiosk-Token": "zz_unknown_token_with_enough_length_000000" });
   assertEquals(status, 400);
   assertEquals(json.error, "MISSING_STATION");

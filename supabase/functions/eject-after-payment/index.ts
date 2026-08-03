@@ -104,6 +104,82 @@ async function markSupportRequired(
   await openIncident(db, session, code, message, { retryable: true, ...details });
 }
 
+type ReleaseBlockResult = {
+  state: "needs_support";
+  terminal: true;
+  idempotent: boolean;
+  mode: "simulation" | "disabled";
+};
+
+// A disabled hardware gate is an intentional staging terminal, not a transient
+// provider error. Persist it before returning so the kiosk leaves the
+// "Préparation" screen. No cancellation/refund is attempted here: the payment
+// state remains available for an operator to reconcile explicitly.
+async function markHardwareReleaseBlocked(
+  db: DB,
+  session: Session,
+): Promise<ReleaseBlockResult> {
+  const code = "HARDWARE_EJECTION_DISABLED";
+  const mode = (Deno.env.get("CHARGENOW_MODE") ?? "test").trim().toLowerCase() === "test"
+    ? "simulation"
+    : "disabled";
+  const message = mode === "simulation"
+    ? "Paiement confirmé en staging; la sortie matérielle est désactivée et requiert une validation opérateur."
+    : "Paiement confirmé; la sortie matérielle est désactivée et requiert une validation opérateur.";
+
+  const { data: transitioned, error } = await db.from("rental_sessions").update({
+    state: "needs_support",
+    chargenow_status: mode === "simulation" ? "simulation_ejection_blocked" : "hardware_ejection_disabled",
+    failure_code: code,
+    failure_message: message,
+  }).eq("id", session.id)
+    .in("state", ["payment_succeeded", "chargenow_failed", "eject_failed"])
+    .select("id");
+  if (error) throw error;
+
+  const changed = Boolean(transitioned && transitioned.length > 0);
+  if (changed) {
+    await openIncident(db, session, code, message, {
+      hardware_command_issued: false,
+      mode,
+      compensation: "manual_review_required",
+      automatic_refund: false,
+    });
+  } else {
+    const { data: latest, error: latestError } = await db.from("rental_sessions")
+      .select("state, failure_code").eq("id", session.id).maybeSingle();
+    if (latestError) throw latestError;
+    if (latest?.state !== "needs_support" || latest?.failure_code !== code) {
+      await auditLog(db, {
+        action: "rental.release.block_refused",
+        target: String(session.id),
+        data: { code: "SESSION_NOT_RELEASABLE", current_state: latest?.state ?? session.state },
+      });
+      throw new OrchestratorError("SESSION_NOT_RELEASABLE");
+    }
+  }
+
+  // Close the canonical orchestrator as well as the legacy UI projection.
+  // This event is idempotent, so a webhook retry repairs a partial database
+  // write without issuing hardware or financial side effects.
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "rental_failed",
+    idempotencyKey: `release_blocked:${session.id}:${code}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    failureReason: code,
+    metadata: { mode, hardwareCommandIssued: false, automaticRefund: false },
+  });
+
+  await auditLog(db, {
+    action: changed ? "rental.release.blocked" : "rental.release.blocked_replay",
+    target: String(session.id),
+    data: { code, mode, hardware_command_issued: false, automatic_refund: false },
+  });
+  return { state: "needs_support", terminal: true, idempotent: !changed, mode };
+}
+
 // Safe only before the physical ejection command has been sent.
 async function compensateBeforeHardwareRequest(
   db: DB,
@@ -272,6 +348,13 @@ Deno.serve(async (req) => {
     if (["refund_pending", "refunded"].includes(session.state)) {
       return reply({ ok: true, compensated: true, state: session.state });
     }
+    if (session.state === "needs_support" && session.failure_code === "HARDWARE_EJECTION_DISABLED") {
+      const blocked = await markHardwareReleaseBlocked(db, session);
+      return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED", ...blocked });
+    }
+    if (session.state === "ejecting") {
+      return reply({ ok: true, alreadyInProgress: true, state: "ejecting" }, 202);
+    }
     if (!["authorized", "prepaid"].includes(String(session.settlement_status))) {
       return reply({ ok: false, error: "PAYMENT_NOT_CONFIRMED" }, 409);
     }
@@ -285,12 +368,15 @@ Deno.serve(async (req) => {
       metadata: { actor: caller.actor },
     });
 
+    if (!areHardwareEjectionsEnabled()) {
+      const blocked = await markHardwareReleaseBlocked(db, session);
+      // HTTP 200 acknowledges the internal webhook request. The business
+      // result remains explicit and terminal, preventing a retry loop.
+      return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED", ...blocked });
+    }
     if (!isChargeNowConfigured()) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CHARGENOW_NOT_CONFIGURED");
       return reply({ ok: false, error: "CHARGENOW_NOT_CONFIGURED", compensation }, 503);
-    }
-    if (!areHardwareEjectionsEnabled()) {
-      return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED" }, 409);
     }
 
     const slotDecision = resolveRentSlot(

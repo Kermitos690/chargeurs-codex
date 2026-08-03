@@ -9,17 +9,23 @@
 // server-side pricing snapshot. No amount supplied by the browser is trusted.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi, auditLog, snapshotHash } from "../_shared/db.ts";
+import { adminClient, logApi, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_shared/pricingSnapshot.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
+import { evaluateCheckoutKioskBinding } from "./kioskBinding.ts";
 
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
 const EXPIRY_MINUTES = 30;
 
+const checkoutCorsHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
+};
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  headers: { ...checkoutCorsHeaders, "Content-Type": "application/json" },
 });
 
 function configuredAppUrl(): string | null {
@@ -33,7 +39,7 @@ function configuredAppUrl(): string | null {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: checkoutCorsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
@@ -48,6 +54,42 @@ Deno.serve(async (req) => {
       .select("*").eq("id", rentalSessionId).maybeSingle();
     if (sessionError) throw sessionError;
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+
+    // Checkout URLs are payment capabilities. They may only be created or
+    // disclosed to the exact active kiosk that created this station-bound
+    // rental. verifyKioskDevice also rejects revoked and expired credentials.
+    const stationId = typeof session.station_id === "string" ? session.station_id.trim() : "";
+    if (!stationId) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: { reason: "SESSION_STATION_MISSING" },
+      });
+      return json({ ok: false, error: "SESSION_STATION_MISSING" }, 409);
+    }
+    const kioskAuth = await verifyKioskDevice(req, db, stationId);
+    if (!kioskAuth.ok) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: { reason: kioskAuth.error, station_id: stationId },
+      });
+      return json({ ok: false, error: kioskAuth.error }, kioskAuth.status);
+    }
+    const binding = evaluateCheckoutKioskBinding(session, kioskAuth.device);
+    if (!binding.ok) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: {
+          reason: binding.error,
+          station_id: stationId,
+          kiosk_device_id: kioskAuth.device.id,
+          token_fp: kioskAuth.tokenFingerprint,
+        },
+      });
+      return json({ ok: false, error: binding.error }, binding.status);
+    }
 
     const stripeRuntime = validateStripeTestRuntime();
     if (!stripeRuntime.ok) {
