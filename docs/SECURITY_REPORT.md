@@ -14,6 +14,8 @@
 | Code kiosk consommé avant persistance tablette | pré-contrôle AndroidKeyStore/préférences, rotation locale unique de la seule clé Chargeurs invalide, puis lecture de confirmation | APK staging 1.0.15 : tests Android, lint staging, build et signature v2 | corrigé ; validation tablette requise |
 | Écran bleu masquant une WebView valide | la WebView est ajoutée au-dessus du fond natif dans le code source, avec reprise contrôlée après erreur réseau de la page principale | CI GitHub `30846463013` : tests, lint staging, build et `apksigner verify` | corrigé ; validation tablette requise |
 | Export d’un rapport de test contenant des traces d’autres locations | le centre de test ne charge que les logs explicitement corrélés à la session ou au tradeNo ; toutes les structures sont expurgées côté navigateur avant affichage/export | 2 tests dédiés, typecheck et build Vite | corrigé localement ; déploiement staging requis |
+| Code public de suivi de location trop court et généré avec `Math.random()` | les nouvelles sessions utilisent `crypto.getRandomValues`, un alphabet sans caractères ambigus et 12 symboles après le préfixe `CHG-` | 2 tests Deno dédiés + tests pricing snapshot | corrigé dans le dépôt ; migration/déploiement staging requis |
+| Énumération de rôles via RPC `SECURITY DEFINER` | les helpers de rôles exigent désormais que le sujet demandé soit `auth.uid()` ; ils restent utilisables depuis les politiques RLS sans exposer le rôle d’un tiers | migration additive revue localement | à appliquer après baseline staging |
 
 ## Dépendances frontend
 
@@ -29,6 +31,19 @@
   déployé, mais l’alerte reste ouverte jusqu’à une version corrigée publiée.
 
 ## Risques résiduels
+
+- Le conseiller Supabase du 3 août 2026 signale `kiosk_quote` et
+  `kiosk_session_status` comme RPC `SECURITY DEFINER` exécutables par `anon`.
+  Cette exposition est intentionnelle : le kiosk non connecté doit lire un
+  devis seulement avec son token lié à la station et la page de paiement doit
+  lire une session seulement avec son code public. Les fonctions ne renvoient
+  qu'une projection publique et rejettent l'absence ou l'invalidité de cette
+  capacité. Les grants sont explicitement conservés et ne constituent pas une
+  autorisation de lecture générale.
+- Le conseiller indique aussi que la protection Supabase contre les mots de
+  passe divulgués est désactivée. C'est une configuration Auth de dashboard,
+  non une migration SQL. Elle doit être activée lors de la prochaine session
+  administrateur Supabase avant les invitations de comptes de test.
 
 - La base staging a une dérive d'historique de migrations. Elle bloque un
   `db push` reproductible ; aucune réparation d'historique n'a été faite à

@@ -23,6 +23,8 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Portail client & borne publique | Vitest, typecheck, build Vite | 76 tests réussis ; routes compte et borne publique sans fallback de démonstration |
 | Checkout lié au kiosk | `deno check` + contrats ciblés | 47 tests réussis : kiosk, station et location doivent correspondre avant création ou divulgation de Checkout |
 | Centre de test expurgé | Vitest, typecheck, build Vite | 78 tests réussis dans 20 fichiers ; logs filtrés par corrélation et expurgés avant export |
+| Rôles staging | Vitest ciblé, typecheck, build Vite | 6 tests réussis ; les rôles non disponibles dans l'énumération staging ne sont pas attribuables dans l'UI |
+| Codes publics de location & sécurité RPC | `deno test --allow-read --allow-env --allow-net --no-check supabase/functions/tests/` | 191 tests Deno réussis ; générateur cryptographique et contrat de migration vérifiés localement |
 
 ## Couverture kiosk à six chiffres
 
@@ -51,6 +53,10 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
   au lieu d’inciter l’opérateur à réessayer un code déjà consommé.
 
 ## Non exécuté volontairement
+
+- La migration `20260803203905_harden_public_rpc_access.sql` n'est pas
+  appliquée au staging : son application doit suivre la baseline de migrations
+  documentée, et non contourner l'historique divergent.
 
 - Paiement Stripe live ou test avec carte. Le webhook Stripe Test signé a été
   validé séparément, sans paiement ni autorisation bancaire.

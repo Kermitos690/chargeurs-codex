@@ -16,19 +16,13 @@
 //  - Stale unpaid sessions are expired lazily (no hardware / no payment effect).
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
+import { createRentalPublicCode } from "../_shared/rentalPublicCode.ts";
 
 // Anti-spam: at most N session creations per device+station in WINDOW seconds.
 const RATE_MAX = 6;
 const RATE_WINDOW_SEC = 60;
 // A created/checkout session is considered abandoned after this delay.
 const SESSION_TTL_MIN = 20;
-
-function shortCode(): string {
-  const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "";
-  for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
-  return `CHG-${s}`;
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -172,7 +166,7 @@ Deno.serve(async (req) => {
       pricing_snapshot: snap,
       pricing_snapshot_hash: hash,
       state: "created",
-      public_session_code: shortCode(),
+      public_session_code: createRentalPublicCode(),
       amount,
       amount_expected: amount,
       currency,

@@ -376,3 +376,18 @@ officiellement documenté.
   staging actuelle accepte. Les rôles du catalogue complet en attente de la
   migration apparaissent explicitement comme non attribuables. Test ciblé,
   typecheck et build Vite ont réussi.
+
+## Revue des conseillers Supabase — 3 août 2026
+
+- Lecture seule des tables, politiques et conseillers de sécurité effectuée
+  via la CLI Management API, sans données applicatives.
+- Deux RPC publics kiosk sont volontairement capables de s'exécuter sans
+  session : ils exigent respectivement un token lié à une station et un code
+  public lié à une location. Leur exposition et leurs limitations sont
+  consignées dans `docs/SECURITY_REPORT.md`.
+- Une migration source additive durcit les helpers de rôle et les futurs codes
+  publics de session. Elle n'est pas appliquée au staging tant que la baseline
+  de migrations n'est pas terminée.
+- La protection Auth contre les mots de passe divulgués est désactivée dans
+  Supabase. Son activation est une action de dashboard à effectuer avant la
+  création d'invitations de test.
