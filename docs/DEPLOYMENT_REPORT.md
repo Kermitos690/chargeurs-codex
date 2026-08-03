@@ -127,3 +127,16 @@
   build Vite ; 47 tests Deno ciblés et `deno check` des modules fonctionnels.
   Aucune migration, opération Stripe live ou mutation ChargeNow n’a été
   effectuée.
+
+## Expurgation des rapports de test — 3 août 2026
+
+- Commit `2f374be`, déploiement staging `dpl_JBrsHfeuU94vr7aMMBQHuGry4YJj`,
+  état `Ready` ; l’alias `https://chargeurs-ch-staging.vercel.app` a été
+  actualisé.
+- Le contrôle de test ne lit plus les derniers `api_logs` globaux. Il filtre
+  les journaux Stripe par `rentalSessionId` et les journaux ChargeNow par
+  `tradeNo`, puis applique une expurgation récursive avant l’affichage ou un
+  export local.
+- Vérifications avant publication : deux tests de confidentialité dédiés,
+  typecheck TypeScript et build Vite réussis. Aucune donnée distante n’a été
+  modifiée.
