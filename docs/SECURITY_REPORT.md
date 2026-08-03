@@ -13,6 +13,7 @@
 | Webhook Stripe falsifié | secret `whsec_`, signature sur le corps brut et inbox idempotente | événement Stripe Test signé 200 ; requête sans signature 400 | déployé staging |
 | Code kiosk consommé avant persistance tablette | pré-contrôle AndroidKeyStore/préférences, rotation locale unique de la seule clé Chargeurs invalide, puis lecture de confirmation | APK staging 1.0.15 : tests Android, lint staging, build et signature v2 | corrigé ; validation tablette requise |
 | Écran bleu masquant une WebView valide | la WebView est ajoutée au-dessus du fond natif dans le code source, avec reprise contrôlée après erreur réseau de la page principale | CI GitHub `30846463013` : tests, lint staging, build et `apksigner verify` | corrigé ; validation tablette requise |
+| Export d’un rapport de test contenant des traces d’autres locations | le centre de test ne charge que les logs explicitement corrélés à la session ou au tradeNo ; toutes les structures sont expurgées côté navigateur avant affichage/export | 2 tests dédiés, typecheck et build Vite | corrigé localement ; déploiement staging requis |
 
 ## Dépendances frontend
 

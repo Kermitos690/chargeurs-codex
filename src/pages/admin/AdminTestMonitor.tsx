@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Download, FileJson, FileText, Search } from "lucide-react";
 import MutationTestMonitor from "@/components/admin/MutationTestMonitor";
+import { redactAdminReportRows, redactAdminReportValue } from "./adminReportRedaction";
 
 // ---------------------------------------------------------------------------
 // Staging manual-validation monitor.
@@ -129,12 +130,30 @@ export default function AdminTestMonitor() {
       }
       const s = session as Session;
 
+      // Never pull the latest global provider logs into a session report.
+      // api_logs does not have a relational session column, so the only safe
+      // source is an explicit request correlation recorded by the server.
+      const stripeLogsForRental = supabase.from("api_logs")
+        .select("*")
+        .eq("service", "stripe")
+        .contains("request", { rentalSessionId: id })
+        .order("created_at", { ascending: true })
+        .limit(50);
+      const chargeNowLogsForRental = s.apifox_trade_no
+        ? supabase.from("api_logs")
+          .select("*")
+          .eq("service", "chargenow")
+          .contains("request", { tradeNo: s.apifox_trade_no })
+          .order("created_at", { ascending: true })
+          .limit(50)
+        : Promise.resolve({ data: [] as unknown[] });
+
       const [payments, refunds, events, cnLogs, stripeLogs, callbacks, cabEvents] = await Promise.all([
         supabase.from("payments").select("*").eq("rental_session_id", id).order("created_at", { ascending: true }),
         supabase.from("refunds").select("*").eq("rental_session_id", id).order("created_at", { ascending: true }),
         supabase.from("rental_events").select("*").eq("rental_session_id", id).order("created_at", { ascending: true }),
-        supabase.from("api_logs").select("*").eq("service", "chargenow").order("created_at", { ascending: true }).limit(50),
-        supabase.from("api_logs").select("*").eq("service", "stripe").order("created_at", { ascending: true }).limit(50),
+        chargeNowLogsForRental,
+        stripeLogsForRental,
         s.apifox_trade_no
           ? supabase.from("chargenow_callbacks").select("*").eq("trade_no", s.apifox_trade_no).order("created_at", { ascending: true })
           : Promise.resolve({ data: [] }),
@@ -159,13 +178,13 @@ export default function AdminTestMonitor() {
       setReport({
         session: s,
         battery_id: battery,
-        payments: payments.data ?? [],
-        refunds: refunds.data ?? [],
-        rental_events: events.data ?? [],
-        chargenow_api_logs: cnLogs.data ?? [],
-        stripe_api_logs: stripeLogs.data ?? [],
-        chargenow_callbacks: callbacks.data ?? [],
-        cabinet_events: cabEvents.data ?? [],
+        payments: redactAdminReportRows(payments.data ?? []),
+        refunds: redactAdminReportRows(refunds.data ?? []),
+        rental_events: redactAdminReportRows(events.data ?? []),
+        chargenow_api_logs: redactAdminReportRows(cnLogs.data ?? []),
+        stripe_api_logs: redactAdminReportRows(stripeLogs.data ?? []),
+        chargenow_callbacks: redactAdminReportRows(callbacks.data ?? []),
+        cabinet_events: redactAdminReportRows(cabEvents.data ?? []),
         generated_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -203,7 +222,7 @@ export default function AdminTestMonitor() {
     let content: string;
     let mime: string;
     if (kind === "json") {
-      content = JSON.stringify(report, null, 2);
+      content = JSON.stringify(redactAdminReportValue(report), null, 2);
       mime = "application/json";
     } else {
       const s = report.session;
