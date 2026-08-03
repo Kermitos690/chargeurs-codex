@@ -49,25 +49,15 @@ jobs:
         if: inputs.run_edge_checks == true
         run: |
           set -euo pipefail
-          for file in \
-            supabase/functions/sync-cabinet-status/index.ts \
-            supabase/functions/create-stripe-checkout/index.ts \
-            supabase/functions/stripe-webhook/index.ts \
-            supabase/functions/eject-after-payment/index.ts \
-            supabase/functions/chargenow-rent-callback/index.ts \
-            supabase/functions/settle-rental-payment/index.ts; do
+          while IFS= read -r file; do
             deno check "$file"
-          done
+          done < <(find supabase/functions -mindepth 2 -maxdepth 2 -name index.ts -type f | sort)
 
       - name: Test critical rental contracts
         if: inputs.run_edge_checks == true
-        run: |
-          deno test --allow-read --allow-env \
-            supabase/functions/tests/kiosk_sync_auth_contract.test.ts \
-            supabase/functions/tests/settlement.test.ts \
-            supabase/functions/tests/orchestrator_runtime.test.ts \
-            supabase/functions/tests/chargenow_callback_auth.test.ts \
-            supabase/functions/tests/settlement_retry_contract.test.ts
+        run: >-
+          deno test --allow-read --allow-env --allow-net --no-check
+          supabase/functions/tests/
 
       - name: Security regression scan
         if: inputs.run_edge_checks == true

@@ -105,3 +105,25 @@
   l’alias `https://chargeurs-ch-staging.vercel.app` lui est affecté.
 - Contrôle HTTP : le bundle `assets/index-Cuhxv-s1.js` expose l’URL Supabase
   publique du staging et aucune valeur sensible.
+
+## Portail client, borne publique et Checkout kiosque — 3 août 2026
+
+- Frontend staging : commit `6bc89e7`, déploiement Vercel
+  `dpl_79GS61VC3D6BxLrZiosk5nZYu9AD`, état `Ready` ; l’alias
+  `https://chargeurs-ch-staging.vercel.app` a été vérifié en HTTP 200 pour
+  `/`, `/bornes/DTA21269`, `/compte`, `/admin` et `/kiosk/DTA21269`.
+- Le portail `/compte` comprend des vues protégées pour les locations,
+  paiements, support et profil. Les erreurs de lecture restent explicites et
+  aucune donnée de démonstration n’est injectée.
+- La fiche publique `/bornes/:stationId` ne lit qu’une liste de colonnes
+  publiée ; elle ne redirige plus vers un kiosk et n’expose aucun payload
+  fournisseur interne.
+- Edge Functions staging déployées depuis `189dbb9` :
+  `create-stripe-checkout`, `eject-after-payment`, `chargenow-admin`. Les
+  sondes sans effet ont confirmé les réponses `405`, `405`, `401` : les
+  endpoints sont publiés, sans créer de Checkout, paiement ni commande
+  matérielle.
+- Contrôles avant déploiement : 76 tests Vitest, typecheck TypeScript,
+  build Vite ; 47 tests Deno ciblés et `deno check` des modules fonctionnels.
+  Aucune migration, opération Stripe live ou mutation ChargeNow n’a été
+  effectuée.
