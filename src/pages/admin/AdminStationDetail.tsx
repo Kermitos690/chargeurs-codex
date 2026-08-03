@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { RefreshCw, Loader2, Wifi, WifiOff, Battery, TabletSmartphone, Copy, Ban, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 
 type KioskDevice = {
   id: string; station_id: string; label: string | null; active: boolean;
@@ -78,6 +79,8 @@ export default function AdminStationDetail() {
   const enrollmentUrl = pairing ? `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/kiosk-enroll` : "";
 
   if (!station) return <Loader2 className="h-8 w-8 animate-spin text-primary" />;
+  const connection = stationConnectionState(station);
+  const isOnline = connection === "online";
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -93,7 +96,7 @@ export default function AdminStationDetail() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <Info label="Statut" value={station.online ? "En ligne" : "Hors ligne"} icon={station.online ? Wifi : WifiOff} tone={station.online ? "text-success" : "text-muted-foreground"} />
+        <Info label="Statut fournisseur" value={stationConnectionLabel(station)} icon={isOnline ? Wifi : WifiOff} tone={isOnline ? "text-success" : connection === "unknown" ? "text-warning" : "text-muted-foreground"} />
         <Info label="Signal" value={station.signal ?? "—"} />
         <Info label="Disponibles" value={station.rentable_count} />
         <Info label="Dernière sync" value={station.last_sync_at ? new Date(station.last_sync_at).toLocaleTimeString() : "—"} />

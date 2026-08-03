@@ -120,6 +120,9 @@ async function persistPilotStatus(db: SupabaseClient, parsed: ParsedCabinetStatu
     returnable_count: parsed.returnableCount ?? 0,
     total_count: parsed.totalCount ?? 0,
     last_sync_at: observedAt,
+    provider_last_success_at: observedAt,
+    provider_last_error_at: null,
+    provider_last_error: null,
     raw_data: parsed.payload,
   }).eq("station_id", DTA_PILOT_STATION_ID);
   if (stationError) throw stationError;

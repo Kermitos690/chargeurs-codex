@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Wifi, WifiOff, RefreshCw, ChevronRight, Loader2 } from "lucide-react";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 
 export default function AdminStations() {
   const [stations, setStations] = useState<any[]>([]);
@@ -37,14 +38,16 @@ export default function AdminStations() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {stations.map((s) => (
-          <Link key={s.station_id} to={`/admin/stations/${s.station_id}`}
+        {stations.map((s) => {
+          const connection = stationConnectionState(s);
+          const connected = connection === "online";
+          return <Link key={s.station_id} to={`/admin/stations/${s.station_id}`}
             className="glass liquid-border group rounded-2xl p-6 transition-transform hover:scale-[1.02]">
             <div className="mb-3 flex items-center justify-between">
               <span className="font-mono text-sm text-muted-foreground">{s.station_id}</span>
-              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${s.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>
-                {s.online ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-                {s.online ? "En ligne" : "Hors ligne"}
+              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${connected ? "bg-success/15 text-success" : connection === "unknown" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>
+                {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                {stationConnectionLabel(s)}
               </span>
             </div>
             <h3 className="text-lg font-bold">{s.name}</h3>
@@ -54,7 +57,7 @@ export default function AdminStations() {
               <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
-        ))}
+        })}
       </div>
     </div>
   );

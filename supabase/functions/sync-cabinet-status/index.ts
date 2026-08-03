@@ -148,7 +148,12 @@ Deno.serve(async (req) => {
         const syncedAt = new Date().toISOString();
         const error = stableProviderError(attempts);
         await db.from("stations").update({
-          status: "unknown", online: false, last_sync_at: syncedAt,
+          // Do not rewrite last_sync_at here: it means the last *confirmed*
+          // cabinet snapshot. A supplier timeout or contradictory response is
+          // diagnostic information, not proof that the physical cabinet died.
+          status: "unknown", online: false,
+          provider_last_error_at: syncedAt,
+          provider_last_error: error,
         }).eq("station_id", st.station_id);
         results.push({
           stationId: st.station_id,
@@ -183,6 +188,9 @@ Deno.serve(async (req) => {
         returnable_count: returnable,
         total_count: total,
         last_sync_at: syncedAt,
+        provider_last_success_at: syncedAt,
+        provider_last_error_at: null,
+        provider_last_error: null,
         raw_data: parsed.payload,
       }).eq("station_id", st.station_id);
 

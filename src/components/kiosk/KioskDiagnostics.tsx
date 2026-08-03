@@ -61,6 +61,7 @@ type Props = {
   net: "online" | "offline";
   chargenowConfigured: boolean | null;
   stationOnline: boolean | null;
+  stationStatus: string | null;
   swUrl: string | null;
   needRefresh: boolean;
   onApplyUpdate: () => void;
@@ -78,7 +79,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 }
 
 export function KioskDiagnostics(props: Props) {
-  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
+  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, stationStatus, swUrl, needRefresh, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [savedToken, setSavedToken] = useState(() => readKioskToken() ?? "");
@@ -157,7 +158,7 @@ export function KioskDiagnostics(props: Props) {
         <Row label="Dernière synchro" value={lastSync ? new Date(lastSync).toLocaleString("fr-CH") : "—"} />
         <Row label="Réseau Internet" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
         <Row label="API ChargeNow" value={chargenowValue} tone={chargenowTone} />
-        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
+        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : stationStatus === "unknown" ? "statut fournisseur à vérifier" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationStatus === "unknown" ? "warn" : stationOnline === false ? "bad" : "warn"} />
         {nativeIntegration && (
           <>
             <Row

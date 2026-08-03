@@ -17,10 +17,11 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useKioskPwa } from "@/pwa/useKioskPwa";
 import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/kioskLock";
 import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
+import { stationConnectionDetail, stationConnectionState } from "@/lib/stationConnection";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
-  online: boolean; rentable_count: number;
+  status: string | null; online: boolean; rentable_count: number;
   price_per_period: number; currency: string; last_sync_at: string | null;
 };
 type Quote = {
@@ -315,6 +316,7 @@ export default function Kiosk() {
   const available = station?.rentable_count ?? 0;
   const canRent = station?.online && available > 0 && configured && !offline;
   const inventoryReadable = Boolean(station?.online && configured && !offline);
+  const connection = stationConnectionState(station ?? { status: null, online: null });
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
@@ -371,6 +373,7 @@ export default function Kiosk() {
           net={net}
           chargenowConfigured={configured}
           stationOnline={station?.online ?? null}
+          stationStatus={station?.status ?? null}
           swUrl={swUrl}
           needRefresh={needRefresh}
           onApplyUpdate={applyUpdate}
@@ -455,7 +458,7 @@ export default function Kiosk() {
 
           {phase === "idle" && station && (
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-8">
-              <StatusBadge online={!!station.online} configured={!!configured} />
+              <StatusBadge connection={connection} configured={!!configured} />
               <h1 className="max-w-3xl font-display text-5xl font-extrabold leading-tight sm:text-7xl">
                 Batterie nomade, à emporter
               </h1>
@@ -477,7 +480,7 @@ export default function Kiosk() {
                 </Button>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {offline ? "Connexion indisponible" : !configured ? "API non configurée" : !station.online ? "Borne hors ligne" : "Aucune batterie disponible"}
+                  {offline ? "Connexion indisponible" : !configured ? "API non configurée" : !station.online ? stationConnectionDetail(station) : "Aucune batterie disponible"}
                 </div>
               )}
             </motion.div>
@@ -603,16 +606,16 @@ export default function Kiosk() {
   );
 }
 
-function StatusBadge({ online, configured }: { online: boolean; configured: boolean }) {
+function StatusBadge({ connection, configured }: { connection: ReturnType<typeof stationConnectionState>; configured: boolean }) {
   if (!configured) return (
     <div className="glass inline-flex items-center gap-2 rounded-full px-4 py-2 text-warning">
       <WifiOff className="h-4 w-4" />API non configurée
     </div>
   );
   return (
-    <div className={`glass inline-flex items-center gap-2 rounded-full px-4 py-2 ${online ? "text-success" : "text-muted-foreground"}`}>
-      {online ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-      {online ? "En ligne" : "Hors ligne"}
+    <div className={`glass inline-flex items-center gap-2 rounded-full px-4 py-2 ${connection === "online" ? "text-success" : connection === "unknown" ? "text-warning" : "text-muted-foreground"}`}>
+      {connection === "online" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+      {connection === "online" ? "En ligne" : connection === "unknown" ? "Statut à vérifier" : "Hors ligne"}
     </div>
   );
 }

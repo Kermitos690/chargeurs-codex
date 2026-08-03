@@ -1077,6 +1077,9 @@ export type Database = {
           online: boolean | null
           partner_id: string | null
           price_per_period: number | null
+          provider_last_error: string | null
+          provider_last_error_at: string | null
+          provider_last_success_at: string | null
           raw_data: Json | null
           rentable_count: number | null
           returnable_count: number | null
@@ -1098,6 +1101,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
@@ -1119,6 +1125,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null

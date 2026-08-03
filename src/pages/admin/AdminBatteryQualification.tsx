@@ -15,6 +15,7 @@ import {
   TestTube2,
   XCircle,
 } from "lucide-react";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -217,6 +218,8 @@ export default function AdminBatteryQualification() {
   }
 
   const { station, campaign, guards, batteries, runs } = dashboard;
+  const connectionState = stationConnectionState(station ?? { status: null, online: null });
+  const connectionLabel = stationConnectionLabel(station ?? { status: null, online: null });
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -292,7 +295,7 @@ export default function AdminBatteryQualification() {
               La prochaine batterie non encore cyclée est sélectionnée automatiquement. Elle doit être rendue à DTA21269.
             </p>
           </div>
-          <Badge variant={station?.online ? "default" : "destructive"}>{station?.online ? "Borne en ligne" : "Borne hors ligne"}</Badge>
+          <Badge variant={connectionState === "online" ? "default" : connectionState === "unknown" ? "secondary" : "destructive"}>Borne {connectionLabel.toLowerCase()}</Badge>
         </div>
 
         {activeRun ? (
