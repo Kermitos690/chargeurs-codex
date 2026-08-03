@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { ensureCustomerProfile } from "@/lib/customerProfile";
 
 /**
  * Customer (renter) auth state. A customer is any authenticated user.
@@ -22,6 +23,13 @@ export function useCustomer() {
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    // The profile is convenience data only.  Authorization continues to rely
+    // on Supabase Auth and RLS, so a failed profile write cannot grant access.
+    void ensureCustomerProfile(user);
+  }, [user]);
 
   return { user, loading };
 }

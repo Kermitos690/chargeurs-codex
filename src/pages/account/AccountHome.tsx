@@ -17,8 +17,7 @@ import {
   ACTIVE_RENTAL_STATES,
   CustomerPayment,
   CustomerRental,
-  fetchCustomerPayments,
-  fetchCustomerRentals,
+  fetchPrivateAccountSummary,
   formatAccountDate,
   formatAccountMoney,
   rentalStateLabel,
@@ -38,8 +37,8 @@ export default function AccountHome() {
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: false }));
     try {
-      const [rentals, payments] = await Promise.all([fetchCustomerRentals(10), fetchCustomerPayments(10)]);
-      setState({ loading: false, error: false, rentals, payments });
+      const summary = await fetchPrivateAccountSummary();
+      setState({ loading: false, error: false, rentals: summary.rentals.slice(0, 10), payments: summary.payments.slice(0, 10) });
     } catch {
       setState((current) => ({ ...current, loading: false, error: true }));
     }
