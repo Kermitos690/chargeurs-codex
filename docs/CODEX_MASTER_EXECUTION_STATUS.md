@@ -372,3 +372,7 @@ officiellement documenté.
   n'ont pas encore une politique explicitement vérifiée.
 - La procédure et la liste des versions divergentes sont maintenues dans
   `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
+- L'écran `Utilisateurs & rôles` n'envoie désormais que les rôles que l'énumération
+  staging actuelle accepte. Les rôles du catalogue complet en attente de la
+  migration apparaissent explicitement comme non attribuables. Test ciblé,
+  typecheck et build Vite ont réussi.

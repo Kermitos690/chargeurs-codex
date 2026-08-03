@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { canManageFinance, canView, canWrite, isSuperAdmin } from "@/lib/roles";
 import { canAccessAdminPath } from "@/pages/admin/adminNav";
-import { ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
+import { ASSIGNABLE_ROLE_IDS, PENDING_STAGING_ROLE_IDS, STAGING_ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
 
 describe("auth role gating", () => {
   it("grants view to back-office roles", () => {
@@ -44,5 +44,8 @@ describe("auth role gating", () => {
     expect(ASSIGNABLE_ROLE_IDS).toContain("venue_staff");
     expect(ASSIGNABLE_ROLE_IDS).not.toContain("kiosk_device");
     expect(roleLabel("support_manager")).toBe("Responsable support");
+    expect(STAGING_ASSIGNABLE_ROLE_IDS).toContain("support_agent");
+    expect(PENDING_STAGING_ROLE_IDS).toContain("mifi_manager");
+    expect(PENDING_STAGING_ROLE_IDS).not.toContain("super_admin");
   });
 });

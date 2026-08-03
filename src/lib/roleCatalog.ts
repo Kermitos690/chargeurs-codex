@@ -55,6 +55,18 @@ export const ASSIGNABLE_ROLE_IDS = ROLE_CATALOG
   .filter((role) => role.scope !== "system")
   .map((role) => role.id) as readonly PlatformRole[];
 
+// The remote staging enum has not yet received the additive role migration.
+// Keep the administration screen truthful: roles outside this list are shown
+// as planned, never submitted to an endpoint that cannot persist them.
+export const STAGING_ASSIGNABLE_ROLE_IDS = [
+  "super_admin", "admin", "operations_admin", "finance_admin",
+  "support_agent", "maintenance_technician", "partner_owner",
+  "partner_staff", "customer", "viewer", "operator", "staff",
+] as const satisfies readonly PlatformRole[];
+
+export const PENDING_STAGING_ROLE_IDS = ASSIGNABLE_ROLE_IDS
+  .filter((role) => !STAGING_ASSIGNABLE_ROLE_IDS.includes(role as typeof STAGING_ASSIGNABLE_ROLE_IDS[number]));
+
 export function roleLabel(role: string): string {
   return ROLE_CATALOG.find((definition) => definition.id === role)?.label ?? role;
 }

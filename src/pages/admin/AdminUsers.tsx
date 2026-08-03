@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, UserPlus, ShieldCheck, X } from "lucide-react";
-import { ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
+import { PENDING_STAGING_ROLE_IDS, STAGING_ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
 
 type AdminUser = {
   id: string;
@@ -114,7 +114,7 @@ export default function AdminUsers() {
 
               {canWrite && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {ASSIGNABLE_ROLE_IDS.filter((r) => !u.roles.includes(r)).map((r) => (
+                  {STAGING_ASSIGNABLE_ROLE_IDS.filter((r) => !u.roles.includes(r)).map((r) => (
                     <Button
                       key={r} size="sm" variant="outline" className="h-7 text-xs"
                       disabled={busy === `${u.id}:${r}:add`}
@@ -127,6 +127,23 @@ export default function AdminUsers() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {canWrite && PENDING_STAGING_ROLE_IDS.length > 0 && (
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm">
+          <p className="font-semibold text-amber-200">Rôles prévus, migration staging requise</p>
+          <p className="mt-1 text-muted-foreground">
+            Ces rôles sont définis dans le dépôt, mais ne peuvent pas être attribués
+            avant la réconciliation Supabase et les tests RLS associés.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {PENDING_STAGING_ROLE_IDS.map((role) => (
+              <Badge key={role} variant="outline" className="border-amber-400/30 text-amber-100">
+                {roleLabel(role)}
+              </Badge>
+            ))}
+          </div>
         </div>
       )}
     </div>
