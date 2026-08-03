@@ -9,14 +9,28 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
+  if (!user.email) return;
+  const { data: unlinked, error: selectError } = await db
+    .from("rental_sessions")
+    .select("id")
+    .is("customer_user_id", null)
+    .eq("customer_email", user.email);
+  if (selectError) throw new Error("RENTAL_LINK_LOOKUP_FAILED");
+  const ids = (unlinked ?? []).map((rental) => String(rental.id));
+  if (ids.length === 0) return;
+  const { error: claimError } = await db
+    .from("rental_sessions")
+    .update({ customer_user_id: user.id })
+    .in("id", ids);
+  if (claimError) throw new Error("RENTAL_LINK_FAILED");
+}
+
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
-  const { data: byId } = await db.from("rental_sessions").select("*").eq("customer_user_id", user.id);
-  const { data: byEmail } = user.email
-    ? await db.from("rental_sessions").select("*").eq("customer_email", user.email)
-    : { data: [] };
-  const rentalsById = new Map<string, Record<string, unknown>>();
-  for (const rental of [...(byId ?? []), ...(byEmail ?? [])]) rentalsById.set(String(rental.id), rental);
-  const rentals = Array.from(rentalsById.values());
+  await claimVerifiedEmailRentals(db, user);
+  const { data: rentalsById, error: rentalsError } = await db.from("rental_sessions").select("*").eq("customer_user_id", user.id);
+  if (rentalsError) throw new Error("RENTALS_UNAVAILABLE");
+  const rentals = rentalsById ?? [];
   const rentalIds = rentals.map((rental) => String(rental.id));
   const { data: profile } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
   if (rentalIds.length === 0) return { profile, rentals: [], payments: [], refunds: [], incidents: [] };
@@ -39,14 +53,24 @@ Deno.serve(async (req) => {
   const action = String(body.action ?? "summary");
 
   if (action === "summary" || action === "export") {
-    const data = await customerData(db, user);
+    let data: Awaited<ReturnType<typeof customerData>>;
+    try {
+      data = await customerData(db, user);
+    } catch {
+      return json({ ok: false, error: "ACCOUNT_DATA_UNAVAILABLE" }, 500);
+    }
     await auditLog(db, { actor: user.id, action: action === "export" ? "account.exported" : "account.summary_viewed", target: user.id });
     return json({ ok: true, generatedAt: new Date().toISOString(), data });
   }
 
   if (action === "delete") {
     if (body.confirmation !== "DELETE_ACCOUNT") return json({ ok: false, error: "CONFIRMATION_REQUIRED" }, 400);
-    const data = await customerData(db, user);
+    let data: Awaited<ReturnType<typeof customerData>>;
+    try {
+      data = await customerData(db, user);
+    } catch {
+      return json({ ok: false, error: "ACCOUNT_DATA_UNAVAILABLE" }, 500);
+    }
     const states = data.rentals.map((rental) => String(rental.state));
     if (accountDeletionBlocked(states)) return json({ ok: false, error: "ACTIVE_OR_UNSETTLED_RENTAL" }, 409);
 

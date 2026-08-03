@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   CustomerPayment,
   CustomerRefund,
-  fetchCustomerPayments,
   fetchPrivateAccountSummary,
   formatAccountDate,
   formatAccountMoney,
@@ -40,11 +39,8 @@ export default function AccountPayments() {
     setLoading(true);
     setError(false);
     try {
-      const [paymentRows, summary] = await Promise.all([
-        fetchCustomerPayments(),
-        fetchPrivateAccountSummary(),
-      ]);
-      setPayments(paymentRows);
+      const summary = await fetchPrivateAccountSummary();
+      setPayments(summary.payments);
       setRefunds(summary.refunds);
     } catch {
       setError(true);

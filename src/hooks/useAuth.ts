@@ -37,11 +37,6 @@ export function useAuth() {
       setIsAdmin(canView(r));
       setLoading(false);
     });
-    // Ensure a profile row exists for this user (RLS: users upsert own profile).
-    supabase.from("profiles").upsert(
-      { id: user.id, email: user.email ?? null },
-      { onConflict: "id", ignoreDuplicates: false },
-    ).then(() => {});
   }, [user]);
 
   // Write access is restricted to roles the backend `requireAdmin` accepts.

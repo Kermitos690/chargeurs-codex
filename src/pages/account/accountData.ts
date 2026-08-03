@@ -99,26 +99,18 @@ export function formatAccountDate(value: string | null) {
 }
 
 export async function fetchCustomerRentals(limit = 100): Promise<CustomerRental[]> {
-  const { data, error } = await supabase
-    .from("rental_sessions")
-    .select("id,station_id,state,amount_paid,amount_expected,currency,created_at,paid_at,ejected_at,returned_at,completed_at,closed_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw new Error("RENTALS_UNAVAILABLE");
-  return (data ?? []) as CustomerRental[];
+  const summary = await fetchPrivateAccountSummary();
+  return summary.rentals.slice(0, limit);
 }
 
 export async function fetchCustomerPayments(limit = 100): Promise<CustomerPayment[]> {
-  const { data, error } = await supabase
-    .from("payments")
-    .select("id,rental_session_id,status,amount,currency,payment_method,provider,created_at,refunded_at")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw new Error("PAYMENTS_UNAVAILABLE");
-  return (data ?? []) as CustomerPayment[];
+  const summary = await fetchPrivateAccountSummary();
+  return summary.payments.slice(0, limit);
 }
 
 export async function fetchPrivateAccountSummary(): Promise<{
+  rentals: CustomerRental[];
+  payments: CustomerPayment[];
   refunds: CustomerRefund[];
   incidents: CustomerIncident[];
   profile: Record<string, unknown> | null;
@@ -128,6 +120,8 @@ export async function fetchPrivateAccountSummary(): Promise<{
   });
   if (error || !data?.ok) throw new Error("ACCOUNT_SUMMARY_UNAVAILABLE");
   return {
+    rentals: (data.data?.rentals ?? []) as CustomerRental[],
+    payments: (data.data?.payments ?? []) as CustomerPayment[],
     refunds: (data.data?.refunds ?? []) as CustomerRefund[],
     incidents: (data.data?.incidents ?? []) as CustomerIncident[],
     profile: (data.data?.profile ?? null) as Record<string, unknown> | null,
