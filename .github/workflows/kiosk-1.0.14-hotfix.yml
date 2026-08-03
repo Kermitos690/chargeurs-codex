@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/fix-kiosk-blue-layer-1.0.14
+  pull_request:
+    branches:
+      - agent/finalize-chargeurs-platform
   workflow_dispatch:
 
 permissions:
