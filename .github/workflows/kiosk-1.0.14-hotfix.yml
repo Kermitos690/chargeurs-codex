@@ -1,0 +1,51 @@
+name: Chargeurs kiosk 1.0.14 hotfix
+
+on:
+  push:
+    branches:
+      - agent/fix-kiosk-blue-layer-1.0.14
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Apply fix, test and build
+        run: bash scripts/build-kiosk-1.0.14-hotfix.sh
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$APKSIGNER" verify --verbose Chargeurs_CH_Kiosk_1.0.14-staging.apk
+
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chargeurs_CH_Kiosk_1.0.14-staging
+          path: |
+            Chargeurs_CH_Kiosk_1.0.14-staging.apk
+            Chargeurs_CH_Kiosk_1.0.14-staging.sha256
+          retention-days: 14
+          if-no-files-found: error
