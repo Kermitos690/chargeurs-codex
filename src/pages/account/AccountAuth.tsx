@@ -124,8 +124,8 @@ export default function AccountAuth() {
         <LiquidBackground />
         <section className="glass-strong liquid-border w-full max-w-md rounded-3xl p-8 text-center">
           <div className="mb-8 flex justify-center"><BrandLogo /></div>
-          <h1 className="font-display text-2xl font-bold">Confirmez votre adresse email</h1>
-          <p className="mt-3 text-sm text-muted-foreground">Un lien de confirmation a été envoyé à <strong className="text-foreground">{confirmationEmail}</strong>. Ouvrez-le avant d’accéder à votre espace client.</p>
+          <h1 className="font-display text-2xl font-bold">Vérifiez votre adresse email</h1>
+          <p className="mt-3 text-sm text-muted-foreground">Si <strong className="text-foreground">{confirmationEmail}</strong> ne possède pas encore de compte, un lien de confirmation vient d’être envoyé. Si un compte existe déjà, connectez-vous ou utilisez «&nbsp;Mot de passe oublié&nbsp;» pour retrouver l’accès.</p>
           <Button type="button" onClick={() => nav("/compte/login", { replace: true })} className="mt-6 w-full rounded-full bg-gradient-primary py-6 text-lg font-bold">Revenir à la connexion</Button>
         </section>
       </div>
