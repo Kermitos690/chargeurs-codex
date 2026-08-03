@@ -140,3 +140,16 @@
 - Vérifications avant publication : deux tests de confidentialité dédiés,
   typecheck TypeScript et build Vite réussis. Aucune donnée distante n’a été
   modifiée.
+
+## Durcissement des codes publics de location — 3 août 2026
+
+- Edge Function staging : `create-rental-session` déployée depuis le commit
+  `8b996f0`. Les nouvelles locations recevront un code public `CHG-` de douze
+  caractères issu du générateur cryptographique Web Crypto.
+- Sonde passive effectuée sans payload : réponse `400 MISSING_STATION`, ce qui
+  confirme que l'endpoint est joignable et refuse une requête incomplète. Aucune
+  location, session Checkout, paiement, commande fournisseur ou opération
+  matérielle n'a été créée.
+- La migration SQL associée à la restriction des helpers de rôle est
+  volontairement non appliquée : voir
+  `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
