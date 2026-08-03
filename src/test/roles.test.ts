@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { canManageFinance, canView, canWrite, isSuperAdmin } from "@/lib/roles";
 import { canAccessAdminPath } from "@/pages/admin/adminNav";
+import { ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
 
 describe("auth role gating", () => {
   it("grants view to back-office roles", () => {
@@ -36,5 +37,12 @@ describe("auth role gating", () => {
   it("identifies super_admin only", () => {
     expect(isSuperAdmin(["super_admin"])).toBe(true);
     expect(isSuperAdmin(["admin"])).toBe(false);
+  });
+  it("keeps the full requested role matrix assignable while system identities stay excluded", () => {
+    expect(ASSIGNABLE_ROLE_IDS).toContain("mifi_manager");
+    expect(ASSIGNABLE_ROLE_IDS).toContain("franchise_owner");
+    expect(ASSIGNABLE_ROLE_IDS).toContain("venue_staff");
+    expect(ASSIGNABLE_ROLE_IDS).not.toContain("kiosk_device");
+    expect(roleLabel("support_manager")).toBe("Responsable support");
   });
 });

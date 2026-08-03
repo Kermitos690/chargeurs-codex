@@ -7,10 +7,15 @@ import { adminClient, requireSuperAdmin, auditLog } from "../_shared/db.ts";
 
 // Roles that may be assigned from the back-office UI.
 const ASSIGNABLE = [
-  "super_admin", "operations_admin", "finance_admin", "support_agent",
-  "maintenance_technician", "partner_owner", "partner_staff", "customer",
+  "super_admin", "admin", "platform_admin", "operations_admin", "finance_admin",
+  "support_manager", "support_agent", "maintenance_manager", "maintenance_technician",
+  "powerbank_manager", "mifi_manager", "advertising_manager", "reports_analyst",
+  "franchise_owner", "franchise_admin", "franchise_staff",
+  "agency_owner", "agency_admin", "agency_staff",
+  "partner_owner", "partner_staff", "venue_manager", "venue_staff",
+  "vip_customer", "customer",
   // Preserved while existing installations migrate to the production matrix.
-  "admin", "staff", "operator", "viewer",
+  "staff", "operator", "viewer",
 ] as const;
 type Assignable = (typeof ASSIGNABLE)[number];
 

@@ -346,3 +346,27 @@ officiellement documenté.
   `cad022c28d3a74dc22e677c791bbb949c6ca3a02f7a383bf2aea5fcd959e0425`).
   `testDebugUnitTest`, `lintStaging`, `assembleStaging` et signature v2 ont
   réussi. Validation tablette toujours requise.
+
+## Maîtrise des coûts GitHub Actions — 3 août 2026
+
+- La répétition des courriels « run failed » provenait du workflow
+  `DTA21269 battery qualification CI`, déclenché à chaque push de la branche
+  pilote. Il est maintenant désactivé côté GitHub. Sa définition locale a été
+  conservée mais ne peut plus être lancée que manuellement.
+- Les anciens workflows de diagnostic, hotfix, synchronisation et validation
+  ponctuelle qui n'ont plus de source active ont également été désactivés.
+- Les workflows restant actifs dans ce dépôt sont tous `workflow_dispatch` :
+  aucun push, aucune pull request et aucune planification ne doit lancer une
+  exécution ou générer un nouveau courriel automatiquement.
+
+## Catalogue de rôles source — 3 août 2026
+
+- Le code source contient désormais le catalogue complet des rôles demandés
+  (plateforme, opérations, finance, support, maintenance, MIFI, publicité,
+  franchises, agences, partenaires, établissements et clients) et l'interface
+  d'administration utilise ces libellés.
+- La migration additive correspondante reste **non appliquée** au staging :
+  l'historique des migrations distant est divergent. Aucun rôle supplémentaire
+  ni privilège n'a été créé à distance par cette étape. Les contrôles RLS et
+  Edge Functions continuent donc à échouer de façon fermée pour les rôles qui
+  n'ont pas encore une politique explicitement vérifiée.

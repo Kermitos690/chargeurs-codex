@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, UserPlus, ShieldCheck, X } from "lucide-react";
+import { ASSIGNABLE_ROLE_IDS, roleLabel } from "@/lib/roleCatalog";
 
 type AdminUser = {
   id: string;
@@ -17,11 +18,6 @@ type AdminUser = {
   phone: string | null;
   roles: string[];
 };
-
-const ASSIGNABLE = [
-  "super_admin", "operations_admin", "finance_admin", "support_agent",
-  "maintenance_technician", "partner_owner", "partner_staff", "customer",
-] as const;
 
 export default function AdminUsers() {
   const { isSuperAdmin: canWrite } = useAuth();
@@ -102,7 +98,7 @@ export default function AdminUsers() {
                   {u.roles.length === 0 && <span className="text-xs text-muted-foreground">Aucun rôle</span>}
                   {u.roles.map((r) => (
                     <Badge key={r} variant="secondary" className="gap-1">
-                      <ShieldCheck className="h-3 w-3" />{r}
+                      <ShieldCheck className="h-3 w-3" />{roleLabel(r)}
                       {canWrite && (
                         <button
                           onClick={() => mutate("remove_role", { userId: u.id, role: r }, `${u.id}:${r}:rm`)}
@@ -118,13 +114,13 @@ export default function AdminUsers() {
 
               {canWrite && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {ASSIGNABLE.filter((r) => !u.roles.includes(r)).map((r) => (
+                  {ASSIGNABLE_ROLE_IDS.filter((r) => !u.roles.includes(r)).map((r) => (
                     <Button
                       key={r} size="sm" variant="outline" className="h-7 text-xs"
                       disabled={busy === `${u.id}:${r}:add`}
                       onClick={() => mutate("set_role", { userId: u.id, role: r }, `${u.id}:${r}:add`)}
                     >
-                      + {r}
+                      + {roleLabel(r)}
                     </Button>
                   ))}
                 </div>

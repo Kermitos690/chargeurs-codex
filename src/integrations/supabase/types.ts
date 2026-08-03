@@ -1451,6 +1451,29 @@ export type Database = {
         | "super_admin"
         | "customer"
         | "kiosk_device"
+        | "platform_admin"
+        | "support_manager"
+        | "maintenance_manager"
+        | "powerbank_manager"
+        | "mifi_manager"
+        | "advertising_manager"
+        | "reports_analyst"
+        | "franchise_owner"
+        | "franchise_admin"
+        | "franchise_staff"
+        | "agency_owner"
+        | "agency_admin"
+        | "agency_staff"
+        | "venue_manager"
+        | "venue_staff"
+        | "vip_customer"
+        | "operations_admin"
+        | "finance_admin"
+        | "support_agent"
+        | "maintenance_technician"
+        | "partner_owner"
+        | "partner_staff"
+        | "api_client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1587,6 +1610,29 @@ export const Constants = {
         "super_admin",
         "customer",
         "kiosk_device",
+        "platform_admin",
+        "support_manager",
+        "maintenance_manager",
+        "powerbank_manager",
+        "mifi_manager",
+        "advertising_manager",
+        "reports_analyst",
+        "franchise_owner",
+        "franchise_admin",
+        "franchise_staff",
+        "agency_owner",
+        "agency_admin",
+        "agency_staff",
+        "venue_manager",
+        "venue_staff",
+        "vip_customer",
+        "operations_admin",
+        "finance_admin",
+        "support_agent",
+        "maintenance_technician",
+        "partner_owner",
+        "partner_staff",
+        "api_client",
       ],
     },
   },
