@@ -20,6 +20,9 @@ Date : 31 juillet 2026 · environnement local et staging non destructif.
 | Stripe webhook staging | événement Test `checkout.session.expired` | livraison signée `200 OK`, 31 juillet 2026 à 16:42 CEST |
 | Récupération inter-navigateur | typecheck, 68 tests, build Vite et inspection du bundle staging | client recovery implicite/non persistant servi ; aucun e-mail de test envoyé |
 | Orientation administrateur | typecheck, 68 tests, build Vite et Vercel staging `dpl_FYKwaeo9daMJUzjSpbtxBETcg8QC` | un rôle de back-office est dirigé vers `/admin`; chargement/erreur dashboard visibles |
+| Portail client & borne publique | Vitest, typecheck, build Vite | 76 tests réussis ; routes compte et borne publique sans fallback de démonstration |
+| Checkout lié au kiosk | `deno check` + contrats ciblés | 47 tests réussis : kiosk, station et location doivent correspondre avant création ou divulgation de Checkout |
+| Centre de test expurgé | Vitest, typecheck, build Vite | 78 tests réussis dans 20 fichiers ; logs filtrés par corrélation et expurgés avant export |
 
 ## Couverture kiosk à six chiffres
 
