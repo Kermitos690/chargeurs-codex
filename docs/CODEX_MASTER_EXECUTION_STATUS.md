@@ -132,6 +132,47 @@ ni lancer ni arrêter l’agent Bajie/ChargeNow. Un pont physique complet reste
 conditionné par un SDK, un service système ou un protocole DTA/RS485
 officiellement documenté.
 
+## APK staging 1.0.15 et recette WebView — 3 août 2026
+
+- Le défaut d’écran bleu sur la borne a été corrigé dans le **code source
+  Android** : la WebView est maintenant insérée durablement au-dessus du fond
+  animé (`WEB_VIEW_LAYER_INDEX = 1`), et non par une réécriture temporaire en
+  CI. Le wrapper recrée aussi la WebView lorsqu’une erreur de chargement de la
+  page principale est suivie d’un rétablissement réseau.
+- La candidate pilote est construite depuis la PR #42, commit
+  `dc977c6ced53a2a0df2859d9d38241da1e13cc2e` : version `1.0.15-staging`,
+  `versionCode=115`, applicationId `ch.chargeurs.kiosk.staging`.
+- Preuve CI : workflow GitHub Actions `30846463013` vert —
+  `testDebugUnitTest`, `lintStaging`, `assembleStaging` et
+  `apksigner verify` réussis. APK :
+  `Chargeurs_CH_Kiosk_1.0.15-staging.apk`, 928 360 octets, SHA-256
+  `d0bf7c7129496820eb3153c2a8fa22528e5a8e9cbb5a756b6b52e51935229a88`.
+- Cette APK reste debug-signée et réservée au staging. Le rendu, le tactile,
+  le redémarrage matériel et la lecture du QR sur la DTA restent à valider
+  physiquement ; aucune éjection ni mutation fournisseur n’est activée.
+
+## Authentification staging et déploiement — 3 août 2026
+
+- Les nouveaux liens de réinitialisation utilisent le client de récupération
+  implicite isolé. Les liens PKCE historiques ouverts dans un autre navigateur
+  ne divulguent plus une erreur Supabase : l’interface demande un nouveau lien.
+- Tests locaux : 76 tests Vitest dans 19 suites et `npm run typecheck` réussis ;
+  `npm run build` réussi (avertissement non bloquant : un bundle reste supérieur
+  à 500 Ko minifié).
+- Le commit `ab57f378d424f3bcb4f1e96b1c0d2cb52dc035db` est déployé explicitement
+  sur le projet Vercel de staging :
+  `dpl_9jhgwqJxp16XnY9MnaDKp8GFQRcq`, état `READY`, alias
+  `https://chargeurs-ch-staging.vercel.app`. Le bundle public
+  `index-BW752rl5.js` contient bien le message de récupération corrigé.
+- `kiosk-enroll` répond depuis le projet staging avec HTTP 405/
+  `METHOD_NOT_ALLOWED` à une requête GET sans code : la fonction est donc
+  déployée et aucune donnée d’appairage n’a été créée ni consommée par ce test.
+- La tentative de création/régularisation du compte propriétaire staging a été
+  volontairement arrêtée par le contrôle d’autorisation de l’environnement :
+  créer ou promouvoir durablement une adresse en `super_admin` exige une
+  confirmation explicite distincte. Aucun compte, rôle ou invitation n’a été
+  modifié pendant cette tentative.
+
 ## Console Super Admin — opérations ChargeNow documentées (31 juillet 2026)
 
 - Le rôle `super_admin` dispose désormais, via la console **Intégrations et
