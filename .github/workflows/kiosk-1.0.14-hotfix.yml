@@ -1,16 +1,14 @@
-name: Chargeurs kiosk 1.0.14 hotfix
+name: Chargeurs kiosk 1.0.15 staging build
 
 on:
-  push:
-    branches:
-      - agent/fix-kiosk-blue-layer-1.0.14
-  pull_request:
-    branches:
-      - agent/finalize-chargeurs-platform
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: kiosk-staging-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -35,20 +33,20 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Apply fix, test and build
+      - name: Test and build committed source
         run: bash scripts/build-kiosk-1.0.14-hotfix.sh
 
       - name: Verify APK signature
         run: |
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$APKSIGNER" verify --verbose Chargeurs_CH_Kiosk_1.0.14-staging.apk
+          "$APKSIGNER" verify --verbose Chargeurs_CH_Kiosk_1.0.15-staging.apk
 
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: Chargeurs_CH_Kiosk_1.0.14-staging
+          name: Chargeurs_CH_Kiosk_1.0.15-staging
           path: |
-            Chargeurs_CH_Kiosk_1.0.14-staging.apk
-            Chargeurs_CH_Kiosk_1.0.14-staging.sha256
+            Chargeurs_CH_Kiosk_1.0.15-staging.apk
+            Chargeurs_CH_Kiosk_1.0.15-staging.sha256
           retention-days: 14
           if-no-files-found: error
