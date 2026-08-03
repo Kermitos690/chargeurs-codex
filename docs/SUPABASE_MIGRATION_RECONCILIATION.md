@@ -1,40 +1,70 @@
-# Réconciliation des migrations Supabase — staging
+# Réconciliation des migrations Supabase staging
 
-## État constaté le 31 juillet 2026
+**État constaté le 3 août 2026 — aucune migration appliquée par ce document.**
 
-Le projet staging lié par la CLI est `xqepbqnaenoeyfjkjnzl`. Son historique de migrations ne correspond pas encore à l'historique versionné dans ce dépôt. Cette situation est un blocage de reproductibilité, **pas** une autorisation de réinitialiser, réparer ou réécrire l'historique.
+Le projet staging `xqepbqnaenoeyfjkjnzl` est lié à ce dépôt, mais son historique
+de migrations n'est pas encore reproductible depuis Git :
 
-### Écarts observés
+- migrations locales absentes du distant : `20260720003000`,
+  `20260724060000`, `20260724061000`, `20260731132542` et la migration de
+  catalogue de rôles `20260803230000` ;
+- migrations distantes absentes du dépôt : la série `20260725042947` à
+  `20260725050549`, plus `20260731055742`, `20260731055744` et
+  `20260731055745` ;
+- seules les migrations dont la version est présente des deux côtés constituent
+  aujourd'hui une preuve de parité.
 
-- Locales absentes de l'historique distant : `20260720003000`, `20260724060000`, `20260724061000`, `20260731132542`.
-- Distantes absentes du dépôt : la séquence `20260725042947` à `20260725050549`, ainsi que `20260731055742`, `20260731055744` et `20260731055745`.
-- Les migrations communes antérieures sont alignées jusqu'à `20260719221000`, puis à `20260731100927` et `20260731101422`.
+Cette dérive interdit un `supabase db push` automatique : il pourrait refuser
+le déploiement ou marquer un schéma comme appliqué sans que son contenu soit
+vérifié. Aucune commande `db reset`, réparation d'historique, suppression de
+table ou migration distante n'est autorisée dans cette phase.
 
-La migration additive `20260731132542_kiosk_numeric_enrollment_rate_limits.sql` a été exécutée une fois directement sur staging après revue : elle ajoute un journal privé de tentatives, deux colonnes non destructives, des index et deux surcharges de fonction de redemption. Cette exécution n'a pas réparé le tableau d'historique Supabase : elle doit donc rester explicitement traitée comme une exception contrôlée jusqu'à la baseline.
+Exception historique déjà consignée :
+`20260731132542_kiosk_numeric_enrollment_rate_limits.sql` a été exécutée une
+fois directement sur staging après revue. Elle ajoute un journal privé de
+tentatives, deux colonnes non destructives, des index et des surcharges de
+fonction de redemption. Cette exécution n'a pas réparé le tableau d'historique
+Supabase ; elle reste donc une exception contrôlée à inclure dans la baseline.
 
-## Garanties de sécurité
+## Stratégie sûre
 
-- Aucun `supabase db reset --linked`, `migration repair`, `db push` ni DDL destructif n'a été exécuté pour traiter cette dérive.
-- Aucun export de mot de passe, URL directe de base, token ou secret n'est stocké dans ce document.
-- Les environnements fournisseur, Stripe live et matériel restent désactivés.
-
-## Procédure de baseline requise
-
-1. Exporter les métadonnées de schéma du staging dans un emplacement local sécurisé, sans données applicatives ni secrets.
-2. Rapatrier les migrations distantes manquantes avec leur contenu réel ou les classer formellement comme des changements manuels historiques. Ne pas les recréer à partir d'une supposition.
-3. Sur une base vierge isolée, rejouer l'historique local candidat et comparer tables, contraintes, index, fonctions et RLS au staging.
-4. Produire une migration de compatibilité additive pour chaque écart de schéma réellement établi.
-5. Faire relire le plan ordonné, effectuer un `db push --dry-run`, puis appliquer seulement les migrations compatibles sur staging.
-6. Une fois le schéma vérifié, réparer l'historique uniquement avec des correspondances version/contenu prouvées et consigner la décision.
+1. Exporter hors Git le schéma `public`, les politiques RLS, fonctions,
+   triggers, extensions et liste des migrations du staging, avec toutes les
+   valeurs sensibles expurgées.
+2. Comparer cet export au schéma reconstruit à partir des migrations locales
+   sur une base vide locale.
+3. Rapatrier dans le dépôt les éléments distants réellement manquants sous une
+   baseline révisée. Ne jamais déduire le contenu depuis le seul numéro de
+   migration.
+4. Écrire des migrations additives de convergence, avec tests RLS et
+   contraintes, plutôt que renuméroter ou réécrire l'historique.
+5. Exécuter un `supabase db push --dry-run` et faire relire le plan SQL avant
+   toute application staging.
+6. Appliquer uniquement après sauvegarde logique et vérification des données ;
+   conserver le rollback pour chaque changement.
 
 ## Critères de sortie
 
-La réconciliation peut être considérée reproductible seulement si :
+La réconciliation ne sera déclarée reproductible que lorsqu'une base vierge
+reconstruit un schéma équivalent au staging, que chaque version distante a un
+fichier versionné ou une décision de baseline prouvée, que le dry-run ne
+propose aucun changement inattendu et que les tests SQL, RLS et de provisioning
+réussissent sur ce schéma reconstruit.
 
-- une base vierge reconstruit un schéma équivalent au staging ;
-- chaque version distante possède un fichier versionné ou une décision de baseline documentée ;
-- le dry-run ne propose aucun changement inattendu ;
-- les tests SQL, RLS et de provisioning passent sur le schéma reconstruit ;
-- les versions appliquées sont consignées dans le rapport de déploiement.
+## Conséquence immédiate
 
-Jusque-là, les nouveaux changements de schéma doivent être rares, additifs, revus individuellement et documentés comme l'exception kiosk ci-dessus.
+Le catalogue complet des rôles est prêt dans le code source, mais sa migration
+reste volontairement **non appliquée**. Aucun utilisateur, rôle, privilège ou
+politique RLS staging n'a été modifié par cette étape. Les politiques actuelles
+continuent à échouer de façon fermée pour les rôles non explicitement pris en
+charge.
+
+## Edge Functions
+
+La liste distante montre que les fonctions attendues sont présentes, dont
+`kiosk-enroll`, `kiosk-admin`, `create-stripe-checkout`, `stripe-webhook`,
+`chargenow-admin`, `sync-cabinet-status` et les passerelles de diagnostic.
+Les fonctions distantes `chargenow-readonly-audit`, `device-shadow-ingest` et
+`local-gateway-api` ont maintenant un répertoire source local correspondant.
+Leur version distante ne doit néanmoins pas être considérée identique au code
+Git sans déploiement contrôlé et test ciblé.

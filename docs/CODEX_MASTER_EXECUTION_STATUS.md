@@ -370,3 +370,5 @@ officiellement documenté.
   ni privilège n'a été créé à distance par cette étape. Les contrôles RLS et
   Edge Functions continuent donc à échouer de façon fermée pour les rôles qui
   n'ont pas encore une politique explicitement vérifiée.
+- La procédure et la liste des versions divergentes sont maintenues dans
+  `docs/SUPABASE_MIGRATION_RECONCILIATION.md`.
