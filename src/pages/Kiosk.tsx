@@ -19,6 +19,7 @@ import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/ki
 import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
 import { stationConnectionState } from "@/lib/stationConnection";
 import { BRAND } from "@/config/brand";
+import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -92,7 +93,10 @@ export default function Kiosk() {
   const idemRef = useRef<string | null>(null);
 
   const net = useOnlineStatus();
-  const offline = net === "offline";
+  // A successful server health request wins over Android WebView's unreliable
+  // navigator.onLine hint. The next sensitive request is still server-side
+  // authenticated and fails closed if transport is actually unavailable.
+  const offline = kioskTransportUnavailable(net, configured === true);
   const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
 
   // A payment / rental is in progress — block reloads, back navigation and
