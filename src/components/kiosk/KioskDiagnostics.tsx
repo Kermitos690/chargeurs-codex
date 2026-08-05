@@ -64,6 +64,12 @@ type Props = {
   stationStatus: string | null;
   swUrl: string | null;
   needRefresh: boolean;
+  lastFailure?: {
+    code: string;
+    correlationId?: string;
+    sessionId?: string;
+    step: string;
+  } | null;
   onApplyUpdate: () => void;
   onClose: () => void;
 };
@@ -79,7 +85,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 }
 
 export function KioskDiagnostics(props: Props) {
-  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, stationStatus, swUrl, needRefresh, onApplyUpdate, onClose } = props;
+  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, stationStatus, swUrl, needRefresh, lastFailure, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [savedToken, setSavedToken] = useState(() => readKioskToken() ?? "");
@@ -175,6 +181,10 @@ export function KioskDiagnostics(props: Props) {
         )}
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
         <Row label="Token kiosk" value={maskToken(savedToken)} tone={tokenReady ? "ok" : "bad"} />
+        <Row label="Dernière étape" value={lastFailure?.step ?? "—"} tone={lastFailure ? "bad" : undefined} />
+        <Row label="Dernier code" value={lastFailure?.code ?? "—"} tone={lastFailure ? "bad" : undefined} />
+        <Row label="Corrélation" value={lastFailure?.correlationId ?? "—"} />
+        <Row label="Session location" value={lastFailure?.sessionId ?? "—"} />
 
         {!nativeWrapper && <div className="mt-5 rounded-2xl border border-border/40 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">

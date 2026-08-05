@@ -1,110 +1,151 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 export type Lang = "fr" | "en" | "de";
+export type TranslationValues = Record<string, string | number>;
 
 type Dict = Record<string, string>;
 
 const fr: Dict = {
-  "brand": "Chargeurs.ch",
-  "kiosk.hero": "Rechargez votre téléphone. Continuez votre soirée.",
-  "kiosk.subtitle": "Scannez, payez avec TWINT, Apple Pay, Google Pay ou carte, puis retirez votre batterie.",
-  "kiosk.cta": "Louer une batterie",
+  brand: "Chargeurs.ch",
+  "kiosk.help": "Aide",
+  "kiosk.loading": "Connexion à la borne…",
+  "kiosk.hero": "Batterie nomade, à emporter",
+  "kiosk.subtitle": "Rechargez votre téléphone partout. Payez avec votre mobile.",
   "kiosk.available": "batteries disponibles",
-  "kiosk.price": "Prix",
+  "kiosk.inventory_unavailable": "stock indisponible",
+  "kiosk.cta": "Louer une batterie",
   "kiosk.online": "Borne en ligne",
   "kiosk.offline": "Borne hors ligne",
-  "kiosk.unavailable": "Aucune batterie disponible pour le moment",
-  "kiosk.notconfigured": "API non configurée — données réelles indisponibles",
-  "kiosk.loading": "Connexion à la borne…",
-  "qr.title": "Scannez ce QR code avec votre téléphone.",
-  "qr.secured": "Paiement sécurisé par Stripe.",
-  "qr.methods": "Compatible TWINT, Apple Pay, Google Pay et cartes.",
-  "qr.waiting": "En attente du paiement…",
-  "qr.cancel": "Annuler",
-  "success.title": "Paiement confirmé. Votre batterie est prête.",
-  "success.sub": "Retirez votre batterie de la borne.",
-  "error.generic": "Un problème est survenu. Aucun montant ne sera perdu : notre système vérifie automatiquement la transaction.",
-  "error.retry": "Réessayer",
-  "error.support": "Notre équipe a été alertée. Contactez le support si besoin.",
-  "pay.title": "Paiement Chargeurs.ch",
-  "pay.open": "Ouvrir le paiement sécurisé",
-  "pay.pending": "Paiement en attente…",
-  "pay.methods": "Apple Pay, Google Pay et TWINT sont disponibles via Stripe.",
-  "pay.return": "Retournez à la borne pour récupérer votre batterie.",
+  "kiosk.status_unknown": "Statut à vérifier",
+  "kiosk.api_not_configured": "API non configurée",
+  "kiosk.connection_unavailable": "Connexion indisponible",
+  "kiosk.no_battery": "Aucune batterie disponible",
+  "kiosk.station_unverified": "Vérification fournisseur en cours",
+  "kiosk.invalid_station": "URL de borne invalide",
+  "kiosk.unknown_station": "Borne inconnue",
+  "kiosk.invalid_station_detail": "L’adresse ouverte sur cette tablette ne correspond à aucune borne valide.",
+  "kiosk.unknown_station_detail": "Cette borne n’est pas provisionnée dans le système. Contactez l’exploitant.",
+  "kiosk.requested_station": "Borne demandée : {{station}}",
+  "kiosk.locked_title": "Borne verrouillée",
+  "kiosk.locked_detail": "Cette tablette est configurée pour la borne {{locked}}, mais l’URL demande {{requested}}.",
+  "kiosk.locked_return": "Revenir à la borne {{station}}",
+  "kiosk.pricing.title": "Confirmez votre location",
+  "kiosk.pricing.guarantee": "Garantie temporaire : {{amount}}",
+  "kiosk.pricing.daily_cap": "Plafond journalier : {{amount}}",
+  "kiosk.pricing.non_return": "Non-retour : {{amount}} au total",
+  "kiosk.pricing.settlement": "Le montant final est calculé au retour ; le solde est libéré ou remboursé selon le moyen de paiement.",
+  "kiosk.pricing.auth_error": "Borne non authentifiée — contactez l’exploitant.",
+  "kiosk.pricing.error": "Tarif non configuré pour cette borne.",
+  "kiosk.pricing.loading": "Chargement du tarif…",
+  "kiosk.back": "Retour",
+  "kiosk.continue": "Continuer — garantie {{amount}}",
+  "kiosk.starting": "Préparation du paiement sécurisé…",
+  "kiosk.qr.title": "Scannez pour payer",
+  "kiosk.qr.subtitle": "Scannez ce QR code avec votre téléphone.",
+  "kiosk.qr.methods": "Choisissez votre moyen de paiement sur votre téléphone.",
+  "kiosk.qr.stripe": "Paiement sécurisé par Stripe",
+  "kiosk.qr.expires": "Expire dans {{time}}",
+  "kiosk.qr.waiting": "En attente du paiement…",
+  "kiosk.cancel": "Annuler",
+  "kiosk.expired.title": "QR code expiré",
+  "kiosk.expired.detail": "Ce QR code a expiré. Vous pouvez générer un nouveau paiement.",
+  "kiosk.expired.restart": "Générer un nouveau QR code",
+  "kiosk.retry": "Réessayer",
+  "kiosk.restart": "Recommencer",
+  "kiosk.help.title": "Besoin d’aide ?",
+  "kiosk.help.close": "Fermer l’aide",
+  "kiosk.help.step1": "Touchez « Louer une batterie ».",
+  "kiosk.help.step2": "Scannez le QR code avec votre téléphone et payez.",
+  "kiosk.help.step3": "Une batterie se libère automatiquement.",
+  "kiosk.help.step4": "Rendez-la dans n’importe quelle borne du réseau.",
+  "kiosk.help.contact": "Un problème ? Contactez {{email}}",
+  "kiosk.help.confirm": "J’ai compris",
+  "kiosk.network_unavailable": "Connexion Internet indisponible — paiement temporairement impossible",
+  "kiosk.update_pending": "Mise à jour en attente (appliquée à la fin de l’opération)",
+  "kiosk.update_running": "Mise à jour en cours…",
+  "kiosk.state.payment_succeeded.title": "Paiement reçu",
+  "kiosk.state.payment_succeeded.subtitle": "Préparation de votre batterie…",
+  "kiosk.state.ejecting.title": "Libération en cours",
+  "kiosk.state.ejecting.subtitle": "Votre batterie va être libérée.",
+  "kiosk.state.payment_failed.title": "Paiement non abouti",
+  "kiosk.state.payment_failed.subtitle": "Le paiement n’a pas abouti. Aucun débit ne sera effectué automatiquement.",
+  "kiosk.state.chargenow_failed.title": "Vérification en cours",
+  "kiosk.state.chargenow_failed.subtitle": "Le paiement a été reçu mais la batterie n’a pas pu être préparée. Une vérification ou un remboursement est en cours.",
+  "kiosk.state.eject_failed.title": "Intervention requise",
+  "kiosk.state.eject_failed.subtitle": "La batterie n’a pas pu être libérée. Votre paiement est sécurisé et une intervention est en cours.",
+  "kiosk.state.needs_support.title": "Support requis",
+  "kiosk.state.needs_support.subtitle": "Une vérification est en cours. Votre paiement est sécurisé.",
+  "kiosk.state.manual_review.title": "Revue manuelle",
+  "kiosk.state.manual_review.subtitle": "Votre demande est en cours de vérification manuelle.",
+  "kiosk.state.refunded.title": "Remboursé",
+  "kiosk.state.refunded.subtitle": "Cette location a été remboursée.",
+  "kiosk.state.payment_expired.title": "QR code expiré",
+  "kiosk.state.payment_expired.subtitle": "Ce QR code a expiré. Vous pouvez générer un nouveau paiement.",
+  "kiosk.state.payment_cancelled.title": "Annulé",
+  "kiosk.state.payment_cancelled.subtitle": "La demande de location a été annulée.",
+  "kiosk.state.cancelled.title": "Annulé",
+  "kiosk.state.cancelled.subtitle": "La demande de location a été annulée.",
+  "kiosk.success.title": "Batterie libérée !",
+  "kiosk.success.slot": "Retirez votre batterie dans le compartiment n° {{slot}}.",
+  "kiosk.success.generic": "Retirez votre batterie dans le compartiment ouvert.",
+  "kiosk.error.generic.title": "La demande n’a pas pu être préparée",
+  "kiosk.error.generic.subtitle": "Aucun paiement n’a été demandé. Vous pouvez réessayer en toute sécurité.",
+  "kiosk.error.network.title": "Connexion indisponible",
+  "kiosk.error.network.subtitle": "Vérifiez la connexion Internet de la borne avant de payer.",
+  "kiosk.error.activation.title": "Borne non activée",
+  "kiosk.error.activation.subtitle": "Cette tablette n’est pas appairée. Contactez le support.",
+  "kiosk.error.pricing.title": "Tarification indisponible",
+  "kiosk.error.pricing.subtitle": "Le tarif de cette borne doit être vérifié avant de poursuivre.",
+  "kiosk.error.station.title": "Borne indisponible",
+  "kiosk.error.station.subtitle": "Cette borne ne peut pas accepter de location pour le moment.",
+  "kiosk.error.stripe.title": "Paiement temporairement indisponible",
+  "kiosk.error.stripe.subtitle": "La session de paiement n’a pas pu être créée. Aucun paiement n’a été demandé.",
+  "kiosk.error.auth.title": "Autorisation de borne expirée",
+  "kiosk.error.auth.subtitle": "Cette tablette doit être réappairée par un opérateur.",
+  "kiosk.error.reference": "Référence de diagnostic : {{id}}",
+  "kiosk.error.step": "Étape : {{step}}",
 };
 
 const en: Dict = {
-  "brand": "Chargeurs.ch",
-  "kiosk.hero": "Charge your phone. Keep your night going.",
-  "kiosk.subtitle": "Scan, pay with TWINT, Apple Pay, Google Pay or card, then take your powerbank.",
-  "kiosk.cta": "Rent a powerbank",
-  "kiosk.available": "powerbanks available",
-  "kiosk.price": "Price",
-  "kiosk.online": "Station online",
-  "kiosk.offline": "Station offline",
-  "kiosk.unavailable": "No powerbank available right now",
-  "kiosk.notconfigured": "API not configured — live data unavailable",
-  "kiosk.loading": "Connecting to station…",
-  "qr.title": "Scan this QR code with your phone.",
-  "qr.secured": "Secured payment by Stripe.",
-  "qr.methods": "Works with TWINT, Apple Pay, Google Pay and cards.",
-  "qr.waiting": "Waiting for payment…",
-  "qr.cancel": "Cancel",
-  "success.title": "Payment confirmed. Your powerbank is ready.",
-  "success.sub": "Take your powerbank from the station.",
-  "error.generic": "Something went wrong. No money is lost: our system verifies the transaction automatically.",
-  "error.retry": "Try again",
-  "error.support": "Our team has been alerted. Contact support if needed.",
-  "pay.title": "Chargeurs.ch payment",
-  "pay.open": "Open secure payment",
-  "pay.pending": "Payment pending…",
-  "pay.methods": "Apple Pay, Google Pay and TWINT are available via Stripe.",
-  "pay.return": "Return to the station to collect your powerbank.",
+  ...fr,
+  "kiosk.help": "Help", "kiosk.loading": "Connecting to station…", "kiosk.hero": "A powerbank to take with you", "kiosk.subtitle": "Charge your phone anywhere. Pay with your phone.", "kiosk.available": "powerbanks available", "kiosk.inventory_unavailable": "inventory unavailable", "kiosk.cta": "Rent a powerbank", "kiosk.online": "Station online", "kiosk.offline": "Station offline", "kiosk.status_unknown": "Status to verify", "kiosk.api_not_configured": "API not configured", "kiosk.connection_unavailable": "Connection unavailable", "kiosk.no_battery": "No powerbank available", "kiosk.station_unverified": "Provider verification in progress", "kiosk.invalid_station": "Invalid station URL", "kiosk.unknown_station": "Unknown station", "kiosk.invalid_station_detail": "The address opened on this tablet does not match a valid station.", "kiosk.unknown_station_detail": "This station is not provisioned in the system. Contact the operator.", "kiosk.requested_station": "Requested station: {{station}}", "kiosk.locked_title": "Station locked", "kiosk.locked_detail": "This tablet is configured for station {{locked}}, but the URL requests {{requested}}.", "kiosk.locked_return": "Return to station {{station}}", "kiosk.pricing.title": "Confirm your rental", "kiosk.pricing.guarantee": "Temporary guarantee: {{amount}}", "kiosk.pricing.daily_cap": "Daily cap: {{amount}}", "kiosk.pricing.non_return": "Non-return: {{amount}} total", "kiosk.pricing.settlement": "The final amount is calculated after return; the balance is released or refunded according to the payment method.", "kiosk.pricing.auth_error": "Station is not authenticated — contact the operator.", "kiosk.pricing.error": "No price is configured for this station.", "kiosk.pricing.loading": "Loading price…", "kiosk.back": "Back", "kiosk.continue": "Continue — {{amount}} guarantee", "kiosk.starting": "Preparing secure payment…", "kiosk.qr.title": "Scan to pay", "kiosk.qr.subtitle": "Scan this QR code with your phone.", "kiosk.qr.methods": "Choose your payment method on your phone.", "kiosk.qr.stripe": "Secure payment by Stripe", "kiosk.qr.expires": "Expires in {{time}}", "kiosk.qr.waiting": "Waiting for payment…", "kiosk.cancel": "Cancel", "kiosk.expired.title": "QR code expired", "kiosk.expired.detail": "This QR code has expired. You can generate a new payment.", "kiosk.expired.restart": "Generate a new QR code", "kiosk.retry": "Try again", "kiosk.restart": "Start again", "kiosk.help.title": "Need help?", "kiosk.help.close": "Close help", "kiosk.help.step1": "Tap “Rent a powerbank”.", "kiosk.help.step2": "Scan the QR code with your phone and pay.", "kiosk.help.step3": "A powerbank is released automatically.", "kiosk.help.step4": "Return it to any station in the network.", "kiosk.help.contact": "A problem? Contact {{email}}", "kiosk.help.confirm": "Got it", "kiosk.network_unavailable": "Internet connection unavailable — payment is temporarily unavailable", "kiosk.update_pending": "Update pending (applied after the current operation)", "kiosk.update_running": "Updating…", "kiosk.state.payment_succeeded.title": "Payment received", "kiosk.state.payment_succeeded.subtitle": "Preparing your powerbank…", "kiosk.state.ejecting.title": "Releasing powerbank", "kiosk.state.ejecting.subtitle": "Your powerbank will be released.", "kiosk.state.payment_failed.title": "Payment unsuccessful", "kiosk.state.payment_failed.subtitle": "The payment did not complete. No automatic charge will be made.", "kiosk.state.chargenow_failed.title": "Verification in progress", "kiosk.state.chargenow_failed.subtitle": "Payment was received but the powerbank could not be prepared. A verification or refund is in progress.", "kiosk.state.eject_failed.title": "Intervention required", "kiosk.state.eject_failed.subtitle": "The powerbank could not be released. Your payment is protected and an intervention is in progress.", "kiosk.state.needs_support.title": "Support required", "kiosk.state.needs_support.subtitle": "A verification is in progress. Your payment is protected.", "kiosk.state.manual_review.title": "Manual review", "kiosk.state.manual_review.subtitle": "Your request is being reviewed manually.", "kiosk.state.refunded.title": "Refunded", "kiosk.state.refunded.subtitle": "This rental has been refunded.", "kiosk.state.payment_expired.title": "QR code expired", "kiosk.state.payment_expired.subtitle": "This QR code has expired. You can generate a new payment.", "kiosk.state.payment_cancelled.title": "Cancelled", "kiosk.state.payment_cancelled.subtitle": "The rental request was cancelled.", "kiosk.state.cancelled.title": "Cancelled", "kiosk.state.cancelled.subtitle": "The rental request was cancelled.", "kiosk.success.title": "Powerbank released!", "kiosk.success.slot": "Take your powerbank from compartment {{slot}}.", "kiosk.success.generic": "Take your powerbank from the open compartment.", "kiosk.error.generic.title": "The request could not be prepared", "kiosk.error.generic.subtitle": "No payment was requested. You can safely try again.", "kiosk.error.network.title": "Connection unavailable", "kiosk.error.network.subtitle": "Check the station’s Internet connection before paying.", "kiosk.error.activation.title": "Station not activated", "kiosk.error.activation.subtitle": "This tablet is not paired. Contact support.", "kiosk.error.pricing.title": "Pricing unavailable", "kiosk.error.pricing.subtitle": "This station’s price must be checked before continuing.", "kiosk.error.station.title": "Station unavailable", "kiosk.error.station.subtitle": "This station cannot accept a rental at the moment.", "kiosk.error.stripe.title": "Payment temporarily unavailable", "kiosk.error.stripe.subtitle": "The payment session could not be created. No payment was requested.", "kiosk.error.auth.title": "Station authorization expired", "kiosk.error.auth.subtitle": "This tablet must be paired again by an operator.", "kiosk.error.reference": "Diagnostic reference: {{id}}", "kiosk.error.step": "Step: {{step}}",
 };
 
 const de: Dict = {
-  "brand": "Chargeurs.ch",
-  "kiosk.hero": "Lade dein Handy. Geniesse deinen Abend.",
-  "kiosk.subtitle": "Scannen, mit TWINT, Apple Pay, Google Pay oder Karte zahlen, dann Powerbank entnehmen.",
-  "kiosk.cta": "Powerbank mieten",
-  "kiosk.available": "Powerbanks verfügbar",
-  "kiosk.price": "Preis",
-  "kiosk.online": "Station online",
-  "kiosk.offline": "Station offline",
-  "kiosk.unavailable": "Momentan keine Powerbank verfügbar",
-  "kiosk.notconfigured": "API nicht konfiguriert — keine Echtdaten",
-  "kiosk.loading": "Verbinde mit Station…",
-  "qr.title": "Scanne diesen QR-Code mit deinem Handy.",
-  "qr.secured": "Sichere Zahlung über Stripe.",
-  "qr.methods": "Funktioniert mit TWINT, Apple Pay, Google Pay und Karten.",
-  "qr.waiting": "Warte auf Zahlung…",
-  "qr.cancel": "Abbrechen",
-  "success.title": "Zahlung bestätigt. Deine Powerbank ist bereit.",
-  "success.sub": "Entnimm deine Powerbank aus der Station.",
-  "error.generic": "Ein Fehler ist aufgetreten. Es geht kein Geld verloren: Das System prüft die Transaktion automatisch.",
-  "error.retry": "Erneut versuchen",
-  "error.support": "Unser Team wurde benachrichtigt. Kontaktiere bei Bedarf den Support.",
-  "pay.title": "Chargeurs.ch Zahlung",
-  "pay.open": "Sichere Zahlung öffnen",
-  "pay.pending": "Zahlung ausstehend…",
-  "pay.methods": "Apple Pay, Google Pay und TWINT sind über Stripe verfügbar.",
-  "pay.return": "Gehe zur Station zurück, um deine Powerbank zu holen.",
+  ...fr,
+  "kiosk.station_unverified": "Prüfung beim Anbieter läuft",
+  "kiosk.help": "Hilfe", "kiosk.loading": "Verbindung zur Station wird hergestellt…", "kiosk.hero": "Powerbank zum Mitnehmen", "kiosk.subtitle": "Lade dein Handy überall. Bezahle mit deinem Smartphone.", "kiosk.available": "Powerbanks verfügbar", "kiosk.inventory_unavailable": "Bestand nicht verfügbar", "kiosk.cta": "Powerbank mieten", "kiosk.online": "Station online", "kiosk.offline": "Station offline", "kiosk.status_unknown": "Status prüfen", "kiosk.api_not_configured": "API nicht konfiguriert", "kiosk.connection_unavailable": "Verbindung nicht verfügbar", "kiosk.no_battery": "Keine Powerbank verfügbar", "kiosk.invalid_station": "Ungültige Stations-URL", "kiosk.unknown_station": "Unbekannte Station", "kiosk.invalid_station_detail": "Die auf diesem Tablet geöffnete Adresse gehört zu keiner gültigen Station.", "kiosk.unknown_station_detail": "Diese Station ist nicht im System eingerichtet. Kontaktiere den Betreiber.", "kiosk.requested_station": "Angefragte Station: {{station}}", "kiosk.locked_title": "Station gesperrt", "kiosk.locked_detail": "Dieses Tablet ist für Station {{locked}} konfiguriert, aber die URL fordert {{requested}} an.", "kiosk.locked_return": "Zur Station {{station}} zurück", "kiosk.pricing.title": "Miete bestätigen", "kiosk.pricing.guarantee": "Temporäre Garantie: {{amount}}", "kiosk.pricing.daily_cap": "Tageslimit: {{amount}}", "kiosk.pricing.non_return": "Nicht-Rückgabe: insgesamt {{amount}}", "kiosk.pricing.settlement": "Der Endbetrag wird nach der Rückgabe berechnet; der Rest wird je nach Zahlungsart freigegeben oder erstattet.", "kiosk.pricing.auth_error": "Station nicht authentifiziert — kontaktiere den Betreiber.", "kiosk.pricing.error": "Für diese Station ist kein Tarif konfiguriert.", "kiosk.pricing.loading": "Tarif wird geladen…", "kiosk.back": "Zurück", "kiosk.continue": "Weiter — Garantie {{amount}}", "kiosk.starting": "Sichere Zahlung wird vorbereitet…", "kiosk.qr.title": "Zum Bezahlen scannen", "kiosk.qr.subtitle": "Scanne diesen QR-Code mit deinem Smartphone.", "kiosk.qr.methods": "Wähle deine Zahlungsart auf deinem Smartphone.", "kiosk.qr.stripe": "Sichere Zahlung über Stripe", "kiosk.qr.expires": "Läuft ab in {{time}}", "kiosk.qr.waiting": "Warte auf Zahlung…", "kiosk.cancel": "Abbrechen", "kiosk.expired.title": "QR-Code abgelaufen", "kiosk.expired.detail": "Dieser QR-Code ist abgelaufen. Du kannst eine neue Zahlung erzeugen.", "kiosk.expired.restart": "Neuen QR-Code erzeugen", "kiosk.retry": "Erneut versuchen", "kiosk.restart": "Neu beginnen", "kiosk.help.title": "Brauchst du Hilfe?", "kiosk.help.close": "Hilfe schließen", "kiosk.help.step1": "Tippe auf „Powerbank mieten“.", "kiosk.help.step2": "Scanne den QR-Code mit deinem Smartphone und bezahle.", "kiosk.help.step3": "Eine Powerbank wird automatisch freigegeben.", "kiosk.help.step4": "Gib sie an einer beliebigen Station im Netzwerk zurück.", "kiosk.help.contact": "Ein Problem? Kontaktiere {{email}}", "kiosk.help.confirm": "Verstanden", "kiosk.network_unavailable": "Internetverbindung nicht verfügbar — Zahlung vorübergehend nicht möglich", "kiosk.update_pending": "Update ausstehend (wird nach dem Vorgang angewendet)", "kiosk.update_running": "Update läuft…", "kiosk.state.payment_succeeded.title": "Zahlung eingegangen", "kiosk.state.payment_succeeded.subtitle": "Deine Powerbank wird vorbereitet…", "kiosk.state.ejecting.title": "Powerbank wird freigegeben", "kiosk.state.ejecting.subtitle": "Deine Powerbank wird freigegeben.", "kiosk.state.payment_failed.title": "Zahlung nicht erfolgreich", "kiosk.state.payment_failed.subtitle": "Die Zahlung wurde nicht abgeschlossen. Es wird nicht automatisch belastet.", "kiosk.state.chargenow_failed.title": "Überprüfung läuft", "kiosk.state.chargenow_failed.subtitle": "Die Zahlung ist eingegangen, aber die Powerbank konnte nicht vorbereitet werden. Eine Überprüfung oder Erstattung läuft.", "kiosk.state.eject_failed.title": "Eingriff erforderlich", "kiosk.state.eject_failed.subtitle": "Die Powerbank konnte nicht freigegeben werden. Deine Zahlung ist geschützt und ein Eingriff läuft.", "kiosk.state.needs_support.title": "Support erforderlich", "kiosk.state.needs_support.subtitle": "Eine Überprüfung läuft. Deine Zahlung ist geschützt.", "kiosk.state.manual_review.title": "Manuelle Prüfung", "kiosk.state.manual_review.subtitle": "Deine Anfrage wird manuell geprüft.", "kiosk.state.refunded.title": "Erstattet", "kiosk.state.refunded.subtitle": "Diese Miete wurde erstattet.", "kiosk.state.payment_expired.title": "QR-Code abgelaufen", "kiosk.state.payment_expired.subtitle": "Dieser QR-Code ist abgelaufen. Du kannst eine neue Zahlung erzeugen.", "kiosk.state.payment_cancelled.title": "Abgebrochen", "kiosk.state.payment_cancelled.subtitle": "Die Mietanfrage wurde abgebrochen.", "kiosk.state.cancelled.title": "Abgebrochen", "kiosk.state.cancelled.subtitle": "Die Mietanfrage wurde abgebrochen.", "kiosk.success.title": "Powerbank freigegeben!", "kiosk.success.slot": "Entnimm deine Powerbank aus Fach {{slot}}.", "kiosk.success.generic": "Entnimm deine Powerbank aus dem geöffneten Fach.", "kiosk.error.generic.title": "Die Anfrage konnte nicht vorbereitet werden", "kiosk.error.generic.subtitle": "Es wurde keine Zahlung angefordert. Du kannst es sicher erneut versuchen.", "kiosk.error.network.title": "Verbindung nicht verfügbar", "kiosk.error.network.subtitle": "Prüfe die Internetverbindung der Station vor der Zahlung.", "kiosk.error.activation.title": "Station nicht aktiviert", "kiosk.error.activation.subtitle": "Dieses Tablet ist nicht gekoppelt. Kontaktiere den Support.", "kiosk.error.pricing.title": "Tarif nicht verfügbar", "kiosk.error.pricing.subtitle": "Der Tarif dieser Station muss vor dem Fortfahren geprüft werden.", "kiosk.error.station.title": "Station nicht verfügbar", "kiosk.error.station.subtitle": "Diese Station kann derzeit keine Miete annehmen.", "kiosk.error.stripe.title": "Zahlung vorübergehend nicht verfügbar", "kiosk.error.stripe.subtitle": "Die Zahlungssitzung konnte nicht erstellt werden. Es wurde keine Zahlung angefordert.", "kiosk.error.auth.title": "Stationsberechtigung abgelaufen", "kiosk.error.auth.subtitle": "Dieses Tablet muss von einem Betreiber erneut gekoppelt werden.", "kiosk.error.reference": "Diagnosereferenz: {{id}}", "kiosk.error.step": "Schritt: {{step}}",
 };
 
-const dicts: Record<Lang, Dict> = { fr, en, de };
+export const translations: Record<Lang, Dict> = { fr, en, de };
+export const kioskTranslationKeys = Object.keys(fr).filter((key) => key.startsWith("kiosk."));
+
+export function translate(lang: Lang, key: string, values: TranslationValues = {}): string {
+  const template = translations[lang][key] ?? translations.fr[key] ?? key;
+  return template.replace(/{{(\w+)}}/g, (_, name) => String(values[name] ?? `{{${name}}}`));
+}
 
 interface I18nCtx {
   lang: Lang;
   setLang: (l: Lang) => void;
-  t: (key: string) => string;
+  t: (key: string, values?: TranslationValues) => string;
 }
 
 const Ctx = createContext<I18nCtx>({ lang: "fr", setLang: () => {}, t: (k) => k });
 
+function storedLang(): Lang {
+  const value = localStorage.getItem("chargeurs.kiosk.language") ?? localStorage.getItem("lang");
+  return value === "en" || value === "de" || value === "fr" ? value : "fr";
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem("lang") as Lang) || "fr");
-  useEffect(() => { localStorage.setItem("lang", lang); }, [lang]);
-  const t = (key: string) => dicts[lang][key] ?? dicts.fr[key] ?? key;
+  const [lang, setLanguage] = useState<Lang>(storedLang);
+  const setLang = (next: Lang) => {
+    setLanguage(next);
+    localStorage.setItem("chargeurs.kiosk.language", next);
+    localStorage.setItem("lang", next); // compatibility with existing customer pages
+  };
+  const t = (key: string, values?: TranslationValues) => translate(lang, key, values);
   return <Ctx.Provider value={{ lang, setLang, t }}>{children}</Ctx.Provider>;
 }
 

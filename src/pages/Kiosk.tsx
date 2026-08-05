@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, CreditCard, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
+  ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -17,7 +17,8 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useKioskPwa } from "@/pwa/useKioskPwa";
 import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/kioskLock";
 import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
-import { stationConnectionDetail, stationConnectionState } from "@/lib/stationConnection";
+import { stationConnectionState } from "@/lib/stationConnection";
+import { BRAND } from "@/config/brand";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -35,24 +36,37 @@ type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
 };
 
-// Human messages per internal rental_session.state (FR — default kiosk lang).
-const STATE_MSG: Record<string, { phase: Phase; title: string; sub: string }> = {
-  payment_succeeded: { phase: "waitpay", title: "Paiement reçu", sub: "Préparation de votre batterie…" },
-  ejecting: { phase: "waitpay", title: "Libération en cours", sub: "Votre batterie va être libérée." },
-  payment_failed: { phase: "error", title: "Paiement non abouti", sub: "Le paiement n'a pas abouti. Aucun débit ne sera effectué automatiquement." },
-  chargenow_failed: { phase: "support", title: "Vérification en cours", sub: "Le paiement a été reçu mais la batterie n'a pas pu être préparée. Une vérification ou un remboursement est en cours." },
-  eject_failed: { phase: "support", title: "Intervention requise", sub: "La batterie n'a pas pu être libérée. Votre paiement est sécurisé et une intervention est en cours." },
-  needs_support: { phase: "support", title: "Support requis", sub: "Une vérification est en cours. Votre paiement est sécurisé." },
-  manual_review: { phase: "support", title: "Revue manuelle", sub: "Votre demande est en cours de vérification manuelle." },
-  refunded: { phase: "error", title: "Remboursé", sub: "Cette location a été remboursée." },
-  payment_expired: { phase: "expired", title: "QR code expiré", sub: "Ce QR code a expiré. Vous pouvez générer un nouveau paiement." },
-  payment_cancelled: { phase: "error", title: "Annulé", sub: "La demande de location a été annulée." },
-  cancelled: { phase: "error", title: "Annulé", sub: "La demande de location a été annulée." },
+type KioskFailure = {
+  code: string;
+  correlationId?: string;
+  sessionId?: string;
+  step: "create_rental_session" | "create_stripe_checkout" | "network";
+};
+
+type KioskFunctionResponse = {
+  ok?: boolean;
+  error?: string;
+  correlationId?: string;
+  correlation_id?: string;
+};
+
+const STATE_KEY: Record<string, { phase: Phase; key: string }> = {
+  payment_succeeded: { phase: "waitpay", key: "kiosk.state.payment_succeeded" },
+  ejecting: { phase: "waitpay", key: "kiosk.state.ejecting" },
+  payment_failed: { phase: "error", key: "kiosk.state.payment_failed" },
+  chargenow_failed: { phase: "support", key: "kiosk.state.chargenow_failed" },
+  eject_failed: { phase: "support", key: "kiosk.state.eject_failed" },
+  needs_support: { phase: "support", key: "kiosk.state.needs_support" },
+  manual_review: { phase: "support", key: "kiosk.state.manual_review" },
+  refunded: { phase: "error", key: "kiosk.state.refunded" },
+  payment_expired: { phase: "expired", key: "kiosk.state.payment_expired" },
+  payment_cancelled: { phase: "error", key: "kiosk.state.payment_cancelled" },
+  cancelled: { phase: "error", key: "kiosk.state.cancelled" },
 };
 
 export default function Kiosk() {
   const { stationId } = useParams();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [station, setStation] = useState<Station | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -65,6 +79,7 @@ export default function Kiosk() {
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
+  const [flowFailure, setFlowFailure] = useState<KioskFailure | null>(null);
   const [lockedStation, setLockedStation] = useState<string | null>(null);
   const [stationLoadError, setStationLoadError] = useState<string | null>(null);
   const [mismatch, setMismatch] = useState(false);
@@ -161,7 +176,7 @@ export default function Kiosk() {
   const reset = useCallback(() => {
     idemRef.current = null;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
-    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null);
+    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void loadStation();
   }, [loadStation]);
 
@@ -263,9 +278,9 @@ export default function Kiosk() {
     if (s === "ejected" || s === "active_rental" || s === "battery_taken") {
       setSlotNum(slot); setPhase("success"); return;
     }
-    const m = STATE_MSG[s];
-    if (m) { setStatusMsg({ title: m.title, sub: m.sub }); setPhase(m.phase); }
-  }, []);
+    const m = STATE_KEY[s];
+    if (m) { setStatusMsg({ title: t(`${m.key}.title`), sub: t(`${m.key}.subtitle`) }); setPhase(m.phase); }
+  }, [t]);
 
   // Poll the rental session status via a safe, scoped RPC (no direct table read:
   // rental_sessions is staff-only and exposes Stripe/financial data).
@@ -279,38 +294,84 @@ export default function Kiosk() {
     return () => clearInterval(poll);
   }, [sessionId, publicCode, phase, applyState]);
 
+  const failFlow = useCallback((failure: KioskFailure) => {
+    setFlowFailure(failure);
+    const code = failure.code;
+    const messageKey = code.startsWith("KIOSK_AUTH") || code === "KIOSK_STATION_MISMATCH"
+      ? "kiosk.error.auth"
+      : code.startsWith("PRICING") || code.startsWith("BETA_") || code === "CURRENCY_MISMATCH"
+        ? "kiosk.error.pricing"
+        : code.startsWith("STATION_")
+          ? "kiosk.error.station"
+          : code.startsWith("STRIPE_") || code.startsWith("SESSION_") || code.startsWith("SNAPSHOT_") || code.startsWith("PUBLIC_APP_URL")
+            ? "kiosk.error.stripe"
+            : failure.step === "network"
+              ? "kiosk.error.network"
+              : "kiosk.error.generic";
+    setStatusMsg({ title: t(`${messageKey}.title`), sub: t(`${messageKey}.subtitle`) });
+    setPhase("error");
+  }, [t]);
+
+  const requestCheckout = useCallback(async (rentalSessionId: string) => {
+    const kioskToken = readKioskToken();
+    if (!kioskToken) {
+      failFlow({ code: "KIOSK_AUTH_REQUIRED", sessionId: rentalSessionId, step: "create_stripe_checkout" });
+      return;
+    }
+    setPhase("starting");
+    const { data: co, error: checkoutError } = await supabase.functions.invoke("create-stripe-checkout", {
+      body: { rentalSessionId, origin: window.location.origin, language: lang },
+      headers: { "X-Kiosk-Token": kioskToken },
+    });
+    const c = co as (KioskFunctionResponse & { checkout_url?: string; public_session_code?: string; expires_at?: string }) | null;
+    if (checkoutError || !c?.ok || !c.checkout_url) {
+      failFlow({
+        code: c?.error ?? "STRIPE_CHECKOUT_REQUEST_FAILED",
+        correlationId: c?.correlationId ?? c?.correlation_id,
+        sessionId: rentalSessionId,
+        step: "create_stripe_checkout",
+      });
+      return;
+    }
+    setFlowFailure(null);
+    setCheckoutUrl(c.checkout_url);
+    setPublicCode(c.public_session_code ?? null);
+    setExpiresAt(c.expires_at ? new Date(c.expires_at).getTime() : null);
+    setPhase("qr");
+  }, [failFlow, lang]);
+
   const startRental = async () => {
     // Never create a rental/payment without a confirmed connection.
-    if (offline) { setStatusMsg({ title: "Connexion indisponible", sub: "Vérifiez la connexion Internet de la borne avant de payer." }); setPhase("error"); return; }
+    if (offline) { failFlow({ code: "NETWORK_OFFLINE", step: "network" }); return; }
     setPhase("starting");
     try {
       // Kiosk credential: provisioned per-tablet token, sent ONLY in a header
       // (never in the URL). The server hashes it and binds it to this station.
       const kioskToken = readKioskToken();
       if (!kioskToken) {
-        setStatusMsg({ title: "Borne non activée", sub: "Cette tablette n'est pas appairée. Contactez le support." });
-        setPhase("error");
+        failFlow({ code: "KIOSK_AUTH_REQUIRED", step: "create_rental_session" });
         return;
       }
       if (!idemRef.current) idemRef.current = crypto.randomUUID();
-      const { data: sess } = await supabase.functions.invoke("create-rental-session", {
+      const { data: sess, error: sessionError } = await supabase.functions.invoke("create-rental-session", {
         body: { stationId, language: lang },
         headers: { "X-Kiosk-Token": kioskToken, "X-Idempotency-Key": idemRef.current },
       });
-      if (!(sess as { ok?: boolean })?.ok) { setPhase("error"); return; }
-      const rentalSessionId = (sess as { session: { id: string } }).session.id;
+      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string } }) | null;
+      if (sessionError || !sessionResponse?.ok || !sessionResponse.session?.id) {
+        failFlow({
+          code: sessionResponse?.error ?? "RENTAL_SESSION_REQUEST_FAILED",
+          correlationId: sessionResponse?.correlationId ?? sessionResponse?.correlation_id,
+          step: "create_rental_session",
+        });
+        return;
+      }
+      const rentalSessionId = sessionResponse.session.id;
       setSessionId(rentalSessionId);
-      const { data: co } = await supabase.functions.invoke("create-stripe-checkout", {
-        body: { rentalSessionId, origin: window.location.origin },
-        headers: { "X-Kiosk-Token": kioskToken },
-      });
-      const c = co as { ok?: boolean; checkout_url?: string; public_session_code?: string; expires_at?: string };
-      if (!c?.ok || !c?.checkout_url) { setPhase("error"); return; }
-      setCheckoutUrl(c.checkout_url);
-      setPublicCode(c.public_session_code ?? null);
-      setExpiresAt(c.expires_at ? new Date(c.expires_at).getTime() : null);
-      setPhase("qr");
-    } catch { setPhase("error"); }
+      await requestCheckout(rentalSessionId);
+    } catch {
+      failFlow({ code: "NETWORK_OR_REQUEST_BLOCKED", step: "network", sessionId: sessionId ?? undefined });
+    }
   };
 
   const available = station?.rentable_count ?? 0;
@@ -331,13 +392,12 @@ export default function Kiosk() {
         <LiquidBackground />
         <div className="glass-strong liquid-border flex max-w-md flex-col items-center gap-5 rounded-3xl p-8">
           <div className="grid h-20 w-20 place-items-center rounded-full bg-warning/20"><Lock className="h-10 w-10 text-warning" /></div>
-          <h1 className="font-display text-2xl font-bold">Borne verrouillée</h1>
+          <h1 className="font-display text-2xl font-bold">{t("kiosk.locked_title")}</h1>
           <p className="text-muted-foreground">
-            Cette tablette est configurée pour la borne <span className="font-mono text-foreground">{lockedStation}</span>,
-            mais l'URL demande <span className="font-mono text-foreground">{stationId}</span>.
+            {t("kiosk.locked_detail", { locked: lockedStation, requested: stationId ?? "—" })}
           </p>
           <Button onClick={() => { window.location.href = `/kiosk/${lockedStation}`; }} className="rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
-            Revenir à la borne {lockedStation}
+            {t("kiosk.locked_return", { station: lockedStation })}
           </Button>
           <button onClick={onLogoTap} className="text-xs text-muted-foreground/60">·</button>
         </div>
@@ -353,7 +413,7 @@ export default function Kiosk() {
       {/* Connectivity banner — blocks confidence in payment when offline. */}
       {offline && (
         <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive/90 py-2 text-sm font-semibold text-destructive-foreground">
-          <WifiOff className="h-4 w-4" />Connexion Internet indisponible — paiement temporairement impossible
+          <WifiOff className="h-4 w-4" />{t("kiosk.network_unavailable")}
         </div>
       )}
 
@@ -361,7 +421,7 @@ export default function Kiosk() {
       {needRefresh && !offline && (
         <div className="fixed inset-x-0 top-0 z-40 flex items-center justify-center gap-2 bg-primary/80 py-1.5 text-xs font-medium text-primary-foreground">
           <RefreshCw className="h-3.5 w-3.5" />
-          {busy ? "Mise à jour en attente (appliquée à la fin de l'opération)" : "Mise à jour en cours…"}
+          {busy ? t("kiosk.update_pending") : t("kiosk.update_running")}
         </div>
       )}
 
@@ -376,6 +436,7 @@ export default function Kiosk() {
           stationStatus={station?.status ?? null}
           swUrl={swUrl}
           needRefresh={needRefresh}
+          lastFailure={flowFailure}
           onApplyUpdate={applyUpdate}
           onClose={() => setShowDiag(false)}
         />
@@ -386,22 +447,22 @@ export default function Kiosk() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-6 backdrop-blur-sm">
           <div className="glass-strong liquid-border w-full max-w-md rounded-3xl p-8 text-left">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-2xl font-bold">Besoin d'aide ?</h2>
-              <button onClick={() => setShowHelp(false)} aria-label="Fermer l'aide" className="rounded-full p-2 hover:bg-muted">
+              <h2 className="font-display text-2xl font-bold">{t("kiosk.help.title")}</h2>
+              <button onClick={() => setShowHelp(false)} aria-label={t("kiosk.help.close")} className="rounded-full p-2 hover:bg-muted">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <ol className="space-y-3 text-muted-foreground">
-              <li>1. Touchez « Louer une batterie ».</li>
-              <li>2. Scannez le QR code avec votre téléphone et payez.</li>
-              <li>3. Une batterie se libère automatiquement.</li>
-              <li>4. Rendez-la dans n'importe quelle borne du réseau.</li>
+              <li>1. {t("kiosk.help.step1")}</li>
+              <li>2. {t("kiosk.help.step2")}</li>
+              <li>3. {t("kiosk.help.step3")}</li>
+              <li>4. {t("kiosk.help.step4")}</li>
             </ol>
             <p className="mt-5 text-sm text-muted-foreground">
-              Un problème ? Contactez <span className="text-foreground">support@chargeurs.ch</span>
+              {t("kiosk.help.contact", { email: BRAND.supportEmail })}
             </p>
             <Button onClick={() => setShowHelp(false)} className="mt-6 w-full rounded-full bg-gradient-primary py-5 text-lg font-bold">
-              J'ai compris
+              {t("kiosk.help.confirm")}
             </Button>
           </div>
         </div>
@@ -416,9 +477,9 @@ export default function Kiosk() {
             onClick={() => setShowHelp(true)}
             variant="ghost"
             className="gap-2 rounded-full border border-border px-5 py-5 text-base"
-            aria-label="Aide"
+            aria-label={t("kiosk.help")}
           >
-            <HelpCircle className="h-5 w-5" />Aide
+            <HelpCircle className="h-5 w-5" />{t("kiosk.help")}
           </Button>
           <LanguageSwitcher />
         </div>
@@ -430,7 +491,7 @@ export default function Kiosk() {
           {phase === "loading" && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="text-xl text-muted-foreground">Chargement…</p>
+              <p className="text-xl text-muted-foreground">{t("kiosk.loading")}</p>
             </motion.div>
           )}
 
@@ -440,16 +501,16 @@ export default function Kiosk() {
                 <AlertTriangle className="h-12 w-12 text-warning" />
               </div>
               <h1 className="font-display text-3xl font-bold">
-                {stationLoadError === "INVALID_STATION_ID" ? "URL de borne invalide" : "Borne inconnue"}
+                {stationLoadError === "INVALID_STATION_ID" ? t("kiosk.invalid_station") : t("kiosk.unknown_station")}
               </h1>
               <p className="text-muted-foreground">
                 {stationLoadError === "INVALID_STATION_ID"
-                  ? "L'adresse ouverte sur cette tablette ne correspond à aucune borne valide."
-                  : "Cette borne n'est pas provisionnée dans le système. Contactez l'exploitant."}
+                  ? t("kiosk.invalid_station_detail")
+                  : t("kiosk.unknown_station_detail")}
               </p>
-              {stationId && <p className="font-mono text-sm text-foreground">Borne demandée : {stationId}</p>}
+              {stationId && <p className="font-mono text-sm text-foreground">{t("kiosk.requested_station", { station: stationId })}</p>}
               <Button onClick={() => { setPhase("loading"); loadStation(); }} className="gap-2 rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
-                <RefreshCw className="h-5 w-5" />Réessayer
+                <RefreshCw className="h-5 w-5" />{t("kiosk.retry")}
               </Button>
               <button onClick={onLogoTap} className="text-xs text-muted-foreground/60">·</button>
             </motion.div>
@@ -458,29 +519,29 @@ export default function Kiosk() {
 
           {phase === "idle" && station && (
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-8">
-              <StatusBadge connection={connection} configured={!!configured} />
+              <StatusBadge connection={connection} configured={!!configured} t={t} />
               <h1 className="max-w-3xl font-display text-5xl font-extrabold leading-tight sm:text-7xl">
-                Batterie nomade, à emporter
+                {t("kiosk.hero")}
               </h1>
               <p className="max-w-2xl text-xl text-muted-foreground sm:text-2xl">
-                Rechargez votre téléphone partout. Payez avec votre mobile.
+                {t("kiosk.subtitle")}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-4">
                 <div className="glass liquid-border flex items-center gap-3 rounded-2xl px-6 py-4">
                   <BatteryCharging className="h-8 w-8 text-success" />
                   <div className="text-left">
                     <div className="text-3xl font-bold">{inventoryReadable ? available : "—"}</div>
-                    <div className="text-sm text-muted-foreground">{inventoryReadable ? "disponibles" : "stock indisponible"}</div>
+                    <div className="text-sm text-muted-foreground">{inventoryReadable ? t("kiosk.available") : t("kiosk.inventory_unavailable")}</div>
                   </div>
                 </div>
               </div>
               {canRent ? (
                 <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
-                  Louer une batterie
+                  {t("kiosk.cta")}
                 </Button>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {offline ? "Connexion indisponible" : !configured ? "API non configurée" : !station.online ? stationConnectionDetail(station) : "Aucune batterie disponible"}
+                  {offline ? t("kiosk.connection_unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : t("kiosk.no_battery")}
                 </div>
               )}
             </motion.div>
@@ -488,7 +549,7 @@ export default function Kiosk() {
 
           {phase === "pricing" && (
             <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-md flex-col items-center gap-6">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl">Confirmez votre location</h2>
+              <h2 className="font-display text-3xl font-bold sm:text-4xl">{t("kiosk.pricing.title")}</h2>
               {quote ? (
                 <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
                   <div className="text-lg font-semibold">{quote.profile_name}</div>
@@ -496,22 +557,22 @@ export default function Kiosk() {
                     {fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min
                   </div>
                   <div className="mt-4 space-y-1 text-sm text-muted-foreground">
-                    <p>Garantie initiale débitée ou autorisée : <strong className="text-foreground">{fmtCents(quote.deposit_cents, quote.currency)}</strong></p>
-                    <p>Plafond journalier : {fmtCents(quote.daily_cap_cents, quote.currency)} · Non-retour : {fmtCents(quote.unreturned_fee_cents, quote.currency)} au total</p>
-                    <p>Le montant final est calculé au retour ; le solde est libéré ou remboursé selon le moyen de paiement.</p>
+                    <p>{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>
+                    <p>{t("kiosk.pricing.daily_cap", { amount: fmtCents(quote.daily_cap_cents, quote.currency) })} · {t("kiosk.pricing.non_return", { amount: fmtCents(quote.unreturned_fee_cents, quote.currency) })}</p>
+                    <p>{t("kiosk.pricing.settlement")}</p>
                   </div>
                 </div>
               ) : (
                 <p className="text-warning">
                   {quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID"
-                    ? "Borne non authentifiée — contactez l'exploitant."
-                    : quoteError ? "Tarif non configuré pour cette borne." : "Chargement du tarif…"}
+                    ? t("kiosk.pricing.auth_error")
+                    : quoteError ? t("kiosk.pricing.error") : t("kiosk.pricing.loading")}
                 </p>
               )}
               <div className="flex gap-3">
-                <Button variant="ghost" onClick={reset}>Retour</Button>
+                <Button variant="ghost" onClick={reset}>{t("kiosk.back")}</Button>
                 <Button onClick={startRental} disabled={!quote} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
-                  Continuer — garantie {quote ? fmtCents(quote.deposit_cents, quote.currency) : ""}
+                  {t("kiosk.continue", { amount: quote ? fmtCents(quote.deposit_cents, quote.currency) : "" })}
                 </Button>
               </div>
             </motion.div>
@@ -520,7 +581,7 @@ export default function Kiosk() {
           {phase === "starting" && (
             <motion.div key="starting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="text-xl text-muted-foreground">Génération du paiement…</p>
+              <p className="text-xl text-muted-foreground">{t("kiosk.starting")}</p>
             </motion.div>
           )}
 
@@ -529,39 +590,38 @@ export default function Kiosk() {
               {quote && (
                 <div className="text-center">
                   <div className="text-lg font-semibold">{quote.profile_name}</div>
-                  <div className="text-3xl font-bold text-gradient-cyan">Garantie {fmtCents(quote.deposit_cents, quote.currency)}</div>
+                  <div className="text-3xl font-bold text-gradient-cyan">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</div>
                   <div className="text-sm text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min</div>
                 </div>
               )}
-              <h2 className="font-display text-2xl font-bold sm:text-3xl">Scannez ce QR code avec votre téléphone pour payer</h2>
+              <h2 className="font-display text-2xl font-bold sm:text-3xl">{t("kiosk.qr.title")}</h2>
+              <p className="text-lg text-muted-foreground">{t("kiosk.qr.subtitle")}</p>
               <div className="relative">
                 <span className="absolute -inset-4 rounded-[2rem] bg-primary/30 blur-2xl animate-pulse-ring" />
                 <div className="glass-strong liquid-border relative rounded-[2rem] bg-white p-6">
-                  <QRCodeSVG value={checkoutUrl} size={300} bgColor="#ffffff" fgColor="#0a1024" level="M" marginSize={2} />
+                  <QRCodeSVG value={checkoutUrl} size={300} bgColor={BRAND.colors.qrBackground} fgColor={BRAND.colors.qrForeground} level="M" marginSize={2} />
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 text-muted-foreground">
-                <span className="inline-flex items-center gap-1"><CreditCard className="h-4 w-4" />Carte</span>
-                <span className="inline-flex items-center gap-1"><Smartphone className="h-4 w-4" />Apple Pay</span>
-                <span className="inline-flex items-center gap-1"><Smartphone className="h-4 w-4" />Google Pay</span>
-                <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" />TWINT</span>
+                <span className="inline-flex items-center gap-1"><Smartphone className="h-4 w-4" />{t("kiosk.qr.methods")}</span>
+                <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" />{t("kiosk.qr.stripe")}</span>
               </div>
               <div className="flex items-center gap-4 text-sm">
-                <span className="inline-flex items-center gap-1 text-primary"><Clock className="h-4 w-4" />Expire dans {mm}:{ss}</span>
+                <span className="inline-flex items-center gap-1 text-primary"><Clock className="h-4 w-4" />{t("kiosk.qr.expires", { time: `${mm}:${ss}` })}</span>
                 {publicCode && <span className="font-mono text-muted-foreground">{publicCode}</span>}
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />En attente du paiement…
+                <Loader2 className="h-5 w-5 animate-spin" />{t("kiosk.qr.waiting")}
               </div>
-              <Button variant="ghost" onClick={reset} className="gap-2"><X className="h-4 w-4" />Annuler</Button>
+              <Button variant="ghost" onClick={reset} className="gap-2"><X className="h-4 w-4" />{t("kiosk.cancel")}</Button>
             </motion.div>
           )}
 
           {phase === "waitpay" && (
             <motion.div key="waitpay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
               <Loader2 className="h-14 w-14 animate-spin text-primary" />
-              <h2 className="font-display text-3xl font-bold">{statusMsg?.title ?? "Paiement reçu"}</h2>
-              <p className="text-xl text-muted-foreground">{statusMsg?.sub ?? "Préparation de votre batterie…"}</p>
+              <h2 className="font-display text-3xl font-bold">{statusMsg?.title ?? t("kiosk.state.payment_succeeded.title")}</h2>
+              <p className="text-xl text-muted-foreground">{statusMsg?.sub ?? t("kiosk.state.payment_succeeded.subtitle")}</p>
             </motion.div>
           )}
 
@@ -571,9 +631,9 @@ export default function Kiosk() {
                 className="grid h-40 w-40 place-items-center rounded-full bg-gradient-success shadow-glow-success">
                 <CheckCircle2 className="h-24 w-24 text-success-foreground" />
               </motion.div>
-              <h2 className="font-display text-4xl font-extrabold">Batterie libérée !</h2>
+              <h2 className="font-display text-4xl font-extrabold">{t("kiosk.success.title")}</h2>
               <p className="text-xl text-muted-foreground">
-                {slotNum ? `Retirez votre batterie dans le compartiment n° ${slotNum}.` : "Retirez votre batterie dans le compartiment ouvert."}
+                {slotNum ? t("kiosk.success.slot", { slot: slotNum }) : t("kiosk.success.generic")}
               </p>
               <Button onClick={reset} variant="ghost" className="mt-4"><RefreshCw className="h-5 w-5" /></Button>
             </motion.div>
@@ -582,10 +642,10 @@ export default function Kiosk() {
           {phase === "expired" && (
             <motion.div key="expired" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-6">
               <div className="grid h-28 w-28 place-items-center rounded-full bg-warning/20"><Clock className="h-14 w-14 text-warning" /></div>
-              <h2 className="font-display text-3xl font-bold">QR code expiré</h2>
-              <p className="max-w-xl text-lg text-muted-foreground">Ce QR code a expiré. Vous pouvez générer un nouveau paiement.</p>
+              <h2 className="font-display text-3xl font-bold">{t("kiosk.expired.title")}</h2>
+              <p className="max-w-xl text-lg text-muted-foreground">{t("kiosk.expired.detail")}</p>
               <Button onClick={() => setPhase("pricing")} className="gap-2 rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold">
-                <RefreshCw className="h-5 w-5" />Générer un nouveau QR code
+                <RefreshCw className="h-5 w-5" />{t("kiosk.expired.restart")}
               </Button>
             </motion.div>
           )}
@@ -595,9 +655,22 @@ export default function Kiosk() {
               <div className={`grid h-32 w-32 place-items-center rounded-full ${phase === "support" ? "bg-warning/20" : "bg-destructive/20"}`}>
                 <AlertTriangle className={`h-16 w-16 ${phase === "support" ? "text-warning" : "text-destructive"}`} />
               </div>
-              <h2 className="font-display text-2xl font-bold">{statusMsg?.title ?? "Une erreur est survenue"}</h2>
-              <p className="max-w-xl text-lg text-muted-foreground">{statusMsg?.sub ?? "Veuillez réessayer."}</p>
-              <Button onClick={reset} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold">Recommencer</Button>
+              <h2 className="font-display text-2xl font-bold">{statusMsg?.title ?? t("kiosk.error.generic.title")}</h2>
+              <p className="max-w-xl text-lg text-muted-foreground">{statusMsg?.sub ?? t("kiosk.error.generic.subtitle")}</p>
+              {flowFailure?.correlationId && <p className="font-mono text-xs text-muted-foreground">{t("kiosk.error.reference", { id: flowFailure.correlationId })}</p>}
+              {flowFailure && <p className="text-xs text-muted-foreground">{t("kiosk.error.step", { step: flowFailure.step })}</p>}
+              <Button
+                onClick={() => {
+                  if (flowFailure?.step === "create_stripe_checkout" && flowFailure.sessionId) {
+                    void requestCheckout(flowFailure.sessionId);
+                  } else {
+                    reset();
+                  }
+                }}
+                className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold"
+              >
+                {flowFailure?.step === "create_stripe_checkout" ? t("kiosk.retry") : t("kiosk.restart")}
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -606,16 +679,16 @@ export default function Kiosk() {
   );
 }
 
-function StatusBadge({ connection, configured }: { connection: ReturnType<typeof stationConnectionState>; configured: boolean }) {
+function StatusBadge({ connection, configured, t }: { connection: ReturnType<typeof stationConnectionState>; configured: boolean; t: (key: string) => string }) {
   if (!configured) return (
     <div className="glass inline-flex items-center gap-2 rounded-full px-4 py-2 text-warning">
-      <WifiOff className="h-4 w-4" />API non configurée
+      <WifiOff className="h-4 w-4" />{t("kiosk.api_not_configured")}
     </div>
   );
   return (
     <div className={`glass inline-flex items-center gap-2 rounded-full px-4 py-2 ${connection === "online" ? "text-success" : connection === "unknown" ? "text-warning" : "text-muted-foreground"}`}>
       {connection === "online" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
-      {connection === "online" ? "En ligne" : connection === "unknown" ? "Statut à vérifier" : "Hors ligne"}
+      {connection === "online" ? t("kiosk.online") : connection === "unknown" ? t("kiosk.status_unknown") : t("kiosk.offline")}
     </div>
   );
 }

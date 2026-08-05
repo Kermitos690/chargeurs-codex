@@ -23,16 +23,25 @@ const RATE_MAX = 6;
 const RATE_WINDOW_SEC = 60;
 // A created/checkout session is considered abandoned after this delay.
 const SESSION_TTL_MIN = 20;
+// The kiosk token and idempotency key are deliberately sent as request
+// headers, never embedded in a URL or body. They must also be explicitly
+// allowed for a browser/WebView preflight; otherwise the browser blocks the
+// request before this function can return its safe, correlated error response.
+const rentalCorsHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-idempotency-key",
+  "Access-Control-Expose-Headers": "x-correlation-id",
+};
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: rentalCorsHeaders });
   const startedAt = Date.now();
   const db = adminClient();
   const correlationId = crypto.randomUUID();
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify({ ...(body as object), correlationId }), {
       status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...rentalCorsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
     });
 
   // Normalized, redacted refusal logger. NEVER logs the raw token.

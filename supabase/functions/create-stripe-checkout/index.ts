@@ -14,19 +14,15 @@ import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestra
 import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_shared/pricingSnapshot.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { evaluateCheckoutKioskBinding } from "./kioskBinding.ts";
+import { BRAND, checkoutLocale, checkoutProductCopy } from "../_shared/brand.ts";
 
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
 const EXPIRY_MINUTES = 30;
 
 const checkoutCorsHeaders = {
   ...corsHeaders,
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-idempotency-key",
 };
-
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...checkoutCorsHeaders, "Content-Type": "application/json" },
-});
 
 function configuredAppUrl(): string | null {
   try {
@@ -39,6 +35,11 @@ function configuredAppUrl(): string | null {
 }
 
 Deno.serve(async (req) => {
+  const correlationId = crypto.randomUUID();
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify({ ...(body as object), correlationId }), {
+    status,
+    headers: { ...checkoutCorsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+  });
   if (req.method === "OPTIONS") return new Response("ok", { headers: checkoutCorsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
@@ -191,6 +192,8 @@ Deno.serve(async (req) => {
     const amount = depositCents / 100;
     const currency = sessCurrency.toLowerCase();
     const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
+    const locale = checkoutLocale(session.customer_language ?? body.language);
+    const productCopy = checkoutProductCopy(locale);
 
     const metadata: Record<string, string> = {
       rental_session_id: String(session.id),
@@ -209,10 +212,14 @@ Deno.serve(async (req) => {
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
+      // No payment_method_types here: hosted Checkout reads the account's
+      // Dashboard configuration and only shows methods eligible for the CHF
+      // amount, country and customer phone. The kiosk remains QR-only.
+      locale,
       client_reference_id: String(session.id),
       customer_creation: "always",
       payment_intent_data: {
-        description: "Chargeurs.ch — caution de location",
+        description: `${BRAND.name} — ${productCopy.depositLabel}`,
         metadata,
       },
       // Dashboard-managed dynamic payment methods remain active. Card is
@@ -230,8 +237,8 @@ Deno.serve(async (req) => {
         price_data: {
           currency,
           product_data: {
-            name: "Chargeurs.ch — Caution de location",
-            description: "Le montant final est calculé au retour de la batterie.",
+            name: productCopy.name,
+            description: productCopy.description,
           },
           unit_amount: depositCents,
         },
@@ -297,6 +304,7 @@ Deno.serve(async (req) => {
         pricing_snapshot_hash: pricingHash,
         card_capture: "manual",
         automatic_methods: "prepaid_refund",
+        correlation_id: correlationId,
       },
     });
 
@@ -316,7 +324,7 @@ Deno.serve(async (req) => {
       await auditLog(db, {
         action: "stripe.checkout.failed",
         target: rentalSessionId,
-        data: { code },
+        data: { code, correlation_id: correlationId },
       }).catch(() => {});
     }
     const status = error instanceof OrchestratorError ? 409 : 500;
