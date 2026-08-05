@@ -15,9 +15,9 @@ import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_share
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { evaluateCheckoutKioskBinding } from "./kioskBinding.ts";
 import { BRAND, checkoutLocale, checkoutProductCopy } from "../_shared/brand.ts";
+import { checkoutExpiryUnix } from "../_shared/checkoutExpiry.ts";
 
 const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
-const EXPIRY_MINUTES = 30;
 
 const checkoutCorsHeaders = {
   ...corsHeaders,
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
 
     const amount = depositCents / 100;
     const currency = sessCurrency.toLowerCase();
-    const expiresAtUnix = Math.floor(Date.now() / 1000) + EXPIRY_MINUTES * 60;
+    const expiresAtUnix = checkoutExpiryUnix();
     const locale = checkoutLocale(session.customer_language ?? body.language);
     const productCopy = checkoutProductCopy(locale);
 
@@ -318,13 +318,32 @@ Deno.serve(async (req) => {
       deposit_cents: depositCents,
     });
   } catch (error) {
-    const code = error instanceof OrchestratorError ? error.code : "STRIPE_CHECKOUT_FAILED";
-    console.error("create-stripe-checkout failed", code);
+    const stripeError = error as {
+      type?: unknown; code?: unknown; param?: unknown; statusCode?: unknown;
+    };
+    const stripeErrorCode = typeof stripeError.code === "string" ? stripeError.code : null;
+    const stripeErrorType = typeof stripeError.type === "string" ? stripeError.type : null;
+    const stripeErrorParam = typeof stripeError.param === "string" ? stripeError.param : null;
+    const code = error instanceof OrchestratorError
+      ? error.code
+      : stripeErrorParam === "expires_at"
+        ? "STRIPE_CHECKOUT_EXPIRY_INVALID"
+        : "STRIPE_CHECKOUT_FAILED";
+    // Only structured, non-secret Stripe diagnostics are retained. The raw
+    // provider message is deliberately never returned to the kiosk screen.
+    console.error("create-stripe-checkout failed", { code, stripeErrorCode, stripeErrorType, stripeErrorParam });
     if (rentalSessionId) {
       await auditLog(db, {
         action: "stripe.checkout.failed",
         target: rentalSessionId,
-        data: { code, correlation_id: correlationId },
+        data: {
+          code,
+          correlation_id: correlationId,
+          stripe_error_code: stripeErrorCode,
+          stripe_error_type: stripeErrorType,
+          stripe_error_param: stripeErrorParam,
+          stripe_status_code: typeof stripeError.statusCode === "number" ? stripeError.statusCode : null,
+        },
       }).catch(() => {});
     }
     const status = error instanceof OrchestratorError ? 409 : 500;
