@@ -357,8 +357,12 @@ export default function Kiosk() {
   }, [failFlow, lang]);
 
   const startRental = async () => {
-    // Never create a rental/payment without a confirmed connection.
-    if (offline) { failFlow({ code: "NETWORK_OFFLINE", step: "network" }); return; }
+    // Do not make the rental decision from `navigator.onLine`. Android System
+    // WebView can report false while HTTPS calls still work through the kiosk
+    // modem/VPN. The authenticated Edge Function is the authoritative, fail-
+    // closed connectivity check: it either creates one idempotent session or
+    // returns a safe correlated refusal. No payment or hardware command is
+    // possible before that server-side check succeeds.
     setPhase("starting");
     try {
       // Kiosk credential: provisioned per-tablet token, sent ONLY in a header
@@ -386,13 +390,19 @@ export default function Kiosk() {
       setSessionId(rentalSessionId);
       await requestCheckout(rentalSessionId);
     } catch {
-      failFlow({ code: "NETWORK_OR_REQUEST_BLOCKED", step: "network", sessionId: sessionId ?? undefined });
+      // Keep the failure tied to the request that failed. This must never be
+      // presented as a generic browser-offline state: operators need to know
+      // that the rental-session request itself did not reach the backend.
+      failFlow({ code: "RENTAL_SESSION_NETWORK_FAILURE", step: "create_rental_session", sessionId: sessionId ?? undefined });
     }
   };
 
   const available = station?.rentable_count ?? 0;
-  const canRent = station?.online && available > 0 && configured && !offline;
-  const inventoryReadable = Boolean(station?.online && configured && !offline);
+  // Availability comes from the authenticated backend snapshot. A WebView
+  // browser hint is never allowed to hide rentable batteries or pre-empt the
+  // server-side availability check.
+  const canRent = station?.online && available > 0 && configured;
+  const inventoryReadable = Boolean(station?.online && configured);
   const connection = stationConnectionState(station ?? { status: null, online: null });
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
