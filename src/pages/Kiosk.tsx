@@ -20,6 +20,7 @@ import { KioskDiagnostics } from "@/components/kiosk/KioskDiagnostics";
 import { stationConnectionState } from "@/lib/stationConnection";
 import { BRAND } from "@/config/brand";
 import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
+import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -335,12 +336,13 @@ export default function Kiosk() {
       return;
     }
     setPhase("starting");
-    const { data: co, error: checkoutError } = await supabase.functions.invoke("create-stripe-checkout", {
-      body: { rentalSessionId, origin: window.location.origin, language: lang },
-      headers: { "X-Kiosk-Token": kioskToken },
-    });
+    const { data: co, transportError: checkoutTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
+      checkout_url?: string; public_session_code?: string; expires_at?: string;
+    }>("/api/kiosk/create-stripe-checkout", {
+      rentalSessionId, origin: window.location.origin, language: lang,
+    }, { "X-Kiosk-Token": kioskToken });
     const c = co as (KioskFunctionResponse & { checkout_url?: string; public_session_code?: string; expires_at?: string }) | null;
-    if (checkoutError || !c?.ok || !c.checkout_url) {
+    if (checkoutTransportError || !c?.ok || !c.checkout_url) {
       failFlow({
         code: c?.error ?? "STRIPE_CHECKOUT_REQUEST_FAILED",
         correlationId: c?.correlationId ?? c?.correlation_id,
@@ -373,12 +375,14 @@ export default function Kiosk() {
         return;
       }
       if (!idemRef.current) idemRef.current = crypto.randomUUID();
-      const { data: sess, error: sessionError } = await supabase.functions.invoke("create-rental-session", {
-        body: { stationId, language: lang },
-        headers: { "X-Kiosk-Token": kioskToken, "X-Idempotency-Key": idemRef.current },
+      const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
+        session?: { id?: string };
+      }>("/api/kiosk/create-rental-session", { stationId, language: lang }, {
+        "X-Kiosk-Token": kioskToken,
+        "X-Idempotency-Key": idemRef.current,
       });
       const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string } }) | null;
-      if (sessionError || !sessionResponse?.ok || !sessionResponse.session?.id) {
+      if (sessionTransportError || !sessionResponse?.ok || !sessionResponse.session?.id) {
         failFlow({
           code: sessionResponse?.error ?? "RENTAL_SESSION_REQUEST_FAILED",
           correlationId: sessionResponse?.correlationId ?? sessionResponse?.correlation_id,

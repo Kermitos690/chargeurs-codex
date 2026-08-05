@@ -5,6 +5,14 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    {
+      "source": "/api/kiosk/create-rental-session",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-rental-session"
+    },
+    {
+      "source": "/api/kiosk/create-stripe-checkout",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-stripe-checkout"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
