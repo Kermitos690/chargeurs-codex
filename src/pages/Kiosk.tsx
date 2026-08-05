@@ -21,6 +21,7 @@ import { stationConnectionState } from "@/lib/stationConnection";
 import { BRAND } from "@/config/brand";
 import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
+import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -374,7 +375,7 @@ export default function Kiosk() {
         failFlow({ code: "KIOSK_AUTH_REQUIRED", step: "create_rental_session" });
         return;
       }
-      if (!idemRef.current) idemRef.current = crypto.randomUUID();
+      if (!idemRef.current) idemRef.current = createKioskIdempotencyKey();
       const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
         session?: { id?: string };
       }>("/api/kiosk/create-rental-session", { stationId, language: lang }, {
