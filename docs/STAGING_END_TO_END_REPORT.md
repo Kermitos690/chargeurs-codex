@@ -27,8 +27,10 @@ rental session id and failed orchestration step in its protected diagnostics.
 | TypeScript | passed locally | `npm run typecheck` |
 | Kiosk i18n unit tests | passed locally | `src/test/kioskI18n.test.ts` |
 | Kiosk CORS / Checkout contract | passed locally | `supabase/functions/tests/kiosk_cors_contract.test.ts` |
-| Deploy Edge Functions | not performed | requires staging deployment |
-| QR displayed on DTA21269 | not yet re-tested | requires deployed source + tablet |
+| Deploy Edge Functions | deployed | `create-rental-session` v14; `create-stripe-checkout` v16 |
+| Frontend staging | deployed | Vercel deployment `dpl_9kBTk7HsD1pqD7dDXMrfBxrBDwej` |
+| CORS preflight | verified remotely | response now includes `x-kiosk-token, x-idempotency-key` |
+| QR displayed on DTA21269 | not yet re-tested | requires tablet interaction |
 | Stripe Test Checkout | not called | no new payment/session created by this change |
 | Webhook / ejection / return | not tested | explicit controlled test remains required |
 
