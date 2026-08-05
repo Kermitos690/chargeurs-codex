@@ -72,6 +72,7 @@ export default function Kiosk() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -96,7 +97,7 @@ export default function Kiosk() {
   // A successful server health request wins over Android WebView's unreliable
   // navigator.onLine hint. The next sensitive request is still server-side
   // authenticated and fails closed if transport is actually unavailable.
-  const offline = kioskTransportUnavailable(net, configured === true);
+  const offline = kioskTransportUnavailable(net, backendReachable);
   const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
 
   // A payment / rental is in progress — block reloads, back navigation and
@@ -131,12 +132,15 @@ export default function Kiosk() {
       .eq("station_id", stationId)
       .maybeSingle();
     if (error) {
+      setBackendReachable(false);
       setStationLoadError(error.message || "STATION_QUERY_FAILED");
       setStation(null);
     } else if (!data) {
+      setBackendReachable(true);
       setStationLoadError("STATION_NOT_FOUND");
       setStation(null);
     } else {
+      setBackendReachable(true);
       setStationLoadError(null);
       setStation(data as Station);
     }
@@ -155,6 +159,7 @@ export default function Kiosk() {
       return;
     }
     const { data, error } = await supabase.rpc("kiosk_quote", { p_token: token, p_station: stationId });
+    if (!error) setBackendReachable(true);
     const snap = data as Record<string, unknown> | null;
     if (error || !snap || snap.error || !snap.final_cents) {
       setQuote(null);
@@ -233,8 +238,15 @@ export default function Kiosk() {
     loadStation();
     loadQuote();
     supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
-      .then(({ data }) => { setConfigured((data as { configured?: boolean })?.configured ?? false); loadStation(); })
-      .catch(() => setConfigured(false));
+      .then(({ data, error }) => {
+        setBackendReachable(!error);
+        setConfigured((data as { configured?: boolean })?.configured ?? false);
+        loadStation();
+      })
+      .catch(() => {
+        setBackendReachable(false);
+        setConfigured(false);
+      });
     const i = setInterval(loadStation, 15000);
     return () => clearInterval(i);
   }, [stationId, loadStation, loadQuote]);
