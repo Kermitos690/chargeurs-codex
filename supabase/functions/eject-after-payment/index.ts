@@ -50,6 +50,7 @@ function safeCode(value: unknown, fallback: string): string {
 async function authorizeCaller(
   req: Request,
   db: DB,
+  oneTime: { rentalSessionId: string; permitId: string | null },
 ): Promise<{ ok: true; actor: string } | { ok: false }> {
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -57,7 +58,19 @@ async function authorizeCaller(
     return { ok: true, actor: "service_role" };
   }
   const adminId = await requireAdmin(req, db);
-  return adminId ? { ok: true, actor: adminId } : { ok: false };
+  if (adminId) return { ok: true, actor: adminId };
+  // The UUID is an expiring, one-time bearer capability. It must be bound to
+  // the exact rental before it can replace an administrator/service token.
+  if (!oneTime.permitId || !/^[0-9a-f-]{36}$/i.test(oneTime.permitId)) return { ok: false };
+  const { data, error } = await db.from("one_time_rental_ejection_permits")
+    .select("id")
+    .eq("id", oneTime.permitId)
+    .eq("rental_session_id", oneTime.rentalSessionId)
+    .is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error || !data) return { ok: false };
+  return { ok: true, actor: "one_time_ejection_permit" };
 }
 
 function extractReleasedBattery(payload: unknown): { batteryId: string | null; slotNum: number | null } {
@@ -337,9 +350,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
-  const caller = await authorizeCaller(req, db);
-  if (!caller.ok) return reply({ ok: false, error: "FORBIDDEN" }, 403);
-
   let rentalSessionId = "";
   let session: Session | null = null;
   let hardwareCommandIssued = false;
@@ -350,6 +360,9 @@ Deno.serve(async (req) => {
     if (!/^[0-9a-f-]{36}$/i.test(rentalSessionId)) {
       return reply({ ok: false, error: "INVALID_RENTAL_ID" }, 400);
     }
+    const oneTimePermitId = typeof body.oneTimePermitId === "string" ? body.oneTimePermitId : null;
+    const caller = await authorizeCaller(req, db, { rentalSessionId, permitId: oneTimePermitId });
+    if (!caller.ok) return reply({ ok: false, error: "FORBIDDEN" }, 403);
 
     const { data, error: sessionError } = await db.from("rental_sessions")
       .select("*").eq("id", rentalSessionId).maybeSingle();
