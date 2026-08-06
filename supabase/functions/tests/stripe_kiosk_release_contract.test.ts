@@ -67,6 +67,10 @@ Deno.test("Checkout endpoint authenticates before disclosing or creating a Check
   assert(bindingAt > authAt);
   assert(cachedUrlAt > bindingAt);
   assert(stripeCreateAt > bindingAt);
+  const cachedPaymentRepairAt = source.indexOf("cachedPaymentError");
+  assert(cachedPaymentRepairAt > cachedUrlAt);
+  assert(cachedPaymentRepairAt < stripeCreateAt);
+  assert(source.includes("onConflict: \"stripe_session_id\""));
   assert(source.includes("x-kiosk-token"));
   assertEquals(source.includes("body.kioskToken"), false);
 });

@@ -1,9 +1,9 @@
 // create-stripe-checkout — creates a hosted Stripe Checkout Session for the
 // server-computed deposit. The kiosk renders the returned URL as a QR code.
 //
-// Settlement is payment-method aware:
-//  - card / Apple Pay / Google Pay: manual capture (30 CHF hold, capture later)
-//  - TWINT: automatic capture (30 CHF prepaid, unused balance refunded later)
+// Hosted Checkout uses the Dashboard's eligible dynamic payment methods. The
+// staging settlement model is prepaid/refund so it remains compatible with
+// every method Checkout may offer for the CHF amount.
 //
 // The deposit, currency and pricing profile are taken only from the frozen
 // server-side pricing snapshot. No amount supplied by the browser is trusted.
@@ -174,6 +174,24 @@ Deno.serve(async (req) => {
       new Date(session.checkout_url_expires_at).getTime() > Date.now() &&
       ["checkout_created", "created", "payment_pending"].includes(String(session.state))
     ) {
+      // A previous request can create the Stripe Checkout session and then
+      // fail while recording its local payment projection (for example if a
+      // database index was temporarily missing). Repair that projection before
+      // returning the already-created URL, so the following webhook has a
+      // payment row to reconcile. This is idempotent on stripe_session_id.
+      if (session.stripe_checkout_session_id) {
+        const { error: cachedPaymentError } = await db.from("payments").upsert({
+          rental_session_id: session.id,
+          stripe_session_id: session.stripe_checkout_session_id,
+          amount: Number(session.amount ?? depositCents / 100),
+          currency: session.currency,
+          status: "pending",
+          amount_authorized_cents: 0,
+          amount_captured_cents: 0,
+          amount_refunded_cents: 0,
+        }, { onConflict: "stripe_session_id" });
+        if (cachedPaymentError) throw cachedPaymentError;
+      }
       return json({
         ok: true,
         checkout_url: session.checkout_url,
