@@ -71,6 +71,17 @@ Deno.test("Checkout endpoint authenticates before disclosing or creating a Check
   assertEquals(source.includes("body.kioskToken"), false);
 });
 
+Deno.test("Checkout keeps dynamic payment methods on one prepaid/refund strategy", async () => {
+  const source = await Deno.readTextFile(
+    "supabase/functions/create-stripe-checkout/index.ts",
+  );
+  assertEquals(source.includes("payment_method_types:"), false);
+  assertEquals(source.includes("payment_method_options:"), false);
+  assertEquals(source.includes('capture_method: "manual"'), false);
+  assert(source.includes("rental_deposit_checkout:v2:"));
+  assert(source.includes('settlement_strategy: "prepaid_refund"'));
+});
+
 Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",

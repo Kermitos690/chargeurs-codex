@@ -217,21 +217,15 @@ Deno.serve(async (req) => {
       // amount, country and customer phone. The kiosk remains QR-only.
       locale,
       client_reference_id: String(session.id),
-      customer_creation: "always",
       payment_intent_data: {
         description: `${BRAND.name} — ${productCopy.depositLabel}`,
         metadata,
       },
-      // Dashboard-managed dynamic payment methods remain active. Card is
-      // overridden to manual capture; automatically captured methods are
-      // settled through the prepaid/refund strategy after webhook confirmation.
-      payment_method_options: {
-        card: {
-          capture_method: "manual",
-          setup_future_usage: "off_session",
-          request_extended_authorization: "if_available",
-        },
-      },
+      // Do not override individual payment-method options here. Hosted
+      // Checkout selects only Dashboard-enabled methods eligible for the CHF
+      // amount and device, and they all use the same prepaid/refund settlement
+      // flow. A mixed manual-capture/card configuration is incompatible with
+      // some dynamic Checkout methods and caused Stripe to reject the session.
       expires_at: expiresAtUnix,
       line_items: [{
         price_data: {
@@ -248,7 +242,10 @@ Deno.serve(async (req) => {
       success_url: `${base}/pay/${session.id}/success?c=${encodeURIComponent(session.public_session_code ?? "")}`,
       cancel_url: `${base}/pay/${session.id}/cancel?c=${encodeURIComponent(session.public_session_code ?? "")}`,
     }, {
-      idempotencyKey: `rental_deposit_checkout:${session.id}:${pricingHash}`,
+      // v2 intentionally supersedes the rejected v1 request shape. Stripe
+      // caches failed idempotent requests, so retrying a given rental must use
+      // this versioned key once rather than replaying the old invalid payload.
+      idempotencyKey: `rental_deposit_checkout:v2:${session.id}:${pricingHash}`,
     });
 
     const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();
@@ -302,8 +299,7 @@ Deno.serve(async (req) => {
         deposit_cents: depositCents,
         currency,
         pricing_snapshot_hash: pricingHash,
-        card_capture: "manual",
-        automatic_methods: "prepaid_refund",
+        settlement_strategy: "prepaid_refund",
         correlation_id: correlationId,
       },
     });
