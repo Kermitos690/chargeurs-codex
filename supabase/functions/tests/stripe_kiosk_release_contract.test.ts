@@ -98,7 +98,10 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",
   );
-  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled())");
+  const chargeNowClient = await Deno.readTextFile(
+    "supabase/functions/_shared/chargenow.ts",
+  );
+  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled() && !oneTimeTestResume)");
   const providerConfigAt = source.indexOf("if (!isChargeNowConfigured())");
   const hardwareAt = source.indexOf("hardwareCommandIssued = true");
   assert(gateAt >= 0);
@@ -110,6 +113,12 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   assert(source.includes("terminal: true"));
   assert(source.includes('eventType: "rental_failed"'));
   assert(source.includes("release_blocked:${session.id}:${code}"));
+  // The permit secret is intentionally read only by the server-side API
+  // client. The orchestration function may only consume the validated helper.
+  assert(chargeNowClient.includes("CHARGENOW_ONE_TIME_RENTAL_EJECTION_PERMIT"));
+  assert(source.includes('chargeNowMode() === "test"'));
+  assert(source.includes("permit.rentalSessionId === session.id"));
+  assert(source.includes("permit.slotNum === requestedSlotNum"));
 
   const disabledBranch = source.slice(gateAt, providerConfigAt);
   assertEquals(

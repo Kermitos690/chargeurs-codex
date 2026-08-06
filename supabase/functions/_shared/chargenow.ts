@@ -73,6 +73,14 @@ export type OneTimeMaintenanceEjectionPermit = {
   expiresAt: string;
 };
 
+// A paid staging rental can only be resumed after a human checkpoint when its
+// release was previously stopped by the hardware kill switch. This permit is
+// intentionally narrower than the maintenance permit: it binds one rental,
+// one cabinet and one slot, is server-only, and is invalid outside test mode.
+export type OneTimeRentalEjectionPermit = OneTimeMaintenanceEjectionPermit & {
+  rentalSessionId: string;
+};
+
 export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
   try {
     const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT") ?? "") as Partial<OneTimeMaintenanceEjectionPermit>;
@@ -84,15 +92,33 @@ export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPe
   }
 }
 
+export function oneTimeRentalEjectionPermit(): OneTimeRentalEjectionPermit | null {
+  try {
+    const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_RENTAL_EJECTION_PERMIT") ?? "") as Partial<OneTimeRentalEjectionPermit>;
+    if (
+      typeof parsed.id !== "string" ||
+      typeof parsed.rentalSessionId !== "string" ||
+      typeof parsed.stationId !== "string" ||
+      !Number.isInteger(parsed.slotNum) ||
+      typeof parsed.expiresAt !== "string" ||
+      Number.isNaN(Date.parse(parsed.expiresAt)) ||
+      Date.parse(parsed.expiresAt) <= Date.now()
+    ) return null;
+    return parsed as OneTimeRentalEjectionPermit;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T = unknown>(
   method: string,
   path: string,
-  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean; superAdminMutation?: boolean } = {},
+  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean; oneTimeRentalEjection?: boolean; superAdminMutation?: boolean } = {},
 ): Promise<ApiResult<T>> {
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
   }
-  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection) {
+  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection && !opts.oneTimeRentalEjection) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 
@@ -238,6 +264,32 @@ export const ejectByRent = (
   return request("POST", "/cabinet/ejectByRent", {
     query: { cabinetid, rentOrderId, slotNum: slot.slotNum },
     mutation: true, superAdminMutation: context.superAdminConfirmed,
+  });
+};
+
+// The permit check is repeated in eject-after-payment before this helper is
+// reached. It is repeated here as a defence-in-depth check so no caller can
+// use the supplier mutation bypass with a broad or expired target.
+export const ejectByRentWithOneTimeRentalPermit = (
+  cabinetid: string,
+  slotNum: number,
+  rentOrderId: string,
+  rentalSessionId: string,
+): Promise<ApiResult> => {
+  const permit = oneTimeRentalEjectionPermit();
+  if (
+    chargeNowMode() !== "test" ||
+    !permit ||
+    permit.rentalSessionId !== rentalSessionId ||
+    permit.stationId !== cabinetid ||
+    permit.slotNum !== slotNum
+  ) {
+    return Promise.resolve({ ok: false, status: 0, data: null, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" });
+  }
+  return request("POST", "/cabinet/ejectByRent", {
+    query: { cabinetid, rentOrderId, slotNum },
+    mutation: true,
+    oneTimeRentalEjection: true,
   });
 };
 

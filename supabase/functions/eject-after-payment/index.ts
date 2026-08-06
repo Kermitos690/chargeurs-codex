@@ -4,7 +4,15 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
-import { areHardwareEjectionsEnabled, ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
+import {
+  areHardwareEjectionsEnabled,
+  chargeNowMode,
+  ejectByRent,
+  ejectByRentWithOneTimeRentalPermit,
+  isChargeNowConfigured,
+  oneTimeRentalEjectionPermit,
+  orderCreate,
+} from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
@@ -342,13 +350,29 @@ Deno.serve(async (req) => {
     if (!data) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
     session = data as Session;
 
+    const permit = oneTimeRentalEjectionPermit();
+    const cabinetId = String(session.cabinet_id || session.station_id || "");
+    const requestedSlotNum = Number(session.selected_slot_num);
+    // This is the sole exception to the hardware kill switch. It requires a
+    // short-lived server-only permit that matches the exact paid rental,
+    // cabinet and slot, and can never operate outside ChargeNow test mode.
+    const oneTimeTestResume = Boolean(
+      session.state === "needs_support" &&
+      session.failure_code === "HARDWARE_EJECTION_DISABLED" &&
+      chargeNowMode() === "test" &&
+      permit &&
+      permit.rentalSessionId === session.id &&
+      permit.stationId === cabinetId &&
+      permit.slotNum === requestedSlotNum,
+    );
+
     if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed"].includes(session.state)) {
       return reply({ ok: true, alreadyDone: true, batteryId: session.battery_id ?? null });
     }
     if (["refund_pending", "refunded"].includes(session.state)) {
       return reply({ ok: true, compensated: true, state: session.state });
     }
-    if (session.state === "needs_support" && session.failure_code === "HARDWARE_EJECTION_DISABLED") {
+    if (session.state === "needs_support" && session.failure_code === "HARDWARE_EJECTION_DISABLED" && !oneTimeTestResume) {
       const blocked = await markHardwareReleaseBlocked(db, session);
       return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED", ...blocked });
     }
@@ -368,7 +392,7 @@ Deno.serve(async (req) => {
       metadata: { actor: caller.actor },
     });
 
-    if (!areHardwareEjectionsEnabled()) {
+    if (!areHardwareEjectionsEnabled() && !oneTimeTestResume) {
       const blocked = await markHardwareReleaseBlocked(db, session);
       // HTTP 200 acknowledges the internal webhook request. The business
       // result remains explicit and terminal, preventing a retry loop.
@@ -387,7 +411,7 @@ Deno.serve(async (req) => {
       const compensation = await compensateBeforeHardwareRequest(db, session, slotDecision.error);
       return reply({ ok: false, error: slotDecision.error, compensation }, 409);
     }
-    const requestedSlotNum = slotDecision.slotNum;
+    const resolvedSlotNum = slotDecision.slotNum;
 
     const retry = Number(session.retry_count ?? 0);
     if (retry >= MAX_RETRIES) {
@@ -398,12 +422,13 @@ Deno.serve(async (req) => {
     const { data: locked, error: lockError } = await db.from("rental_sessions")
       .update({ state: "ejecting", retry_count: retry + 1 })
       .eq("id", session.id)
-      .in("state", ["payment_succeeded", "chargenow_failed", "eject_failed"])
+      .in("state", oneTimeTestResume
+        ? ["payment_succeeded", "chargenow_failed", "eject_failed", "needs_support"]
+        : ["payment_succeeded", "chargenow_failed", "eject_failed"])
       .select("id");
     if (lockError) throw lockError;
     if (!locked || locked.length === 0) return reply({ ok: true, alreadyInProgress: true }, 202);
 
-    const cabinetId = String(session.cabinet_id || session.station_id || "");
     if (!cabinetId) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CABINET_ID_MISSING");
       return reply({ ok: false, error: "CABINET_ID_MISSING", compensation }, 409);
@@ -459,16 +484,18 @@ Deno.serve(async (req) => {
     // From this line onward, any thrown error is physically ambiguous: the HTTP
     // request may have reached the supplier even when no response is available.
     hardwareCommandIssued = true;
-    const ejection = await ejectByRent(cabinetId, requestedSlotNum, tradeNo ?? undefined);
+    const ejection = oneTimeTestResume
+      ? await ejectByRentWithOneTimeRentalPermit(cabinetId, resolvedSlotNum, tradeNo ?? "", rentalSessionId)
+      : await ejectByRent(cabinetId, resolvedSlotNum, tradeNo ?? undefined);
     const released = extractReleasedBattery(ejection.data);
-    const selectedSlotNum = released.slotNum ?? requestedSlotNum;
+    const selectedSlotNum = released.slotNum ?? resolvedSlotNum;
 
     await logApi(db, {
       service: "chargenow",
       endpoint: "/cabinet/ejectByRent",
       method: "POST",
       status_code: ejection.status,
-      request: { cabinetId, slotNum: requestedSlotNum, tradeNo },
+      request: { cabinetId, slotNum: resolvedSlotNum, tradeNo, one_time_test_resume: oneTimeTestResume },
       response: { ok: ejection.ok, batteryId: released.batteryId, slotNum: selectedSlotNum },
       error: ejection.ok ? null : safeCode(ejection.error, "EJECTION_UNCONFIRMED"),
     });
@@ -486,7 +513,7 @@ Deno.serve(async (req) => {
         session,
         code,
         "Résultat d'éjection incertain — réconciliation ChargeNow obligatoire avant toute compensation.",
-        { cabinetId, tradeNo, requestedSlotNum },
+        { cabinetId, tradeNo, requestedSlotNum: resolvedSlotNum },
       );
       return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
     }
