@@ -75,10 +75,15 @@ export type OneTimeMaintenanceEjectionPermit = {
 
 // A paid staging rental can only be resumed after a human checkpoint when its
 // release was previously stopped by the hardware kill switch. This permit is
-// intentionally narrower than the maintenance permit: it binds one rental,
-// one cabinet and one slot, is server-only, and is invalid outside test mode.
-export type OneTimeRentalEjectionPermit = OneTimeMaintenanceEjectionPermit & {
+// stored in the service-role-only staging database and consumed before the
+// supplier request. It binds one rental, one cabinet and one slot, and can
+// never operate outside ChargeNow test mode.
+export type OneTimeRentalEjectionPermit = {
+  id: string;
   rentalSessionId: string;
+  stationId: string;
+  slotNum: number;
+  expiresAt: string;
 };
 
 export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
@@ -87,24 +92,6 @@ export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPe
     if (typeof parsed.id !== "string" || typeof parsed.stationId !== "string" || !Number.isInteger(parsed.slotNum)
       || typeof parsed.expiresAt !== "string" || Number.isNaN(Date.parse(parsed.expiresAt))) return null;
     return parsed as OneTimeMaintenanceEjectionPermit;
-  } catch {
-    return null;
-  }
-}
-
-export function oneTimeRentalEjectionPermit(): OneTimeRentalEjectionPermit | null {
-  try {
-    const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_RENTAL_EJECTION_PERMIT") ?? "") as Partial<OneTimeRentalEjectionPermit>;
-    if (
-      typeof parsed.id !== "string" ||
-      typeof parsed.rentalSessionId !== "string" ||
-      typeof parsed.stationId !== "string" ||
-      !Number.isInteger(parsed.slotNum) ||
-      typeof parsed.expiresAt !== "string" ||
-      Number.isNaN(Date.parse(parsed.expiresAt)) ||
-      Date.parse(parsed.expiresAt) <= Date.now()
-    ) return null;
-    return parsed as OneTimeRentalEjectionPermit;
   } catch {
     return null;
   }
@@ -275,14 +262,14 @@ export const ejectByRentWithOneTimeRentalPermit = (
   slotNum: number,
   rentOrderId: string,
   rentalSessionId: string,
+  permit: OneTimeRentalEjectionPermit,
 ): Promise<ApiResult> => {
-  const permit = oneTimeRentalEjectionPermit();
   if (
     chargeNowMode() !== "test" ||
-    !permit ||
     permit.rentalSessionId !== rentalSessionId ||
     permit.stationId !== cabinetid ||
-    permit.slotNum !== slotNum
+    permit.slotNum !== slotNum ||
+    Date.parse(permit.expiresAt) <= Date.now()
   ) {
     return Promise.resolve({ ok: false, status: 0, data: null, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" });
   }

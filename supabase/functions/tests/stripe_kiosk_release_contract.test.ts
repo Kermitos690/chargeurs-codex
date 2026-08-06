@@ -98,8 +98,8 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",
   );
-  const chargeNowClient = await Deno.readTextFile(
-    "supabase/functions/_shared/chargenow.ts",
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000812_add_one_time_rental_ejection_permits.sql",
   );
   const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled() && !oneTimeTestResume)");
   const providerConfigAt = source.indexOf("if (!isChargeNowConfigured())");
@@ -113,12 +113,13 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   assert(source.includes("terminal: true"));
   assert(source.includes('eventType: "rental_failed"'));
   assert(source.includes("release_blocked:${session.id}:${code}"));
-  // The permit secret is intentionally read only by the server-side API
-  // client. The orchestration function may only consume the validated helper.
-  assert(chargeNowClient.includes("CHARGENOW_ONE_TIME_RENTAL_EJECTION_PERMIT"));
+  // The permit is service-role-only, time limited and consumed atomically.
+  assert(migration.includes("one_time_rental_ejection_permits"));
+  assert(migration.toUpperCase().includes("ENABLE ROW LEVEL SECURITY"));
   assert(source.includes('chargeNowMode() === "test"'));
-  assert(source.includes("permit.rentalSessionId === session.id"));
-  assert(source.includes("permit.slotNum === requestedSlotNum"));
+  assert(source.includes("permit.rental_session_id === session.id"));
+  assert(source.includes("permit.slot_num === requestedSlotNum"));
+  assert(source.includes("rental.one_time_test_ejection_consumed"));
 
   const disabledBranch = source.slice(gateAt, providerConfigAt);
   assertEquals(

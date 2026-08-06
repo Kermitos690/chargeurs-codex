@@ -10,7 +10,7 @@ import {
   ejectByRent,
   ejectByRentWithOneTimeRentalPermit,
   isChargeNowConfigured,
-  oneTimeRentalEjectionPermit,
+  type OneTimeRentalEjectionPermit,
   orderCreate,
 } from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
@@ -20,6 +20,13 @@ import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
 const MAX_RETRIES = 3;
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
+type OneTimePermitRow = {
+  id: string;
+  rental_session_id: string;
+  station_id: string;
+  slot_num: number;
+  expires_at: string;
+};
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -350,9 +357,17 @@ Deno.serve(async (req) => {
     if (!data) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
     session = data as Session;
 
-    const permit = oneTimeRentalEjectionPermit();
     const cabinetId = String(session.cabinet_id || session.station_id || "");
     const requestedSlotNum = Number(session.selected_slot_num);
+    const { data: permitData, error: permitError } = await db
+      .from("one_time_rental_ejection_permits")
+      .select("id, rental_session_id, station_id, slot_num, expires_at")
+      .eq("rental_session_id", session.id)
+      .is("consumed_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    if (permitError) throw permitError;
+    const permit = permitData as OneTimePermitRow | null;
     // This is the sole exception to the hardware kill switch. It requires a
     // short-lived server-only permit that matches the exact paid rental,
     // cabinet and slot, and can never operate outside ChargeNow test mode.
@@ -361,9 +376,9 @@ Deno.serve(async (req) => {
       session.failure_code === "HARDWARE_EJECTION_DISABLED" &&
       chargeNowMode() === "test" &&
       permit &&
-      permit.rentalSessionId === session.id &&
-      permit.stationId === cabinetId &&
-      permit.slotNum === requestedSlotNum,
+      permit.rental_session_id === session.id &&
+      permit.station_id === cabinetId &&
+      permit.slot_num === requestedSlotNum,
     );
 
     if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed"].includes(session.state)) {
@@ -429,6 +444,43 @@ Deno.serve(async (req) => {
     if (lockError) throw lockError;
     if (!locked || locked.length === 0) return reply({ ok: true, alreadyInProgress: true }, 202);
 
+    let consumedPermit: OneTimeRentalEjectionPermit | null = null;
+    if (oneTimeTestResume && permit) {
+      // Consume before the supplier call. A network timeout after this point is
+      // physically ambiguous and must be reconciled, never retried as a second
+      // ejection.
+      const { data: consumed, error: consumeError } = await db
+        .from("one_time_rental_ejection_permits")
+        .update({ consumed_at: new Date().toISOString() })
+        .eq("id", permit.id)
+        .is("consumed_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .select("id");
+      if (consumeError) throw consumeError;
+      if (!consumed || consumed.length !== 1) {
+        await markSupportRequired(
+          db,
+          session,
+          "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED",
+          "L'autorisation unique a expiré ou a déjà été utilisée.",
+        );
+        return reply({ ok: false, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" }, 409);
+      }
+      consumedPermit = {
+        id: permit.id,
+        rentalSessionId: permit.rental_session_id,
+        stationId: permit.station_id,
+        slotNum: permit.slot_num,
+        expiresAt: permit.expires_at,
+      };
+      await auditLog(db, {
+        actor: caller.actor,
+        action: "rental.one_time_test_ejection_consumed",
+        target: session.id,
+        data: { permit_id: permit.id, cabinet_id: cabinetId, slot_num: requestedSlotNum },
+      });
+    }
+
     if (!cabinetId) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CABINET_ID_MISSING");
       return reply({ ok: false, error: "CABINET_ID_MISSING", compensation }, 409);
@@ -485,7 +537,13 @@ Deno.serve(async (req) => {
     // request may have reached the supplier even when no response is available.
     hardwareCommandIssued = true;
     const ejection = oneTimeTestResume
-      ? await ejectByRentWithOneTimeRentalPermit(cabinetId, resolvedSlotNum, tradeNo ?? "", rentalSessionId)
+      ? await ejectByRentWithOneTimeRentalPermit(
+        cabinetId,
+        resolvedSlotNum,
+        tradeNo ?? "",
+        rentalSessionId,
+        consumedPermit as OneTimeRentalEjectionPermit,
+      )
       : await ejectByRent(cabinetId, resolvedSlotNum, tradeNo ?? undefined);
     const released = extractReleasedBattery(ejection.data);
     const selectedSlotNum = released.slotNum ?? resolvedSlotNum;
