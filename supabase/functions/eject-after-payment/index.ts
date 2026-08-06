@@ -12,6 +12,7 @@ import {
   isChargeNowConfigured,
   type OneTimeRentalEjectionPermit,
   orderCreate,
+  orderCreateWithOneTimeRentalPermit,
 } from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
@@ -505,7 +506,12 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL") ?? "",
         rentalSessionId,
       );
-      const order = await orderCreate({ deviceId: cabinetId, callbackURL });
+      const order = oneTimeTestResume
+        ? await orderCreateWithOneTimeRentalPermit(
+          { deviceId: cabinetId, callbackURL },
+          consumedPermit as OneTimeRentalEjectionPermit,
+        )
+        : await orderCreate({ deviceId: cabinetId, callbackURL });
       const orderData = order.data as {
         data?: { tradeNo?: string; orderId?: string };
         tradeNo?: string;

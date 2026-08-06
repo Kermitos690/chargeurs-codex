@@ -171,6 +171,27 @@ export const orderCreate = (args: { deviceId: string; callbackURL?: string }, co
     mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
 
+// The same one-time permit is required for the supplier order that precedes a
+// permitted rental ejection. It is deliberately not a general order-creation
+// bypass: the station must match and only ChargeNow test mode is accepted.
+export const orderCreateWithOneTimeRentalPermit = (
+  args: { deviceId: string; callbackURL?: string },
+  permit: OneTimeRentalEjectionPermit,
+) => {
+  if (
+    chargeNowMode() !== "test" ||
+    permit.stationId !== args.deviceId ||
+    Date.parse(permit.expiresAt) <= Date.now()
+  ) {
+    return Promise.resolve<ApiResult>({ ok: false, status: 0, data: null, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" });
+  }
+  return request("POST", "/rent/order/create", {
+    query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
+    mutation: true,
+    oneTimeRentalEjection: true,
+  });
+};
+
 // O3 — Query Rent Order Status (query: tradeNo)
 export const orderQuery = (tradeNo: string) =>
   request("POST", "/rent/order/query", { query: { tradeNo } });

@@ -121,6 +121,7 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   assert(source.includes("permit.slot_num === requestedSlotNum"));
   assert(source.includes("rental.one_time_test_ejection_consumed"));
   assert(source.includes("actor: \"one_time_ejection_permit\""));
+  assert(source.includes("orderCreateWithOneTimeRentalPermit"));
 
   const disabledBranch = source.slice(gateAt, providerConfigAt);
   assertEquals(
