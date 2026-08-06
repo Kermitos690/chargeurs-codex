@@ -1,7 +1,8 @@
--- The canonical 20260607153031 migration declares this index, but the staging
--- database is missing it. create-stripe-checkout upserts payments by
--- stripe_session_id, so Postgres rejects the upsert with 42P10 without this
--- unique partial index. Preflight confirmed no duplicate non-null values.
-CREATE UNIQUE INDEX IF NOT EXISTS payments_stripe_session_key
-  ON public.payments(stripe_session_id)
-  WHERE stripe_session_id IS NOT NULL;
+-- create-stripe-checkout uses PostgREST's `on_conflict=stripe_session_id`.
+-- That endpoint cannot infer a partial unique index, which made the original
+-- partial index fail with PostgreSQL 42P10 after Stripe had already created a
+-- Checkout Session. A real unique constraint is required. PostgreSQL allows
+-- multiple NULL values in a UNIQUE constraint, so non-Stripe payment rows are
+-- unaffected. Preflight confirmed no duplicate non-null Stripe session IDs.
+ALTER TABLE public.payments
+  ADD CONSTRAINT payments_stripe_session_id_key UNIQUE (stripe_session_id);

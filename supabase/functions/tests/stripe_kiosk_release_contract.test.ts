@@ -86,6 +86,14 @@ Deno.test("Checkout keeps dynamic payment methods on one prepaid/refund strategy
   assert(source.includes('settlement_strategy: "prepaid_refund"'));
 });
 
+Deno.test("Stripe Checkout payment upsert has a non-partial database conflict target", async () => {
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000811_restore_payments_stripe_session_index.sql",
+  );
+  assert(migration.includes("ADD CONSTRAINT payments_stripe_session_id_key UNIQUE (stripe_session_id)"));
+  assertEquals(migration.includes("WHERE stripe_session_id IS NOT NULL"), false);
+});
+
 Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",
