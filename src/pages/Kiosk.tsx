@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
   ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
+  Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -66,6 +67,9 @@ type KioskFunctionResponse = {
 export default function Kiosk() {
   const { stationId } = useParams();
   const { lang, t } = useI18n();
+  // This is deliberately an opt-in staging preview. A real campaign feed will
+  // replace the demo panel only after operator-managed media is available.
+  const splitLayoutPreview = new URLSearchParams(window.location.search).get("layout") === "split";
   const [station, setStation] = useState<Station | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -587,12 +591,13 @@ export default function Kiosk() {
 
 
           {phase === "idle" && station && (
-            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-4xl flex-col items-center gap-6">
-              <h1 className="font-display text-4xl font-extrabold leading-tight sm:text-6xl">{t("kiosk.choose.title")}</h1>
-              <p className="text-xl text-muted-foreground sm:text-2xl">{t("kiosk.choose.subtitle")}</p>
-              {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
-              {hourlyCents != null && <div className="text-3xl font-bold text-gradient-cyan sm:text-4xl">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
-              <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-4">
+            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-6 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-6"}`}>
+              <section className={`flex flex-col items-center ${splitLayoutPreview ? "gap-4 rounded-[2rem] glass-strong liquid-border p-5" : "gap-6"}`}>
+                <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-6xl"}`}>{t("kiosk.choose.title")}</h1>
+                <p className={`${splitLayoutPreview ? "text-lg" : "text-xl sm:text-2xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
+                {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
+                {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl sm:text-4xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+              <div className={`grid w-full grid-cols-2 gap-4 ${splitLayoutPreview ? "" : "sm:grid-cols-4"}`}>
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot) => {
@@ -621,6 +626,8 @@ export default function Kiosk() {
                   {offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : t("kiosk.no_battery")}
                 </div>
               )}
+              </section>
+              {splitLayoutPreview && <KioskAdvertisingPreview t={t} />}
             </motion.div>
           )}
 
@@ -757,5 +764,33 @@ function StatusBadge({ connection, configured, t }: { connection: ReturnType<typ
       {connection === "online" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
       {connection === "online" ? t("kiosk.online") : connection === "unknown" ? t("kiosk.status_unknown") : t("kiosk.offline")}
     </div>
+  );
+}
+
+/**
+ * Staging-only visual proof for the future advertising area. It has no remote
+ * media URL, analytics or provider-side advertisement mutation: the kiosk can
+ * therefore be tested safely before a partner campaign is configured.
+ */
+function KioskAdvertisingPreview({ t }: { t: (key: string) => string }) {
+  return (
+    <aside className="relative min-h-[22rem] overflow-hidden rounded-[2rem] glass-strong liquid-border p-7 text-left">
+      <motion.div aria-hidden className="absolute -right-16 -top-12 h-52 w-52 rounded-full bg-primary/40 blur-3xl"
+        animate={{ x: [0, -25, 8, 0], y: [0, 22, -10, 0], scale: [1, 1.18, .92, 1] }} transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }} />
+      <motion.div aria-hidden className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-accent/30 blur-3xl"
+        animate={{ x: [0, 35, 0], y: [0, -20, 0] }} transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }} />
+      <div className="relative flex h-full flex-col justify-between gap-8">
+        <span className="w-fit rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{t("kiosk.ad.preview")}</span>
+        <div>
+          <motion.div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-primary shadow-glow"
+            animate={{ rotate: [0, -4, 4, 0], scale: [1, 1.06, 1] }} transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}>
+            <Zap className="h-8 w-8 text-primary-foreground" />
+          </motion.div>
+          <h2 className="font-display text-4xl font-extrabold leading-tight">{t("kiosk.ad.title")}</h2>
+          <p className="mt-3 text-lg text-muted-foreground">{t("kiosk.ad.subtitle")}</p>
+        </div>
+        <div className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-success" />{t("kiosk.ad.footer")}</div>
+      </div>
+    </aside>
   );
 }
