@@ -87,6 +87,8 @@ export default function Kiosk() {
   const [mismatch, setMismatch] = useState(false);
   const [showDiag, setShowDiag] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastDataRefresh, setLastDataRefresh] = useState<number | null>(null);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
   // Stable idempotency key for ONE rental intent. Reused across network retries
   // so a double-tap / reconnection never creates duplicate sessions. Cleared on
@@ -203,13 +205,25 @@ export default function Kiosk() {
     setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggested?.slot_num ?? null);
   }, [stationId]);
 
+  // A visible refresh must never reload the WebView or reset a Checkout QR.
+  // It performs only authenticated, read-only refreshes; payment/ejection state
+  // continues to be owned by the existing server polling loop.
+  const refreshKioskData = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadStation(), loadQuote(), loadSlots()]);
+      setLastDataRefresh(Date.now());
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadStation, loadQuote, loadSlots]);
+
   const reset = useCallback(() => {
     idemRef.current = null;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
-    void loadStation();
-    void loadSlots();
-  }, [loadStation, loadSlots]);
+    void refreshKioskData();
+  }, [refreshKioskData]);
 
   // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
   // different cabinet id in the URL is treated as a mismatch (no silent switch).
@@ -257,12 +271,10 @@ export default function Kiosk() {
 
   useEffect(() => {
 
-    loadStation();
-    loadQuote();
-    loadSlots();
-    const i = setInterval(() => { void loadStation(); void loadSlots(); }, 15000);
+    void refreshKioskData();
+    const i = setInterval(() => { void refreshKioskData(); }, 15000);
     return () => clearInterval(i);
-  }, [stationId, loadStation, loadQuote, loadSlots]);
+  }, [stationId, refreshKioskData]);
 
   // Tell the native host that React has rendered a usable kiosk state. This
   // avoids leaving an operator with a bare native background when an old or
@@ -520,6 +532,17 @@ export default function Kiosk() {
         </button>
         <div className="flex items-center gap-2">
           <Button
+            onClick={() => { void refreshKioskData(); }}
+            variant="ghost"
+            disabled={refreshing}
+            className="gap-2 rounded-full border border-border px-4 py-5 text-base"
+            aria-label={t("kiosk.refresh")}
+            title={t("kiosk.refresh")}
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? "animate-spin" : ""}`} />
+            <span>{t("kiosk.refresh")}</span>
+          </Button>
+          <Button
             onClick={() => setShowHelp(true)}
             variant="ghost"
             className="gap-2 rounded-full border border-border px-5 py-5 text-base"
@@ -567,6 +590,7 @@ export default function Kiosk() {
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-4xl flex-col items-center gap-6">
               <h1 className="font-display text-4xl font-extrabold leading-tight sm:text-6xl">{t("kiosk.choose.title")}</h1>
               <p className="text-xl text-muted-foreground sm:text-2xl">{t("kiosk.choose.subtitle")}</p>
+              {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
               {hourlyCents != null && <div className="text-3xl font-bold text-gradient-cyan sm:text-4xl">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
               <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-4">
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
