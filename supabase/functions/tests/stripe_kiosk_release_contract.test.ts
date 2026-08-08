@@ -94,6 +94,13 @@ Deno.test("Stripe Checkout payment upsert has a non-partial database conflict ta
   assertEquals(migration.includes("WHERE stripe_session_id IS NOT NULL"), false);
 });
 
+Deno.test("ChargeNow order projection has a real rental-session conflict target", async () => {
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000813_restore_apifox_orders_rental_session_constraint.sql",
+  );
+  assert(/ADD CONSTRAINT\s+apifox_orders_rental_session_id_key\s+UNIQUE \(rental_session_id\)/i.test(migration));
+});
+
 Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",

@@ -16,6 +16,16 @@ describe("kiosk translations", () => {
     expect(translate("de", "kiosk.qr.title")).toBe("Zum Bezahlen scannen");
     expect(translate("en", "kiosk.continue", { amount: "30.00 CHF" })).toContain("Continue");
     expect(translate("de", "kiosk.continue", { amount: "30.00 CHF" })).toContain("Weiter");
+    expect(translate("en", "pay.title")).toBe("Payment verification in progress");
+    expect(translate("de", "qr.secured")).toBe("Sichere Zahlung über Stripe");
+  });
+
+  it("defines every hosted-payment page key in FR, EN and DE", () => {
+    for (const lang of ["fr", "en", "de"] as const) {
+      for (const key of ["pay.title", "pay.pending", "pay.open", "pay.methods", "pay.return", "qr.secured"]) {
+        expect(translate(lang, key), `${lang}:${key}`).not.toBe(key);
+      }
+    }
   });
 
   it("does not leave legacy French kiosk UI literals in the main rental path", () => {

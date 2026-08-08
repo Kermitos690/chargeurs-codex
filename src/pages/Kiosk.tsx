@@ -22,6 +22,7 @@ import { BRAND } from "@/config/brand";
 import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
+import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -51,20 +52,6 @@ type KioskFunctionResponse = {
   error?: string;
   correlationId?: string;
   correlation_id?: string;
-};
-
-const STATE_KEY: Record<string, { phase: Phase; key: string }> = {
-  payment_succeeded: { phase: "waitpay", key: "kiosk.state.payment_succeeded" },
-  ejecting: { phase: "waitpay", key: "kiosk.state.ejecting" },
-  payment_failed: { phase: "error", key: "kiosk.state.payment_failed" },
-  chargenow_failed: { phase: "support", key: "kiosk.state.chargenow_failed" },
-  eject_failed: { phase: "support", key: "kiosk.state.eject_failed" },
-  needs_support: { phase: "support", key: "kiosk.state.needs_support" },
-  manual_review: { phase: "support", key: "kiosk.state.manual_review" },
-  refunded: { phase: "error", key: "kiosk.state.refunded" },
-  payment_expired: { phase: "expired", key: "kiosk.state.payment_expired" },
-  payment_cancelled: { phase: "error", key: "kiosk.state.payment_cancelled" },
-  cancelled: { phase: "error", key: "kiosk.state.cancelled" },
 };
 
 export default function Kiosk() {
@@ -292,12 +279,15 @@ export default function Kiosk() {
     }
   }, []);
 
-  const applyState = useCallback((s: string, slot: number | null) => {
+  const applyState = useCallback((s: string, slot: number | null, failureCode?: string | null) => {
     if (s === "ejected" || s === "active_rental" || s === "battery_taken") {
       setSlotNum(slot); setPhase("success"); return;
     }
-    const m = STATE_KEY[s];
-    if (m) { setStatusMsg({ title: t(`${m.key}.title`), sub: t(`${m.key}.subtitle`) }); setPhase(m.phase); }
+    const presentation = kioskPaymentPresentation(s, failureCode);
+    if (presentation) {
+      setStatusMsg({ title: t(presentation.titleKey), sub: t(presentation.subtitleKey) });
+      setPhase(presentation.phase);
+    }
   }, [t]);
 
   // Poll the rental session status via a safe, scoped RPC (no direct table read:
@@ -306,8 +296,8 @@ export default function Kiosk() {
     if (!sessionId || !publicCode || !["qr", "waitpay", "starting"].includes(phase)) return;
     const poll = setInterval(async () => {
       const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId, p_code: publicCode });
-      const r = data as { state?: string; selected_slot_num?: number | null } | null;
-      if (r?.state) applyState(r.state, r.selected_slot_num ?? null);
+      const r = data as { state?: string; selected_slot_num?: number | null; failure_code?: string | null } | null;
+      if (r?.state) applyState(r.state, r.selected_slot_num ?? null, r.failure_code);
     }, 3000);
     return () => clearInterval(poll);
   }, [sessionId, publicCode, phase, applyState]);

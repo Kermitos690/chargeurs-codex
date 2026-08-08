@@ -30,6 +30,30 @@ function safeErrorCode(error: unknown): string {
   return error instanceof Error ? error.name : "UNKNOWN_ERROR";
 }
 
+function webhookProjection(event: Stripe.Event): Record<string, unknown> {
+  // Preserve only identifiers needed to trace a signed webhook to its local
+  // rental. The raw Stripe event can contain customer data and is not needed
+  // for retry/idempotency semantics.
+  const object = event.data.object as {
+    id?: unknown;
+    metadata?: Record<string, unknown> | null;
+    payment_intent?: unknown;
+  };
+  const metadata = object.metadata ?? {};
+  const rentalSessionId = typeof metadata.rental_session_id === "string"
+    ? metadata.rental_session_id
+    : null;
+  const paymentIntentId = typeof object.payment_intent === "string"
+    ? object.payment_intent
+    : null;
+  return {
+    type: event.type,
+    object_id: typeof object.id === "string" ? object.id : null,
+    rental_session_id: rentalSessionId,
+    payment_intent_id: paymentIntentId,
+  };
+}
+
 async function paymentMethodType(
   stripe: Stripe,
   intent: Stripe.PaymentIntent,
@@ -69,8 +93,13 @@ async function failPaymentRental(
     metadata: { code: input.code, ...(input.metadata ?? {}) },
   });
 
+  const terminalState = input.code === "CHECKOUT_EXPIRED"
+    ? "payment_expired"
+    : ["ASYNC_PAYMENT_FAILED", "PAYMENT_INTENT_FAILED"].includes(input.code)
+      ? "payment_failed"
+      : "needs_support";
   const { error } = await db.from("rental_sessions").update({
-    state: "needs_support",
+    state: terminalState,
     settlement_status: "failed",
     settlement_error: input.code,
     failure_code: input.code,
@@ -286,6 +315,7 @@ async function markWebhook(
 ) {
   await db.from("webhook_events").update({
     processing_status: status,
+    processed: status === "processed",
     processed_at: status === "failed" ? null : new Date().toISOString(),
     processing_error: errorCode ? errorCode.slice(0, 200) : null,
   }).eq("external_id", eventId);
@@ -317,7 +347,7 @@ Deno.serve(async (req) => {
   const { data: claim, error: claimError } = await db.rpc("claim_stripe_webhook_event", {
     p_external_id: event.id,
     p_event_type: event.type,
-    p_payload: { type: event.type },
+    p_payload: webhookProjection(event),
     p_lock_ttl_minutes: 10,
   });
 
