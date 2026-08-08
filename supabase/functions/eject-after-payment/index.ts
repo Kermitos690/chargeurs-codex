@@ -17,6 +17,7 @@ import {
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
+import { needsSupplierReleaseConfirmation } from "../_shared/ejectionResult.ts";
 
 const MAX_RETRIES = 3;
 type DB = ReturnType<typeof adminClient>;
@@ -596,6 +597,27 @@ Deno.serve(async (req) => {
       response: { ok: ejection.ok, batteryId: released.batteryId, slotNum: selectedSlotNum },
       error: ejection.ok ? null : safeCode(ejection.error, "EJECTION_UNCONFIRMED"),
     });
+
+    if (!ejection.ok && needsSupplierReleaseConfirmation(ejection)) {
+      // The supplier received the physical request at the HTTP layer but did
+      // not provide a usable release confirmation. Do not retry and do not
+      // present this normal asynchronous window as a support failure.
+      const code = "EJECTION_PROVIDER_CONFIRMATION_PENDING";
+      const { error: pendingUpdateError } = await db.from("rental_sessions").update({
+        state: "ejecting",
+        chargenow_status: "release_provider_confirmation_pending",
+        failure_code: code,
+        failure_message: "La commande d'ouverture a été reçue par le fournisseur; confirmation matérielle en attente.",
+      }).eq("id", session.id);
+      if (pendingUpdateError) throw pendingUpdateError;
+      await auditLog(db, {
+        actor: caller.actor,
+        action: "rental.release.provider_confirmation_pending",
+        target: session.id,
+        data: { cabinet_id: cabinetId, trade_no: tradeNo, slot_num: selectedSlotNum, provider_code: ejection.error },
+      });
+      return reply({ ok: true, state: "ejecting", confirmationPending: true }, 202);
+    }
 
     if (!ejection.ok) {
       const code = safeCode(ejection.error, "EJECTION_UNCONFIRMED");

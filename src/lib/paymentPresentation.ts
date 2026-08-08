@@ -1,6 +1,4 @@
 const SERVER_CONFIRMED_STATES = new Set([
-  "payment_succeeded",
-  "ejecting",
   "ejected",
   "battery_taken",
   "active_rental",
@@ -8,6 +6,11 @@ const SERVER_CONFIRMED_STATES = new Set([
   "billing_pending",
   "completed",
   "closed",
+]);
+
+const SERVER_RELEASE_PENDING_STATES = new Set([
+  "payment_succeeded",
+  "ejecting",
 ]);
 
 const SERVER_CANCELLED_STATES = new Set([
@@ -23,6 +26,11 @@ const SERVER_CANCELLED_STATES = new Set([
  */
 export function isServerConfirmedPayment(state: string): boolean {
   return SERVER_CONFIRMED_STATES.has(state);
+}
+
+/** Payment is confirmed by Stripe, but the physical delivery is not yet. */
+export function isServerReleasePending(state: string): boolean {
+  return SERVER_RELEASE_PENDING_STATES.has(state);
 }
 
 export function isServerCancelledPayment(state: string): boolean {
