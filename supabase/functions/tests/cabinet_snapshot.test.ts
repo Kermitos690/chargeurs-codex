@@ -11,6 +11,15 @@ Deno.test("temperature is never interpreted as state of charge", () => {
   assertEquals(parseChargePercent({ capacity: 31.2 }), null);
 });
 
+Deno.test("confirmed ChargeNow DTA vol is interpreted as a percentage only in the valid range", () => {
+  assertEquals(parseChargePercent({ vol: 77 }), 77);
+  assertEquals(parseChargePercent({ vol: "36" }), 36);
+  assertEquals(parseChargePercent({ vol: 0 }), 0);
+  // A voltage-like or malformed value is never surfaced as a percentage.
+  assertEquals(parseChargePercent({ vol: 3120 }), null);
+  assertEquals(parseChargePercent({ vol: 31.2, temperature: 31.2 }), null);
+});
+
 Deno.test("merged slot needs corroborated, healthy and fresh observations", () => {
   const now = new Date().toISOString();
   const [slot] = mergeCabinetSlotObservations([

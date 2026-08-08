@@ -1,9 +1,9 @@
 // Conservative, multi-source interpretation of a ChargeNow cabinet.
 //
-// This module deliberately does not treat generic `capacity`, `vol` or a
-// temperature-looking number as a battery percentage.  The provider returns
-// different payload shapes per endpoint, so the kiosk receives a safe merged
-// view while the raw values remain available only to operators in raw_data.
+// The provider returns different payload shapes per endpoint. For the
+// ChargeNow DTA integration, the operator has confirmed that `vol` is the
+// state-of-charge percentage (0–100), not a voltage. `capacity` and generic
+// temperature-looking values remain deliberately excluded.
 import {
   batteryListByCabinetId,
   cabinetDetail,
@@ -75,12 +75,26 @@ function toBoolean(value: unknown): boolean | null {
   return null;
 }
 
-/** Only explicit state-of-charge keys are accepted as a percentage. */
+/**
+ * Parse only confirmed ChargeNow state-of-charge keys.
+ *
+ * `vol` is intentionally accepted for the DTA integration after on-device
+ * operator confirmation. The range guard prevents a voltage such as 3120 or
+ * an unrelated capacity figure from reaching the customer UI.
+ */
 export function parseChargePercent(record: RecordValue): number | null {
   const value = numberValue(first(record, [
     "chargePercent", "charge_percent", "powerLevel", "power_level", "soc", "electricity", "batteryPower",
   ]));
-  return value != null && value >= 0 && value <= 100 ? value : null;
+  if (value != null) return value >= 0 && value <= 100 ? value : null;
+
+  // `vol` is a DTA percentage by operator-confirmed vendor semantics. DTA
+  // percentage snapshots are integral; do not accept a decimal here, because
+  // 31.2 is also a common temperature/voltage-looking value in supplier data.
+  const dtaVol = numberValue(record.vol);
+  return dtaVol != null && Number.isInteger(dtaVol) && dtaVol >= 0 && dtaVol <= 100
+    ? dtaVol
+    : null;
 }
 
 /** Only explicit temperature keys are accepted as Celsius. */
@@ -213,11 +227,9 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     const freshEnough = slotObservations.some((item) => Date.now() - Date.parse(item.timestamp) < 5 * 60 * 1000);
     const confidence: SlotConfidence = conflicts.length ? "low" : slotObservations.length >= 2 && batteryId && freshEnough ? "high" : "medium";
     // A cabinet can be online and report an occupied slot without exposing a
-    // semantically trustworthy state of charge.  That is not enough to call a
-    // battery "ready" to a customer: doing so produced the misleading
-    // "Prête" + "—%" combination observed on DTA21269.  Fail closed until an
-    // explicit charge field is present; capacity, voltage and temperature are
-    // deliberately not substitutes (see parseChargePercent above).
+    // semantically trustworthy state of charge. That is not enough to call a
+    // battery "ready" to a customer. For the DTA integration, `vol` is now a
+    // confirmed charge field; capacity and temperature remain excluded.
     const hasConfirmedCharge = chargePercent !== null;
     const rentable = Boolean(
       batteryId && batteryPresent !== false && online !== false && !blocking &&
