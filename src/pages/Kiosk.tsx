@@ -94,6 +94,7 @@ export default function Kiosk() {
   const [showHelp, setShowHelp] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastDataRefresh, setLastDataRefresh] = useState<number | null>(null);
+  const [inactivitySeconds, setInactivitySeconds] = useState<number | null>(null);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
   // Stable idempotency key for ONE rental intent. Reused across network retries
   // so a double-tap / reconnection never creates duplicate sessions. Cleared on
@@ -229,6 +230,27 @@ export default function Kiosk() {
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void refreshKioskData();
   }, [refreshKioskData]);
+
+  // Public kiosks must always recover their idle screen after an interrupted
+  // interaction. This changes only the local presentation: it never cancels a
+  // Checkout session, retries hardware, or modifies the server-side rental.
+  useEffect(() => {
+    if (phase === "idle" || phase === "loading") {
+      setInactivitySeconds(null);
+      return;
+    }
+    const deadline = Date.now() + 35_000;
+    const refreshCountdown = () => {
+      setInactivitySeconds(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    };
+    refreshCountdown();
+    const interval = window.setInterval(refreshCountdown, 250);
+    const timeout = window.setTimeout(reset, 35_000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
+    };
+  }, [phase, reset]);
 
   // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
   // different cabinet id in the URL is treated as a mismatch (no silent switch).
@@ -486,6 +508,29 @@ export default function Kiosk() {
           <RefreshCw className="h-3.5 w-3.5" />
           {busy ? t("kiosk.update_pending") : t("kiosk.update_running")}
         </div>
+      )}
+
+      {/* Every non-idle public screen has a short, visible escape hatch. The
+          close icon returns only this tablet UI to its station home screen. */}
+      {inactivitySeconds !== null && (
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="fixed left-5 top-5 z-50 flex items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-8"
+          aria-live="polite"
+        >
+          <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+          <span>{t("kiosk.inactivity.return_in", { seconds: inactivitySeconds })}</span>
+          <button
+            type="button"
+            onClick={reset}
+            aria-label={t("kiosk.inactivity.close")}
+            title={t("kiosk.inactivity.close")}
+            className="ml-1 grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </motion.div>
       )}
 
       {showDiag && (

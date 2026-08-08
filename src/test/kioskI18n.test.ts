@@ -29,11 +29,17 @@ describe("kiosk translations", () => {
   });
 
   it("translates the battery-choice screen without falling back to French", () => {
-    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.slot.charge_unknown", "kiosk.slot.selected", "kiosk.qr.phone", "kiosk.refresh", "kiosk.ad.preview", "kiosk.ad.title"];
+    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.slot.charge_unknown", "kiosk.slot.selected", "kiosk.qr.phone", "kiosk.refresh", "kiosk.inactivity.return_in", "kiosk.inactivity.close", "kiosk.ad.preview", "kiosk.ad.title"];
     for (const key of keys) {
       expect(translate("en", key), `en:${key}`).not.toBe(translations.fr[key]);
       expect(translate("de", key), `de:${key}`).not.toBe(translations.fr[key]);
     }
+  });
+
+  it("labels the non-idle kiosk timeout in every public language", () => {
+    expect(translate("fr", "kiosk.inactivity.return_in", { seconds: 35 })).toBe("Menu dans 35 s");
+    expect(translate("en", "kiosk.inactivity.return_in", { seconds: 35 })).toBe("Menu in 35 s");
+    expect(translate("de", "kiosk.inactivity.return_in", { seconds: 35 })).toBe("Menü in 35 s");
   });
 
   it("does not leave legacy French kiosk UI literals in the main rental path", () => {
