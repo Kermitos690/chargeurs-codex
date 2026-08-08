@@ -17,10 +17,10 @@ export function PowerbankScene({ charge, selected, recommended, rentable }: Prop
   const level = charge == null ? 0 : Math.max(0, Math.min(100, charge));
   const accent = rentable ? "from-cyan-300 via-blue-500 to-violet-500" : "from-slate-500 via-slate-600 to-slate-800";
   return (
-    <motion.div className="relative mt-3 h-20 [perspective:600px]" aria-hidden="true"
+    <motion.div className="relative mt-2 h-16 [perspective:600px]" aria-hidden="true"
       animate={selected || recommended ? { y: [0, -4, 0], rotateY: [-4, 4, -4] } : { rotateY: [-2, 2, -2] }}
       transition={{ duration: selected ? 1.7 : 4.2, repeat: Infinity, ease: "easeInOut" }}>
-      <motion.div className={`absolute inset-x-3 top-2 h-14 rounded-2xl border border-white/25 bg-gradient-to-br ${accent} shadow-[0_18px_22px_rgba(0,0,0,.38)]`}
+      <motion.div className={`absolute inset-x-3 top-2 h-12 rounded-2xl border border-white/25 bg-gradient-to-br ${accent} shadow-[0_18px_22px_rgba(0,0,0,.38)]`}
         style={{ transform: "rotateX(8deg) rotateY(-11deg)" }}>
         <div className="absolute inset-x-3 top-3 h-1 rounded-full bg-white/30" />
         <div className="absolute bottom-2 left-3 flex gap-1">

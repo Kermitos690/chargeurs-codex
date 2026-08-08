@@ -504,7 +504,7 @@ export default function Kiosk() {
 
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-6 py-8 sm:px-12">
+    <div className="relative min-h-screen overflow-hidden px-5 py-4 sm:px-10 sm:py-5">
       <LiquidBackground />
 
       {/* Connectivity banner — blocks confidence in payment when offline. */}
@@ -617,7 +617,7 @@ export default function Kiosk() {
       </header>
 
 
-      <main className="mx-auto flex min-h-[80vh] max-w-5xl flex-col items-center justify-center text-center">
+      <main className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col items-center justify-center text-center">
         <AnimatePresence mode="wait">
           {phase === "loading" && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
@@ -649,12 +649,12 @@ export default function Kiosk() {
 
 
           {phase === "idle" && station && (
-            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-6 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-6"}`}>
-              <section className={`flex flex-col items-center ${splitLayoutPreview ? "gap-4 rounded-[2rem] glass-strong liquid-border p-5" : "gap-6"}`}>
-                <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-6xl"}`}>{t("kiosk.choose.title")}</h1>
-                <p className={`${splitLayoutPreview ? "text-lg" : "text-xl sm:text-2xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
+            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-4"}`}>
+              <section className={`flex flex-col items-center ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
+                <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
+                <p className={`${splitLayoutPreview ? "text-base" : "text-lg sm:text-xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
                 {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
-                {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl sm:text-4xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+                {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
               {/* The cabinet itself is a two-by-two physical layout. Keeping
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
@@ -671,7 +671,7 @@ export default function Kiosk() {
                       : { opacity: 1, y: 0, scale: 1 }}
                     transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
                     whileTap={slot.rentable ? { scale: .96 } : undefined}
-                    className={`glass liquid-border relative min-h-52 rounded-3xl p-5 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    className={`glass liquid-border relative min-h-40 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
                     <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
@@ -680,8 +680,8 @@ export default function Kiosk() {
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
                       <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />
                     </> : <>
-                      <div className="mt-3 text-4xl font-extrabold">{`${Math.round(slot.charge_percent)}%`}</div>
-                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted"><motion.div className="h-full rounded-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
+                      <div className="mt-2 text-3xl font-extrabold">{`${Math.round(slot.charge_percent)}%`}</div>
+                      <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted"><motion.div className="h-full rounded-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
                     </>}
                     <div className="mt-3 text-sm font-semibold">{t(`kiosk.slot.${slot.status}`)}</div>
                   </motion.button>;
@@ -689,7 +689,7 @@ export default function Kiosk() {
               </div>
               {canRent ? (
                 <div className="flex flex-col items-center gap-2">
-                  <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
+                  <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-10 py-5 text-xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
                     {t("kiosk.rent_selected")}
                   </Button>
                   {hourlyCents != null && <span className="text-lg text-muted-foreground">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</span>}
