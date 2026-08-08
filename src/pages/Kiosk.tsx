@@ -619,7 +619,7 @@ export default function Kiosk() {
                     </motion.div>
                     {slot.charge_percent == null ? <>
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
-                      <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted"><motion.div className="h-full w-1/2 rounded-full bg-gradient-primary" animate={{ x: ["-110%", "220%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} /></div>
+                      <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />
                     </> : <>
                       <div className="mt-3 text-4xl font-extrabold">{`${Math.round(slot.charge_percent)}%`}</div>
                       <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted"><motion.div className="h-full rounded-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
@@ -637,7 +637,7 @@ export default function Kiosk() {
                 </div>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : t("kiosk.no_battery")}
+                  {offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : slots.some((slot) => slot.status === "checking") ? t("kiosk.inventory_verifying") : t("kiosk.no_battery")}
                 </div>
               )}
               </section>
