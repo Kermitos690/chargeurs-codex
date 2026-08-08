@@ -23,6 +23,7 @@ import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
+import { hourlyRateCents } from "@/lib/kioskPricing";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -34,6 +35,14 @@ type Quote = {
   final_cents: number; profile_id: string; source: string; error?: string;
   deposit_cents: number; period_minutes: number; price_per_period_cents: number;
   daily_cap_cents: number; unreturned_fee_cents: number;
+};
+type KioskSlot = {
+  slot_num: number;
+  charge_percent: number | null;
+  rentable: boolean;
+  confidence: "high" | "medium" | "low";
+  status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "maintenance";
+  recommended: boolean;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 type NativeKioskWindow = Window & {
@@ -69,6 +78,8 @@ export default function Kiosk() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [slotNum, setSlotNum] = useState<number | null>(null);
+  const [slots, setSlots] = useState<KioskSlot[]>([]);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
   const [flowFailure, setFlowFailure] = useState<KioskFailure | null>(null);
   const [lockedStation, setLockedStation] = useState<string | null>(null);
@@ -171,12 +182,34 @@ export default function Kiosk() {
     });
   }, [stationId]);
 
+  // The kiosk never infers a rentable battery from a single stale count. This
+  // server-side, station-bound snapshot merges the documented C4/C7/C8 reads.
+  const loadSlots = useCallback(async () => {
+    const token = readKioskToken();
+    if (!stationId || !token) { setSnapshotError("KIOSK_AUTH_REQUIRED"); return; }
+    const { data, transportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
+      slots?: KioskSlot[];
+    }>("/api/kiosk/cabinet-snapshot", { stationId }, { "X-Kiosk-Token": token });
+    if (transportError || !data?.ok || !Array.isArray(data.slots)) {
+      setSnapshotError(data?.error ?? "SNAPSHOT_UNAVAILABLE");
+      return;
+    }
+    const normalized = data.slots.slice(0, 4).sort((a, b) => a.slot_num - b.slot_num);
+    setSlots(normalized);
+    setSnapshotError(null);
+    setConfigured(true);
+    setBackendReachable(true);
+    const suggested = normalized.find((slot) => slot.recommended && slot.rentable) ?? normalized.find((slot) => slot.rentable);
+    setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggested?.slot_num ?? null);
+  }, [stationId]);
+
   const reset = useCallback(() => {
     idemRef.current = null;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void loadStation();
-  }, [loadStation]);
+    void loadSlots();
+  }, [loadStation, loadSlots]);
 
   // Cabinet lock: bind this tablet to the cabinet on first open; afterwards a
   // different cabinet id in the URL is treated as a mismatch (no silent switch).
@@ -226,19 +259,10 @@ export default function Kiosk() {
 
     loadStation();
     loadQuote();
-    supabase.functions.invoke("sync-cabinet-status", { body: { stationId } })
-      .then(({ data, error }) => {
-        setBackendReachable(!error);
-        setConfigured((data as { configured?: boolean })?.configured ?? false);
-        loadStation();
-      })
-      .catch(() => {
-        setBackendReachable(false);
-        setConfigured(false);
-      });
-    const i = setInterval(loadStation, 15000);
+    loadSlots();
+    const i = setInterval(() => { void loadStation(); void loadSlots(); }, 15000);
     return () => clearInterval(i);
-  }, [stationId, loadStation, loadQuote]);
+  }, [stationId, loadStation, loadQuote, loadSlots]);
 
   // Tell the native host that React has rendered a usable kiosk state. This
   // avoids leaving an operator with a bare native background when an old or
@@ -368,7 +392,7 @@ export default function Kiosk() {
       if (!idemRef.current) idemRef.current = createKioskIdempotencyKey();
       const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
         session?: { id?: string };
-      }>("/api/kiosk/create-rental-session", { stationId, language: lang }, {
+      }>("/api/kiosk/create-rental-session", { stationId, language: lang, selectedSlotNum: slotNum }, {
         "X-Kiosk-Token": kioskToken,
         "X-Idempotency-Key": idemRef.current,
       });
@@ -392,15 +416,16 @@ export default function Kiosk() {
     }
   };
 
-  const available = station?.rentable_count ?? 0;
+  const available = slots.filter((slot) => slot.rentable).length || station?.rentable_count || 0;
   // Availability comes from the authenticated backend snapshot. A WebView
   // browser hint is never allowed to hide rentable batteries or pre-empt the
   // server-side availability check.
-  const canRent = station?.online && available > 0 && configured;
-  const inventoryReadable = Boolean(station?.online && configured);
+  const canRent = available > 0 && configured && slotNum !== null;
+  const inventoryReadable = Boolean(configured && slots.length);
   const connection = stationConnectionState(station ?? { status: null, online: null });
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
+  const hourlyCents = quote ? hourlyRateCents(quote.price_per_period_cents, quote.period_minutes) : null;
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
@@ -539,30 +564,37 @@ export default function Kiosk() {
 
 
           {phase === "idle" && station && (
-            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-8">
-              <StatusBadge connection={connection} configured={!!configured} t={t} />
-              <h1 className="max-w-3xl font-display text-5xl font-extrabold leading-tight sm:text-7xl">
-                {t("kiosk.hero")}
-              </h1>
-              <p className="max-w-2xl text-xl text-muted-foreground sm:text-2xl">
-                {t("kiosk.subtitle")}
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-4">
-                <div className="glass liquid-border flex items-center gap-3 rounded-2xl px-6 py-4">
-                  <BatteryCharging className="h-8 w-8 text-success" />
-                  <div className="text-left">
-                    <div className="text-3xl font-bold">{inventoryReadable ? available : "—"}</div>
-                    <div className="text-sm text-muted-foreground">{inventoryReadable ? t("kiosk.available") : t("kiosk.inventory_unavailable")}</div>
-                  </div>
-                </div>
+            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-4xl flex-col items-center gap-6">
+              <h1 className="font-display text-4xl font-extrabold leading-tight sm:text-6xl">{t("kiosk.choose.title")}</h1>
+              <p className="text-xl text-muted-foreground sm:text-2xl">{t("kiosk.choose.subtitle")}</p>
+              {hourlyCents != null && <div className="text-3xl font-bold text-gradient-cyan sm:text-4xl">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+              <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-4">
+                {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
+                  slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
+                }).map((slot) => {
+                  const selected = slot.slot_num === slotNum;
+                  return <button key={slot.slot_num} type="button" disabled={!slot.rentable}
+                    onClick={() => { idemRef.current = null; setSlotNum(slot.slot_num); }}
+                    className={`glass liquid-border relative min-h-52 rounded-3xl p-5 text-left transition ${slot.rentable ? "hover:scale-[1.02] active:scale-[.98]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
+                    <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
+                    <BatteryCharging className={`mt-4 h-10 w-10 ${slot.rentable ? "text-success" : "text-muted-foreground"}`} />
+                    <div className="mt-3 text-4xl font-extrabold">{slot.charge_percent == null ? "—" : `${Math.round(slot.charge_percent)}%`}</div>
+                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gradient-primary" style={{ width: `${Math.max(0, Math.min(100, slot.charge_percent ?? 0))}%` }} /></div>
+                    <div className="mt-3 text-sm font-semibold">{t(`kiosk.slot.${slot.status}`)}</div>
+                  </button>;
+                })}
               </div>
               {canRent ? (
-                <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
-                  {t("kiosk.cta")}
-                </Button>
+                <div className="flex flex-col items-center gap-2">
+                  <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-12 py-6 text-2xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
+                    {t("kiosk.rent_selected")}
+                  </Button>
+                  {hourlyCents != null && <span className="text-lg text-muted-foreground">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</span>}
+                </div>
               ) : (
                 <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
-                  {offline ? t("kiosk.connection_unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : t("kiosk.no_battery")}
+                  {offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : t("kiosk.no_battery")}
                 </div>
               )}
             </motion.div>
@@ -573,15 +605,10 @@ export default function Kiosk() {
               <h2 className="font-display text-3xl font-bold sm:text-4xl">{t("kiosk.pricing.title")}</h2>
               {quote ? (
                 <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
-                  <div className="text-lg font-semibold">{quote.profile_name}</div>
-                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">
-                    {fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min
-                  </div>
-                  <div className="mt-4 space-y-1 text-sm text-muted-foreground">
-                    <p>{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>
-                    <p>{t("kiosk.pricing.daily_cap", { amount: fmtCents(quote.daily_cap_cents, quote.currency) })} · {t("kiosk.pricing.non_return", { amount: fmtCents(quote.unreturned_fee_cents, quote.currency) })}</p>
-                    <p>{t("kiosk.pricing.settlement")}</p>
-                  </div>
+                  <div className="text-lg font-semibold">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div>
+                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>
+                  <p className="mt-3 text-sm text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} {t("kiosk.minutes")}</p>
+                  <p className="mt-5 text-sm text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>
                 </div>
               ) : (
                 <p className="text-warning">
@@ -592,8 +619,8 @@ export default function Kiosk() {
               )}
               <div className="flex gap-3">
                 <Button variant="ghost" onClick={reset}>{t("kiosk.back")}</Button>
-                <Button onClick={startRental} disabled={!quote} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
-                  {t("kiosk.continue", { amount: quote ? fmtCents(quote.deposit_cents, quote.currency) : "" })}
+                <Button onClick={startRental} disabled={!quote || slotNum === null} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
+                  {t("kiosk.rent_selected")}
                 </Button>
               </div>
             </motion.div>
@@ -609,14 +636,10 @@ export default function Kiosk() {
           {phase === "qr" && checkoutUrl && (
             <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
               {quote && (
-                <div className="text-center">
-                  <div className="text-lg font-semibold">{quote.profile_name}</div>
-                  <div className="text-3xl font-bold text-gradient-cyan">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</div>
-                  <div className="text-sm text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} min</div>
-                </div>
+                <div className="text-center"><div className="text-4xl font-bold text-gradient-cyan">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div></div>
               )}
               <h2 className="font-display text-2xl font-bold sm:text-3xl">{t("kiosk.qr.title")}</h2>
-              <p className="text-lg text-muted-foreground">{t("kiosk.qr.subtitle")}</p>
+              <p className="text-lg text-muted-foreground">{t("kiosk.qr.phone")}</p>
               <div className="relative">
                 <span className="absolute -inset-4 rounded-[2rem] bg-primary/30 blur-2xl animate-pulse-ring" />
                 <div className="glass-strong liquid-border relative rounded-[2rem] bg-white p-6">
@@ -624,7 +647,6 @@ export default function Kiosk() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 text-muted-foreground">
-                <span className="inline-flex items-center gap-1"><Smartphone className="h-4 w-4" />{t("kiosk.qr.methods")}</span>
                 <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" />{t("kiosk.qr.stripe")}</span>
               </div>
               <div className="flex items-center gap-4 text-sm">

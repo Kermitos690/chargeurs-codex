@@ -16,7 +16,7 @@ export type KioskProxyResult<T> = {
 };
 
 export async function invokeKioskEdgeProxy<T>(
-  path: "/api/kiosk/create-rental-session" | "/api/kiosk/create-stripe-checkout",
+  path: "/api/kiosk/create-rental-session" | "/api/kiosk/create-stripe-checkout" | "/api/kiosk/cabinet-snapshot",
   body: Record<string, unknown>,
   headers: Record<string, string>,
 ): Promise<KioskProxyResult<T>> {
