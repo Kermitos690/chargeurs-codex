@@ -25,6 +25,7 @@ import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { hourlyRateCents } from "@/lib/kioskPricing";
+import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -205,8 +206,8 @@ export default function Kiosk() {
     setSnapshotError(null);
     setConfigured(true);
     setBackendReachable(true);
-    const suggested = normalized.find((slot) => slot.recommended && slot.rentable) ?? normalized.find((slot) => slot.rentable);
-    setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggested?.slot_num ?? null);
+    const suggestedSlotNum = preferredKioskSlot(normalized);
+    setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggestedSlotNum);
   }, [stationId]);
 
   // A visible refresh must never reload the WebView or reset a Checkout QR.

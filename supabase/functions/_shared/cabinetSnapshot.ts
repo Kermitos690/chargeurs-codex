@@ -178,6 +178,15 @@ function latest<T>(values: Array<{ value: T; timestamp: string }>): T | null {
   return values.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0].value;
 }
 
+/**
+ * Keep the newest actual observation. A missing field from another source
+ * must never erase a usable value reported at the same refresh time (notably
+ * `vol: 0`, which is a valid DTA state of charge).
+ */
+function latestKnown<T>(values: Array<{ value: T | null; timestamp: string }>): T | null {
+  return latest(values.filter((item): item is { value: T; timestamp: string } => item.value !== null));
+}
+
 function conflicting<T>(values: T[]): boolean {
   return new Set(values.filter((value) => value !== null && value !== undefined).map(String)).size > 1;
 }
@@ -214,12 +223,12 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     if (conflicting(chargeValues)) conflicts.push("charge_percent");
     if (conflicting(presentValues)) conflicts.push("battery_present");
     if (conflicting(onlineValues)) conflicts.push("online");
-    const batteryId = latest(slotObservations.map((item) => ({ value: parseBatteryId(item.raw), timestamp: item.timestamp })));
-    const batteryPresent = latest(slotObservations.map((item) => ({ value: sourcePresent(item.raw), timestamp: item.timestamp })));
-    const chargePercent = latest(slotObservations.map((item) => ({ value: parseChargePercent(item.raw), timestamp: item.timestamp })));
-    const temperatureC = latest(slotObservations.map((item) => ({ value: parseTemperatureC(item.raw), timestamp: item.timestamp })));
-    const online = latest(slotObservations.map((item) => ({ value: sourceOnline(item.raw), timestamp: item.timestamp })));
-    const healthStatus = latest(slotObservations.map((item) => ({ value: sourceHealth(item.raw), timestamp: item.timestamp })));
+    const batteryId = latestKnown(slotObservations.map((item) => ({ value: parseBatteryId(item.raw), timestamp: item.timestamp })));
+    const batteryPresent = latestKnown(slotObservations.map((item) => ({ value: sourcePresent(item.raw), timestamp: item.timestamp })));
+    const chargePercent = latestKnown(slotObservations.map((item) => ({ value: parseChargePercent(item.raw), timestamp: item.timestamp })));
+    const temperatureC = latestKnown(slotObservations.map((item) => ({ value: parseTemperatureC(item.raw), timestamp: item.timestamp })));
+    const online = latestKnown(slotObservations.map((item) => ({ value: sourceOnline(item.raw), timestamp: item.timestamp })));
+    const healthStatus = latestKnown(slotObservations.map((item) => ({ value: sourceHealth(item.raw), timestamp: item.timestamp })));
     const selfCheck = checks.includes("fail") ? "fail" : checks.includes("pass") ? "pass" : "unknown";
     const blocking = Boolean(error || faultType || faultCause) || selfCheck === "fail" || online === false
       || temperatureC != null && (temperatureC < 0 || temperatureC > 55) || conflicts.length > 0;
@@ -231,9 +240,11 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     // battery "ready" to a customer. For the DTA integration, `vol` is now a
     // confirmed charge field; capacity and temperature remain excluded.
     const hasConfirmedCharge = chargePercent !== null;
+    // A present 0% battery is shown as charging, never as customer-ready.
+    const hasUsableCharge = chargePercent != null && chargePercent > 0;
     const rentable = Boolean(
       batteryId && batteryPresent !== false && online !== false && !blocking &&
-      freshEnough && confidence !== "low" && supplierEjectable !== false && hasConfirmedCharge,
+      freshEnough && confidence !== "low" && supplierEjectable !== false && hasConfirmedCharge && hasUsableCharge,
     );
     const customerStatus: SlotCustomerStatus = !hasConfirmedCharge || conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
       : rentable ? "ready"
