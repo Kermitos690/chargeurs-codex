@@ -1,6 +1,7 @@
 // sync-cabinet-status — pulls REAL cabinet/slot/battery state from ChargeNow
-// and updates the database. No mock data: if the API is not configured or a
-// station is unreachable, the station is marked unknown/offline.
+// and updates the database. No mock data. Supplier business states are kept
+// distinct from transport reachability so a "temporarily unavailable" cabinet
+// is never mislabeled as physically offline.
 //
 // Authorization:
 // - admins may synchronize one station or all stations;
@@ -37,6 +38,11 @@ type ProviderAttempt = {
   parsed: ParsedCabinetStatus | null;
 };
 
+type KnownBusinessState =
+  | { kind: "offline"; error: "CHARGENOW_DEVICE_OFFLINE" }
+  | { kind: "online_unavailable"; error: "CHARGENOW_ALL_CHARGERS_RECHARGING" }
+  | null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -46,12 +52,23 @@ function businessCode(data: unknown): string | number | null {
   return typeof data.code === "number" || typeof data.code === "string" ? data.code : null;
 }
 
+function normalizedBusinessCode(data: unknown): string {
+  return String(businessCode(data) ?? "").trim();
+}
+
+function knownBusinessState(attempts: ProviderAttempt[]): KnownBusinessState {
+  const latest = attempts.at(-1);
+  if (!latest || latest.result.status < 200 || latest.result.status >= 300) return null;
+  const code = normalizedBusinessCode(latest.result.data);
+  if (code === "2005") return { kind: "offline", error: "CHARGENOW_DEVICE_OFFLINE" };
+  if (code === "2009") return { kind: "online_unavailable", error: "CHARGENOW_ALL_CHARGERS_RECHARGING" };
+  return null;
+}
+
 // Some ChargeNow deployments serialize the documented business code 0 as "0".
-// Treat that as success without weakening any non-zero business-code failure.
 function isEffectiveSuccess(result: ApiResult): boolean {
   if (result.ok) return true;
-  const code = businessCode(result.data);
-  return result.status >= 200 && result.status < 300 && String(code ?? "").trim() === "0";
+  return result.status >= 200 && result.status < 300 && normalizedBusinessCode(result.data) === "0";
 }
 
 function usableAttempt(attempt: ProviderAttempt): boolean {
@@ -69,12 +86,10 @@ function sanitizedAttempt(attempt: ProviderAttempt) {
 }
 
 function stableProviderError(attempts: ProviderAttempt[]): string {
-  if (attempts.some((attempt) => [401, 403].includes(attempt.result.status))) {
-    return "CHARGENOW_AUTH_REJECTED";
-  }
-  if (attempts.some((attempt) => attempt.result.status === 404)) {
-    return "CHARGENOW_DEVICE_NOT_FOUND";
-  }
+  const known = knownBusinessState(attempts);
+  if (known) return known.error;
+  if (attempts.some((attempt) => [401, 403].includes(attempt.result.status))) return "CHARGENOW_AUTH_REJECTED";
+  if (attempts.some((attempt) => attempt.result.status === 404)) return "CHARGENOW_DEVICE_NOT_FOUND";
   if (attempts.some((attempt) => isEffectiveSuccess(attempt.result) && !attempt.parsed?.recognized)) {
     return "CHARGENOW_RESPONSE_UNRECOGNIZED";
   }
@@ -101,8 +116,6 @@ Deno.serve(async (req) => {
 
     const adminId = await requireAdmin(req, db);
     if (!adminId) {
-      // Kiosks are fail-closed and station-bound. A kiosk can never request the
-      // all-stations branch and cannot impersonate another cabinet.
       if (!stationId) return json({ ok: false, error: "KIOSK_STATION_REQUIRED" }, 400);
       const auth = await verifyKioskDevice(req, db, stationId);
       if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
@@ -145,20 +158,54 @@ Deno.serve(async (req) => {
       const providerReachable = attempts.some((attempt) => attempt.result.status > 0);
 
       if (!chosen?.parsed) {
-        const syncedAt = new Date().toISOString();
+        const observedAt = new Date().toISOString();
+        const known = knownBusinessState(attempts);
         const error = stableProviderError(attempts);
+
+        if (known?.kind === "offline") {
+          await db.from("stations").update({
+            status: "offline",
+            online: false,
+            provider_last_error_at: observedAt,
+            provider_last_error: error,
+          }).eq("station_id", st.station_id);
+          results.push({
+            stationId: st.station_id, ok: false, configured: true,
+            providerReachable, stateKnown: true, online: false, status: "offline",
+            availability: "offline", error, attempts: attempts.map(sanitizedAttempt), observedAt,
+          });
+          continue;
+        }
+
+        if (known?.kind === "online_unavailable") {
+          await db.from("stations").update({
+            status: "online",
+            online: true,
+            rentable_count: 0,
+            provider_last_error_at: observedAt,
+            provider_last_error: error,
+          }).eq("station_id", st.station_id);
+          results.push({
+            stationId: st.station_id, ok: true, configured: true,
+            providerReachable: true, stateKnown: true, online: true, status: "online",
+            availability: "recharging", rentableCount: 0,
+            error, attempts: attempts.map(sanitizedAttempt), observedAt,
+          });
+          continue;
+        }
+
+        // Unknown supplier/transport failure: do NOT assert physical offline.
+        // Keep the last confirmed inventory snapshot and expose online=null.
         await db.from("stations").update({
-          status: "unknown", online: false, last_sync_at: syncedAt,
+          status: "unknown",
+          online: null,
+          provider_last_error_at: observedAt,
+          provider_last_error: error,
         }).eq("station_id", st.station_id);
         results.push({
-          stationId: st.station_id,
-          ok: false,
-          configured: true,
-          providerReachable,
-          stateKnown: false,
-          error,
-          attempts: attempts.map(sanitizedAttempt),
-          syncedAt,
+          stationId: st.station_id, ok: false, configured: true,
+          providerReachable, stateKnown: false, online: null, status: "unknown",
+          error, attempts: attempts.map(sanitizedAttempt), observedAt,
         });
         continue;
       }
@@ -166,7 +213,7 @@ Deno.serve(async (req) => {
       const parsed = chosen.parsed;
       const syncedAt = new Date().toISOString();
       const status = parsed.online === true ? "online" : parsed.online === false ? "offline" : "unknown";
-      const online = parsed.online === true;
+      const online = parsed.online;
       const total = parsed.totalCount ?? 0;
       const rentable = parsed.rentableCount;
       const returnable = parsed.returnableCount ?? 0;
@@ -175,18 +222,18 @@ Deno.serve(async (req) => {
         status,
         online,
         provider_shop_id: parsed.providerShopId ?? undefined,
-        // Preserve the provider's human-readable location when it is known;
-        // local shop/partner linkage remains an explicit admin decision.
         location_name: parsed.providerShopAddress ?? parsed.providerShopName ?? undefined,
         signal: parsed.signal,
         rentable_count: rentable,
         returnable_count: returnable,
         total_count: total,
         last_sync_at: syncedAt,
+        provider_last_success_at: syncedAt,
+        provider_last_error_at: null,
+        provider_last_error: null,
         raw_data: parsed.payload,
       }).eq("station_id", st.station_id);
 
-      // Upsert one slot row per battery currently present.
       const observedSlots = new Set<number>();
       for (const battery of parsed.batteries) {
         if (battery.slotNum == null || !battery.batteryId) continue;
@@ -208,10 +255,6 @@ Deno.serve(async (req) => {
         }, { onConflict: "battery_id" });
       }
 
-      // Reconcile slots that were occupied in the previous snapshot but are
-      // absent from the provider response. ChargeNow reports present
-      // batteries only; without this cleanup, a battery removed by a customer
-      // could remain falsely visible in the public inventory indefinitely.
       const { data: previousSlots } = await db
         .from("slots")
         .select("slot_num, battery_id")
