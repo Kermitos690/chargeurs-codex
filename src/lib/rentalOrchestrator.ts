@@ -17,6 +17,7 @@ export type RentalEventType =
   | "payment_started"
   | "payment_authorized"
   | "release_requested"
+  | "test_ejection_resumed"
   | "battery_released"
   | "rental_activated"
   | "return_detected"
@@ -56,6 +57,7 @@ const EVENT_TARGET: Record<RentalEventType, RentalState> = {
   payment_started: "payment_pending",
   payment_authorized: "authorized",
   release_requested: "release_requested",
+  test_ejection_resumed: "release_requested",
   battery_released: "released",
   rental_activated: "active",
   return_detected: "return_detected",
@@ -79,7 +81,7 @@ const ALLOWED_TRANSITIONS: Record<RentalState, RentalState[]> = {
   payment_captured: ["completed", "refunded", "failed"],
   refunded: ["completed", "failed"],
   completed: [],
-  failed: [],
+  failed: ["release_requested"],
   non_return: ["pricing_finalized", "payment_captured", "completed", "failed"],
 };
 

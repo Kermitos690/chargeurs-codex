@@ -28,6 +28,10 @@ export type RentalEventType =
   | "payment_started"
   | "payment_authorized"
   | "release_requested"
+  // A prior staging safety gate may intentionally terminalize a paid rental
+  // before a hardware command is sent. A *single-use*, server-side test
+  // permit is the only route that may reopen that exact lifecycle.
+  | "test_ejection_resumed"
   | "battery_released"
   | "rental_activated"
   | "return_detected"
@@ -53,6 +57,7 @@ const EVENT_TARGET: Record<RentalEventType, RentalState> = {
   payment_started: "payment_pending",
   payment_authorized: "authorized",
   release_requested: "release_requested",
+  test_ejection_resumed: "release_requested",
   battery_released: "released",
   rental_activated: "active",
   return_detected: "return_detected",
@@ -76,7 +81,10 @@ const ALLOWED_TRANSITIONS: Record<RentalState, RentalState[]> = {
   payment_captured: ["completed", "refunded", "failed"],
   refunded: ["completed", "failed"],
   completed: [],
-  failed: [],
+  // This transition is not reachable from a browser. It is emitted only by
+  // eject-after-payment after it has validated and consumed a scoped test
+  // ejection permit for a previous HARDWARE_EJECTION_DISABLED result.
+  failed: ["release_requested"],
   non_return: ["pricing_finalized", "payment_captured", "completed", "failed"],
 };
 

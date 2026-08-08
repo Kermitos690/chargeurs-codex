@@ -412,6 +412,26 @@ Deno.serve(async (req) => {
       return reply({ ok: false, error: "PAYMENT_NOT_CONFIRMED" }, 409);
     }
 
+    // A previous staging gate can leave the canonical state machine in
+    // `failed` before any supplier command is issued. Do not silently reuse
+    // the old release_requested event: record the explicit, one-time operator
+    // resume first, then continue the ordinary release sequence.
+    if (oneTimeTestResume && permit) {
+      await appendRentalEvent(db, {
+        rentalId: rentalSessionId,
+        eventType: "test_ejection_resumed",
+        idempotencyKey: `test_ejection_resumed:${rentalSessionId}:${permit.id}`,
+        paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+        stationId: String(session.station_id ?? "") || null,
+        metadata: {
+          actor: caller.actor,
+          permit_id: permit.id,
+          previous_failure_code: session.failure_code ?? null,
+          requested_slot_num: requestedSlotNum,
+        },
+      });
+    }
+
     await appendRentalEvent(db, {
       rentalId: rentalSessionId,
       eventType: "release_requested",
