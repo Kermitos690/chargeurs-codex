@@ -201,6 +201,10 @@ Deno.serve(async (req) => {
       amount_expected: amount,
       currency,
       selected_slot_num: selectedSlotNum,
+      // Reservation only: the selected snapshot gives the callback pipeline a
+      // strict expected identity. The state remains `created` until a verified
+      // Stripe webhook and a physical-provider confirmation occur.
+      battery_id: selectedSlot.battery_id,
       customer_language: language,
       idempotency_key: idempotencyKey,
       expires_at: expiresAt,
@@ -237,6 +241,7 @@ Deno.serve(async (req) => {
         final_cents: finalCents,
         currency,
         selected_slot_num: selectedSlotNum,
+        selected_battery_id: selectedSlot.battery_id,
         selected_battery_present: selectedSlot.battery_present === true,
         selected_snapshot_confidence: selectedSlot.confidence,
         pricing_snapshot_hash: hash,

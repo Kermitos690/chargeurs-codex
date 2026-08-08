@@ -598,10 +598,11 @@ Deno.serve(async (req) => {
       error: ejection.ok ? null : safeCode(ejection.error, "EJECTION_UNCONFIRMED"),
     });
 
-    if (!ejection.ok && needsSupplierReleaseConfirmation(ejection)) {
+    if (needsSupplierReleaseConfirmation(ejection, released.batteryId)) {
       // The supplier received the physical request at the HTTP layer but did
-      // not provide a usable release confirmation. Do not retry and do not
-      // present this normal asynchronous window as a support failure.
+      // not provide a usable battery identity. Do not retry and do not present
+      // this normal asynchronous window as a support failure. This also covers
+      // an otherwise-successful C3 response that omits batteryId.
       const code = "EJECTION_PROVIDER_CONFIRMATION_PENDING";
       const { error: pendingUpdateError } = await db.from("rental_sessions").update({
         state: "ejecting",
