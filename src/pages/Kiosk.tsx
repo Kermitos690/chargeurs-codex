@@ -232,6 +232,17 @@ export default function Kiosk() {
     void refreshKioskData();
   }, [refreshKioskData]);
 
+  // The idle display is operational data, not a static advert. Re-read the
+  // supplier snapshot regularly so a battery inserted, removed or charging
+  // does not remain frozen until a customer happens to press Refresh. This is
+  // deliberately disabled once a rental starts: a payment flow must never be
+  // disturbed by an inventory refresh.
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const interval = window.setInterval(() => void refreshKioskData(), 20_000);
+    return () => window.clearInterval(interval);
+  }, [phase, refreshKioskData]);
+
   // Public kiosks must always recover their idle screen after an interrupted
   // interaction. This changes only the local presentation: it never cancels a
   // Checkout session, retries hardware, or modifies the server-side rental.
