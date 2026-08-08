@@ -30,6 +30,8 @@ export type CabinetSlotSnapshot = {
   rentable: boolean;
   confidence: SlotConfidence;
   customer_status: SlotCustomerStatus;
+  /** Evidence-based operator diagnostics; never shown as raw supplier codes to customers. */
+  diagnostic_flags: string[];
   source_timestamps: Record<string, string>;
   conflicts: string[];
   raw: Record<string, unknown>;
@@ -240,13 +242,18 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     // battery "ready" to a customer. For the DTA integration, `vol` is now a
     // confirmed charge field; capacity and temperature remain excluded.
     const hasConfirmedCharge = chargePercent !== null;
-    // A present 0% battery is shown as charging, never as customer-ready.
+    // A present 0% battery is never customer-ready.  The supplier payload
+    // contains no charging-state field, so calling it "charging" would be an
+    // unsupported diagnosis.  Keep it unavailable pending verification and
+    // expose the evidence to operators instead.
     const hasUsableCharge = chargePercent != null && chargePercent > 0;
+    const diagnosticFlags: string[] = [];
+    if (chargePercent === 0) diagnosticFlags.push("zero_charge_reported");
     const rentable = Boolean(
       batteryId && batteryPresent !== false && online !== false && !blocking &&
       freshEnough && confidence !== "low" && supplierEjectable !== false && hasConfirmedCharge && hasUsableCharge,
     );
-    const customerStatus: SlotCustomerStatus = !hasConfirmedCharge || conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
+    const customerStatus: SlotCustomerStatus = !hasConfirmedCharge || chargePercent === 0 || conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
       : rentable ? "ready"
       : blocking ? "maintenance"
       : batteryPresent === false || !batteryId ? "unavailable"
@@ -254,7 +261,7 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     return {
       slot_num: slotNum, battery_id: batteryId, battery_present: batteryPresent, charge_percent: chargePercent,
       temperature_c: temperatureC, online, health_status: healthStatus, self_check: selfCheck,
-      error_code: error, fault_type: faultType, fault_cause: faultCause, rentable, confidence, customer_status: customerStatus,
+      error_code: error, fault_type: faultType, fault_cause: faultCause, rentable, confidence, customer_status: customerStatus, diagnostic_flags: diagnosticFlags,
       source_timestamps: timestamps, conflicts, raw: Object.assign({}, ...slotObservations.map((item) => item.raw)),
     };
   });

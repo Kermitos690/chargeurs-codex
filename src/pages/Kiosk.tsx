@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  BatteryCharging, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
+  Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
   ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
   Zap,
 } from "lucide-react";
@@ -26,6 +26,7 @@ import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
+import { PowerbankScene } from "@/components/kiosk/PowerbankScene";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -643,7 +644,10 @@ export default function Kiosk() {
                 <p className={`${splitLayoutPreview ? "text-lg" : "text-xl sm:text-2xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
                 {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
                 {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl sm:text-4xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
-              <div className={`grid w-full grid-cols-2 gap-4 ${splitLayoutPreview ? "" : "sm:grid-cols-4"}`}>
+              {/* The cabinet itself is a two-by-two physical layout. Keeping
+                  the same arrangement on the touch screen makes "slot 4"
+                  immediately locatable after payment. */}
+              <div className="grid w-full max-w-3xl grid-cols-2 gap-4">
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
@@ -660,9 +664,7 @@ export default function Kiosk() {
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
                     <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
-                    <motion.div animate={slot.rentable ? { y: [0, -2, 0] } : undefined} transition={{ duration: 2.1, repeat: Infinity, ease: "easeInOut" }}>
-                      <BatteryCharging className={`mt-4 h-10 w-10 ${slot.rentable ? "text-success" : "text-muted-foreground"}`} />
-                    </motion.div>
+                    <PowerbankScene charge={slot.charge_percent} selected={selected} recommended={slot.recommended} rentable={slot.rentable} />
                     {slot.charge_percent == null ? <>
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
                       <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />

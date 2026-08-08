@@ -55,7 +55,7 @@ Deno.test("a battery without an explicit charge percentage is never customer-rea
   assertEquals(slot.customer_status, "checking");
 });
 
-Deno.test("a confirmed 0% ChargeNow battery is charging, never rentable or ready", () => {
+Deno.test("a confirmed 0% ChargeNow battery is a verification anomaly, never rentable or charging", () => {
   const now = new Date().toISOString();
   const slots = mergeCabinetSlotObservations([
     { source: "c7_batteries", timestamp: now, raw: { slotNum: 3, batteryId: "BAT-3", vol: 0, online: true } },
@@ -64,7 +64,8 @@ Deno.test("a confirmed 0% ChargeNow battery is charging, never rentable or ready
   const slot = slots[2];
   assertEquals(slot.charge_percent, 0);
   assertEquals(slot.rentable, false);
-  assertEquals(slot.customer_status, "charging");
+  assertEquals(slot.customer_status, "checking");
+  assertEquals(slot.diagnostic_flags, ["zero_charge_reported"]);
 });
 
 Deno.test("only a corroborated self-checked slot can be recommended", () => {

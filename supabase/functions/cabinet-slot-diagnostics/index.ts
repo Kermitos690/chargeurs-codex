@@ -42,6 +42,7 @@ Deno.serve(async (req) => {
         fault_type: slot.fault_type, fault_cause: slot.fault_cause, rentable: slot.rentable,
         confidence: slot.confidence, customer_status: slot.customer_status,
         source_timestamps: slot.source_timestamps, age_seconds: ageSeconds(slot.source_timestamps), conflicts: slot.conflicts,
+        diagnostic_flags: slot.diagnostic_flags,
       })),
     });
   } catch (error) {
