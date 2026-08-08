@@ -34,6 +34,18 @@ Deno.test("conflicting supplier observations fail closed", () => {
   assertEquals(slot.conflicts.includes("battery_id"), true);
 });
 
+Deno.test("a battery without an explicit charge percentage is never customer-ready", () => {
+  const now = new Date().toISOString();
+  const [slot] = mergeCabinetSlotObservations([
+    // 31.2 is an explicit temperature, not 31.2% charge.
+    { source: "c7_batteries", timestamp: now, raw: { slotNum: 1, batteryId: "BAT-1", temperature: 31.2, online: true } },
+    { source: "c8_slots", timestamp: now, raw: { slotNum: 1, batteryId: "BAT-1", present: true, canEject: true, online: true } },
+  ]);
+  assertEquals(slot.charge_percent, null);
+  assertEquals(slot.rentable, false);
+  assertEquals(slot.customer_status, "checking");
+});
+
 Deno.test("only a corroborated self-checked slot can be recommended", () => {
   const now = new Date().toISOString();
   const slots = mergeCabinetSlotObservations([

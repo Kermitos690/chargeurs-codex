@@ -212,9 +212,19 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     const supplierEjectable = ejectableValues.includes(false) ? false : ejectableValues.includes(true) ? true : null;
     const freshEnough = slotObservations.some((item) => Date.now() - Date.parse(item.timestamp) < 5 * 60 * 1000);
     const confidence: SlotConfidence = conflicts.length ? "low" : slotObservations.length >= 2 && batteryId && freshEnough ? "high" : "medium";
-    const rentable = Boolean(batteryId && batteryPresent !== false && online !== false && !blocking && freshEnough && confidence !== "low" && supplierEjectable !== false);
-    const customerStatus: SlotCustomerStatus = rentable ? "ready"
-      : conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
+    // A cabinet can be online and report an occupied slot without exposing a
+    // semantically trustworthy state of charge.  That is not enough to call a
+    // battery "ready" to a customer: doing so produced the misleading
+    // "Prête" + "—%" combination observed on DTA21269.  Fail closed until an
+    // explicit charge field is present; capacity, voltage and temperature are
+    // deliberately not substitutes (see parseChargePercent above).
+    const hasConfirmedCharge = chargePercent !== null;
+    const rentable = Boolean(
+      batteryId && batteryPresent !== false && online !== false && !blocking &&
+      freshEnough && confidence !== "low" && supplierEjectable !== false && hasConfirmedCharge,
+    );
+    const customerStatus: SlotCustomerStatus = !hasConfirmedCharge || conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
+      : rentable ? "ready"
       : blocking ? "maintenance"
       : batteryPresent === false || !batteryId ? "unavailable"
       : "charging";
