@@ -29,7 +29,7 @@ describe("kiosk translations", () => {
   });
 
   it("translates the battery-choice screen without falling back to French", () => {
-    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.qr.phone", "kiosk.refresh", "kiosk.ad.preview", "kiosk.ad.title"];
+    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.slot.charge_unknown", "kiosk.slot.selected", "kiosk.qr.phone", "kiosk.refresh", "kiosk.ad.preview", "kiosk.ad.title"];
     for (const key of keys) {
       expect(translate("en", key), `en:${key}`).not.toBe(translations.fr[key]);
       expect(translate("de", key), `de:${key}`).not.toBe(translations.fr[key]);
@@ -49,5 +49,13 @@ describe("kiosk translations", () => {
     ]) {
       expect(source, literal).not.toContain(literal);
     }
+  });
+
+  it("keeps the guarantee out of the idle and QR customer screens", () => {
+    const source = readFileSync("src/pages/Kiosk.tsx", "utf8");
+    const idle = source.slice(source.indexOf('{phase === "idle" && station'), source.indexOf('{phase === "pricing"'));
+    const qr = source.slice(source.indexOf('{phase === "qr"'), source.indexOf('{phase === "waitpay"'));
+    expect(idle).not.toContain("kiosk.pricing.guarantee");
+    expect(qr).not.toContain("kiosk.pricing.guarantee");
   });
 });

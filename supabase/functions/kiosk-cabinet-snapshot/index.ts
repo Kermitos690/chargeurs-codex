@@ -33,9 +33,16 @@ Deno.serve(async (req) => {
       slot_num: slot.slot_num, charge_percent: slot.charge_percent, rentable: slot.rentable,
       confidence: slot.confidence, status: slot.customer_status, recommended: false,
     }));
-    const candidates = slots.filter((slot) => slot.rentable && slot.charge_percent != null)
+    // Recommendation is stricter than eligibility: it needs corroborated,
+    // fresh, self-checked data rather than merely one rentable-looking slot.
+    const candidates = snapshot.slots.filter((slot) =>
+      slot.rentable && slot.charge_percent != null && slot.self_check === "pass" &&
+      slot.confidence === "high" && slot.temperature_c != null && slot.temperature_c >= 0 && slot.temperature_c <= 45,
+    )
       .sort((a, b) => (b.charge_percent ?? -1) - (a.charge_percent ?? -1) || a.slot_num - b.slot_num);
-    if (candidates[0]) candidates[0].recommended = true;
+    const recommended = candidates[0];
+    const displayRecommendation = slots.find((slot) => slot.slot_num === recommended?.slot_num);
+    if (displayRecommendation) displayRecommendation.recommended = true;
     return json({ ok: true, configured: true, online: snapshot.online, slots, syncedAt: new Date().toISOString() });
   } catch (error) {
     console.error("kiosk-cabinet-snapshot", error instanceof Error ? error.message : "UNKNOWN_ERROR");

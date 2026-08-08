@@ -600,18 +600,32 @@ export default function Kiosk() {
               <div className={`grid w-full grid-cols-2 gap-4 ${splitLayoutPreview ? "" : "sm:grid-cols-4"}`}>
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
-                }).map((slot) => {
+                }).map((slot, index) => {
                   const selected = slot.slot_num === slotNum;
-                  return <button key={slot.slot_num} type="button" disabled={!slot.rentable}
+                  return <motion.button key={slot.slot_num} type="button" disabled={!slot.rentable}
                     onClick={() => { idemRef.current = null; setSlotNum(slot.slot_num); }}
-                    className={`glass liquid-border relative min-h-52 rounded-3xl p-5 text-left transition ${slot.rentable ? "hover:scale-[1.02] active:scale-[.98]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={selected
+                      ? { opacity: 1, y: 0, scale: [1, 1.025, 1], boxShadow: ["0 0 0 rgba(59,130,246,0)", "0 0 34px rgba(34,211,238,.56)", "0 0 0 rgba(59,130,246,0)"] }
+                      : { opacity: 1, y: 0, scale: 1 }}
+                    transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
+                    whileTap={slot.rentable ? { scale: .96 } : undefined}
+                    className={`glass liquid-border relative min-h-52 rounded-3xl p-5 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
+                    {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
                     <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
-                    <BatteryCharging className={`mt-4 h-10 w-10 ${slot.rentable ? "text-success" : "text-muted-foreground"}`} />
-                    <div className="mt-3 text-4xl font-extrabold">{slot.charge_percent == null ? "—" : `${Math.round(slot.charge_percent)}%`}</div>
-                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gradient-primary" style={{ width: `${Math.max(0, Math.min(100, slot.charge_percent ?? 0))}%` }} /></div>
+                    <motion.div animate={slot.rentable ? { y: [0, -2, 0] } : undefined} transition={{ duration: 2.1, repeat: Infinity, ease: "easeInOut" }}>
+                      <BatteryCharging className={`mt-4 h-10 w-10 ${slot.rentable ? "text-success" : "text-muted-foreground"}`} />
+                    </motion.div>
+                    {slot.charge_percent == null ? <>
+                      <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
+                      <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted"><motion.div className="h-full w-1/2 rounded-full bg-gradient-primary" animate={{ x: ["-110%", "220%"] }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }} /></div>
+                    </> : <>
+                      <div className="mt-3 text-4xl font-extrabold">{`${Math.round(slot.charge_percent)}%`}</div>
+                      <div className="mt-3 h-3 overflow-hidden rounded-full bg-muted"><motion.div className="h-full rounded-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
+                    </>}
                     <div className="mt-3 text-sm font-semibold">{t(`kiosk.slot.${slot.status}`)}</div>
-                  </button>;
+                  </motion.button>;
                 })}
               </div>
               {canRent ? (
@@ -706,9 +720,10 @@ export default function Kiosk() {
                 <CheckCircle2 className="h-24 w-24 text-success-foreground" />
               </motion.div>
               <h2 className="font-display text-4xl font-extrabold">{t("kiosk.success.title")}</h2>
-              <p className="text-xl text-muted-foreground">
-                {slotNum ? t("kiosk.success.slot", { slot: slotNum }) : t("kiosk.success.generic")}
-              </p>
+              {slotNum ? <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass liquid-border rounded-[2rem] px-14 py-7 text-center shadow-glow">
+                <p className="text-xl text-muted-foreground">{t("kiosk.success.slot", { slot: slotNum })}</p>
+                <motion.p animate={{ scale: [1, 1.08, 1] }} transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }} className="mt-2 font-display text-7xl font-extrabold text-gradient-cyan">{slotNum}</motion.p>
+              </motion.div> : <p className="text-xl text-muted-foreground">{t("kiosk.success.generic")}</p>}
               <Button onClick={reset} variant="ghost" className="mt-4"><RefreshCw className="h-5 w-5" /></Button>
             </motion.div>
           )}

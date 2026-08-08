@@ -20,6 +20,15 @@ type PairingReveal = {
   stationId: string; organizationName: string;
 };
 
+type SlotDiagnostic = {
+  slot_num: number; battery_id: string | null; battery_present: boolean | null;
+  charge_percent: number | null; temperature_c: number | null; online: boolean | null;
+  health_status: string | null; self_check: string; error_code: string | null;
+  fault_type: string | null; fault_cause: string | null; rentable: boolean;
+  confidence: string; customer_status: string; source_timestamps: Record<string, string>;
+  age_seconds: number | null; conflicts: string[];
+};
+
 export default function AdminStationDetail() {
   const { stationId } = useParams();
   const { canWrite } = useAuth();
@@ -32,17 +41,20 @@ export default function AdminStationDetail() {
   const [pairing, setPairing] = useState<PairingReveal | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SlotDiagnostic[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: st }, { data: sl }, { data: ev }, { data: rt }, { data: kd }] = await Promise.all([
+    const [{ data: st }, { data: sl }, { data: ev }, { data: rt }, { data: kd }, { data: snapshot }] = await Promise.all([
       supabase.from("stations").select("*").eq("station_id", stationId).maybeSingle(),
       supabase.from("slots").select("*").eq("station_id", stationId).order("slot_num"),
       supabase.from("cabinet_events").select("*").eq("station_id", stationId).order("received_at", { ascending: false }).limit(8),
       supabase.from("rental_sessions").select("*").eq("station_id", stationId).in("state", ["active_rental", "battery_taken", "ejected"]).order("created_at", { ascending: false }).limit(1),
       supabase.functions.invoke("kiosk-admin", { body: { action: "list" } }),
+      supabase.functions.invoke("cabinet-slot-diagnostics", { body: { stationId } }),
     ]);
     setStation(st); setSlots(sl ?? []); setEvents(ev ?? []); setRental(rt?.[0] ?? null);
     setKiosks(((kd as { devices?: KioskDevice[] } | null)?.devices ?? []).filter((device) => device.station_id === stationId));
+    setDiagnostics(((snapshot as { slots?: SlotDiagnostic[] } | null)?.slots ?? []));
   }, [stationId]);
   useEffect(() => { load(); }, [load]);
 
@@ -117,6 +129,15 @@ export default function AdminStationDetail() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="glass liquid-border rounded-2xl p-6">
+        <div className="mb-4"><h2 className="font-display text-xl font-bold">Diagnostic fournisseur par slot</h2><p className="text-sm text-muted-foreground">Vue technique multi-source, en lecture seule. Les données ambiguës ne rendent jamais une batterie louable.</p></div>
+        {diagnostics.length === 0 ? <p className="text-muted-foreground">Aucun snapshot technique récent. Utilisez Synchroniser ou vérifiez l’accès fournisseur.</p> : (
+          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border text-muted-foreground"><tr><th className="p-2">Slot</th><th className="p-2">Batterie</th><th className="p-2">Charge</th><th className="p-2">Temp.</th><th className="p-2">État</th><th className="p-2">Self-check</th><th className="p-2">Confiance</th><th className="p-2">Âge</th><th className="p-2">Louable</th><th className="p-2">Anomalies</th></tr></thead><tbody>
+            {diagnostics.map((slot) => <tr key={slot.slot_num} className="border-b border-border/50 align-top"><td className="p-2 font-bold">{slot.slot_num}</td><td className="p-2 font-mono text-xs">{slot.battery_id ?? "—"}</td><td className="p-2">{slot.charge_percent == null ? "non interprété" : `${Math.round(slot.charge_percent)} %`}</td><td className="p-2">{slot.temperature_c == null ? "—" : `${slot.temperature_c.toFixed(1)} °C`}</td><td className="p-2">{slot.customer_status}</td><td className="p-2">{slot.self_check}</td><td className="p-2">{slot.confidence}</td><td className="p-2">{slot.age_seconds == null ? "—" : `${slot.age_seconds}s`}</td><td className="p-2">{slot.rentable ? "oui" : "non"}</td><td className="p-2 text-xs text-warning">{[...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).join(" · ") || "—"}</td></tr>)}
+          </tbody></table></div>
         )}
       </section>
 
