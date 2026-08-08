@@ -26,7 +26,7 @@ import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
-import { PowerbankScene } from "@/components/kiosk/PowerbankScene";
+import { KioskHolographicFloor, PowerbankScene } from "@/components/kiosk/PowerbankScene";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -650,15 +650,18 @@ export default function Kiosk() {
 
           {phase === "idle" && station && (
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-4"}`}>
-              <section className={`flex flex-col items-center ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
-                <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
-                <p className={`${splitLayoutPreview ? "text-base" : "text-lg sm:text-xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
-                {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
-                {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+              <section className={`relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
+                <KioskHolographicFloor />
+                <div className="relative z-10 flex flex-col items-center gap-3">
+                  <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
+                  <p className={`${splitLayoutPreview ? "text-base" : "text-lg sm:text-xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
+                  {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
+                  {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+                </div>
               {/* The cabinet itself is a two-by-two physical layout. Keeping
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
-              <div className="grid w-full max-w-3xl grid-cols-2 gap-4">
+              <div className="relative z-10 grid w-full max-w-3xl grid-cols-2 gap-4">
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
@@ -688,14 +691,14 @@ export default function Kiosk() {
                 })}
               </div>
               {canRent ? (
-                <div className="flex flex-col items-center gap-2">
+                <div className="relative z-10 flex flex-col items-center gap-2">
                   <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-10 py-5 text-xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
                     {t("kiosk.rent_selected")}
                   </Button>
                   {hourlyCents != null && <span className="text-lg text-muted-foreground">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</span>}
                 </div>
               ) : (
-                <div className="glass rounded-2xl px-8 py-5 text-lg text-warning">
+                <div className="relative z-10 glass rounded-2xl px-8 py-5 text-lg text-warning">
                   {offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : slots.some((slot) => slot.status === "checking") ? t("kiosk.inventory_verifying") : t("kiosk.no_battery")}
                 </div>
               )}
