@@ -20,7 +20,7 @@ export function PowerbankScene({ charge, selected, recommended, rentable }: Prop
 
   return (
     <motion.div
-      className="relative mt-1 h-[4.7rem] w-full [perspective:900px]"
+      className="kiosk-powerbank-scene relative mt-1 h-[4.7rem] w-full [perspective:900px]"
       aria-hidden="true"
       animate={selected || recommended
         ? { y: [0, -6, 0], rotateY: [-3, 4, -3] }

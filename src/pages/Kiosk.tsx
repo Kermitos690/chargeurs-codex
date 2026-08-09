@@ -504,7 +504,7 @@ export default function Kiosk() {
 
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-5 py-4 sm:px-10 sm:py-5">
+    <div className="kiosk-root relative min-h-screen overflow-hidden px-5 py-4 sm:px-10 sm:py-5">
       <LiquidBackground />
 
       {/* Connectivity banner — blocks confidence in payment when offline. */}
@@ -650,7 +650,7 @@ export default function Kiosk() {
 
           {phase === "idle" && station && (
             <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-4"}`}>
-              <section className={`relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
+              <section className={`kiosk-idle-stage relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
                 <KioskHolographicFloor />
                 <div className="relative z-10 flex flex-col items-center gap-3">
                   <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
@@ -674,7 +674,7 @@ export default function Kiosk() {
                       : { opacity: 1, y: 0, scale: 1 }}
                     transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
                     whileTap={slot.rentable ? { scale: .96 } : undefined}
-                    className={`glass liquid-border relative min-h-40 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    className={`kiosk-slot-card glass liquid-border relative min-h-40 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
                     <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>

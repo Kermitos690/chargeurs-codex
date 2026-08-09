@@ -214,3 +214,17 @@ html.kiosk-mode textarea {
 html:not(.kiosk-mode) {
   scroll-behavior: smooth;
 }
+
+/* The DTA tablet is a landscape 16:9 display with less usable height than a
+   desktop browser. Keep the entire four-slot chooser and its CTA in frame;
+   kiosk mode intentionally has no scroll escape hatch. */
+@media (orientation: landscape) and (max-height: 760px) {
+  .kiosk-root { padding-top: .55rem; padding-bottom: .55rem; }
+  .kiosk-root > header { transform: scale(.88); transform-origin: top center; }
+  .kiosk-root main { min-height: calc(100vh - 3.7rem); }
+  .kiosk-idle-stage { gap: .45rem !important; }
+  .kiosk-idle-stage h1 { font-size: clamp(2rem, 4.1vw, 2.75rem) !important; }
+  .kiosk-idle-stage .kiosk-slot-card { min-height: 7.6rem; padding: .7rem; }
+  .kiosk-idle-stage .kiosk-powerbank-scene { height: 3.4rem; margin-top: 0; }
+  .kiosk-idle-stage .kiosk-slot-card .text-3xl { font-size: 1.7rem; line-height: 1.8rem; }
+}
