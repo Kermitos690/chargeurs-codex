@@ -9,6 +9,9 @@ import NotFound from "./pages/NotFound.tsx";
 import KioskJourneyGate from "./pages/KioskJourneyGate.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
+import PaymentChoice from "./pages/PaymentChoice.tsx";
+import RentalProgress from "./pages/RentalProgress.tsx";
+import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -59,6 +62,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
+          <KioskReturnOverlay />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
@@ -69,6 +73,8 @@ const App = () => (
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<KioskJourneyGate />} />
             <Route path="/kiosk/station/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
+            <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
