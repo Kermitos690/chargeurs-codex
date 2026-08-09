@@ -48,6 +48,17 @@ html.kiosk-mode #root {
   display: none !important;
 }
 
+/* Stripe decides the eligible payment methods on the customer's phone.
+   Do not hard-code a promise of TWINT/Wallet availability on the station. */
+.kiosk-qr-stage > div:first-child > div.mt-9 {
+  display: none !important;
+}
+
+/* Public session codes are useful to support/diagnostics, not to customers. */
+.kiosk-qr-stage .font-mono.text-xs {
+  display: none !important;
+}
+
 @media (orientation: landscape) {
   .kiosk-idle-stage,
   .kiosk-pricing-stage,
