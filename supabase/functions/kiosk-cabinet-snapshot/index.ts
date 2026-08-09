@@ -91,14 +91,31 @@ Deno.serve(async (req) => {
     const slots = snapshot.slots.map((slot) => ({
       // An empty compartment can retain a stale supplier reading. It is a
       // return location, not a battery at 1% or a customer-facing warning.
-      slot_num: slot.slot_num, charge_percent: slot.customer_status === "return_available" ? null : slot.charge_percent, rentable: slot.rentable,
-      confidence: slot.confidence, status: slot.customer_status, recommended: false,
+      slot_num: slot.slot_num,
+      charge_percent: slot.customer_status === "return_available" ? null : slot.charge_percent,
+      rentable: slot.rentable,
+      confidence: slot.confidence,
+      status: slot.customer_status,
+      recommended: false,
     }));
-    // Recommendation is stricter than eligibility: it needs corroborated,
-    // fresh, self-checked data rather than merely one rentable-looking slot.
+
+    // Recommendation is stricter than basic eligibility, but must not depend
+    // on a fictitious interpretation of pCheckResult. The real C7 telemetry
+    // gives charge, temperature, online state and explicit zero/non-zero fault
+    // fields. A documented self-check failure blocks recommendation; an
+    // unknown self-check does not, provided the independent sources agree and
+    // there is no explicit fault.
     const candidates = snapshot.slots.filter((slot) =>
-      slot.rentable && slot.charge_percent != null && slot.self_check === "pass" &&
-      slot.confidence === "high" && slot.temperature_c != null && slot.temperature_c >= 0 && slot.temperature_c <= 45,
+      slot.rentable
+      && slot.charge_percent != null
+      && slot.confidence === "high"
+      && slot.self_check !== "fail"
+      && !slot.error_code
+      && !slot.fault_type
+      && !slot.fault_cause
+      && slot.temperature_c != null
+      && slot.temperature_c >= 0
+      && slot.temperature_c <= 45,
     )
       .sort((a, b) => (b.charge_percent ?? -1) - (a.charge_percent ?? -1) || a.slot_num - b.slot_num);
     const recommended = candidates[0];
