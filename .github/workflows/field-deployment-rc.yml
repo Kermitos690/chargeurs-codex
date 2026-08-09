@@ -1,0 +1,63 @@
+name: Field Deployment RC
+
+on:
+  push:
+    branches:
+      - codex/field-deployment-v1
+  pull_request:
+    branches:
+      - agent/finalize-chargeurs-platform
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: field-rc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-and-edge-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Web unit tests
+        run: npm test
+
+      - name: Production web build
+        run: npm run build
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cabinet telemetry and callback contracts
+        run: >-
+          deno test --allow-env --allow-net --no-check
+          supabase/functions/tests/cabinet_snapshot.test.ts
+          supabase/functions/tests/chargenow_callback_auth.test.ts
+          supabase/functions/tests/kiosk_cors_contract.test.ts
+
+      - name: Record tested SHA
+        run: |
+          echo "FIELD_RC_TESTED_SHA=${GITHUB_SHA}"
+          echo "FIELD_RC_REF=${GITHUB_REF}"
