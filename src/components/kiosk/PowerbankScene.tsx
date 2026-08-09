@@ -42,14 +42,23 @@ export function PowerbankScene({ charge, selected, recommended, rentable }: Prop
 }
 
 /**
- * Ambient light only. A product render must be composed for the physical
- * kiosk's 16:9 viewport; using a generic render as a full-screen crop made
- * the controls appear to sit in a small, badly framed poster.
+ * A dedicated 16:9 cabinet render is kept behind the interactive content,
+ * never cropped into a small card. The dark vignette preserves contrast for
+ * the four real slot controls while giving the landscape kiosk a physical,
+ * premium context instead of a dashboard-like flat background.
  */
 export function KioskHolographicFloor() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_108%,rgba(14,165,233,.28),transparent_46%),radial-gradient(ellipse_at_8%_12%,rgba(99,102,241,.16),transparent_40%)]" />
+      <motion.img
+        src="/kiosk/attract-scene-v1.png"
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover object-center opacity-45 mix-blend-screen"
+        initial={{ opacity: 0.18, scale: 1.015 }}
+        animate={{ opacity: [0.33, 0.5, 0.38], scale: [1.015, 1.035, 1.02] }}
+        transition={{ duration: 11, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,14,43,.5)_0%,rgba(6,21,63,.22)_35%,rgba(4,12,38,.62)_100%),radial-gradient(ellipse_at_50%_108%,rgba(14,165,233,.28),transparent_46%),radial-gradient(ellipse_at_8%_12%,rgba(99,102,241,.18),transparent_40%)]" />
       <motion.div
         className="absolute inset-x-[-20%] top-[-45%] h-[85%] rotate-[18deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.07),transparent)] blur-2xl"
         animate={{ x: ["-24%", "78%"] }}

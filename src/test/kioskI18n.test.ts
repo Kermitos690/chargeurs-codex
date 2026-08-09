@@ -29,7 +29,7 @@ describe("kiosk translations", () => {
   });
 
   it("translates the battery-choice screen without falling back to French", () => {
-    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.slot.charge_unknown", "kiosk.slot.selected", "kiosk.qr.phone", "kiosk.refresh", "kiosk.inactivity.return_in", "kiosk.inactivity.close", "kiosk.ad.preview", "kiosk.ad.title"];
+    const keys = ["kiosk.choose.title", "kiosk.choose.subtitle", "kiosk.rent_selected", "kiosk.slot.ready", "kiosk.slot.checking", "kiosk.slot.charge_unknown", "kiosk.slot.selected", "kiosk.qr.phone", "kiosk.qr.card", "kiosk.qr.eligibility", "kiosk.refresh", "kiosk.inactivity.return_in", "kiosk.inactivity.close", "kiosk.ad.preview", "kiosk.ad.title"];
     for (const key of keys) {
       expect(translate("en", key), `en:${key}`).not.toBe(translations.fr[key]);
       expect(translate("de", key), `de:${key}`).not.toBe(translations.fr[key]);

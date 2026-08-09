@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
+  ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle, CreditCard,
   Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -748,29 +748,36 @@ export default function Kiosk() {
           )}
 
           {phase === "qr" && checkoutUrl && (
-            <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
-              {quote && (
-                <div className="text-center"><div className="text-4xl font-bold text-gradient-cyan">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div></div>
-              )}
-              <h2 className="font-display text-2xl font-bold sm:text-3xl">{t("kiosk.qr.title")}</h2>
-              <p className="text-lg text-muted-foreground">{t("kiosk.qr.phone")}</p>
-              <div className="relative">
-                <span className="absolute -inset-4 rounded-[2rem] bg-primary/30 blur-2xl animate-pulse-ring" />
-                <div className="glass-strong liquid-border relative rounded-[2rem] bg-white p-6">
-                  <QRCodeSVG value={checkoutUrl} size={300} bgColor={BRAND.colors.qrBackground} fgColor={BRAND.colors.qrForeground} level="M" marginSize={2} />
+            <motion.div key="qr" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-qr-stage grid w-full max-w-6xl items-center gap-8 px-4 lg:grid-cols-[.9fr_1.1fr] lg:px-8">
+              <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
+                {quote && <div className="font-display text-5xl font-extrabold text-gradient-cyan sm:text-6xl">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>}
+                <h2 className="mt-6 font-display text-5xl font-extrabold tracking-tight sm:text-6xl">{t("kiosk.qr.title")}</h2>
+                <p className="mt-4 text-2xl font-medium text-muted-foreground">{t("kiosk.qr.phone")}</p>
+                <div className="mt-9 w-full rounded-[2rem] border border-white/15 bg-slate-950/20 p-6 text-left">
+                  <div className="flex items-center gap-3 text-xl font-bold"><Smartphone className="h-7 w-7 text-primary" />{t("kiosk.qr.methods")}</div>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    {["TWINT", "Apple Pay", "Google Pay", t("kiosk.qr.card")].map((method) => <span key={method} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold"><CreditCard className="h-4 w-4 text-cyan-200" />{method}</span>)}
+                  </div>
+                  <p className="mt-5 text-base text-muted-foreground">{t("kiosk.qr.eligibility")}</p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-3 text-muted-foreground">
-                <span className="inline-flex items-center gap-1"><ShieldCheck className="h-4 w-4" />{t("kiosk.qr.stripe")}</span>
+              <div className="flex flex-col items-center">
+                <div className="relative">
+                  <span className="absolute -inset-7 rounded-[3rem] bg-primary/35 blur-3xl animate-pulse-ring" />
+                  <div className="glass-strong liquid-border relative rounded-[2.5rem] bg-white p-7 shadow-[0_0_55px_rgba(34,211,238,.42)]">
+                    <QRCodeSVG value={checkoutUrl} size={380} bgColor={BRAND.colors.qrBackground} fgColor={BRAND.colors.qrForeground} level="M" marginSize={2} />
+                  </div>
+                </div>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-lg">
+                  <span className="inline-flex items-center gap-2 font-semibold text-success"><ShieldCheck className="h-5 w-5" />{t("kiosk.qr.stripe")}</span>
+                  <span className="inline-flex items-center gap-2 font-semibold text-primary"><Clock className="h-5 w-5" />{t("kiosk.qr.expires", { time: `${mm}:${ss}` })}</span>
+                </div>
+                <div className="mt-4 flex items-center gap-2 text-lg text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />{t("kiosk.qr.waiting")}</div>
+                <div className="mt-4 flex items-center gap-4">
+                  {publicCode && <span className="font-mono text-xs text-muted-foreground">{publicCode}</span>}
+                  <Button variant="ghost" onClick={reset} className="h-12 gap-2 rounded-full px-6 text-lg"><X className="h-5 w-5" />{t("kiosk.cancel")}</Button>
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="inline-flex items-center gap-1 text-primary"><Clock className="h-4 w-4" />{t("kiosk.qr.expires", { time: `${mm}:${ss}` })}</span>
-                {publicCode && <span className="font-mono text-muted-foreground">{publicCode}</span>}
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />{t("kiosk.qr.waiting")}
-              </div>
-              <Button variant="ghost" onClick={reset} className="gap-2"><X className="h-4 w-4" />{t("kiosk.cancel")}</Button>
             </motion.div>
           )}
 
