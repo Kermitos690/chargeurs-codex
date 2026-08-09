@@ -80,6 +80,26 @@ Deno.test("an explicitly empty compartment is available for return, not an alert
   assertEquals(slot.diagnostic_flags, []);
 });
 
+Deno.test("a supplier-declared empty C8 slot is a return location even when only its battery field is blank", () => {
+  const now = new Date().toISOString();
+  const slots = mergeCabinetSlotObservations([
+    { source: "c8_slots", timestamp: now, raw: { slotNum: 4, batteryId: null, canEject: false, online: true } },
+  ]);
+  assertEquals(slots[3].battery_present, false);
+  assertEquals(slots[3].customer_status, "return_available");
+});
+
+Deno.test("an explicitly present 0% battery is a technical issue even before its identifier is available", () => {
+  const now = new Date().toISOString();
+  const slots = mergeCabinetSlotObservations([
+    { source: "c7_batteries", timestamp: now, raw: { slotNum: 3, vol: 0, online: true } },
+    { source: "c8_slots", timestamp: now, raw: { slotNum: 3, present: true, canEject: true, online: true } },
+  ]);
+  assertEquals(slots[2].battery_id, null);
+  assertEquals(slots[2].customer_status, "technical_issue");
+  assertEquals(slots[2].rentable, false);
+});
+
 Deno.test("only a corroborated self-checked slot can be recommended", () => {
   const now = new Date().toISOString();
   const slots = mergeCabinetSlotObservations([

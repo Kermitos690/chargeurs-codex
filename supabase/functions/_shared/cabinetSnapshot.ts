@@ -163,7 +163,20 @@ function sourceOnline(record: RecordValue): boolean | null {
 
 function sourcePresent(record: RecordValue): boolean | null {
   const explicit = toBoolean(first(record, ["batteryPresent", "battery_present", "present", "isPresent", "hasBattery"]));
-  return explicit ?? (parseBatteryId(record) ? true : null);
+  if (explicit !== null) return explicit;
+  if (parseBatteryId(record)) return true;
+
+  // C8 may describe every physical compartment, including an empty one. A
+  // null/blank battery identifier in that explicit record is evidence of an
+  // empty return slot, not merely missing telemetry. Do not infer emptiness
+  // from a wholly absent field.
+  const batteryKeys = ["batteryId", "batteryID", "batterySn", "batterySN", "battery_id", "sn", "bid", "powerBankId"];
+  const emptyBatteryKey = batteryKeys.find((key) => Object.prototype.hasOwnProperty.call(record, key) && (record[key] === null || record[key] === undefined || String(record[key]).trim() === ""));
+  if (emptyBatteryKey) return false;
+
+  const slotState = first(record, ["slotStatus", "slot_status", "slotState", "slot_state", "compartmentStatus"]);
+  if (typeof slotState === "string" && ["empty", "vacant", "free", "available", "returnable"].includes(slotState.trim().toLowerCase())) return false;
+  return null;
 }
 
 function sourceHealth(record: RecordValue): string | null {
@@ -250,7 +263,7 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     const diagnosticFlags: string[] = [];
     const confirmedEmpty = batteryPresent === false;
     const confirmedZeroBattery = Boolean(
-      batteryId && batteryPresent !== false && chargePercent === 0 && freshEnough && !conflicts.includes("charge_percent"),
+      batteryPresent === true && chargePercent === 0 && freshEnough && !conflicts.includes("charge_percent"),
     );
     if (confirmedZeroBattery) diagnosticFlags.push("zero_charge_reported");
     const rentable = Boolean(
