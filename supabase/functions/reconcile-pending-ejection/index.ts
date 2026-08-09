@@ -1,13 +1,20 @@
-// Reconcile an asynchronous ChargeNow ejection using read-only supplier state.
+// Reconcile a ChargeNow C3 command using read-only cabinet state only.
 //
-// This function intentionally NEVER calls an ejection endpoint. It can only
-// convert a paid rental from `ejecting` to `ejected` after the selected slot is
-// observed empty and the battery identity was reserved before payment.
+// Exactly-once API calls are not enough: a single provider command can still
+// produce multiple physical releases. This function compares the four-slot
+// baseline saved before payment with a fresh post-command snapshot. A rental is
+// activated only when exactly the selected compartment became explicitly empty.
+// It NEVER calls an ejection endpoint and NEVER retries a hardware command.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, verifyKioskDevice } from "../_shared/db.ts";
 import { isChargeNowConfigured } from "../_shared/chargenow.ts";
 import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import {
+  classifyReleaseDelta,
+  safeReleaseSnapshot,
+  type SafeReleaseSnapshot,
+} from "../_shared/releaseObservation.ts";
 
 const headers = {
   ...corsHeaders,
@@ -22,6 +29,92 @@ const json = (correlationId: string, body: Record<string, unknown>, status = 200
 
 function validUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}[0-9a-f]$/i.test(value);
+}
+
+function isSafeBaseline(value: unknown): value is SafeReleaseSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.cabinet_id === "string" && Array.isArray(row.slots);
+}
+
+async function quarantineStation(
+  db: ReturnType<typeof adminClient>,
+  session: Record<string, any>,
+  code: "MULTI_RELEASE_DETECTED" | "UNEXPECTED_RELEASE_DETECTED",
+  delta: ReturnType<typeof classifyReleaseDelta>,
+  postSnapshot: SafeReleaseSnapshot,
+) {
+  const now = new Date().toISOString();
+  const details = {
+    rental_session_id: session.id,
+    trade_no: session.apifox_trade_no ?? null,
+    selected_slot_num: session.selected_slot_num,
+    expected_battery_id: session.battery_id ?? null,
+    released_slot_nums: delta.released_slot_nums,
+    released_battery_ids: delta.released_battery_ids,
+    automatic_retry_allowed: false,
+    observed_at: postSnapshot.observed_at,
+  };
+
+  const { error: quarantineError } = await db.from("station_hardware_quarantines").upsert({
+    station_id: session.station_id,
+    active: true,
+    reason_code: code,
+    source_rental_session_id: session.id,
+    details,
+    updated_at: now,
+    cleared_at: null,
+    cleared_by: null,
+  }, { onConflict: "station_id" });
+  if (quarantineError) throw quarantineError;
+
+  const { error: incidentError } = await db.from("system_incidents").insert({
+    type: code === "MULTI_RELEASE_DETECTED" ? "multi_battery_release" : "unexpected_battery_release",
+    severity: "critical",
+    message: code === "MULTI_RELEASE_DETECTED"
+      ? "Une commande d'éjection a provoqué plusieurs sorties physiques. La borne est mise en quarantaine."
+      : "Une batterie différente du slot demandé a été observée comme sortie. La borne est mise en quarantaine.",
+    data: details,
+    resolved: false,
+    rental_session_id: session.id,
+    station_id: session.station_id,
+  });
+  if (incidentError) throw incidentError;
+
+  const { error: sessionUpdateError } = await db.from("rental_sessions").update({
+    state: "needs_support",
+    chargenow_status: code === "MULTI_RELEASE_DETECTED" ? "multi_release_detected" : "unexpected_release_detected",
+    failure_code: code,
+    failure_message: "Réconciliation matérielle obligatoire. Aucune nouvelle éjection automatique n'est autorisée.",
+  }).eq("id", session.id).eq("state", "ejecting");
+  if (sessionUpdateError) throw sessionUpdateError;
+
+  try {
+    await appendRentalEvent(db, {
+      rentalId: String(session.id),
+      eventType: "rental_failed",
+      idempotencyKey: `physical_release_anomaly:${session.id}:${code}`,
+      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+      stationId: String(session.station_id ?? "") || null,
+      batteryId: String(session.battery_id ?? "") || null,
+      failureReason: code,
+      metadata: details,
+    });
+  } catch (error) {
+    // Legacy UI projection is still quarantined even if an old orchestrator
+    // state cannot accept the terminal event. Never undo the safety block.
+    await auditLog(db, {
+      action: "rental.release.anomaly_orchestrator_pending",
+      target: String(session.id),
+      data: { code, error: error instanceof OrchestratorError ? error.code : "ORCHESTRATOR_UPDATE_FAILED" },
+    });
+  }
+
+  await auditLog(db, {
+    action: "station.hardware.quarantined",
+    target: String(session.station_id),
+    data: { code, ...details },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -45,7 +138,10 @@ Deno.serve(async (req) => {
 
     const { data: session, error: sessionError } = await db.from("rental_sessions")
       .select("id,station_id,cabinet_id,public_session_code,state,chargenow_status,failure_code,selected_slot_num,battery_id,stripe_payment_intent_id,apifox_trade_no,ejected_at,started_at")
-      .eq("id", rentalSessionId).eq("station_id", stationId).eq("public_session_code", publicCode).maybeSingle();
+      .eq("id", rentalSessionId)
+      .eq("station_id", stationId)
+      .eq("public_session_code", publicCode)
+      .maybeSingle();
     if (sessionError) throw sessionError;
     if (!session) return json(correlationId, { ok: false, error: "RENTAL_SESSION_NOT_FOUND" }, 404);
 
@@ -67,13 +163,56 @@ Deno.serve(async (req) => {
       return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "RELEASE_IDENTITY_INCOMPLETE" }, 202);
     }
 
+    const { data: attempt, error: attemptError } = await db.from("hardware_release_attempts")
+      .select("id,pre_snapshot,result")
+      .eq("rental_session_id", session.id)
+      .maybeSingle();
+    if (attemptError) throw attemptError;
+    if (!attempt || !isSafeBaseline(attempt.pre_snapshot)) {
+      await auditLog(db, {
+        action: "rental.release.reconciliation_baseline_missing",
+        target: String(session.id),
+        data: { station_id: stationId, slot_num: slotNum },
+      });
+      return json(correlationId, {
+        ok: true,
+        state: "ejecting",
+        confirmed: false,
+        reason: "RELEASE_BASELINE_MISSING",
+      }, 202);
+    }
+
     const cabinetId = String(session.cabinet_id ?? stationId).trim() || stationId;
-    const snapshot = await readCabinetSnapshot(cabinetId);
-    const slot = snapshot.slots.find((item) => item.slot_num === slotNum);
-    // An empty selected compartment is the only evidence accepted here. A
-    // missing field, stale record, or another slot becoming empty never marks
-    // this rental complete and never triggers another hardware command.
-    if (!slot || slot.battery_present !== false) {
+    const providerSnapshot = await readCabinetSnapshot(cabinetId);
+    const postSnapshot = safeReleaseSnapshot(providerSnapshot);
+    const delta = classifyReleaseDelta(attempt.pre_snapshot, postSnapshot, slotNum);
+    const now = new Date().toISOString();
+
+    const { error: attemptUpdateError } = await db.from("hardware_release_attempts").update({
+      post_snapshot: postSnapshot,
+      result: delta.result,
+      released_slot_nums: delta.released_slot_nums,
+      released_battery_ids: delta.released_battery_ids,
+      command_sent_at: now,
+      reconciled_at: delta.result === "pending" ? null : now,
+      updated_at: now,
+    }).eq("id", attempt.id);
+    if (attemptUpdateError) throw attemptUpdateError;
+
+    if (delta.result === "multi_release" || delta.result === "unexpected_release") {
+      const code = delta.result === "multi_release" ? "MULTI_RELEASE_DETECTED" : "UNEXPECTED_RELEASE_DETECTED";
+      await quarantineStation(db, session, code, delta, postSnapshot);
+      return json(correlationId, {
+        ok: false,
+        state: "needs_support",
+        confirmed: false,
+        error: code,
+        stationQuarantined: true,
+        releasedSlotNums: delta.released_slot_nums,
+      }, 202);
+    }
+
+    if (delta.result !== "single_release") {
       await auditLog(db, {
         action: "rental.release.reconciliation_pending",
         target: String(session.id),
@@ -81,40 +220,60 @@ Deno.serve(async (req) => {
           station_id: stationId,
           cabinet_id: cabinetId,
           slot_num: slotNum,
-          observed_present: slot?.battery_present ?? null,
-          snapshot_sources: snapshot.sources,
+          delta_result: delta.result,
+          snapshot_sources: providerSnapshot.sources,
         },
       });
-      return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "AWAITING_PROVIDER_SLOT_EMPTY" }, 202);
+      return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "AWAITING_SINGLE_PHYSICAL_RELEASE" }, 202);
     }
 
-    const releasedAt = new Date().toISOString();
+    if (delta.released_battery_ids.length !== 1 || delta.released_battery_ids[0] !== batteryId) {
+      await quarantineStation(db, session, "UNEXPECTED_RELEASE_DETECTED", delta, postSnapshot);
+      return json(correlationId, {
+        ok: false,
+        state: "needs_support",
+        confirmed: false,
+        error: "RELEASE_BATTERY_MISMATCH",
+        stationQuarantined: true,
+      }, 202);
+    }
+
+    const releasedAt = now;
     const tradeNo = String(session.apifox_trade_no ?? "") || String(session.id);
     await appendRentalEvent(db, {
-      rentalId: String(session.id), eventType: "battery_released",
-      idempotencyKey: `battery_released:reconciliation:${tradeNo}:${batteryId}`,
+      rentalId: String(session.id),
+      eventType: "battery_released",
+      idempotencyKey: `battery_released:physical_delta:${tradeNo}:${batteryId}`,
       paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId, batteryId, occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum, tradeNo, source: "supplier_slot_snapshot" },
+      stationId,
+      batteryId,
+      occurredAt: releasedAt,
+      metadata: { cabinetId, slotNum, tradeNo, source: "four_slot_physical_delta" },
     });
     await appendRentalEvent(db, {
-      rentalId: String(session.id), eventType: "rental_activated",
-      idempotencyKey: `rental_activated:reconciliation:${tradeNo}:${batteryId}`,
+      rentalId: String(session.id),
+      eventType: "rental_activated",
+      idempotencyKey: `rental_activated:physical_delta:${tradeNo}:${batteryId}`,
       paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId, batteryId, occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum, tradeNo, source: "supplier_slot_snapshot" },
+      stationId,
+      batteryId,
+      occurredAt: releasedAt,
+      metadata: { cabinetId, slotNum, tradeNo, source: "four_slot_physical_delta" },
     });
 
     const { data: updated, error: updateError } = await db.from("rental_sessions").update({
-      state: "ejected", ejected_at: session.ejected_at ?? releasedAt,
-      started_at: session.started_at ?? releasedAt, chargenow_status: "ejected",
-      failure_code: null, failure_message: null,
+      state: "ejected",
+      ejected_at: session.ejected_at ?? releasedAt,
+      started_at: session.started_at ?? releasedAt,
+      chargenow_status: "ejected",
+      failure_code: null,
+      failure_message: null,
     }).eq("id", session.id).eq("state", "ejecting").select("id");
     if (updateError) throw updateError;
     if (!updated?.length) return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "RECONCILIATION_RACE" }, 202);
 
     await auditLog(db, {
-      action: "rental.release.reconciled_from_supplier_snapshot",
+      action: "rental.release.reconciled_from_four_slot_delta",
       target: String(session.id),
       data: { station_id: stationId, cabinet_id: cabinetId, slot_num: slotNum, battery_id: batteryId },
     });
