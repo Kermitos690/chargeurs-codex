@@ -284,3 +284,101 @@ html:not(.kiosk-mode) {
   .kiosk-idle-stage { display: flex !important; min-height: auto; padding: 1rem; }
   .kiosk-idle-hero, .kiosk-idle-cta { align-items: center !important; text-align: center; }
 }
+
+/* ============================================================= */
+/* Kiosk edge-to-edge canvas — no page gutters on the 16:9 DTA. */
+/* The background and interaction surface always cover every pixel. */
+/* Internal component padding remains for touch safety, but it no longer */
+/* creates an outer frame or an asymmetric bottom edge. */
+/* ============================================================= */
+html.kiosk-mode,
+html.kiosk-mode body,
+html.kiosk-mode #root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: hsl(var(--background));
+}
+
+html.kiosk-mode body {
+  position: fixed;
+  inset: 0;
+}
+
+.kiosk-root {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.kiosk-root > header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 30;
+  height: clamp(3.75rem, 7.5vh, 5rem);
+  min-height: 0 !important;
+  margin: 0;
+  padding: max(.4rem, env(safe-area-inset-top)) max(.85rem, env(safe-area-inset-right)) .4rem max(.85rem, env(safe-area-inset-left));
+}
+
+.kiosk-root > main {
+  position: absolute;
+  inset: clamp(3.75rem, 7.5vh, 5rem) 0 0 0;
+  width: 100% !important;
+  height: auto;
+  min-height: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+@media (orientation: landscape) and (max-height: 760px) {
+  .kiosk-root {
+    padding: 0 !important;
+  }
+
+  .kiosk-root > header {
+    height: 4rem;
+    padding: .3rem .75rem;
+  }
+
+  .kiosk-root > main {
+    inset: 4rem 0 0 0;
+    min-height: 0 !important;
+    height: calc(100dvh - 4rem);
+  }
+
+  .kiosk-idle-stage {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: clamp(.7rem, 1.55vw, 1.25rem) clamp(.85rem, 2vw, 2rem) !important;
+  }
+
+  .kiosk-idle-stage::after {
+    display: none;
+  }
+
+  .kiosk-pricing-stage,
+  .kiosk-qr-stage,
+  .kiosk-release-stage {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+}
