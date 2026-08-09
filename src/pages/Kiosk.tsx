@@ -674,19 +674,19 @@ export default function Kiosk() {
                       : { opacity: 1, y: 0, scale: 1 }}
                     transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
                     whileTap={slot.rentable ? { scale: .96 } : undefined}
-                    className={`kiosk-slot-card glass liquid-border relative min-h-40 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    className={`kiosk-slot-card glass liquid-border relative min-h-44 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
-                    <div className="text-sm font-semibold text-muted-foreground">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
+                    <div className="text-base font-bold text-foreground/90">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
                     <PowerbankScene charge={slot.charge_percent} selected={selected} recommended={slot.recommended} rentable={slot.rentable} />
                     {slot.charge_percent == null ? <>
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
                       <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />
                     </> : <>
-                      <div className="mt-2 text-3xl font-extrabold">{`${Math.round(slot.charge_percent)}%`}</div>
-                      <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted"><motion.div className="h-full rounded-full bg-gradient-primary" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
+                      <div className="mt-2 text-4xl font-extrabold tracking-tight">{`${Math.round(slot.charge_percent)}%`}</div>
+                      <div className="mt-2 h-3 overflow-hidden rounded-full border border-white/10 bg-slate-950/45"><motion.div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-500 to-violet-400 shadow-[0_0_18px_rgba(34,211,238,.85)]" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
                     </>}
-                    <div className="mt-3 text-sm font-semibold">{t(`kiosk.slot.${slot.status}`)}</div>
+                    <div className="mt-3 text-base font-bold">{t(`kiosk.slot.${slot.status}`)}</div>
                   </motion.button>;
                 })}
               </div>
