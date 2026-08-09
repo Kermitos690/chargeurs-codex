@@ -16,6 +16,7 @@ lifecycle is not proven.
 | Callback canonicalization | IMPLEMENTED, AUTOMATED_TESTED |
 | Monotone state guard | IMPLEMENTED, AUTOMATED_TESTED |
 | Atomic slot reservation | IMPLEMENTED, not INTEGRATION_TESTED |
+| Selected-slot stability during Checkout | IMPLEMENTED, AUTOMATED_TESTED |
 | C4/C7/C8 aggregation | IMPLEMENTED, AUTOMATED_TESTED |
 | Stripe Checkout QR Test | previously STRIPE_TESTED, current RC not DEPLOYED_STAGING |
 | Stripe webhook to final settlement | not proven |
@@ -40,3 +41,15 @@ lifecycle is not proven.
 No ChargeNow mutation, ejection or real payment was sent during this RC code
 work. A future physical test must wait for the exact human checkpoint required
 by the mission.
+
+## Local validation on current RC head
+
+- `npm run typecheck`: PASS.
+- `npm test -- --run`: PASS (31 files, 109 tests).
+- `deno test --allow-env supabase/functions/tests/chargenow_callback_auth.test.ts supabase/functions/tests/cabinet_snapshot.test.ts`: PASS (15 tests).
+- `npm run lint`: PASS with 15 pre-existing Fast Refresh warnings and no errors.
+- `npm run build`: PASS (with the existing Vite oversized-chunk warning).
+- `supabase db lint --linked`: PASS; it does not apply or validate the new migration against the remote history.
+
+These results are AUTOMATED_TESTED only. They do not establish a staging,
+tablet, Stripe, hardware or field proof for this RC.
