@@ -36,6 +36,10 @@
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/reconcile-pending-ejection"
     },
     {
+      "source": "/api/kiosk/resume-state",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-resume-state"
+    },
+    {
       "source": "/api/kiosk/customer-options",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-customer-options"
     },
