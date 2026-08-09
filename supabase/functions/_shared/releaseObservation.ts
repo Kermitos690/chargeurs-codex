@@ -35,13 +35,36 @@ export function safeReleaseSnapshot(snapshot: CabinetSnapshot, observedAt = new 
   };
 }
 
+function trustworthy(slot: SafeReleaseSlot | undefined): boolean {
+  return Boolean(slot && slot.confidence !== "low" && slot.conflicts.length === 0);
+}
+
 function trustworthyEmpty(slot: SafeReleaseSlot | undefined): boolean {
-  return Boolean(slot && slot.battery_present === false && slot.confidence !== "low" && slot.conflicts.length === 0);
+  return Boolean(trustworthy(slot) && slot?.battery_present === false);
+}
+
+function trustworthyOccupied(slot: SafeReleaseSlot | undefined): boolean {
+  return Boolean(trustworthy(slot) && slot?.battery_present === true && slot.battery_id);
 }
 
 /**
- * Compare the exact physical compartments that were occupied before C3.
- * Missing telemetry is never interpreted as a release. Only an explicit,
+ * The safety proof needs a trustworthy baseline for every physical compartment,
+ * not merely for the battery selected by the customer. Otherwise a second
+ * compartment could open and there would be no reliable way to tell whether it
+ * changed after C3.
+ */
+export function releaseBaselineReady(snapshot: SafeReleaseSnapshot, totalSlots = 4): boolean {
+  if (snapshot.slots.length < totalSlots) return false;
+  for (let slotNum = 1; slotNum <= totalSlots; slotNum += 1) {
+    const slot = snapshot.slots.find((candidate) => candidate.slot_num === slotNum);
+    if (!trustworthyEmpty(slot) && !trustworthyOccupied(slot)) return false;
+  }
+  return true;
+}
+
+/**
+ * Compare the exact physical compartments that were CONFIRMED occupied before
+ * C3. Missing telemetry is never interpreted as a release. Only an explicit,
  * conflict-free post-command empty observation counts.
  */
 export function classifyReleaseDelta(
@@ -51,7 +74,7 @@ export function classifyReleaseDelta(
 ): ReleaseDelta {
   const postBySlot = new Map(post.slots.map((slot) => [slot.slot_num, slot]));
   const released = pre.slots
-    .filter((slot) => slot.battery_present !== false && Boolean(slot.battery_id))
+    .filter((slot) => trustworthyOccupied(slot))
     .filter((slot) => trustworthyEmpty(postBySlot.get(slot.slot_num)));
 
   const releasedSlotNums = released.map((slot) => slot.slot_num).sort((a, b) => a - b);
