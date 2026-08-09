@@ -1,6 +1,8 @@
--- Atomically consume a verified customer pairing together with the rental and
--- physical-slot reservation. A client-supplied member flag can therefore never
--- obtain the green/member price without a claimed server-side pairing.
+-- Atomically consume a verified customer pairing together with the rental,
+-- the physical-slot reservation and the pre-release cabinet observation.
+-- A client-supplied member flag can therefore never obtain the green/member
+-- price without a claimed server-side pairing, and every future hardware
+-- command has a four-slot baseline for multi-release detection.
 
 create or replace function public.create_reserved_kiosk_rental_session(
   p_session jsonb
@@ -19,6 +21,7 @@ declare
   v_pairing_id uuid := nullif(p_session->>'customer_pairing_session_id', '')::uuid;
   v_customer_user_id uuid := nullif(p_session->>'customer_user_id', '')::uuid;
   v_customer_segment text := coalesce(nullif(p_session->>'customer_segment', ''), 'guest');
+  v_pre_release_snapshot jsonb := p_session->'pre_release_snapshot';
   v_consumed_pairing uuid;
   v_session public.rental_sessions;
 begin
@@ -27,6 +30,11 @@ begin
   end if;
   if v_customer_segment not in ('guest','member') then
     raise exception 'INVALID_CUSTOMER_SEGMENT' using errcode = 'P0001';
+  end if;
+  if v_pre_release_snapshot is null
+     or jsonb_typeof(v_pre_release_snapshot) <> 'object'
+     or jsonb_typeof(v_pre_release_snapshot->'slots') <> 'array' then
+    raise exception 'PRE_RELEASE_SNAPSHOT_REQUIRED' using errcode = 'P0001';
   end if;
 
   if v_customer_segment = 'member' then
@@ -99,6 +107,17 @@ begin
     v_pairing_id
   ) returning * into v_session;
 
+  insert into public.hardware_release_attempts(
+    rental_session_id, station_id, selected_slot_num, expected_battery_id,
+    pre_snapshot, result
+  ) values (
+    v_session.id, v_station_id, v_slot_num, v_battery_id,
+    v_pre_release_snapshot, 'prepared'
+  );
+
+  -- trg_ensure_inserted_rental_slot_reservation writes the slot reservation in
+  -- this same transaction. A failure in pairing, snapshot or hardware baseline
+  -- therefore rolls back the rental too.
   return v_session;
 end;
 $$;
