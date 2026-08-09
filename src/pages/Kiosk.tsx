@@ -630,7 +630,7 @@ export default function Kiosk() {
       </header>
 
 
-      <main className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[90rem] flex-col items-center justify-center text-center">
+      <main className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[100rem] flex-col items-center justify-center text-center">
         <AnimatePresence mode="wait">
           {phase === "loading" && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
@@ -662,10 +662,10 @@ export default function Kiosk() {
 
 
           {phase === "idle" && station && (
-            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-6xl flex-col items-center gap-4"}`}>
+            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-[96rem] gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-[96rem] flex-col items-center gap-4"}`}>
               <section className={`kiosk-idle-stage relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
                 <KioskHolographicFloor />
-                <div className="relative z-10 flex flex-col items-center gap-3">
+                <div className="kiosk-idle-hero relative z-10 flex flex-col items-center gap-3">
                   <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
                   <p className={`${splitLayoutPreview ? "text-base" : "text-lg sm:text-xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
                   {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
@@ -674,7 +674,7 @@ export default function Kiosk() {
               {/* The cabinet itself is a two-by-two physical layout. Keeping
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
-              <div className="relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
+              <div className="kiosk-slot-grid relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
@@ -707,7 +707,7 @@ export default function Kiosk() {
                 })}
               </div>
               {canRent ? (
-                <div className="relative z-10 flex flex-col items-center gap-2">
+                <div className="kiosk-idle-cta relative z-10 flex flex-col items-center gap-2">
                   <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-10 py-5 text-xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">
                     {t("kiosk.rent_selected")}
                   </Button>
@@ -724,10 +724,10 @@ export default function Kiosk() {
           )}
 
           {phase === "pricing" && (
-            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="kiosk-pricing-stage flex w-full max-w-5xl flex-col items-center gap-7 px-4">
+            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="kiosk-pricing-stage flex w-full max-w-[82rem] flex-col items-center gap-7 px-4">
               <h2 className="font-display text-5xl font-extrabold tracking-tight sm:text-6xl">{t("kiosk.pricing.title")}</h2>
               {quote ? (
-                <div className="glass liquid-border grid w-full max-w-4xl grid-cols-[.8fr_1.2fr] items-center gap-8 rounded-[2.25rem] p-8 text-center sm:p-10">
+                <div className="kiosk-pricing-card glass liquid-border grid w-full max-w-6xl grid-cols-[.8fr_1.2fr] items-center gap-8 rounded-[2.25rem] p-8 text-center sm:p-10">
                   <div className="flex flex-col items-center gap-4 border-r border-white/15 pr-8">
                     <div className="text-xl font-bold text-muted-foreground">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div>
                     <div className="grid h-28 w-28 place-items-center rounded-[2rem] border border-primary/40 bg-primary/10 shadow-glow">
@@ -764,7 +764,7 @@ export default function Kiosk() {
           )}
 
           {phase === "qr" && checkoutUrl && (
-            <motion.div key="qr" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-qr-stage grid w-full max-w-6xl items-center gap-8 px-4 lg:grid-cols-[.9fr_1.1fr] lg:px-8">
+            <motion.div key="qr" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-qr-stage grid w-full max-w-[88rem] items-center gap-8 px-4 lg:grid-cols-[.85fr_1.15fr] lg:px-8">
               <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
                 {quote && <div className="font-display text-5xl font-extrabold text-gradient-cyan sm:text-6xl">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>}
                 <h2 className="mt-6 font-display text-5xl font-extrabold tracking-tight sm:text-6xl">{t("kiosk.qr.title")}</h2>
@@ -798,7 +798,7 @@ export default function Kiosk() {
           )}
 
           {phase === "waitpay" && (
-            <motion.div key="waitpay" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex w-full max-w-5xl flex-col items-center gap-7 px-4">
+            <motion.div key="waitpay" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-release-stage flex w-full max-w-[86rem] flex-col items-center gap-7 px-4">
               <SlotReleaseScene slotNum={slotNum} />
               <div className="flex items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
