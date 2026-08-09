@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, CheckCircle2, Clock3, Loader2, QrCode, Smartphone, UserRound, Zap } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Loader2, QrCode, RefreshCw, Smartphone, UserRound, Zap } from "lucide-react";
 import Kiosk from "./Kiosk";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -54,6 +54,25 @@ type PairingStatus = {
   error?: string;
 };
 
+type ResumeSession = {
+  id: string;
+  publicCode: string | null;
+  state: string;
+  stateVersion: number;
+  selectedSlotNum: number | null;
+  failureCode: string | null;
+  checkoutUrl: string | null;
+  checkoutExpiresAt: string | null;
+  expiresAt: string | null;
+};
+
+type ResumeResponse = {
+  ok?: boolean;
+  active?: boolean;
+  session?: ResumeSession | null;
+  error?: string;
+};
+
 type Journey = "guest" | "member";
 type GateView = "choose" | "pairing" | "connected" | "kiosk";
 
@@ -80,6 +99,19 @@ const copy = {
     continue: "Choisir ma batterie",
     back: "Changer de parcours",
     unavailable: "Connexion client temporairement indisponible",
+    rate: "Tarif",
+    memberRate: "Tarif client",
+    ratesUnavailable: "Tarifs momentanément indisponibles — actualisation en cours.",
+    resumeChecking: "Récupération de votre location…",
+    resumeCheckoutTitle: "Votre paiement est toujours prêt",
+    resumeCheckoutBody: "Scannez le QR pour continuer sur votre téléphone.",
+    resumeProcessingTitle: "Paiement confirmé",
+    resumeProcessingBody: "Votre location est en cours. Ne lancez pas une deuxième location.",
+    resumeSupportTitle: "Vérification en cours",
+    resumeSupportBody: "Votre paiement est sécurisé. La borne conserve votre location pendant la vérification.",
+    resumeSuccessTitle: "Prenez votre batterie",
+    resumeSuccessBody: "La borne a repris votre location après le redémarrage.",
+    resumeSession: "Location en cours",
   },
   en: {
     title: "How would you like to rent?",
@@ -103,6 +135,19 @@ const copy = {
     continue: "Choose my powerbank",
     back: "Change journey",
     unavailable: "Customer connection temporarily unavailable",
+    rate: "Rate",
+    memberRate: "Customer rate",
+    ratesUnavailable: "Rates are temporarily unavailable — refreshing.",
+    resumeChecking: "Recovering your rental…",
+    resumeCheckoutTitle: "Your payment is still ready",
+    resumeCheckoutBody: "Scan the QR to continue on your phone.",
+    resumeProcessingTitle: "Payment confirmed",
+    resumeProcessingBody: "Your rental is in progress. Please do not start a second rental.",
+    resumeSupportTitle: "Verification in progress",
+    resumeSupportBody: "Your payment is secure. The station keeps your rental while it verifies the release.",
+    resumeSuccessTitle: "Take your powerbank",
+    resumeSuccessBody: "The station recovered your rental after the restart.",
+    resumeSession: "Rental in progress",
   },
   de: {
     title: "Wie möchten Sie mieten?",
@@ -126,11 +171,36 @@ const copy = {
     continue: "Powerbank auswählen",
     back: "Mietweg ändern",
     unavailable: "Kundenverbindung vorübergehend nicht verfügbar",
+    rate: "Tarif",
+    memberRate: "Kundentarif",
+    ratesUnavailable: "Tarife vorübergehend nicht verfügbar — Aktualisierung läuft.",
+    resumeChecking: "Miete wird wiederhergestellt…",
+    resumeCheckoutTitle: "Ihre Zahlung ist weiterhin bereit",
+    resumeCheckoutBody: "Scannen Sie den QR, um auf Ihrem Handy fortzufahren.",
+    resumeProcessingTitle: "Zahlung bestätigt",
+    resumeProcessingBody: "Ihre Miete läuft. Bitte starten Sie keine zweite Miete.",
+    resumeSupportTitle: "Prüfung läuft",
+    resumeSupportBody: "Ihre Zahlung ist sicher. Die Station behält Ihre Miete während der Prüfung.",
+    resumeSuccessTitle: "Nehmen Sie Ihre Powerbank",
+    resumeSuccessBody: "Die Station hat Ihre Miete nach dem Neustart wiederhergestellt.",
+    resumeSession: "Miete läuft",
   },
 } as const;
 
 function money(cents: number | null | undefined, currency = "CHF") {
   return cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
+}
+
+function isResumeSuccess(state: string) {
+  return ["ejected", "battery_taken", "active_rental"].includes(state);
+}
+
+function isResumeSupport(state: string) {
+  return ["needs_support", "eject_failed", "failed"].includes(state);
+}
+
+function isResumeCheckout(session: ResumeSession) {
+  return ["created", "payment_pending"].includes(session.state) && Boolean(session.checkoutUrl);
 }
 
 export default function KioskJourneyGate() {
@@ -145,6 +215,8 @@ export default function KioskJourneyGate() {
   const [pairingName, setPairingName] = useState("Client");
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [resumeChecked, setResumeChecked] = useState(false);
+  const [resumeSession, setResumeSession] = useState<ResumeSession | null>(null);
 
   useEffect(() => {
     document.documentElement.classList.add("kiosk-mode");
@@ -162,6 +234,75 @@ export default function KioskJourneyGate() {
     setPairingError(null);
     setView("choose");
   }, []);
+
+  const refreshResumeState = useCallback(async (initial = false) => {
+    const token = readKioskToken();
+    if (!token || !stationId) {
+      if (initial) setResumeChecked(true);
+      return;
+    }
+    const { data, transportError } = await invokeKioskEdgeProxy<ResumeResponse>(
+      "/api/kiosk/resume-state",
+      { stationId },
+      { "X-Kiosk-Token": token },
+    );
+    if (transportError || !data?.ok) {
+      // On first boot fail closed visually: the normal kiosk can still show its
+      // network state, but we never erase a previously recovered paid session
+      // merely because one refresh failed.
+      if (initial) setResumeChecked(true);
+      return;
+    }
+    if (data.active && data.session?.id) {
+      setResumeSession(data.session);
+    } else {
+      setResumeSession(null);
+    }
+    setResumeChecked(true);
+  }, [stationId]);
+
+  // Recovery is checked before any new rental choice is offered. sessionStorage
+  // may disappear on Android/WebView restart; the server remains authoritative.
+  useEffect(() => {
+    setResumeChecked(false);
+    void refreshResumeState(true);
+  }, [refreshResumeState]);
+
+  // Keep a recovered rental alive on screen and reconcile only through the
+  // read-only physical-delta endpoint. No path here can issue an ejection.
+  useEffect(() => {
+    if (!resumeSession) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (resumeSession.state === "ejecting" && resumeSession.publicCode) {
+        const token = readKioskToken();
+        if (token) {
+          await invokeKioskEdgeProxy(
+            "/api/kiosk/reconcile-pending-ejection",
+            { stationId, rentalSessionId: resumeSession.id, publicCode: resumeSession.publicCode },
+            { "X-Kiosk-Token": token },
+          );
+        }
+      }
+      if (!cancelled) await refreshResumeState(false);
+    };
+    const interval = window.setInterval(() => void poll(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [refreshResumeState, resumeSession, stationId]);
+
+  // After a recovered successful release, return to the public choice screen.
+  // This only changes UI state; it does not mutate the server rental.
+  useEffect(() => {
+    if (!resumeSession || !isResumeSuccess(resumeSession.state)) return;
+    const timer = window.setTimeout(() => {
+      setResumeSession(null);
+      clearJourney();
+    }, 12_000);
+    return () => window.clearTimeout(timer);
+  }, [clearJourney, resumeSession]);
 
   useEffect(() => {
     const onTerminal = () => window.setTimeout(clearJourney, 13_000);
@@ -185,7 +326,11 @@ export default function KioskJourneyGate() {
     setOptionsError(false);
   }, [stationId]);
 
-  useEffect(() => { void loadOptions(); }, [loadOptions]);
+  useEffect(() => {
+    if (!resumeChecked || resumeSession) return;
+    void loadOptions();
+  }, [loadOptions, resumeChecked, resumeSession]);
+
   useEffect(() => {
     if (view !== "pairing") return;
     const timer = window.setInterval(() => setNow(Date.now()), 250);
@@ -257,6 +402,81 @@ export default function KioskJourneyGate() {
   const secondsLeft = pairing?.expiresAt ? Math.max(0, Math.ceil((Date.parse(pairing.expiresAt) - now) / 1000)) : 0;
   const interpolate = (value: string, values: Record<string, string | number>) => Object.entries(values).reduce((out, [key, item]) => out.replace(`{{${key}}}`, String(item)), value);
 
+  if (!resumeChecked) {
+    return (
+      <div className="kiosk-root fixed inset-0 grid place-items-center overflow-hidden bg-background">
+        <LiquidBackground />
+        <div className="relative z-10 flex flex-col items-center gap-5 text-center">
+          <Loader2 className="h-16 w-16 animate-spin text-primary" />
+          <p className="font-display text-3xl font-bold">{c.resumeChecking}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (resumeSession) {
+    const checkout = isResumeCheckout(resumeSession);
+    const success = isResumeSuccess(resumeSession.state);
+    const support = isResumeSupport(resumeSession.state);
+    const title = success ? c.resumeSuccessTitle
+      : support ? c.resumeSupportTitle
+      : checkout ? c.resumeCheckoutTitle
+      : c.resumeProcessingTitle;
+    const body = success ? c.resumeSuccessBody
+      : support ? c.resumeSupportBody
+      : checkout ? c.resumeCheckoutBody
+      : c.resumeProcessingBody;
+
+    return (
+      <div className="kiosk-root fixed inset-0 overflow-hidden bg-background">
+        <LiquidBackground />
+        <header className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between px-5 sm:px-8">
+          <BrandLogo size="md" />
+          <LanguageSwitcher />
+        </header>
+        <main className="absolute inset-x-0 bottom-0 top-16 grid place-items-center overflow-hidden p-4 sm:p-7">
+          <motion.section initial={{ opacity: 0, scale: .97 }} animate={{ opacity: 1, scale: 1 }} className="grid w-full max-w-6xl items-center gap-8 lg:grid-cols-[1fr_.9fr]">
+            <div className="text-center lg:text-left">
+              <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary">
+                <RefreshCw className="h-4 w-4" />{c.resumeSession}
+              </span>
+              <h1 className="mt-6 font-display text-4xl font-extrabold sm:text-6xl">{title}</h1>
+              <p className="mt-5 text-xl leading-relaxed text-muted-foreground sm:text-2xl">{body}</p>
+              {resumeSession.selectedSlotNum != null && (
+                <div className="mt-7 inline-flex rounded-[2rem] border border-primary/30 bg-primary/10 px-8 py-5">
+                  <span className="font-display text-4xl font-extrabold text-gradient-cyan">Slot {resumeSession.selectedSlotNum}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="glass-strong liquid-border flex min-h-[25rem] flex-col items-center justify-center rounded-[2.5rem] p-8 text-center">
+              {checkout && resumeSession.checkoutUrl ? (
+                <>
+                  <div className="rounded-[2rem] bg-white p-5 shadow-2xl">
+                    <QRCodeSVG value={resumeSession.checkoutUrl} size={300} level="M" />
+                  </div>
+                  <p className="mt-5 text-lg font-bold text-primary">{c.resumeCheckoutBody}</p>
+                </>
+              ) : success ? (
+                <>
+                  <motion.div initial={{ scale: .5 }} animate={{ scale: 1 }} className="grid h-32 w-32 place-items-center rounded-full bg-success/15 shadow-glow-success">
+                    <CheckCircle2 className="h-20 w-20 text-success" />
+                  </motion.div>
+                  {resumeSession.selectedSlotNum != null && <p className="mt-6 font-display text-7xl font-extrabold text-gradient-cyan">{resumeSession.selectedSlotNum}</p>}
+                </>
+              ) : (
+                <>
+                  <Loader2 className={`h-20 w-20 ${support ? "text-warning" : "animate-spin text-primary"}`} />
+                  <p className="mt-6 max-w-sm text-lg text-muted-foreground">{body}</p>
+                </>
+              )}
+            </div>
+          </motion.section>
+        </main>
+      </div>
+    );
+  }
+
   if (view === "kiosk" && journey) return <Kiosk />;
 
   return (
@@ -285,7 +505,7 @@ export default function KioskJourneyGate() {
                     <Zap className="h-16 w-16 shrink-0 text-blue-300" />
                   </div>
                   <div className="relative mt-10 flex items-end justify-between gap-4">
-                    <div><p className="text-sm font-semibold text-blue-200/70">Tarif</p><p className="font-display text-5xl font-extrabold text-blue-200">{money(options?.guest?.hourly_cents, options?.guest?.currency)}<span className="ml-2 text-xl">/ h</span></p></div>
+                    <div><p className="text-sm font-semibold text-blue-200/70">{c.rate}</p><p className="font-display text-5xl font-extrabold text-blue-200">{money(options?.guest?.hourly_cents, options?.guest?.currency)}<span className="ml-2 text-xl">/ h</span></p></div>
                     <span className="grid h-14 w-14 place-items-center rounded-full bg-blue-400 text-slate-950 transition group-hover:translate-x-1"><ArrowRight className="h-7 w-7" /></span>
                   </div>
                   <p className="relative mt-7 text-base font-bold text-blue-100">{c.guestCta}</p>
@@ -300,13 +520,13 @@ export default function KioskJourneyGate() {
                     <UserRound className="h-16 w-16 shrink-0 text-emerald-300" />
                   </div>
                   <div className="relative mt-10 flex items-end justify-between gap-4">
-                    <div><p className="text-sm font-semibold text-emerald-200/70">Tarif client</p><p className="font-display text-5xl font-extrabold text-emerald-300">{money(options?.member?.hourly_cents, options?.member?.currency)}<span className="ml-2 text-xl">/ h</span></p></div>
+                    <div><p className="text-sm font-semibold text-emerald-200/70">{c.memberRate}</p><p className="font-display text-5xl font-extrabold text-emerald-300">{money(options?.member?.hourly_cents, options?.member?.currency)}<span className="ml-2 text-xl">/ h</span></p></div>
                     <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-400 text-slate-950 transition group-hover:translate-x-1"><QrCode className="h-7 w-7" /></span>
                   </div>
                   <p className="relative mt-7 text-base font-bold text-emerald-100">{options?.memberAvailable ? c.memberCta : c.unavailable}</p>
                 </button>
               </div>
-              {optionsError && <p className="mt-4 text-center text-sm text-warning">Tarifs momentanément indisponibles — actualisation en cours.</p>}
+              {optionsError && <p className="mt-4 text-center text-sm text-warning">{c.ratesUnavailable}</p>}
             </motion.section>
           )}
 
@@ -317,7 +537,7 @@ export default function KioskJourneyGate() {
                 <h1 className="mt-6 font-display text-4xl font-extrabold text-emerald-50 sm:text-6xl">{c.scanTitle}</h1>
                 <p className="mt-5 text-xl leading-relaxed text-muted-foreground">{c.scanBody}</p>
                 <div className="mt-7 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
-                  <p className="text-sm text-emerald-100/70">Tarif client</p>
+                  <p className="text-sm text-emerald-100/70">{c.memberRate}</p>
                   <p className="mt-1 font-display text-5xl font-extrabold text-emerald-300">{money(options?.member?.hourly_cents, options?.member?.currency)} / h</p>
                 </div>
                 <Button onClick={clearJourney} variant="ghost" className="mt-6 rounded-full px-6 py-5">{c.back}</Button>
