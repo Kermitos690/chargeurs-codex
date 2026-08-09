@@ -1,0 +1,70 @@
+/* Field kiosk overrides loaded after the shared design system.
+   The public DTA surface is a full-screen appliance, not a centered webpage. */
+
+html.kiosk-mode,
+html.kiosk-mode body,
+html.kiosk-mode #root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: hsl(var(--background));
+}
+
+.kiosk-root {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  width: 100dvw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.kiosk-root > main {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Customer pricing: keep the commercial message immediate. The detailed
+   billing unit/deposit still belongs to the payment/legal detail layer, not
+   the kiosk hero. */
+.kiosk-pricing-card > div:last-child > p {
+  display: none !important;
+}
+
+@media (orientation: landscape) {
+  .kiosk-idle-stage,
+  .kiosk-pricing-stage,
+  .kiosk-qr-stage,
+  .kiosk-release-stage {
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 900px) {
+  .kiosk-idle-stage {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+}
