@@ -26,7 +26,7 @@ import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
-import { KioskHolographicFloor, PowerbankScene } from "@/components/kiosk/PowerbankScene";
+import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -111,7 +111,7 @@ export default function Kiosk() {
 
   // A payment / rental is in progress — block reloads, back navigation and
   // disruptive auto-updates during these phases.
-  const busy = ["pricing", "starting", "qr", "waitpay"].includes(phase);
+  const busy = ["starting", "qr", "waitpay", "success", "support"].includes(phase);
 
   // Hidden diagnostics trigger: 5 quick taps on the logo.
   const onLogoTap = useCallback(() => {
@@ -243,11 +243,13 @@ export default function Kiosk() {
     return () => window.clearInterval(interval);
   }, [phase, refreshKioskData]);
 
-  // Public kiosks must always recover their idle screen after an interrupted
-  // interaction. This changes only the local presentation: it never cancels a
-  // Checkout session, retries hardware, or modifies the server-side rental.
+  // Public kiosks recover their idle screen only before a payment has started.
+  // A payment confirmation / dispense sequence is safety-critical: returning
+  // to the menu there would hide its real state and invites duplicate actions.
+  // This local timer never cancels a Checkout session or changes the rental.
   useEffect(() => {
-    if (phase === "idle" || phase === "loading") {
+    const protectedFlow = ["starting", "qr", "waitpay", "success", "support"].includes(phase);
+    if (phase === "idle" || phase === "loading" || protectedFlow) {
       setInactivitySeconds(null);
       return;
     }
@@ -782,10 +784,13 @@ export default function Kiosk() {
           )}
 
           {phase === "waitpay" && (
-            <motion.div key="waitpay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-5">
-              <Loader2 className="h-14 w-14 animate-spin text-primary" />
-              <h2 className="font-display text-3xl font-bold">{statusMsg?.title ?? t("kiosk.state.payment_succeeded.title")}</h2>
-              <p className="text-xl text-muted-foreground">{statusMsg?.sub ?? t("kiosk.state.payment_succeeded.subtitle")}</p>
+            <motion.div key="waitpay" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="flex w-full max-w-5xl flex-col items-center gap-7 px-4">
+              <SlotReleaseScene slotNum={slotNum} />
+              <div className="flex items-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <h2 className="font-display text-5xl font-extrabold tracking-tight">{statusMsg?.title ?? t("kiosk.state.payment_succeeded.title")}</h2>
+              </div>
+              <p className="max-w-3xl text-center text-2xl text-muted-foreground">{statusMsg?.sub ?? t("kiosk.state.payment_succeeded.subtitle")}</p>
             </motion.div>
           )}
 

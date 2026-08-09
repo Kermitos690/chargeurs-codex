@@ -62,7 +62,6 @@ export default function Pay() {
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
             <h1 className="font-display text-2xl font-bold">{t("pay.release_pending.title")}</h1>
             <p className="text-muted-foreground">{t("pay.release_pending")}</p>
-            <p className="text-sm text-muted-foreground">{t("pay.return")}</p>
             <div className="flex items-center gap-2 text-success"><ShieldCheck className="h-4 w-4" />{t("qr.secured")}</div>
           </motion.div>
         ) : cancelled ? (

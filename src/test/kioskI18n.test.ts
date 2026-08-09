@@ -42,6 +42,11 @@ describe("kiosk translations", () => {
     expect(translate("de", "kiosk.inactivity.return_in", { seconds: 35 })).toBe("Menü in 35 s");
   });
 
+  it("never starts an inactivity reset while payment or dispense is active", () => {
+    const source = readFileSync("src/pages/Kiosk.tsx", "utf8");
+    expect(source).toContain('const protectedFlow = ["starting", "qr", "waitpay", "success", "support"].includes(phase);');
+  });
+
   it("does not leave legacy French kiosk UI literals in the main rental path", () => {
     const source = readFileSync("src/pages/Kiosk.tsx", "utf8");
     for (const literal of [

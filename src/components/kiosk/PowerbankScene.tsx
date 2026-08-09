@@ -68,3 +68,39 @@ export function KioskHolographicFloor() {
     </div>
   );
 }
+
+/**
+ * Visual-only feedback while the server reports that a compartment is opening.
+ * It deliberately says "preparing" through its parent screen: the animation
+ * is not evidence that a battery has physically been taken.
+ */
+export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
+  const position = {
+    1: "left-[25%] top-[58%]",
+    2: "left-[73%] top-[58%]",
+    3: "left-[25%] top-[80%]",
+    4: "left-[73%] top-[80%]",
+  }[slotNum ?? 0] ?? "left-1/2 top-2/3";
+
+  return (
+    <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-cyan-100/25 bg-slate-950/50 shadow-[0_0_70px_rgba(34,211,238,.2)]">
+      <img src="/kiosk/attract-scene-v1.png" alt="" className="h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,12,34,.08),rgba(3,12,34,.58))]" />
+      <motion.div
+        className={`absolute ${position} z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center`}
+        animate={{ scale: [1, 1.15, 1], opacity: [0.75, 1, 0.75] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <span className="absolute h-24 w-24 rounded-full border-4 border-cyan-200 bg-cyan-300/20 shadow-[0_0_44px_rgba(34,211,238,.95)]" />
+        <span className="relative grid h-16 w-16 place-items-center rounded-full bg-gradient-primary text-2xl font-black text-primary-foreground shadow-glow">
+          {slotNum ?? "?"}
+        </span>
+      </motion.div>
+      <motion.div
+        className="absolute inset-x-[-15%] bottom-0 h-1/3 bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.38),transparent)] blur-xl"
+        animate={{ x: ["-25%", "35%", "-25%"] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </div>
+  );
+}
