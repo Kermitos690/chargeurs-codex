@@ -2,7 +2,7 @@
 -- the physical-slot reservation and the pre-release cabinet observation.
 -- A client-supplied member flag can therefore never obtain the green/member
 -- price without a claimed server-side pairing, and every future hardware
--- command has a four-slot baseline for multi-release detection.
+-- command has a trustworthy four-slot baseline for multi-release detection.
 
 create or replace function public.create_reserved_kiosk_rental_session(
   p_session jsonb
@@ -22,6 +22,7 @@ declare
   v_customer_user_id uuid := nullif(p_session->>'customer_user_id', '')::uuid;
   v_customer_segment text := coalesce(nullif(p_session->>'customer_segment', ''), 'guest');
   v_pre_release_snapshot jsonb := p_session->'pre_release_snapshot';
+  v_baseline_slots integer := 0;
   v_consumed_pairing uuid;
   v_session public.rental_sessions;
 begin
@@ -35,6 +36,27 @@ begin
      or jsonb_typeof(v_pre_release_snapshot) <> 'object'
      or jsonb_typeof(v_pre_release_snapshot->'slots') <> 'array' then
     raise exception 'PRE_RELEASE_SNAPSHOT_REQUIRED' using errcode = 'P0001';
+  end if;
+
+  -- Exactly the four DTA compartments must have an unambiguous pre-command
+  -- observation. A compartment may be explicitly empty, or explicitly occupied
+  -- with a battery id. Low-confidence/conflicting records are not sufficient.
+  select count(distinct (slot->>'slot_num')::integer)
+    into v_baseline_slots
+  from jsonb_array_elements(v_pre_release_snapshot->'slots') slot
+  where (slot->>'slot_num') ~ '^[1-4]$'
+    and coalesce(slot->>'confidence','low') <> 'low'
+    and coalesce(jsonb_array_length(coalesce(slot->'conflicts','[]'::jsonb)), 0) = 0
+    and (
+      (slot->>'battery_present')::boolean = false
+      or (
+        (slot->>'battery_present')::boolean = true
+        and nullif(slot->>'battery_id','') is not null
+      )
+    );
+
+  if v_baseline_slots <> 4 then
+    raise exception 'HARDWARE_BASELINE_UNSAFE' using errcode = 'P0001';
   end if;
 
   if v_customer_segment = 'member' then
