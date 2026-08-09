@@ -99,7 +99,11 @@ function normalizeBattery(value: unknown): ChargeNowBattery | null {
   const slotNum = asNonNegativeInteger(firstDefined(value, ["slotNum", "slot", "slotId", "port", "portNo", "channel"]));
   const rawBatteryId = firstDefined(value, ["batteryId", "batteryID", "batterySn", "batterySN", "sn", "bid", "powerBankId"]);
   const batteryId = rawBatteryId == null || String(rawBatteryId).trim() === "" ? null : String(rawBatteryId).trim();
-  const powerLevel = asNumber(firstDefined(value, ["vol", "batteryCapacity", "capacity", "power", "electricity", "powerLevel", "soc"]));
+  // `vol`, `capacity` and `batteryCapacity` have not been confirmed as a
+  // percentage in every supplier payload. Never turn a voltage (for example
+  // 31.2) or a capacity into a customer-facing charge level.
+  const candidate = asNumber(firstDefined(value, ["chargePercent", "charge_percent", "powerLevel", "power_level", "electricity", "soc"]));
+  const powerLevel = candidate != null && candidate >= 0 && candidate <= 100 ? candidate : null;
   return { slotNum, batteryId, powerLevel, raw: value };
 }
 

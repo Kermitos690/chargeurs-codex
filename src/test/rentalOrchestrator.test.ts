@@ -97,6 +97,25 @@ describe("rentalOrchestrator", () => {
     ]);
   });
 
+  it("ne reprend un échec de verrouillage staging que par l’événement explicite", () => {
+    const snapshot: RentalSnapshot = {
+      rentalId: "rental-1",
+      state: "failed",
+      version: 3,
+      events: [],
+      paymentIntentId: "pi_123",
+      failureReason: "HARDWARE_EJECTION_DISABLED",
+    };
+
+    const resumed = applyRentalEvent(snapshot, event("test_ejection_resumed", 4));
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) return;
+    expect(resumed.snapshot.state).toBe("release_requested");
+
+    const unsafe = applyRentalEvent(snapshot, event("battery_released", 5));
+    expect(unsafe.ok).toBe(false);
+  });
+
   it("valide le parcours non-retour vers capture puis clôture", () => {
     const events = [
       event("payment_started", 1),

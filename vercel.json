@@ -4,7 +4,37 @@
   "installCommand": "npm ci --no-audit --no-fund",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/kiosk/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api/kiosk/create-rental-session",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-rental-session"
+    },
+    {
+      "source": "/api/kiosk/create-stripe-checkout",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-stripe-checkout"
+    },
+    {
+      "source": "/api/kiosk/cabinet-snapshot",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-cabinet-snapshot"
+    },
+    {
+      "source": "/api/kiosk/reconcile-pending-ejection",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/reconcile-pending-ejection"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -73,6 +73,19 @@ export type OneTimeMaintenanceEjectionPermit = {
   expiresAt: string;
 };
 
+// A paid staging rental can only be resumed after a human checkpoint when its
+// release was previously stopped by the hardware kill switch. This permit is
+// stored in the service-role-only staging database and consumed before the
+// supplier request. It binds one rental, one cabinet and one slot, and can
+// never operate outside ChargeNow test mode.
+export type OneTimeRentalEjectionPermit = {
+  id: string;
+  rentalSessionId: string;
+  stationId: string;
+  slotNum: number;
+  expiresAt: string;
+};
+
 export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPermit | null {
   try {
     const parsed = JSON.parse(Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT") ?? "") as Partial<OneTimeMaintenanceEjectionPermit>;
@@ -87,12 +100,12 @@ export function oneTimeMaintenanceEjectionPermit(): OneTimeMaintenanceEjectionPe
 async function request<T = unknown>(
   method: string,
   path: string,
-  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean; superAdminMutation?: boolean } = {},
+  opts: { query?: Query; body?: unknown; bearer?: string; mutation?: boolean; oneTimeMaintenanceEjection?: boolean; oneTimeRentalEjection?: boolean; superAdminMutation?: boolean } = {},
 ): Promise<ApiResult<T>> {
   if (!isChargeNowConfigured() && !opts.bearer) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_NOT_CONFIGURED" };
   }
-  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection) {
+  if (opts.mutation && !areChargeNowMutationsEnabled() && !opts.oneTimeMaintenanceEjection && !opts.oneTimeRentalEjection) {
     return { ok: false, status: 0, data: null, error: "CHARGENOW_MUTATIONS_DISABLED" };
   }
 
@@ -157,6 +170,27 @@ export const orderCreate = (args: { deviceId: string; callbackURL?: string }, co
     query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
     mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
+
+// The same one-time permit is required for the supplier order that precedes a
+// permitted rental ejection. It is deliberately not a general order-creation
+// bypass: the station must match and only ChargeNow test mode is accepted.
+export const orderCreateWithOneTimeRentalPermit = (
+  args: { deviceId: string; callbackURL?: string },
+  permit: OneTimeRentalEjectionPermit,
+) => {
+  if (
+    chargeNowMode() !== "test" ||
+    permit.stationId !== args.deviceId ||
+    Date.parse(permit.expiresAt) <= Date.now()
+  ) {
+    return Promise.resolve<ApiResult>({ ok: false, status: 0, data: null, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" });
+  }
+  return request("POST", "/rent/order/create", {
+    query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
+    mutation: true,
+    oneTimeRentalEjection: true,
+  });
+};
 
 // O3 — Query Rent Order Status (query: tradeNo)
 export const orderQuery = (tradeNo: string) =>
@@ -238,6 +272,32 @@ export const ejectByRent = (
   return request("POST", "/cabinet/ejectByRent", {
     query: { cabinetid, rentOrderId, slotNum: slot.slotNum },
     mutation: true, superAdminMutation: context.superAdminConfirmed,
+  });
+};
+
+// The permit check is repeated in eject-after-payment before this helper is
+// reached. It is repeated here as a defence-in-depth check so no caller can
+// use the supplier mutation bypass with a broad or expired target.
+export const ejectByRentWithOneTimeRentalPermit = (
+  cabinetid: string,
+  slotNum: number,
+  rentOrderId: string,
+  rentalSessionId: string,
+  permit: OneTimeRentalEjectionPermit,
+): Promise<ApiResult> => {
+  if (
+    chargeNowMode() !== "test" ||
+    permit.rentalSessionId !== rentalSessionId ||
+    permit.stationId !== cabinetid ||
+    permit.slotNum !== slotNum ||
+    Date.parse(permit.expiresAt) <= Date.now()
+  ) {
+    return Promise.resolve({ ok: false, status: 0, data: null, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" });
+  }
+  return request("POST", "/cabinet/ejectByRent", {
+    query: { cabinetid, rentOrderId, slotNum },
+    mutation: true,
+    oneTimeRentalEjection: true,
   });
 };
 

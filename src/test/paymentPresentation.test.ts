@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isServerCancelledPayment, isServerConfirmedPayment } from "@/lib/paymentPresentation";
+import {
+  isServerCancelledPayment,
+  isServerConfirmedPayment,
+  isServerReleasePending,
+} from "@/lib/paymentPresentation";
 
 describe("payment presentation", () => {
   it("never treats a client redirect or pending state as payment proof", () => {
@@ -9,10 +13,17 @@ describe("payment presentation", () => {
     expect(isServerConfirmedPayment("success")).toBe(false);
   });
 
-  it("accepts only server-confirmed lifecycle states", () => {
-    expect(isServerConfirmedPayment("payment_succeeded")).toBe(true);
+  it("only treats a physically-confirmed lifecycle state as delivered", () => {
+    expect(isServerConfirmedPayment("payment_succeeded")).toBe(false);
+    expect(isServerConfirmedPayment("ejecting")).toBe(false);
     expect(isServerConfirmedPayment("ejected")).toBe(true);
     expect(isServerConfirmedPayment("completed")).toBe(true);
+  });
+
+  it("keeps verified payments in a non-final release state until hardware is confirmed", () => {
+    expect(isServerReleasePending("payment_succeeded")).toBe(true);
+    expect(isServerReleasePending("ejecting")).toBe(true);
+    expect(isServerReleasePending("ejected")).toBe(false);
   });
 
   it("recognizes terminal payment failures from the server", () => {

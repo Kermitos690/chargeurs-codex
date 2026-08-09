@@ -17,22 +17,33 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
 import { createRentalPublicCode } from "../_shared/rentalPublicCode.ts";
+import { isChargeNowConfigured } from "../_shared/chargenow.ts";
+import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
 
 // Anti-spam: at most N session creations per device+station in WINDOW seconds.
 const RATE_MAX = 6;
 const RATE_WINDOW_SEC = 60;
 // A created/checkout session is considered abandoned after this delay.
 const SESSION_TTL_MIN = 20;
+// The kiosk token and idempotency key are deliberately sent as request
+// headers, never embedded in a URL or body. They must also be explicitly
+// allowed for a browser/WebView preflight; otherwise the browser blocks the
+// request before this function can return its safe, correlated error response.
+const rentalCorsHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-idempotency-key",
+  "Access-Control-Expose-Headers": "x-correlation-id",
+};
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: rentalCorsHeaders });
   const startedAt = Date.now();
   const db = adminClient();
   const correlationId = crypto.randomUUID();
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify({ ...(body as object), correlationId }), {
       status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...rentalCorsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
     });
 
   // Normalized, redacted refusal logger. NEVER logs the raw token.
@@ -50,7 +61,7 @@ Deno.serve(async (req) => {
   };
 
   try {
-    let payload: { stationId?: string; language?: string };
+    let payload: { stationId?: string; language?: string; selectedSlotNum?: number };
     try {
       payload = await req.json();
     } catch {
@@ -58,8 +69,12 @@ Deno.serve(async (req) => {
     }
     const stationId = typeof payload.stationId === "string" ? payload.stationId.trim() : "";
     const language = typeof payload.language === "string" ? payload.language.slice(0, 8) : "fr";
+    const selectedSlotNum = Number(payload.selectedSlotNum);
     if (!stationId || !/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) {
       return refuse(400, "MISSING_STATION");
+    }
+    if (!Number.isInteger(selectedSlotNum) || selectedSlotNum < 1 || selectedSlotNum > 128) {
+      return refuse(400, "SLOT_SELECTION_REQUIRED", { station_id: stationId });
     }
 
     // ---- 1. Kiosk authentication + strict station binding (fail-closed) ----
@@ -117,8 +132,23 @@ Deno.serve(async (req) => {
     if (station.status === "maintenance") {
       return refuse(409, "STATION_MAINTENANCE", { station_id: stationId });
     }
-    if (!station.online || (station.rentable_count ?? 0) <= 0) {
-      return refuse(409, "STATION_UNAVAILABLE", { station_id: stationId });
+    // ---- 5b. A client choice is never enough to select physical hardware. ----
+    // Re-read C4/C7/C8/O1 at the point of reservation and accept the chosen
+    // slot only when independent supplier observations agree it is rentable.
+    // This prevents a stale UI, slot 0, or a conflicting provider payload from
+    // silently becoming an ambiguous ejection request later in the flow.
+    if (!isChargeNowConfigured()) {
+      return refuse(409, "CHARGENOW_NOT_CONFIGURED", { station_id: stationId });
+    }
+    const liveSnapshot = await readCabinetSnapshot(station.cabinet_id || station.station_id);
+    const selectedSlot = liveSnapshot.slots.find((slot) => slot.slot_num === selectedSlotNum);
+    if (!selectedSlot?.rentable) {
+      return refuse(409, "SLOT_NOT_RENTABLE", {
+        station_id: stationId,
+        slot_num: selectedSlotNum,
+        confidence: selectedSlot?.confidence ?? "none",
+        conflict_count: selectedSlot?.conflicts.length ?? 0,
+      });
     }
 
     // ---- 6. Authoritative server-side pricing (single source of truth) ----
@@ -170,6 +200,11 @@ Deno.serve(async (req) => {
       amount,
       amount_expected: amount,
       currency,
+      selected_slot_num: selectedSlotNum,
+      // Reservation only: the selected snapshot gives the callback pipeline a
+      // strict expected identity. The state remains `created` until a verified
+      // Stripe webhook and a physical-provider confirmation occur.
+      battery_id: selectedSlot.battery_id,
       customer_language: language,
       idempotency_key: idempotencyKey,
       expires_at: expiresAt,
@@ -205,6 +240,10 @@ Deno.serve(async (req) => {
         source: snap.source,
         final_cents: finalCents,
         currency,
+        selected_slot_num: selectedSlotNum,
+        selected_battery_id: selectedSlot.battery_id,
+        selected_battery_present: selectedSlot.battery_present === true,
+        selected_snapshot_confidence: selectedSlot.confidence,
         pricing_snapshot_hash: hash,
         duration_ms: Date.now() - startedAt,
       },

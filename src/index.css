@@ -214,3 +214,73 @@ html.kiosk-mode textarea {
 html:not(.kiosk-mode) {
   scroll-behavior: smooth;
 }
+
+/* The DTA tablet is a landscape 16:9 display with less usable height than a
+   desktop browser. Keep the entire four-slot chooser and its CTA in frame;
+   kiosk mode intentionally has no scroll escape hatch. */
+@media (orientation: landscape) and (max-height: 760px) {
+  /* The DTA is a real 16:9 landscape canvas, not a shrunken web card. */
+  .kiosk-root { padding: .6rem clamp(.9rem, 2.4vw, 2.4rem); }
+  .kiosk-root > header { min-height: 3.55rem; }
+  .kiosk-root main { min-height: calc(100vh - 4.15rem); max-width: none; }
+
+  /* Hero at left, true two-by-two physical cabinet map at right. This uses
+     the complete 1280x720 panel while preserving a visible CTA. */
+  .kiosk-idle-stage {
+    display: grid !important;
+    width: 100%;
+    min-height: calc(100vh - 4.55rem);
+    grid-template-columns: minmax(19rem, .88fr) minmax(32rem, 1.32fr);
+    grid-template-rows: 1fr auto;
+    align-items: center;
+    gap: clamp(1rem, 2.4vw, 2.5rem) !important;
+    padding: clamp(.9rem, 2vw, 1.8rem) clamp(1rem, 2.8vw, 3rem);
+    border-radius: 2.25rem;
+  }
+  .kiosk-idle-stage::after {
+    content: '';
+    position: absolute;
+    inset: 1rem;
+    z-index: 0;
+    border: 1px solid hsl(var(--glass-border));
+    border-radius: 1.8rem;
+    pointer-events: none;
+  }
+  .kiosk-idle-hero { grid-column: 1; grid-row: 1; align-self: center; text-align: left; align-items: flex-start !important; }
+  .kiosk-idle-stage h1 { font-size: clamp(2.35rem, 4vw, 4.15rem) !important; max-width: 11ch; }
+  .kiosk-idle-hero > p { font-size: clamp(1.1rem, 1.8vw, 1.55rem) !important; }
+  .kiosk-idle-hero .text-3xl { font-size: clamp(2.1rem, 3.5vw, 3.5rem) !important; }
+  .kiosk-slot-grid { grid-column: 2; grid-row: 1 / span 2; max-width: none !important; gap: clamp(.75rem, 1.4vw, 1.4rem) !important; }
+  .kiosk-idle-stage .kiosk-slot-card { min-height: clamp(9.35rem, 25vh, 12.4rem); padding: clamp(.95rem, 1.8vw, 1.45rem); border-radius: 1.65rem; }
+  .kiosk-idle-stage .kiosk-slot-visual { height: 2.75rem; margin-top: .5rem; }
+  .kiosk-idle-stage .kiosk-slot-card .text-4xl { font-size: clamp(2.25rem, 3.4vw, 3.35rem); line-height: 1; }
+  .kiosk-idle-stage .kiosk-slot-card .text-base { font-size: clamp(.95rem, 1.35vw, 1.25rem); }
+  .kiosk-idle-cta { grid-column: 1; grid-row: 2; align-items: flex-start !important; }
+  .kiosk-idle-cta button { min-width: min(100%, 21rem); padding: 1.05rem 1.65rem; font-size: clamp(1.15rem, 1.8vw, 1.55rem); }
+
+  .kiosk-pricing-stage { gap: 1.05rem; }
+  .kiosk-pricing-stage > h2 { font-size: clamp(2.4rem, 4.7vw, 4.25rem); }
+  .kiosk-pricing-card { max-width: min(100%, 76rem) !important; padding: clamp(1.5rem, 3vw, 3rem) !important; }
+  .kiosk-pricing-stage .text-6xl { font-size: clamp(2.85rem, 5.5vw, 4.8rem); }
+  .kiosk-pricing-stage .text-7xl { font-size: clamp(4.1rem, 6vw, 5.7rem); }
+  .kiosk-pricing-stage .h-16 { height: 3.75rem; }
+
+  .kiosk-qr-stage { min-height: calc(100vh - 5.2rem); align-content: center; }
+  .kiosk-qr-stage h2 { font-size: clamp(3rem, 5.3vw, 5rem) !important; }
+  .kiosk-qr-stage .text-5xl { font-size: clamp(2.5rem, 4.7vw, 4.5rem); }
+  .kiosk-qr-stage .text-2xl { font-size: clamp(1.15rem, 1.85vw, 1.65rem); }
+  .kiosk-qr-stage .text-lg { font-size: clamp(1rem, 1.45vw, 1.28rem); }
+  .kiosk-qr-stage svg { width: min(38vw, 430px) !important; height: min(38vw, 430px) !important; }
+  .kiosk-release-stage { min-height: calc(100vh - 5.2rem); justify-content: center; }
+  .kiosk-release-stage > div:first-child { max-width: min(78vw, 76rem); }
+}
+
+@media (orientation: landscape) and (min-width: 1100px) and (min-height: 761px) {
+  .kiosk-root main { max-width: none; }
+  .kiosk-idle-stage { width: 100%; min-height: calc(100vh - 5.5rem); padding: 2rem 3.5rem; }
+}
+
+@media (orientation: portrait), (max-width: 900px) {
+  .kiosk-idle-stage { display: flex !important; min-height: auto; padding: 1rem; }
+  .kiosk-idle-hero, .kiosk-idle-cta { align-items: center !important; text-align: center; }
+}

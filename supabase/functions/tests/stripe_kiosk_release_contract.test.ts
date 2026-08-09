@@ -67,15 +67,48 @@ Deno.test("Checkout endpoint authenticates before disclosing or creating a Check
   assert(bindingAt > authAt);
   assert(cachedUrlAt > bindingAt);
   assert(stripeCreateAt > bindingAt);
+  const cachedPaymentRepairAt = source.indexOf("cachedPaymentError");
+  assert(cachedPaymentRepairAt > cachedUrlAt);
+  assert(cachedPaymentRepairAt < stripeCreateAt);
+  assert(source.includes("onConflict: \"stripe_session_id\""));
   assert(source.includes("x-kiosk-token"));
   assertEquals(source.includes("body.kioskToken"), false);
+});
+
+Deno.test("Checkout keeps dynamic payment methods on one prepaid/refund strategy", async () => {
+  const source = await Deno.readTextFile(
+    "supabase/functions/create-stripe-checkout/index.ts",
+  );
+  assertEquals(source.includes("payment_method_types:"), false);
+  assertEquals(source.includes("payment_method_options:"), false);
+  assertEquals(source.includes('capture_method: "manual"'), false);
+  assert(source.includes("rental_deposit_checkout:v2:"));
+  assert(source.includes('settlement_strategy: "prepaid_refund"'));
+});
+
+Deno.test("Stripe Checkout payment upsert has a non-partial database conflict target", async () => {
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000811_restore_payments_stripe_session_index.sql",
+  );
+  assert(migration.includes("ADD CONSTRAINT payments_stripe_session_id_key UNIQUE (stripe_session_id)"));
+  assertEquals(migration.includes("WHERE stripe_session_id IS NOT NULL"), false);
+});
+
+Deno.test("ChargeNow order projection has a real rental-session conflict target", async () => {
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000813_restore_apifox_orders_rental_session_constraint.sql",
+  );
+  assert(/ADD CONSTRAINT\s+apifox_orders_rental_session_id_key\s+UNIQUE \(rental_session_id\)/i.test(migration));
 });
 
 Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",
   );
-  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled())");
+  const migration = await Deno.readTextFile(
+    "supabase/migrations/20260806000812_add_one_time_rental_ejection_permits.sql",
+  );
+  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled() && !oneTimeTestResume)");
   const providerConfigAt = source.indexOf("if (!isChargeNowConfigured())");
   const hardwareAt = source.indexOf("hardwareCommandIssued = true");
   assert(gateAt >= 0);
@@ -87,6 +120,15 @@ Deno.test("disabled hardware is persisted as a terminal support state without au
   assert(source.includes("terminal: true"));
   assert(source.includes('eventType: "rental_failed"'));
   assert(source.includes("release_blocked:${session.id}:${code}"));
+  // The permit is service-role-only, time limited and consumed atomically.
+  assert(migration.includes("one_time_rental_ejection_permits"));
+  assert(migration.toUpperCase().includes("ENABLE ROW LEVEL SECURITY"));
+  assert(source.includes('chargeNowMode() === "test"'));
+  assert(source.includes("permit.rental_session_id === session.id"));
+  assert(source.includes("permit.slot_num === requestedSlotNum"));
+  assert(source.includes("rental.one_time_test_ejection_consumed"));
+  assert(source.includes("actor: \"one_time_ejection_permit\""));
+  assert(source.includes("orderCreateWithOneTimeRentalPermit"));
 
   const disabledBranch = source.slice(gateAt, providerConfigAt);
   assertEquals(
