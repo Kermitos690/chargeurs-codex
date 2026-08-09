@@ -72,14 +72,17 @@ export function KioskHolographicFloor() {
 
 /**
  * Visual-only feedback while the server reports that a compartment is opening.
- * It deliberately says "preparing" through its parent screen: the animation
- * is not evidence that a battery has physically been taken.
+ * Physical DTA21269 layout, seen from the front:
+ *   1 | 3
+ *   2 | 4
+ * The animation must mirror this exact wiring so the highlighted compartment
+ * never points the customer to a different physical slot.
  */
 export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
   const position = {
     1: "left-[25%] top-[58%]",
-    2: "left-[73%] top-[58%]",
-    3: "left-[25%] top-[80%]",
+    2: "left-[25%] top-[80%]",
+    3: "left-[73%] top-[58%]",
     4: "left-[73%] top-[80%]",
   }[slotNum ?? 0] ?? "left-1/2 top-2/3";
 
