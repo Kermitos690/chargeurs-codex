@@ -55,7 +55,7 @@ Deno.test("a battery without an explicit charge percentage is never customer-rea
   assertEquals(slot.customer_status, "checking");
 });
 
-Deno.test("a confirmed 0% ChargeNow battery is a verification anomaly, never rentable or charging", () => {
+Deno.test("a confirmed 0% ChargeNow battery is a technical issue, never rentable or charging", () => {
   const now = new Date().toISOString();
   const slots = mergeCabinetSlotObservations([
     { source: "c7_batteries", timestamp: now, raw: { slotNum: 3, batteryId: "BAT-3", vol: 0, online: true } },
@@ -64,8 +64,20 @@ Deno.test("a confirmed 0% ChargeNow battery is a verification anomaly, never ren
   const slot = slots[2];
   assertEquals(slot.charge_percent, 0);
   assertEquals(slot.rentable, false);
-  assertEquals(slot.customer_status, "checking");
+  assertEquals(slot.customer_status, "technical_issue");
   assertEquals(slot.diagnostic_flags, ["zero_charge_reported"]);
+});
+
+Deno.test("an explicitly empty compartment is available for return, not an alert or a battery", () => {
+  const now = new Date().toISOString();
+  const slots = mergeCabinetSlotObservations([
+    { source: "c8_slots", timestamp: now, raw: { slotNum: 4, present: false, canEject: false, online: true, vol: 1 } },
+  ]);
+  const slot = slots[3];
+  assertEquals(slot.battery_present, false);
+  assertEquals(slot.rentable, false);
+  assertEquals(slot.customer_status, "return_available");
+  assertEquals(slot.diagnostic_flags, []);
 });
 
 Deno.test("only a corroborated self-checked slot can be recommended", () => {

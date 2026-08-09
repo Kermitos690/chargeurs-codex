@@ -44,7 +44,7 @@ type KioskSlot = {
   charge_percent: number | null;
   rentable: boolean;
   confidence: "high" | "medium" | "low";
-  status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "maintenance";
+  status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "return_available" | "technical_issue" | "maintenance";
   recommended: boolean;
 };
 type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
@@ -676,12 +676,15 @@ export default function Kiosk() {
                       : { opacity: 1, y: 0, scale: 1 }}
                     transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
                     whileTap={slot.rentable ? { scale: .96 } : undefined}
-                    className={`kiosk-slot-card glass liquid-border relative min-h-44 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    className={`kiosk-slot-card glass liquid-border relative min-h-44 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : slot.status === "return_available" ? "cursor-default opacity-85" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
                     <div className="text-base font-bold text-foreground/90">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
-                    <PowerbankScene charge={slot.charge_percent} selected={selected} recommended={slot.recommended} rentable={slot.rentable} />
-                    {slot.charge_percent == null ? <>
+                    <PowerbankScene charge={slot.charge_percent} selected={selected} recommended={slot.recommended} rentable={slot.rentable} returnAvailable={slot.status === "return_available"} />
+                    {slot.status === "return_available" ? <>
+                      <div className="mt-3 text-base font-bold text-cyan-100">{t("kiosk.slot.return_available")}</div>
+                      <div className="mt-4 h-3 rounded-full bg-cyan-300/15" aria-hidden="true" />
+                    </> : slot.charge_percent == null ? <>
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
                       <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />
                     </> : <>

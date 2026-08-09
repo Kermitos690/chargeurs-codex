@@ -13,7 +13,7 @@ import {
 } from "./chargenow.ts";
 
 export type SlotConfidence = "high" | "medium" | "low";
-export type SlotCustomerStatus = "ready" | "recommended" | "charging" | "checking" | "unavailable" | "maintenance";
+export type SlotCustomerStatus = "ready" | "recommended" | "charging" | "checking" | "unavailable" | "return_available" | "technical_issue" | "maintenance";
 
 export type CabinetSlotSnapshot = {
   slot_num: number;
@@ -242,21 +242,27 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
     // battery "ready" to a customer. For the DTA integration, `vol` is now a
     // confirmed charge field; capacity and temperature remain excluded.
     const hasConfirmedCharge = chargePercent !== null;
-    // A present 0% battery is never customer-ready.  The supplier payload
-    // contains no charging-state field, so calling it "charging" would be an
-    // unsupported diagnosis.  Keep it unavailable pending verification and
-    // expose the evidence to operators instead.
+    // A present 0% battery is never customer-ready. The supplier payload
+    // contains no confirmed charging-state field, so never call it charging.
+    // A fresh, identified 0% report is actionable for an operator and must
+    // not leave customers on an endless, ambiguous "checking" state.
     const hasUsableCharge = chargePercent != null && chargePercent > 0;
     const diagnosticFlags: string[] = [];
-    if (chargePercent === 0) diagnosticFlags.push("zero_charge_reported");
+    const confirmedEmpty = batteryPresent === false;
+    const confirmedZeroBattery = Boolean(
+      batteryId && batteryPresent !== false && chargePercent === 0 && freshEnough && !conflicts.includes("charge_percent"),
+    );
+    if (confirmedZeroBattery) diagnosticFlags.push("zero_charge_reported");
     const rentable = Boolean(
       batteryId && batteryPresent !== false && online !== false && !blocking &&
       freshEnough && confidence !== "low" && supplierEjectable !== false && hasConfirmedCharge && hasUsableCharge,
     );
-    const customerStatus: SlotCustomerStatus = !hasConfirmedCharge || chargePercent === 0 || conflicts.length || confidence === "low" || batteryPresent === null ? "checking"
+    const customerStatus: SlotCustomerStatus = confirmedEmpty ? "return_available"
+      : confirmedZeroBattery ? "technical_issue"
+      : conflicts.length || confidence === "low" || batteryPresent === null || !hasConfirmedCharge ? "checking"
       : rentable ? "ready"
       : blocking ? "maintenance"
-      : batteryPresent === false || !batteryId ? "unavailable"
+      : !batteryId ? "unavailable"
       : "charging";
     return {
       slot_num: slotNum, battery_id: batteryId, battery_present: batteryPresent, charge_percent: chargePercent,

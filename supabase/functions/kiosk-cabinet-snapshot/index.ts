@@ -30,7 +30,9 @@ Deno.serve(async (req) => {
     if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
     const snapshot = await readCabinetSnapshot(station.cabinet_id || station.station_id);
     const slots = snapshot.slots.map((slot) => ({
-      slot_num: slot.slot_num, charge_percent: slot.charge_percent, rentable: slot.rentable,
+      // An empty compartment can retain a stale supplier reading. It is a
+      // return location, not a battery at 1% or a customer-facing warning.
+      slot_num: slot.slot_num, charge_percent: slot.customer_status === "return_available" ? null : slot.charge_percent, rentable: slot.rentable,
       confidence: slot.confidence, status: slot.customer_status, recommended: false,
     }));
     // Recommendation is stricter than eligibility: it needs corroborated,

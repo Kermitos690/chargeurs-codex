@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
-import { AlertTriangle, BatteryCharging, Zap } from "lucide-react";
+import { AlertTriangle, BatteryCharging, CornerDownLeft, Zap } from "lucide-react";
 
 type Props = {
   charge: number | null;
   selected: boolean;
   recommended: boolean;
   rentable: boolean;
+  returnAvailable?: boolean;
 };
 
 /**
@@ -13,7 +14,7 @@ type Props = {
  * rendered once behind the chooser. Repeating tiny faux-3D batteries in four
  * cards made the actual charge level hard to read on the DTA display.
  */
-export function PowerbankScene({ charge, selected, recommended, rentable }: Props) {
+export function PowerbankScene({ charge, selected, recommended, rentable, returnAvailable = false }: Props) {
   const level = charge == null ? 0 : Math.max(0, Math.min(100, charge));
   const iconClass = rentable
     ? "text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,.95)]"
@@ -31,7 +32,7 @@ export function PowerbankScene({ charge, selected, recommended, rentable }: Prop
         animate={selected ? { y: [0, -2, 0], rotate: [0, -3, 0] } : undefined}
         transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
       >
-        {rentable ? <BatteryCharging className={`h-7 w-7 ${iconClass}`} strokeWidth={2.4} /> : <AlertTriangle className="h-6 w-6 text-amber-200" strokeWidth={2.3} />}
+        {rentable ? <BatteryCharging className={`h-7 w-7 ${iconClass}`} strokeWidth={2.4} /> : returnAvailable ? <CornerDownLeft className="h-7 w-7 text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,.95)]" strokeWidth={2.4} /> : <AlertTriangle className="h-6 w-6 text-amber-200" strokeWidth={2.3} />}
       </motion.div>
       <div className="relative z-10 flex gap-1">
         {[25, 50, 75, 100].map((threshold) => <span key={threshold} className={`h-1.5 w-1.5 rounded-full ${level >= threshold ? "bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,1)]" : "bg-white/20"}`} />)}

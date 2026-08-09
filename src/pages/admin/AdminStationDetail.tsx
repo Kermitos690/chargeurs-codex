@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { RefreshCw, Loader2, Wifi, WifiOff, Battery, TabletSmartphone, Copy, Ban, type LucideIcon } from "lucide-react";
+import { RefreshCw, Loader2, Wifi, WifiOff, Battery, TabletSmartphone, Copy, Ban, AlertTriangle, CircleCheck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 
@@ -28,6 +28,25 @@ type SlotDiagnostic = {
   confidence: string; customer_status: string; source_timestamps: Record<string, string>;
   age_seconds: number | null; conflicts: string[]; diagnostic_flags: string[];
 };
+
+const statusLabel = (status: string) => ({
+  ready: "Prête", recommended: "Recommandée", charging: "En recharge",
+  checking: "Vérification", unavailable: "Indisponible",
+  return_available: "Libre pour un retour", technical_issue: "Problème technique", maintenance: "Maintenance",
+}[status] ?? status);
+
+const diagnosticLabel = (flag: string) => ({
+  zero_charge_reported: "charge signalée à 0 % : location bloquée",
+  battery_id: "identifiants batterie contradictoires",
+  charge_percent: "niveaux de charge contradictoires",
+  battery_present: "présence de batterie contradictoire",
+  online: "états réseau contradictoires",
+}[flag] ?? flag);
+
+const needsOperatorAlert = (slot: SlotDiagnostic) =>
+  ["technical_issue", "maintenance"].includes(slot.customer_status) ||
+  slot.diagnostic_flags.length > 0 || slot.conflicts.length > 0 ||
+  Boolean(slot.error_code || slot.fault_type || slot.fault_cause);
 
 export default function AdminStationDetail() {
   const { stationId } = useParams();
@@ -93,6 +112,7 @@ export default function AdminStationDetail() {
   if (!station) return <Loader2 className="h-8 w-8 animate-spin text-primary" />;
   const connection = stationConnectionState(station);
   const isOnline = connection === "online";
+  const activeAlerts = diagnostics.filter(needsOperatorAlert);
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -132,11 +152,28 @@ export default function AdminStationDetail() {
         )}
       </section>
 
+      <section className={cn("rounded-2xl border p-5", activeAlerts.length ? "border-warning/45 bg-warning/10" : "border-success/35 bg-success/10")}>
+        <div className="flex items-start gap-3">
+          {activeAlerts.length ? <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-warning" /> : <CircleCheck className="mt-0.5 h-6 w-6 shrink-0 text-success" />}
+          <div>
+            <h2 className="font-display text-xl font-bold">Alertes actives de la borne</h2>
+            <p className="text-sm text-muted-foreground">Vue opérateur basée sur le snapshot fournisseur le plus récent. Un slot libre pour un retour n’est pas une alerte.</p>
+          </div>
+        </div>
+        {activeAlerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{activeAlerts.map((slot) => (
+          <div key={slot.slot_num} className="rounded-xl border border-warning/30 bg-background/35 p-3 text-sm">
+            <div className="font-bold">Slot {slot.slot_num} — {statusLabel(slot.customer_status)}</div>
+            <div className="mt-1 text-muted-foreground">{[...slot.diagnostic_flags, ...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).map(diagnosticLabel).join(" · ") || "Contrôle opérateur requis"}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Âge : {slot.age_seconds == null ? "inconnu" : `${slot.age_seconds}s`} · confiance : {slot.confidence}</div>
+          </div>
+        ))}</div> : <p className="mt-3 text-sm text-success">Aucune anomalie active dans le dernier snapshot. Les emplacements vides sont suivis comme retours possibles.</p>}
+      </section>
+
       <section className="glass liquid-border rounded-2xl p-6">
         <div className="mb-4"><h2 className="font-display text-xl font-bold">Diagnostic fournisseur par slot</h2><p className="text-sm text-muted-foreground">Vue technique multi-source, en lecture seule. Les données ambiguës ne rendent jamais une batterie louable.</p></div>
         {diagnostics.length === 0 ? <p className="text-muted-foreground">Aucun snapshot technique récent. Utilisez Synchroniser ou vérifiez l’accès fournisseur.</p> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border text-muted-foreground"><tr><th className="p-2">Slot</th><th className="p-2">Batterie</th><th className="p-2">Charge</th><th className="p-2">Temp.</th><th className="p-2">État</th><th className="p-2">Self-check</th><th className="p-2">Confiance</th><th className="p-2">Âge</th><th className="p-2">Louable</th><th className="p-2">Anomalies</th></tr></thead><tbody>
-            {diagnostics.map((slot) => <tr key={slot.slot_num} className="border-b border-border/50 align-top"><td className="p-2 font-bold">{slot.slot_num}</td><td className="p-2 font-mono text-xs">{slot.battery_id ?? "—"}</td><td className="p-2">{slot.charge_percent == null ? "non interprété" : `${Math.round(slot.charge_percent)} %`}</td><td className="p-2">{slot.temperature_c == null ? "—" : `${slot.temperature_c.toFixed(1)} °C`}</td><td className="p-2">{slot.customer_status}</td><td className="p-2">{slot.self_check}</td><td className="p-2">{slot.confidence}</td><td className="p-2">{slot.age_seconds == null ? "—" : `${slot.age_seconds}s`}</td><td className="p-2">{slot.rentable ? "oui" : "non"}</td><td className="p-2 text-xs text-warning">{[...slot.diagnostic_flags, ...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).join(" · ") || "—"}</td></tr>)}
+            {diagnostics.map((slot) => <tr key={slot.slot_num} className="border-b border-border/50 align-top"><td className="p-2 font-bold">{slot.slot_num}</td><td className="p-2 font-mono text-xs">{slot.battery_id ?? "—"}</td><td className="p-2">{slot.customer_status === "return_available" ? "— (retour)" : slot.charge_percent == null ? "non interprété" : `${Math.round(slot.charge_percent)} %`}</td><td className="p-2">{slot.temperature_c == null ? "—" : `${slot.temperature_c.toFixed(1)} °C`}</td><td className="p-2">{statusLabel(slot.customer_status)}</td><td className="p-2">{slot.self_check}</td><td className="p-2">{slot.confidence}</td><td className="p-2">{slot.age_seconds == null ? "—" : `${slot.age_seconds}s`}</td><td className="p-2">{slot.rentable ? "oui" : "non"}</td><td className="p-2 text-xs text-warning">{[...slot.diagnostic_flags, ...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).map(diagnosticLabel).join(" · ") || "—"}</td></tr>)}
           </tbody></table></div>
         )}
       </section>
