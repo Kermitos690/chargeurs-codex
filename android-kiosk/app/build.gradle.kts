@@ -34,11 +34,10 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // 1.0.15 fixes the permanent WebView z-order regression directly in
-        // the source tree. It can therefore be installed over 1.0.13/1.0.14
-        // without relying on a CI-only source rewrite.
-        versionCode = 115
-        versionName = "1.0.15"
+        // Field RC after the staging payment/hardware lifecycle hardening.
+        // The staging variant appends "-staging" and remains test-only.
+        versionCode = 116
+        versionName = "1.0.16-rc1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
