@@ -528,7 +528,7 @@ export default function Kiosk() {
         <motion.div
           initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
-          className="fixed left-5 top-5 z-50 flex items-center gap-2 rounded-full border border-border bg-background/85 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-8"
+          className="fixed left-5 top-[4.7rem] z-50 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-[5.2rem]"
           aria-live="polite"
         >
           <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
@@ -708,14 +708,21 @@ export default function Kiosk() {
           )}
 
           {phase === "pricing" && (
-            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-md flex-col items-center gap-6">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl">{t("kiosk.pricing.title")}</h2>
+            <motion.div key="pricing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="kiosk-pricing-stage flex w-full max-w-5xl flex-col items-center gap-7 px-4">
+              <h2 className="font-display text-5xl font-extrabold tracking-tight sm:text-6xl">{t("kiosk.pricing.title")}</h2>
               {quote ? (
-                <div className="glass liquid-border w-full rounded-2xl p-8 text-center">
-                  <div className="text-lg font-semibold">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div>
-                  <div className="mt-3 text-5xl font-bold text-gradient-cyan">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>
-                  <p className="mt-3 text-sm text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} {t("kiosk.minutes")}</p>
-                  <p className="mt-5 text-sm text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>
+                <div className="glass liquid-border grid w-full max-w-4xl grid-cols-[.8fr_1.2fr] items-center gap-8 rounded-[2.25rem] p-8 text-center sm:p-10">
+                  <div className="flex flex-col items-center gap-4 border-r border-white/15 pr-8">
+                    <div className="text-xl font-bold text-muted-foreground">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div>
+                    <div className="grid h-28 w-28 place-items-center rounded-[2rem] border border-primary/40 bg-primary/10 shadow-glow">
+                      <span className="font-display text-7xl font-extrabold text-gradient-cyan">{slotNum ?? "—"}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-display text-6xl font-extrabold leading-none text-gradient-cyan sm:text-7xl">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>
+                    <p className="mt-5 text-xl font-semibold text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} {t("kiosk.minutes")}</p>
+                    <p className="mt-7 text-base text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>
+                  </div>
                 </div>
               ) : (
                 <p className="text-warning">
@@ -724,9 +731,9 @@ export default function Kiosk() {
                     : quoteError ? t("kiosk.pricing.error") : t("kiosk.pricing.loading")}
                 </p>
               )}
-              <div className="flex gap-3">
-                <Button variant="ghost" onClick={reset}>{t("kiosk.back")}</Button>
-                <Button onClick={startRental} disabled={!quote || slotNum === null} className="rounded-full bg-gradient-primary px-10 py-5 text-lg font-bold shadow-glow">
+              <div className="flex gap-5">
+                <Button variant="ghost" onClick={reset} className="h-16 px-8 text-xl">{t("kiosk.back")}</Button>
+                <Button onClick={startRental} disabled={!quote || slotNum === null} className="h-16 rounded-full bg-gradient-primary px-14 text-2xl font-bold shadow-glow">
                   {t("kiosk.rent_selected")}
                 </Button>
               </div>
@@ -734,9 +741,9 @@ export default function Kiosk() {
           )}
 
           {phase === "starting" && (
-            <motion.div key="starting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <p className="text-xl text-muted-foreground">{t("kiosk.starting")}</p>
+            <motion.div key="starting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-6">
+              <Loader2 className="h-20 w-20 animate-spin text-primary" />
+              <p className="text-3xl font-bold text-muted-foreground">{t("kiosk.starting")}</p>
             </motion.div>
           )}
 

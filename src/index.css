@@ -227,4 +227,9 @@ html:not(.kiosk-mode) {
   .kiosk-idle-stage .kiosk-slot-card { min-height: 8.4rem; padding: .7rem .9rem; }
   .kiosk-idle-stage .kiosk-slot-visual { height: 2.2rem; margin-top: .35rem; }
   .kiosk-idle-stage .kiosk-slot-card .text-4xl { font-size: 2rem; line-height: 2.1rem; }
+  .kiosk-pricing-stage { gap: 1.1rem; }
+  .kiosk-pricing-stage > h2 { font-size: clamp(2.35rem, 4.5vw, 3.1rem); }
+  .kiosk-pricing-stage .text-6xl { font-size: clamp(2.65rem, 5vw, 3.6rem); }
+  .kiosk-pricing-stage .text-7xl { font-size: 4rem; }
+  .kiosk-pricing-stage .h-16 { height: 3.45rem; }
 }
