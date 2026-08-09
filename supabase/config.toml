@@ -53,6 +53,9 @@ verify_jwt = false
 [functions.eject-after-payment]
 verify_jwt = false
 
+[functions.reconcile-pending-ejection]
+verify_jwt = false
+
 [functions.chargenow-rent-callback]
 verify_jwt = false
 

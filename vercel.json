@@ -31,6 +31,10 @@
       "source": "/api/kiosk/cabinet-snapshot",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-cabinet-snapshot"
     },
+    {
+      "source": "/api/kiosk/reconcile-pending-ejection",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/reconcile-pending-ejection"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

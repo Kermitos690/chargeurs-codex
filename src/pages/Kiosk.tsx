@@ -372,12 +372,23 @@ export default function Kiosk() {
   useEffect(() => {
     if (!sessionId || !publicCode || !["qr", "waitpay", "starting"].includes(phase)) return;
     const poll = setInterval(async () => {
+      // ChargeNow can acknowledge an ejection before it publishes the battery
+      // identity. Reconcile only that pending state by reading the selected
+      // supplier slot; this endpoint never sends a hardware command.
+      if (phase === "waitpay") {
+        const kioskToken = readKioskToken();
+        if (kioskToken) {
+          await invokeKioskEdgeProxy("/api/kiosk/reconcile-pending-ejection", {
+            stationId, rentalSessionId: sessionId, publicCode,
+          }, { "X-Kiosk-Token": kioskToken });
+        }
+      }
       const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId, p_code: publicCode });
       const r = data as { state?: string; selected_slot_num?: number | null; failure_code?: string | null } | null;
       if (r?.state) applyState(r.state, r.selected_slot_num ?? null, r.failure_code);
     }, 3000);
     return () => clearInterval(poll);
-  }, [sessionId, publicCode, phase, applyState]);
+  }, [sessionId, publicCode, phase, stationId, applyState]);
 
   const failFlow = useCallback((failure: KioskFailure) => {
     setFlowFailure(failure);
