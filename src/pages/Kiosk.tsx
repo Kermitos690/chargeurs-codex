@@ -756,7 +756,7 @@ export default function Kiosk() {
                 <div className="mt-9 w-full rounded-[2rem] border border-white/15 bg-slate-950/20 p-6 text-left">
                   <div className="flex items-center gap-3 text-xl font-bold"><Smartphone className="h-7 w-7 text-primary" />{t("kiosk.qr.methods")}</div>
                   <div className="mt-5 flex flex-wrap gap-3">
-                    {["TWINT", "Apple Pay", "Google Pay", t("kiosk.qr.card")].map((method) => <span key={method} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold"><CreditCard className="h-4 w-4 text-cyan-200" />{method}</span>)}
+                    {["TWINT", "Apple Pay", "Google Pay", "Link", t("kiosk.qr.card")].map((method) => <span key={method} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold"><CreditCard className="h-4 w-4 text-cyan-200" />{method}</span>)}
                   </div>
                   <p className="mt-5 text-base text-muted-foreground">{t("kiosk.qr.eligibility")}</p>
                 </div>
