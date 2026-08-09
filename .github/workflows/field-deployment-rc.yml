@@ -50,12 +50,14 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Cabinet telemetry and callback contracts
+      - name: Cabinet telemetry, callback and physical-release contracts
         run: >-
           deno test --allow-env --allow-net --no-check
           supabase/functions/tests/cabinet_snapshot.test.ts
           supabase/functions/tests/chargenow_callback_auth.test.ts
           supabase/functions/tests/kiosk_cors_contract.test.ts
+          supabase/functions/tests/release_observation.test.ts
+          supabase/functions/tests/customer_pairing.test.ts
 
       - name: Record tested SHA
         run: |
