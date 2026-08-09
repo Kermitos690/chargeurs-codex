@@ -213,9 +213,15 @@ export default function Kiosk() {
     setSnapshotError(null);
     setConfigured(true);
     setBackendReachable(true);
-    const suggestedSlotNum = preferredKioskSlot(normalized);
-    setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggestedSlotNum);
-  }, [stationId]);
+    // A supplier refresh is useful on the idle menu only. Once a customer has
+    // selected a battery, that selection is part of the rental intent and must
+    // not silently change underneath the QR/payment flow. The backend repeats
+    // the eligibility check and owns the final reservation before Checkout.
+    if (phase === "idle" || phase === "loading") {
+      const suggestedSlotNum = preferredKioskSlot(normalized);
+      setSlotNum((selected) => normalized.some((slot) => slot.slot_num === selected && slot.rentable) ? selected : suggestedSlotNum);
+    }
+  }, [stationId, phase]);
 
   // A visible refresh must never reload the WebView or reset a Checkout QR.
   // It performs only authenticated, read-only refreshes; payment/ejection state
@@ -316,12 +322,13 @@ export default function Kiosk() {
     }
   }, [needRefresh, busy, phase, applyUpdate]);
 
+  // Initial load only. The idle-only effect above owns periodic refreshes;
+  // keeping a second global interval here used to mutate the selected slot
+  // while a Checkout session was open.
   useEffect(() => {
-
+    if (phase !== "loading" && phase !== "idle") return;
     void refreshKioskData();
-    const i = setInterval(() => { void refreshKioskData(); }, 15000);
-    return () => clearInterval(i);
-  }, [stationId, refreshKioskData]);
+  }, [stationId, phase, refreshKioskData]);
 
   // Tell the native host that React has rendered a usable kiosk state. This
   // avoids leaving an operator with a bare native background when an old or
