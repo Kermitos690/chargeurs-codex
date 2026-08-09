@@ -10,11 +10,11 @@ create or replace function public.append_rental_orchestrator_event(
   p_occurred_at timestamptz,
   p_metadata jsonb,
   p_resulting_state text,
-  p_payment_intent_id text,
-  p_station_id text,
-  p_battery_id text,
-  p_final_amount_chf numeric,
-  p_failure_reason text
+  p_payment_intent_id text default null,
+  p_station_id text default null,
+  p_battery_id text default null,
+  p_final_amount_chf numeric default null,
+  p_failure_reason text default null
 )
 returns public.rental_orchestrator_snapshots
 language plpgsql
