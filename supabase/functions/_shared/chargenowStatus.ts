@@ -99,10 +99,18 @@ function normalizeBattery(value: unknown): ChargeNowBattery | null {
   const slotNum = asNonNegativeInteger(firstDefined(value, ["slotNum", "slot", "slotId", "port", "portNo", "channel"]));
   const rawBatteryId = firstDefined(value, ["batteryId", "batteryID", "batterySn", "batterySN", "sn", "bid", "powerBankId"]);
   const batteryId = rawBatteryId == null || String(rawBatteryId).trim() === "" ? null : String(rawBatteryId).trim();
-  // `vol`, `capacity` and `batteryCapacity` have not been confirmed as a
-  // percentage in every supplier payload. Never turn a voltage (for example
-  // 31.2) or a capacity into a customer-facing charge level.
-  const candidate = asNumber(firstDefined(value, ["chargePercent", "charge_percent", "powerLevel", "power_level", "electricity", "soc"]));
+
+  // Prefer explicit SOC keys. On the DTA O1 `/rent/cabinet/query` contract,
+  // `vol` has been confirmed operationally as the integer state-of-charge
+  // percentage. Keep an integer/range guard so a decimal temperature/voltage-
+  // looking value such as 31.2 can never be surfaced as battery percentage.
+  const explicit = asNumber(firstDefined(value, ["chargePercent", "charge_percent", "powerLevel", "power_level", "electricity", "soc"]));
+  const dtaVol = explicit == null ? asNumber(value.vol) : null;
+  const candidate = explicit ?? (
+    dtaVol != null && Number.isInteger(dtaVol) && dtaVol >= 0 && dtaVol <= 100
+      ? dtaVol
+      : null
+  );
   const powerLevel = candidate != null && candidate >= 0 && candidate <= 100 ? candidate : null;
   return { slotNum, batteryId, powerLevel, raw: value };
 }
