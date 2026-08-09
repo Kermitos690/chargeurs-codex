@@ -41,24 +41,21 @@ export function PowerbankScene({ charge, selected, recommended, rentable }: Prop
   );
 }
 
-/** A high-resolution product scene with only subtle movement behind UI. */
+/**
+ * Ambient light only. A product render must be composed for the physical
+ * kiosk's 16:9 viewport; using a generic render as a full-screen crop made
+ * the controls appear to sit in a small, badly framed poster.
+ */
 export function KioskHolographicFloor() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <motion.img
-        src="/kiosk/powerbank-stage-v1.png"
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover object-center opacity-[0.3] mix-blend-screen"
-        animate={{ scale: [1.02, 1.065, 1.02], x: [0, -7, 0], y: [0, 4, 0] }}
-        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,19,68,.42)_0%,rgba(7,19,68,.16)_38%,rgba(7,19,68,.76)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_108%,rgba(14,165,233,.28),transparent_46%),radial-gradient(ellipse_at_8%_12%,rgba(99,102,241,.16),transparent_40%)]" />
       <motion.div
-        className="absolute inset-x-[-20%] top-[-45%] h-[85%] rotate-[18deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.1),transparent)] blur-2xl"
+        className="absolute inset-x-[-20%] top-[-45%] h-[85%] rotate-[18deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.07),transparent)] blur-2xl"
         animate={{ x: ["-24%", "78%"] }}
         transition={{ duration: 8, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
       />
-      <div className="absolute inset-x-[10%] bottom-[8%] h-28 rounded-[50%] border border-cyan-200/15 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.15),transparent_70%)] blur-[1px]" />
+      <div className="absolute inset-x-[8%] bottom-[4%] h-32 rounded-[50%] border border-cyan-200/15 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.15),transparent_70%)] blur-[1px]" />
     </div>
   );
 }

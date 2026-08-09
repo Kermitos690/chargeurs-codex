@@ -617,7 +617,7 @@ export default function Kiosk() {
       </header>
 
 
-      <main className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-5xl flex-col items-center justify-center text-center">
+      <main className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[90rem] flex-col items-center justify-center text-center">
         <AnimatePresence mode="wait">
           {phase === "loading" && (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
@@ -649,7 +649,7 @@ export default function Kiosk() {
 
 
           {phase === "idle" && station && (
-            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-4xl flex-col items-center gap-4"}`}>
+            <motion.div key="idle" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`w-full ${splitLayoutPreview ? "grid max-w-6xl gap-4 lg:grid-cols-[1.35fr_.85fr] lg:items-stretch" : "flex max-w-6xl flex-col items-center gap-4"}`}>
               <section className={`kiosk-idle-stage relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
                 <KioskHolographicFloor />
                 <div className="relative z-10 flex flex-col items-center gap-3">
@@ -661,7 +661,7 @@ export default function Kiosk() {
               {/* The cabinet itself is a two-by-two physical layout. Keeping
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
-              <div className="relative z-10 grid w-full max-w-3xl grid-cols-2 gap-4">
+              <div className="relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
                 {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
                   slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
