@@ -41,6 +41,14 @@ function customerPairingPayload(path: KioskProxyPath, body: Record<string, unkno
   return body;
 }
 
+function notifyKioskFlowComplete(path: KioskProxyPath, data: unknown) {
+  if (path !== "/api/kiosk/reconcile-pending-ejection" || !data || typeof data !== "object") return;
+  const result = data as Record<string, unknown>;
+  if (result.confirmed === true && result.state === "ejected") {
+    window.dispatchEvent(new CustomEvent("chargeurs:kiosk-flow-complete"));
+  }
+}
+
 export async function invokeKioskEdgeProxy<T>(
   path: KioskProxyPath,
   body: Record<string, unknown>,
@@ -62,6 +70,7 @@ export async function invokeKioskEdgeProxy<T>(
     let data: T | null = null;
     try {
       data = await response.json() as T;
+      notifyKioskFlowComplete(path, data);
     } catch {
       // A non-JSON gateway error is treated as a safe request failure below.
     }
