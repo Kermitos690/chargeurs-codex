@@ -5,6 +5,8 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { pairingTokenHash, validPairingToken } from "../_shared/customerPairing.ts";
 
+const CLAIMED_PAIRING_TTL_MS = 5 * 60 * 1000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const correlationId = crypto.randomUUID();
@@ -49,18 +51,23 @@ Deno.serve(async (req) => {
     }
     if (current.state !== "pending") return reply({ ok: false, error: "PAIRING_NOT_CLAIMABLE" }, 409);
 
-    // Atomic compare-and-set: only one account can win the QR.
+    // Atomic compare-and-set: only one account can win the QR. Once the QR has
+    // been claimed, extend only that already-authenticated pairing for five
+    // minutes so the customer has time to choose a battery and pay. The raw QR
+    // token itself still had to be scanned inside its original 90-second window.
     const now = new Date().toISOString();
+    const claimedExpiresAt = new Date(Date.now() + CLAIMED_PAIRING_TTL_MS).toISOString();
     const { data: claimed, error: claimError } = await db.from("customer_pairing_sessions").update({
       customer_user_id: user.id,
       state: "claimed",
       claimed_at: now,
+      expires_at: claimedExpiresAt,
       updated_at: now,
     }).eq("id", current.id)
       .eq("state", "pending")
       .is("customer_user_id", null)
       .gt("expires_at", now)
-      .select("id,station_id,segment")
+      .select("id,station_id,segment,expires_at")
       .maybeSingle();
     if (claimError) throw claimError;
     if (!claimed) return reply({ ok: false, error: "PAIRING_ALREADY_CLAIMED" }, 409);
@@ -73,11 +80,12 @@ Deno.serve(async (req) => {
         station_id: claimed.station_id,
         kiosk_device_id: current.kiosk_device_id,
         segment: claimed.segment,
+        expires_at: claimed.expires_at,
         correlation_id: correlationId,
       },
     });
 
-    return reply({ ok: true, pairingId: claimed.id, stationId: claimed.station_id, segment: claimed.segment });
+    return reply({ ok: true, pairingId: claimed.id, stationId: claimed.station_id, segment: claimed.segment, expiresAt: claimed.expires_at });
   } catch (error) {
     console.error("customer-pairing-claim", error instanceof Error ? error.message : "UNKNOWN_ERROR");
     return reply({ ok: false, error: "PAIRING_CLAIM_FAILED" }, 500);
