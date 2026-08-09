@@ -84,7 +84,7 @@ jobs:
 
       - name: Android unit tests and staging lint
         working-directory: android-kiosk
-        run: ./gradlew testStagingUnitTest lintStaging --stacktrace
+        run: ./gradlew test lintStaging --stacktrace
 
       - name: Build staging RC APK
         working-directory: android-kiosk
