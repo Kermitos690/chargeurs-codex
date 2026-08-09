@@ -78,6 +78,12 @@ for each row
 execute function public.project_orchestrator_event_to_rental_session();
 
 -- Backfill only milestones already proven by the immutable event stream.
+with latest_release as (
+  select distinct on (rental_id) rental_id, occurred_at
+  from public.rental_orchestrator_events
+  where event_type = 'battery_released'
+  order by rental_id, resulting_version desc
+)
 update public.rental_sessions rs
 set ejected_at = coalesce(rs.ejected_at, e.occurred_at),
     state = case
@@ -87,26 +93,26 @@ set ejected_at = coalesce(rs.ejected_at, e.occurred_at),
     chargenow_status = case when rs.chargenow_status = 'release_provider_confirmation_pending' then 'ejected' else rs.chargenow_status end,
     failure_code = case when rs.failure_code = 'EJECTION_PROVIDER_CONFIRMATION_PENDING' then null else rs.failure_code end,
     failure_message = case when rs.failure_code = 'EJECTION_PROVIDER_CONFIRMATION_PENDING' then null else rs.failure_message end
-from lateral (
-  select occurred_at
-  from public.rental_orchestrator_events ev
-  where ev.rental_id = rs.id and ev.event_type = 'battery_released'
-  order by resulting_version desc
-  limit 1
-) e
-where e.occurred_at is not null;
+from latest_release e
+where e.rental_id = rs.id;
 
+with latest_activation as (
+  select distinct on (rental_id) rental_id, occurred_at
+  from public.rental_orchestrator_events
+  where event_type = 'rental_activated'
+  order by rental_id, resulting_version desc
+)
 update public.rental_sessions rs
 set started_at = coalesce(rs.started_at, e.occurred_at)
-from lateral (
-  select occurred_at
-  from public.rental_orchestrator_events ev
-  where ev.rental_id = rs.id and ev.event_type = 'rental_activated'
-  order by resulting_version desc
-  limit 1
-) e
-where e.occurred_at is not null;
+from latest_activation e
+where e.rental_id = rs.id;
 
+with latest_return as (
+  select distinct on (rental_id) rental_id, occurred_at, metadata
+  from public.rental_orchestrator_events
+  where event_type = 'return_detected'
+  order by rental_id, resulting_version desc
+)
 update public.rental_sessions rs
 set state = case
       when public.rental_session_state_rank(rs.state) < public.rental_session_state_rank('battery_returned') then 'battery_returned'
@@ -120,11 +126,5 @@ set state = case
         when coalesce(e.metadata->>'slotNum','') ~ '^[0-9]+$' then (e.metadata->>'slotNum')::integer
         else null
       end)
-from lateral (
-  select occurred_at, metadata
-  from public.rental_orchestrator_events ev
-  where ev.rental_id = rs.id and ev.event_type = 'return_detected'
-  order by resulting_version desc
-  limit 1
-) e
-where e.occurred_at is not null;
+from latest_return e
+where e.rental_id = rs.id;
