@@ -23,6 +23,7 @@ type KioskProxyPath =
   | "/api/kiosk/create-stripe-checkout"
   | "/api/kiosk/cabinet-snapshot"
   | "/api/kiosk/reconcile-pending-ejection"
+  | "/api/kiosk/return-summary"
   | "/api/kiosk/resume-state"
   | "/api/kiosk/customer-options"
   | "/api/kiosk/customer-pairing-create"
