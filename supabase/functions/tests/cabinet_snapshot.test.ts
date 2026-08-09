@@ -107,6 +107,67 @@ Deno.test("real C4 C7 C8 and O1 field names reconcile the same physical battery"
   assertEquals(slot.rentable, true);
 });
 
+Deno.test("real C7 sn is a module serial and never overrides pBatteryid", () => {
+  const now = new Date().toISOString();
+  const slots = mergeCabinetSlotObservations([
+    {
+      source: "c7_batteries",
+      timestamp: now,
+      raw: {
+        data: [
+          {
+            sn: "22",
+            pKakou: 1,
+            pSubKakou: 1,
+            pBatteryid: "FECA02C714",
+            pDianliang: 84,
+            pTemperature: 25,
+            pInfostatus: "在线",
+            pErrid: 0,
+            pFaultType: 0,
+          },
+        ],
+      },
+    },
+    {
+      source: "c8_slots",
+      timestamp: now,
+      raw: {
+        data: [
+          { pSn: "22", pKakou: 1, pBatteryid: "FECA02C714", pDianliang: 84, pErrid: 0, pFaultType: 0 },
+        ],
+      },
+    },
+    {
+      source: "o1_query",
+      timestamp: now,
+      raw: { data: { batteries: [{ slotNum: 1, batteryId: "FECA02C714", vol: 84 }] } },
+    },
+  ]);
+
+  assertEquals(slots[0].battery_id, "FECA02C714");
+  assertEquals(slots[0].conflicts.includes("battery_id"), false);
+  assertEquals(slots[0].charge_percent, 84);
+  assertEquals(slots[0].rentable, true);
+});
+
+Deno.test("small cross-endpoint SOC drift is tolerated but large drift fails closed", () => {
+  const now = new Date().toISOString();
+  const tolerant = mergeCabinetSlotObservations([
+    { source: "c7_batteries", timestamp: now, raw: { pKakou: 1, pBatteryid: "BAT-1", pDianliang: 84, pInfostatus: "在线", pErrid: 0, pFaultType: 0 } },
+    { source: "c8_slots", timestamp: now, raw: { pKakou: 1, pBatteryid: "BAT-1", pDianliang: 82, pErrid: 0, pFaultType: 0 } },
+  ]);
+  assertEquals(tolerant[0].conflicts.includes("charge_percent"), false);
+  assertEquals(tolerant[0].rentable, true);
+
+  const divergent = mergeCabinetSlotObservations([
+    { source: "c7_batteries", timestamp: now, raw: { pKakou: 1, pBatteryid: "BAT-1", pDianliang: 84, pInfostatus: "在线", pErrid: 0, pFaultType: 0 } },
+    { source: "c8_slots", timestamp: now, raw: { pKakou: 1, pBatteryid: "BAT-1", pDianliang: 70, pErrid: 0, pFaultType: 0 } },
+  ]);
+  assertEquals(divergent[0].conflicts.includes("charge_percent"), true);
+  assertEquals(divergent[0].rentable, false);
+});
+
 Deno.test("conflicting supplier observations fail closed", () => {
   const now = new Date().toISOString();
   const [slot] = mergeCabinetSlotObservations([
