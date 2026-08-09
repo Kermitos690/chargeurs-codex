@@ -9,7 +9,10 @@ Deno.test("a 2xx reply without a battery identity remains pending even when its 
   assertEquals(needsSupplierReleaseConfirmation({ ok: true, status: 200, data: {}, error: null }, null), true);
 });
 
-Deno.test("transport failures and identity-confirmed results are not treated as pending release confirmation", () => {
+Deno.test("even a provider-identified 2xx release requires the four-slot physical delta", () => {
+  assertEquals(needsSupplierReleaseConfirmation({ ok: true, status: 200, data: {}, error: null }, "F0F000503E"), true);
+});
+
+Deno.test("transport failures are not mistaken for normal provider confirmation pending", () => {
   assertEquals(needsSupplierReleaseConfirmation({ ok: false, status: 502, data: null, error: "HTTP_502" }, null), false);
-  assertEquals(needsSupplierReleaseConfirmation({ ok: true, status: 200, data: {}, error: null }, "F0F000503E"), false);
 });
