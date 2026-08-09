@@ -8,12 +8,15 @@
 //  - guest/member pricing is resolved server-side from that verified segment;
 //  - the selected battery is re-read from ChargeNow immediately before the
 //    atomic rental + slot reservation;
+//  - a safe four-slot baseline is persisted atomically for post-ejection delta
+//    reconciliation;
 //  - an active hardware quarantine refuses new rentals before payment.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
 import { createRentalPublicCode } from "../_shared/rentalPublicCode.ts";
 import { isChargeNowConfigured } from "../_shared/chargenow.ts";
 import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
+import { safeReleaseSnapshot } from "../_shared/releaseObservation.ts";
 
 const RATE_MAX = 6;
 const RATE_WINDOW_SEC = 60;
@@ -73,7 +76,6 @@ Deno.serve(async (req) => {
       return refuse(400, "CUSTOMER_PAIRING_INVALID", { station_id: stationId });
     }
 
-    // ---- 1. Kiosk authentication + strict station binding. ----
     const auth = await verifyKioskDevice(req, db, stationId);
     if (!auth.ok) return refuse(auth.status, auth.error, { station_id: stationId });
     const device = auth.device;
@@ -81,7 +83,6 @@ Deno.serve(async (req) => {
 
     await db.rpc("expire_stale_rental_sessions").then(() => {}, () => {});
 
-    // ---- 2. Idempotency before any new business side effect. ----
     const rawIdem = (req.headers.get("X-Idempotency-Key") ?? "").trim();
     const idempotencyKey = rawIdem && rawIdem.length >= 8 && rawIdem.length <= 128
       ? `${device.id}:${stationId}:${rawIdem}`
@@ -103,7 +104,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ---- 3. Rate limiting. ----
     const sinceIso = new Date(Date.now() - RATE_WINDOW_SEC * 1000).toISOString();
     const { count: recentCount } = await db.from("rental_sessions")
       .select("id", { count: "exact", head: true })
@@ -114,7 +114,6 @@ Deno.serve(async (req) => {
       return refuse(429, "RATE_LIMITED", { station_id: stationId, device_id: device.id, recent: recentCount });
     }
 
-    // ---- 4. Station + physical safety gates. ----
     const { data: station } = await db.from("stations").select("*").eq("station_id", stationId).maybeSingle();
     if (!station) return refuse(404, "STATION_NOT_FOUND", { station_id: stationId });
     if (station.status === "maintenance") return refuse(409, "STATION_MAINTENANCE", { station_id: stationId });
@@ -132,7 +131,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ---- 5. Resolve customer journey from a claimed server-side pairing. ----
     let customerSegment: "guest" | "member" = "guest";
     let customerUserId: string | null = null;
     let customerPairingSessionId: string | null = null;
@@ -158,7 +156,6 @@ Deno.serve(async (req) => {
       customerPairingSessionId = pairing.id;
     }
 
-    // ---- 6. Fresh multi-source hardware qualification. ----
     if (!isChargeNowConfigured()) return refuse(409, "CHARGENOW_NOT_CONFIGURED", { station_id: stationId });
     const liveSnapshot = await readCabinetSnapshot(station.cabinet_id || station.station_id);
     const selectedSlot = liveSnapshot.slots.find((slot) => slot.slot_num === selectedSlotNum);
@@ -171,7 +168,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ---- 7. Segment-aware server pricing. ----
     const { data: snapshot, error: priceErr } = await db.rpc("compute_customer_pricing_snapshot", {
       p_station: stationId,
       p_segment: customerSegment,
@@ -201,7 +197,6 @@ Deno.serve(async (req) => {
     const cabinetId = station.cabinet_id || station.station_id;
     const expiresAt = new Date(Date.now() + SESSION_TTL_MIN * 60 * 1000).toISOString();
 
-    // ---- 8. Atomic pairing-consume + session + physical-slot reservation. ----
     const reservationPayload = {
       station_id: stationId,
       cabinet_id: cabinetId,
@@ -222,6 +217,7 @@ Deno.serve(async (req) => {
       customer_user_id: customerUserId,
       customer_segment: customerSegment,
       customer_pairing_session_id: customerPairingSessionId,
+      pre_release_snapshot: safeReleaseSnapshot(liveSnapshot),
       idempotency_key: idempotencyKey,
       expires_at: expiresAt,
     };
@@ -242,6 +238,9 @@ Deno.serve(async (req) => {
       }
       if (message.includes("CUSTOMER_PAIRING_INVALID") || message.includes("MEMBER_PAIRING_REQUIRED")) {
         return refuse(409, "CUSTOMER_PAIRING_INVALID", { station_id: stationId });
+      }
+      if (message.includes("PRE_RELEASE_SNAPSHOT_REQUIRED")) {
+        return refuse(409, "HARDWARE_SNAPSHOT_REQUIRED", { station_id: stationId });
       }
       throw insErr;
     }
@@ -267,6 +266,7 @@ Deno.serve(async (req) => {
         selected_battery_id: selectedSlot.battery_id,
         selected_battery_present: selectedSlot.battery_present === true,
         selected_snapshot_confidence: selectedSlot.confidence,
+        release_baseline_slot_count: liveSnapshot.slots.length,
         pricing_snapshot_hash: hash,
         duration_ms: Date.now() - startedAt,
       },
