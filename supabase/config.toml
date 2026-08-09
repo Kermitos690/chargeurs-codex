@@ -7,6 +7,7 @@ additional_redirect_urls = [
   "https://chargeurs-ch-staging.vercel.app/admin/reset-password",
   "https://chargeurs-ch-staging.vercel.app/compte",
   "https://chargeurs-ch-staging.vercel.app/compte/reset-password",
+  "https://chargeurs-ch-staging.vercel.app/compte/connect/**",
   # Legacy aliases kept temporarily for recovery links already issued before
   # the French customer routes were introduced.
   "https://chargeurs-ch-staging.vercel.app/account",
@@ -70,6 +71,18 @@ verify_jwt = false
 
 [functions.account-privacy]
 verify_jwt = true
+
+[functions.customer-pairing-create]
+verify_jwt = false
+
+[functions.customer-pairing-status]
+verify_jwt = false
+
+[functions.customer-pairing-claim]
+verify_jwt = true
+
+[functions.kiosk-customer-options]
+verify_jwt = false
 
 [functions.dta-pilot-qualification]
 verify_jwt = true
