@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import Kiosk from "./pages/Kiosk.tsx";
+import KioskJourneyGate from "./pages/KioskJourneyGate.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
@@ -67,8 +67,8 @@ const App = () => (
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<Kiosk />} />
-            <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
+            <Route path="/kiosk/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/kiosk/station/:stationId" element={<KioskJourneyGate />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
