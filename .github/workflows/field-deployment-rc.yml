@@ -52,7 +52,7 @@ jobs:
 
       - name: Cabinet telemetry, callback and physical-release contracts
         run: >-
-          deno test --allow-env --allow-net --no-check
+          deno test --allow-env --allow-net --allow-read --no-check
           supabase/functions/tests/cabinet_snapshot.test.ts
           supabase/functions/tests/chargenow_callback_auth.test.ts
           supabase/functions/tests/kiosk_cors_contract.test.ts
