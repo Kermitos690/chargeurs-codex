@@ -35,6 +35,18 @@
       "source": "/api/kiosk/reconcile-pending-ejection",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/reconcile-pending-ejection"
     },
+    {
+      "source": "/api/kiosk/customer-options",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-customer-options"
+    },
+    {
+      "source": "/api/kiosk/customer-pairing-create",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/customer-pairing-create"
+    },
+    {
+      "source": "/api/kiosk/customer-pairing-status",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/customer-pairing-status"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
