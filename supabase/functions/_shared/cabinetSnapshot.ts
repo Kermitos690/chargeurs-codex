@@ -428,7 +428,7 @@ export function mergeCabinetSlotObservations(
 
     const diagnosticFlags: string[] = [];
     if (confirmedZeroBattery) diagnosticFlags.push("zero_charge_reported");
-    if (chargePercent != null && chargePercent > 0 && chargePercent < minimumCharge) {
+    if (batteryPresent !== false && chargePercent != null && chargePercent > 0 && chargePercent < minimumCharge) {
       diagnosticFlags.push("charge_below_rental_threshold");
     }
 
