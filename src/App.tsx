@@ -21,6 +21,8 @@ import AccountPayments from "./pages/account/AccountPayments.tsx";
 import AccountSupport from "./pages/account/AccountSupport.tsx";
 import AccountProfile from "./pages/account/AccountProfile.tsx";
 import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
+import AccountConnect from "./pages/account/AccountConnect.tsx";
+import AccountScanner from "./pages/account/AccountScanner.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
@@ -72,6 +74,8 @@ const App = () => (
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
             <Route path="/compte/login" element={<AccountAuth />} />
             <Route path="/compte/reset-password" element={<AccountResetPassword />} />
+            <Route path="/compte/connect/:token" element={<AccountConnect />} />
+            <Route path="/compte/scanner" element={<AccountScanner />} />
             <Route path="/compte" element={<AccountLayout />}>
               <Route index element={<AccountHome />} />
               <Route path="locations" element={<AccountRentals />} />
