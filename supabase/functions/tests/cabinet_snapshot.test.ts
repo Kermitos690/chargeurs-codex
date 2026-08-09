@@ -3,12 +3,14 @@ import {
   mergeCabinetSlotObservations,
   parseChargePercent,
   parseTemperatureC,
+  parseVoltage,
 } from "../_shared/cabinetSnapshot.ts";
 
 Deno.test("temperature is never interpreted as state of charge", () => {
   assertEquals(parseTemperatureC({ temperature: 31.2 }), 31.2);
   assertEquals(parseChargePercent({ temperature: 31.2 }), null);
   assertEquals(parseChargePercent({ capacity: 31.2 }), null);
+  assertEquals(parseVoltage({ voltage: 3.82, vol: 82 }), 3.82);
 });
 
 Deno.test("confirmed ChargeNow DTA vol is interpreted as a percentage only in the valid range", () => {

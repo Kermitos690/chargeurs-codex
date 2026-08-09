@@ -185,8 +185,11 @@ Deno.serve(async (req) => {
     const cabinetId = station.cabinet_id || station.station_id;
     const expiresAt = new Date(Date.now() + SESSION_TTL_MIN * 60 * 1000).toISOString();
 
-    // ---- 7. Insert. Unique idempotency index enforces single session ----
-    const { data: session, error: insErr } = await db.from("rental_sessions").insert({
+    // ---- 7. Atomic session + physical-slot reservation ----
+    // The browser chooses a slot, but this server-owned snapshot confirms it;
+    // the RPC serializes competing requests for the same slot and commits the
+    // rental_session and its reservation together.
+    const reservationPayload = {
       station_id: stationId,
       cabinet_id: cabinetId,
       shop_id: station.shop_id ?? null,
@@ -208,11 +211,16 @@ Deno.serve(async (req) => {
       customer_language: language,
       idempotency_key: idempotencyKey,
       expires_at: expiresAt,
-    }).select().single();
+    };
+    const { data: session, error: insErr } = await db.rpc("create_reserved_kiosk_rental_session", {
+      p_session: reservationPayload,
+    });
 
     if (insErr) {
-      // 23505 = unique violation on idempotency_key => a concurrent request won.
-      if ((insErr as { code?: string }).code === "23505" && idempotencyKey) {
+      // A concurrent same-intent request can win either the legacy unique key
+      // or the new atomic session insert. Return that exact session instead of
+      // ever making a second Checkout or a second physical reservation.
+      if (idempotencyKey) {
         const { data: existing } = await db
           .from("rental_sessions")
           .select("*")
@@ -221,6 +229,14 @@ Deno.serve(async (req) => {
         if (existing) {
           return json({ ok: true, session: existing, snapshot: existing.pricing_snapshot, idempotent: true });
         }
+      }
+      const message = String((insErr as { message?: string })?.message ?? "");
+      if (message.includes("SLOT_ALREADY_RESERVED")) {
+        return refuse(409, "SLOT_ALREADY_RESERVED", {
+          station_id: stationId,
+          slot_num: selectedSlotNum,
+          correlation_id: correlationId,
+        });
       }
       throw insErr;
     }

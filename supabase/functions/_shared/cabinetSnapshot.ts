@@ -34,6 +34,8 @@ export type CabinetSlotSnapshot = {
   diagnostic_flags: string[];
   source_timestamps: Record<string, string>;
   conflicts: string[];
+  /** Age of the newest usable supplier observation for this slot. */
+  data_age_seconds: number | null;
   raw: Record<string, unknown>;
 };
 
@@ -103,6 +105,12 @@ export function parseChargePercent(record: RecordValue): number | null {
 export function parseTemperatureC(record: RecordValue): number | null {
   const value = numberValue(first(record, ["temperatureC", "temperature_c", "temperature", "tempC", "temp_c", "temp"]));
   return value != null && value >= -40 && value <= 100 ? value : null;
+}
+
+/** Diagnostics only: a voltage must never be rendered as a charge level. */
+export function parseVoltage(record: RecordValue): number | null {
+  const value = numberValue(first(record, ["voltage", "voltageV", "voltage_v", "batteryVoltage"]));
+  return value != null && value >= 0 && value <= 1000 ? value : null;
 }
 
 export function parseSelfCheck(record: RecordValue): "pass" | "fail" | "unknown" {
@@ -249,6 +257,10 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
       || temperatureC != null && (temperatureC < 0 || temperatureC > 55) || conflicts.length > 0;
     const supplierEjectable = ejectableValues.includes(false) ? false : ejectableValues.includes(true) ? true : null;
     const freshEnough = slotObservations.some((item) => Date.now() - Date.parse(item.timestamp) < 5 * 60 * 1000);
+    const newestTimestamp = slotObservations.map((item) => item.timestamp).sort().at(-1) ?? null;
+    const dataAgeSeconds = newestTimestamp
+      ? Math.max(0, Math.floor((Date.now() - Date.parse(newestTimestamp)) / 1000))
+      : null;
     const confidence: SlotConfidence = conflicts.length ? "low" : slotObservations.length >= 2 && batteryId && freshEnough ? "high" : "medium";
     // A cabinet can be online and report an occupied slot without exposing a
     // semantically trustworthy state of charge. That is not enough to call a
@@ -281,7 +293,8 @@ export function mergeCabinetSlotObservations(observations: Observation[], totalS
       slot_num: slotNum, battery_id: batteryId, battery_present: batteryPresent, charge_percent: chargePercent,
       temperature_c: temperatureC, online, health_status: healthStatus, self_check: selfCheck,
       error_code: error, fault_type: faultType, fault_cause: faultCause, rentable, confidence, customer_status: customerStatus, diagnostic_flags: diagnosticFlags,
-      source_timestamps: timestamps, conflicts, raw: Object.assign({}, ...slotObservations.map((item) => item.raw)),
+      source_timestamps: timestamps, conflicts, data_age_seconds: dataAgeSeconds,
+      raw: Object.assign({}, ...slotObservations.map((item) => item.raw)),
     };
   });
 }

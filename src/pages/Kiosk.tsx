@@ -24,6 +24,7 @@ import { kioskTransportUnavailable } from "@/lib/kioskConnectivity";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
+import { acceptsKioskStateVersion } from "@/lib/kioskStateVersion";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
@@ -101,6 +102,10 @@ export default function Kiosk() {
   // so a double-tap / reconnection never creates duplicate sessions. Cleared on
   // reset (new intent gets a fresh key).
   const idemRef = useRef<string | null>(null);
+  // The server owns the rental state machine. This watermark prevents an older
+  // in-flight polling response from repainting a newer payment/ejection state.
+  const seenStateVersionRef = useRef<number>(-1);
+  const pollInFlightRef = useRef(false);
 
   const net = useOnlineStatus();
   // A successful server health request wins over Android WebView's unreliable
@@ -227,6 +232,7 @@ export default function Kiosk() {
 
   const reset = useCallback(() => {
     idemRef.current = null;
+    seenStateVersionRef.current = -1;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void refreshKioskData();
@@ -356,7 +362,11 @@ export default function Kiosk() {
     }
   }, []);
 
-  const applyState = useCallback((s: string, slot: number | null, failureCode?: string | null) => {
+  const applyState = useCallback((s: string, slot: number | null, failureCode?: string | null, stateVersion?: number | null) => {
+    if (typeof stateVersion === "number") {
+      if (!acceptsKioskStateVersion(seenStateVersionRef.current, stateVersion)) return;
+      seenStateVersionRef.current = stateVersion;
+    }
     if (s === "ejected" || s === "active_rental" || s === "battery_taken") {
       setSlotNum(slot); setPhase("success"); return;
     }
@@ -371,7 +381,11 @@ export default function Kiosk() {
   // rental_sessions is staff-only and exposes Stripe/financial data).
   useEffect(() => {
     if (!sessionId || !publicCode || !["qr", "waitpay", "starting"].includes(phase)) return;
-    const poll = setInterval(async () => {
+    let cancelled = false;
+    const poll = async () => {
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+      try {
       // ChargeNow can acknowledge an ejection before it publishes the battery
       // identity. Reconcile only that pending state by reading the selected
       // supplier slot; this endpoint never sends a hardware command.
@@ -384,10 +398,20 @@ export default function Kiosk() {
         }
       }
       const { data } = await supabase.rpc("kiosk_session_status", { p_id: sessionId, p_code: publicCode });
-      const r = data as { state?: string; selected_slot_num?: number | null; failure_code?: string | null } | null;
-      if (r?.state) applyState(r.state, r.selected_slot_num ?? null, r.failure_code);
-    }, 3000);
-    return () => clearInterval(poll);
+      const r = data as {
+        state?: string; selected_slot_num?: number | null; failure_code?: string | null;
+        state_version?: number | null;
+      } | null;
+      if (!cancelled && r?.state) {
+        applyState(r.state, r.selected_slot_num ?? null, r.failure_code, r.state_version);
+      }
+      } finally {
+        pollInFlightRef.current = false;
+      }
+    };
+    void poll();
+    const interval = setInterval(() => void poll(), 3000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [sessionId, publicCode, phase, stationId, applyState]);
 
   const failFlow = useCallback((failure: KioskFailure) => {
@@ -470,6 +494,7 @@ export default function Kiosk() {
         return;
       }
       const rentalSessionId = sessionResponse.session.id;
+      seenStateVersionRef.current = -1;
       setSessionId(rentalSessionId);
       await requestCheckout(rentalSessionId);
     } catch {
