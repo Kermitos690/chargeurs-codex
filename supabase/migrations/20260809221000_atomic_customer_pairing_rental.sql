@@ -79,7 +79,7 @@ begin
     v_station_id,
     nullif(p_session->>'cabinet_id', ''),
     nullif(p_session->>'shop_id', ''),
-    v_kiosk_device_id,
+    v_kiosk_device_id::text,
     nullif(p_session->>'price_profile_id', '')::uuid,
     nullif(p_session->>'price_profile_version', '')::integer,
     coalesce(p_session->'pricing_snapshot', '{}'::jsonb),
