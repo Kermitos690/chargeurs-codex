@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import "./kiosk-field.css";
+import "./kiosk-customer-polish.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
 
