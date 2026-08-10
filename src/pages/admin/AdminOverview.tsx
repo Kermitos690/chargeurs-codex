@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Server, Wifi, BatteryCharging, CreditCard, AlertTriangle, Activity, Loader2, type LucideIcon } from "lucide-react";
 
 type Stat = { label: string; value: string | number; icon: LucideIcon; tone: string };
+type Metrics = { stations: number; online: number; batteries: number; activeRentals: number; paymentsToday: number; errors: number };
 
 export default function AdminOverview() {
   const [stats, setStats] = useState<Stat[]>([]);
@@ -10,29 +11,24 @@ export default function AdminOverview() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const [stationsResult, paymentsResult, activeResult, errorsResult] = await Promise.all([
-        supabase.from("stations").select("online, rentable_count"),
-        supabase.from("payments").select("id", { count: "exact", head: true }).gte("created_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
-        supabase.from("rental_sessions").select("id", { count: "exact", head: true }).in("state", ["active_rental", "battery_taken", "ejected"]),
-        supabase.from("rental_sessions").select("id", { count: "exact", head: true }).in("state", ["eject_failed", "needs_support"]),
-      ]);
-      const { data: stations, error: stationsError } = stationsResult;
-      const { count: payCount, error: paymentsError } = paymentsResult;
-      const { count: activeCount, error: activeError } = activeResult;
-      const { count: errCount, error: errorsError } = errorsResult;
-      const firstError = [stationsError, paymentsError, activeError, errorsError].find(Boolean);
-      setLoadError(firstError ? "Certaines données du tableau de bord n'ont pas pu être chargées. Réessayez ou vérifiez les droits du compte." : null);
-      const total = stations?.length ?? 0;
-      const online = (stations ?? []).filter((s: any) => s.online).length;
-      const batteries = (stations ?? []).reduce((a: number, s: any) => a + (s.rentable_count ?? 0), 0);
+    void (async () => {
+      setLoading(true);
+      const { data, error } = await supabase.functions.invoke("admin-overview-read", { body: {} });
+      if (error || !data?.ok) {
+        setLoadError(data?.error ?? error?.message ?? "Le tableau de bord n’a pas pu être chargé.");
+        setStats([]);
+        setLoading(false);
+        return;
+      }
+      const metrics = data.metrics as Metrics;
+      setLoadError(null);
       setStats([
-        { label: "Bornes", value: total, icon: Server, tone: "text-primary" },
-        { label: "En ligne", value: `${online}/${total}`, icon: Wifi, tone: "text-success" },
-        { label: "Batteries dispo", value: batteries, icon: BatteryCharging, tone: "text-secondary" },
-        { label: "Locations actives", value: activeCount ?? 0, icon: Activity, tone: "text-accent" },
-        { label: "Paiements aujourd'hui", value: payCount ?? 0, icon: CreditCard, tone: "text-primary" },
-        { label: "Erreurs", value: errCount ?? 0, icon: AlertTriangle, tone: "text-destructive" },
+        { label: "Bornes", value: metrics.stations, icon: Server, tone: "text-primary" },
+        { label: "En ligne", value: `${metrics.online}/${metrics.stations}`, icon: Wifi, tone: "text-success" },
+        { label: "Batteries dispo", value: metrics.batteries, icon: BatteryCharging, tone: "text-secondary" },
+        { label: "Locations actives", value: metrics.activeRentals, icon: Activity, tone: "text-accent" },
+        { label: "Paiements aujourd'hui", value: metrics.paymentsToday, icon: CreditCard, tone: "text-primary" },
+        { label: "Erreurs", value: metrics.errors, icon: AlertTriangle, tone: "text-destructive" },
       ]);
       setLoading(false);
     })();
@@ -41,25 +37,11 @@ export default function AdminOverview() {
   return (
     <div className="animate-fade-in">
       <h1 className="mb-2 font-display text-3xl font-bold">Vue d'ensemble</h1>
-      <p className="mb-4 text-muted-foreground">Vue staging des données auxquelles votre rôle a accès.</p>
-      {loadError && (
-        <div role="alert" className="mb-5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {loadError}
-        </div>
-      )}
-      {loading && (
-        <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Chargement des données du back-office…
-        </div>
-      )}
+      <p className="mb-4 text-muted-foreground">Vue staging consolidée, calculée côté serveur avec les mêmes droits que le back-office.</p>
+      {loadError && <div role="alert" className="mb-5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{loadError}</div>}
+      {loading && <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Chargement des données du back-office…</div>}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-        {stats.map((s) => (
-          <div key={s.label} className="glass liquid-border rounded-2xl p-6">
-            <s.icon className={`mb-3 h-7 w-7 ${s.tone}`} />
-            <div className="text-3xl font-bold">{s.value}</div>
-            <div className="text-sm text-muted-foreground">{s.label}</div>
-          </div>
-        ))}
+        {stats.map((stat) => <div key={stat.label} className="glass liquid-border rounded-2xl p-6"><stat.icon className={`mb-3 h-7 w-7 ${stat.tone}`} /><div className="text-3xl font-bold">{stat.value}</div><div className="text-sm text-muted-foreground">{stat.label}</div></div>)}
       </div>
     </div>
   );
