@@ -1,0 +1,367 @@
+/*
+ * Chargeurs.ch — cinematic production kiosk skin
+ * Source of truth: Chargeurs.ch_References_Visuelles_Completes.pdf
+ * 16:9 first, Chrome 88 safe, no functional :has(), no scroll.
+ */
+
+:root {
+  --kp-bg: #020407;
+  --kp-surface: rgba(7, 13, 25, .78);
+  --kp-surface-strong: rgba(4, 9, 18, .94);
+  --kp-line: rgba(113, 178, 255, .2);
+  --kp-blue: #1787ff;
+  --kp-cyan: #37d9ff;
+  --kp-green: #77ff39;
+  --kp-violet: #a948ff;
+  --kp-success: #65ff63;
+  --kp-warning: #ffb44b;
+  --kp-text: #f7fbff;
+  --kp-muted: #aebbd0;
+  --kp-safe-x: clamp(28px, 4vw, 72px);
+  --kp-safe-y: clamp(20px, 3vh, 42px);
+  --kp-radius: 28px;
+  --kp-touch: 58px;
+}
+
+html.kiosk-v3,
+html.kiosk-v3 body,
+html.kiosk-v3 #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden !important;
+  background: var(--kp-bg);
+}
+
+html.kiosk-v3 body {
+  color: var(--kp-text);
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+}
+
+.kv3-runtime {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 72% 72%, rgba(18, 102, 255, .22), transparent 34%),
+    radial-gradient(ellipse at 12% 86%, rgba(0, 112, 255, .12), transparent 30%),
+    linear-gradient(135deg, #010203 0%, #030711 46%, #02060d 72%, #010203 100%);
+}
+
+.kv3-product-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.kv3-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 1100px;
+}
+
+.kv3-vignette {
+  position: absolute;
+  inset: -5%;
+  background: radial-gradient(circle at 50% 48%, transparent 38%, rgba(0,0,0,.58) 88%);
+  z-index: 15;
+}
+
+.kv3-grid-floor {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -32%;
+  height: 65%;
+  transform: perspective(720px) rotateX(67deg);
+  transform-origin: bottom;
+  background:
+    linear-gradient(rgba(40,137,255,.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40,137,255,.12) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to top, rgba(0,0,0,.9), transparent 78%);
+  opacity: .46;
+}
+
+.kv3-horizon-glow {
+  position: absolute;
+  left: 4%; right: 4%; bottom: 4%; height: 20%;
+  background: radial-gradient(ellipse at center, rgba(20,119,255,.34), rgba(0,21,68,.08) 52%, transparent 76%);
+  filter: blur(20px);
+}
+
+.kv3-neon-beam {
+  position: absolute;
+  top: -18%;
+  width: 20vw;
+  height: 116vh;
+  transform: rotate(19deg);
+  background: linear-gradient(90deg, transparent, rgba(48,151,255,.12), rgba(78,207,255,.28), transparent);
+  filter: blur(22px);
+}
+.kv3-neon-beam-a { left: 15%; }
+.kv3-neon-beam-b { right: 21%; transform: rotate(-14deg); opacity: .7; }
+
+.kv3-smoke {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(30,118,255,.18) 0%, rgba(15,71,161,.08) 38%, transparent 72%);
+  filter: blur(34px);
+  opacity: .75;
+  animation: kpSmoke 10s ease-in-out infinite alternate;
+}
+.kv3-smoke-a { width: 34vw; height: 24vh; left: -7vw; bottom: 2vh; }
+.kv3-smoke-b { width: 30vw; height: 20vh; left: 17vw; bottom: -4vh; animation-delay: -3s; }
+.kv3-smoke-c { width: 34vw; height: 26vh; right: -4vw; bottom: 1vh; animation-delay: -5s; }
+.kv3-smoke-d { width: 21vw; height: 16vh; right: 20vw; bottom: 7vh; animation-delay: -7s; opacity: .5; }
+@keyframes kpSmoke { from { transform: translate3d(-2%,2%,0) scale(.94); } to { transform: translate3d(4%,-8%,0) scale(1.13); } }
+
+.kv3-neon-orbit {
+  position: absolute;
+  bottom: 4.2vh;
+  border: 2px solid rgba(34,142,255,.62);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(29,127,255,.8), inset 0 0 24px rgba(37,152,255,.26), 0 0 58px rgba(0,94,255,.26);
+  transform: rotateX(72deg);
+}
+.kv3-neon-orbit-a { width: 29vw; height: 10vw; right: 1.7vw; }
+.kv3-neon-orbit-b { width: 20vw; height: 7vw; left: -3vw; opacity: .65; }
+
+.kv3-particles { position: absolute; inset: 0; opacity: .46; }
+.kv3-particles i {
+  position: absolute;
+  width: 3px; height: 3px; border-radius: 50%;
+  left: calc((var(--i) * 47) % 96 * 1%);
+  top: calc((var(--i) * 31) % 92 * 1%);
+  background: #85dcff;
+  box-shadow: 0 0 10px #3bbcff;
+  animation: kpParticle 4s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -.27s);
+}
+@keyframes kpParticle { to { transform: translateY(-15px); opacity: .18; } }
+
+/* -------------------------------------------------------------------------- */
+/* 3D STATION                                                                 */
+/* -------------------------------------------------------------------------- */
+.kv3-station-hero {
+  position: absolute;
+  right: 4.8vw;
+  top: 17vh;
+  width: clamp(270px, 23vw, 440px);
+  height: clamp(390px, 62vh, 690px);
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 34px 30px rgba(0,0,0,.72));
+}
+.kv3-station-floor-light {
+  position: absolute;
+  left: -19%; right: -19%; bottom: -5%; height: 16%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(34,165,255,.62), rgba(26,74,255,.18) 40%, transparent 72%);
+  filter: blur(15px);
+}
+.kv3-station-shadow { position:absolute; left:-4%; right:-4%; bottom:1%; height:8%; border-radius:50%; background:rgba(0,0,0,.88); filter:blur(14px); }
+.kv3-station-body { position:absolute; inset:0 6% 5%; transform: rotateY(-9deg); transform-style:preserve-3d; }
+.kv3-station-face {
+  position:absolute; inset:0 8% 0 0; border-radius:30px 22px 26px 28px;
+  background: linear-gradient(145deg, #111927 0%, #050a11 34%, #080d16 72%, #020407 100%);
+  border:1px solid rgba(95,181,255,.46);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), inset 18px 0 35px rgba(30,118,255,.08), 0 0 48px rgba(22,113,255,.22);
+  overflow:hidden;
+}
+.kv3-station-face::after { content:""; position:absolute; inset:0; background:linear-gradient(108deg,rgba(255,255,255,.12),transparent 16%,transparent 72%,rgba(41,145,255,.08)); pointer-events:none; }
+.kv3-station-side { position:absolute; top:4%; right:-1%; width:16%; height:91%; transform:translateZ(-18px) skewY(-8deg); border-radius:0 18px 22px 0; background:linear-gradient(90deg,#08101b,#151d28 45%,#030609); border-right:1px solid rgba(64,155,255,.35); box-shadow:14px 4px 28px rgba(0,0,0,.58); }
+.kv3-side-mark { position:absolute; top:42%; left:22%; color:#239fff; font-size:clamp(24px,2.7vw,46px); text-shadow:0 0 18px #1787ff; }
+.kv3-station-top { position:absolute; left:8%; right:13%; top:-2%; height:6%; transform:rotateX(62deg); border-radius:28px; background:linear-gradient(90deg,#1d2736,#050810); box-shadow:0 -3px 12px rgba(70,161,255,.16); }
+.kv3-station-screen { margin:8.5% auto 4%; width:72%; height:20%; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; background:radial-gradient(circle at 50% 20%,rgba(23,139,255,.22),rgba(0,3,10,.96)); border:1px solid rgba(65,168,255,.46); box-shadow:inset 0 0 24px rgba(26,112,255,.12),0 0 20px rgba(25,126,255,.16); }
+.kv3-station-screen strong { font-size:clamp(17px,1.5vw,27px); letter-spacing:-.03em; }
+.kv3-station-screen span { color:#7ddfff; font-size:clamp(12px,1vw,18px); font-weight:800; }
+.kv3-station-screen small { color:#8192aa; font-size:clamp(9px,.65vw,12px); }
+.kv3-station-brand { text-align:center; margin:2% 0 5%; color:#dff8ff; font-size:clamp(13px,1.1vw,21px); text-shadow:0 0 12px rgba(42,155,255,.42); }
+.kv3-station-slots { width:76%; margin:0 auto; display:grid; gap:clamp(9px,1.25vh,15px); }
+.kv3-station-slot { position:relative; height:clamp(42px,6.1vh,65px); border-radius:12px; background:linear-gradient(180deg,#020408,#101722 54%,#030509); border:1px solid rgba(99,163,230,.23); box-shadow:inset 0 7px 14px rgba(0,0,0,.8),0 0 15px rgba(0,96,255,.08); }
+.kv3-station-slot::before { content:""; position:absolute; left:12%; right:12%; top:28%; height:42%; border-radius:8px; background:#020306; box-shadow:inset 0 2px 7px #000; }
+.kv3-station-slot-led { position:absolute; z-index:2; right:13%; top:42%; width:10px; height:10px; border-radius:50%; background:#32c9ff; box-shadow:0 0 7px #2fd8ff,0 0 16px #147bff; }
+.kv3-station-slot i { position:absolute; z-index:2; left:15%; top:34%; font-style:normal; color:#70bfff; font-size:11px; font-weight:800; }
+.kv3-station-base { position:absolute; left:2%; right:8%; bottom:-2.5%; height:7%; border-radius:45%; background:linear-gradient(#172238,#020408); border:1px solid rgba(67,157,255,.35); box-shadow:0 8px 18px #000,0 0 28px rgba(25,129,255,.28); }
+.kv3-station-rim { position:absolute; left:9%; right:15%; bottom:-4%; height:2px; background:#39b9ff; box-shadow:0 0 10px #2eaeff,0 0 24px #176dff; }
+
+/* -------------------------------------------------------------------------- */
+/* SHARED KIOSK SURFACES                                                      */
+/* -------------------------------------------------------------------------- */
+.kiosk-v3 .ck2-shell,
+.kiosk-v3 .kiosk-root {
+  min-height: 100vh !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  color: var(--kp-text);
+}
+.kiosk-v3 .ck2-ambient { display:none !important; }
+.kiosk-v3 .ck2-shell button,
+.kiosk-v3 .kiosk-root button { -webkit-tap-highlight-color: transparent; }
+
+/* -------------------------------------------------------------------------- */
+/* HOME                                                                       */
+/* -------------------------------------------------------------------------- */
+.kiosk-v3 .ck2-home > .ck2-topbar,
+.kiosk-v3 .ck2-home .ck2-device-stage { opacity:0 !important; pointer-events:none !important; }
+
+.kv3-home-topbar {
+  position:absolute; z-index:40; left:var(--kp-safe-x); right:var(--kp-safe-x); top:var(--kp-safe-y);
+  height:72px; display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid rgba(116,176,255,.14);
+}
+.kv3-home-brand { transform:scale(1.12); transform-origin:left center; }
+.kv3-home-actions { display:flex; align-items:center; gap:12px; }
+.kv3-home-control {
+  min-height:56px; padding:0 22px; border-radius:18px; border:1px solid rgba(111,173,239,.25);
+  background:linear-gradient(180deg,rgba(17,28,45,.8),rgba(5,10,18,.8)); color:#e9f5ff;
+  display:flex; align-items:center; gap:10px; font-size:clamp(16px,1.25vw,21px); font-weight:800;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05); backdrop-filter:blur(12px);
+}
+.kv3-home-control svg { width:23px; height:23px; color:#4bc9ff; }
+.kv3-home-control:active { transform:scale(.97); }
+.kv3-home-language { min-height:56px; display:flex; align-items:center; }
+.kv3-home-language button { min-width:50px !important; min-height:50px !important; font-size:16px !important; }
+.kv3-spin { animation:kpSpin .8s linear infinite; }
+@keyframes kpSpin { to { transform:rotate(360deg); } }
+
+.kiosk-v3 .ck2-home-grid { display:block !important; position:absolute !important; inset:0 !important; padding:0 !important; }
+.kiosk-v3 .ck2-hero-copy {
+  position:absolute !important; left:6vw; top:16vh; width:58vw; align-items:flex-start !important; text-align:left !important; gap:0 !important;
+}
+.kiosk-v3 .ck2-hero-copy .ck2-eyebrow { color:#6ed7ff !important; font-size:clamp(12px,1.05vw,18px) !important; font-weight:900; letter-spacing:.24em; margin-bottom:10px; }
+.kiosk-v3 .ck2-hero-copy h1 { margin:0 !important; display:flex; flex-wrap:wrap; gap:0 .22em; max-width:900px; font-size:clamp(48px,5.4vw,91px) !important; line-height:.88 !important; letter-spacing:-.065em !important; text-transform:uppercase; }
+.kiosk-v3 .ck2-hero-copy h1 span { color:#f7fbff; }
+.kiosk-v3 .ck2-hero-copy h1 strong { color:#40c8ff !important; text-shadow:0 0 30px rgba(34,151,255,.35); }
+.kiosk-v3 .ck2-price-row { margin-top:20px !important; min-height:54px; padding:0 18px !important; border:1px solid rgba(74,173,255,.24); border-radius:16px; background:rgba(3,9,18,.66); gap:13px !important; font-size:clamp(14px,1.1vw,19px) !important; }
+.kiosk-v3 .ck2-price-row strong { font-size:clamp(18px,1.55vw,26px) !important; }
+.kiosk-v3 .ck2-price-icon { color:#53cdff !important; }
+
+.kiosk-v3 .ck2-choice-grid {
+  position:absolute !important; left:6vw; bottom:17vh; width:35.5vw !important; max-width:none !important;
+  display:grid !important; grid-template-columns:1fr 1fr !important; gap:1vw !important;
+}
+.kiosk-v3 .ck2-choice {
+  min-height:220px !important; padding:22px 22px 20px !important; border-radius:24px !important; text-align:left !important;
+  display:flex !important; flex-direction:column !important; align-items:flex-start !important; justify-content:flex-start !important;
+  background:linear-gradient(145deg,rgba(6,15,23,.94),rgba(3,7,13,.94)) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 24px 50px rgba(0,0,0,.36) !important;
+}
+.kiosk-v3 .ck2-choice-express { border:1.5px solid rgba(108,255,53,.58) !important; box-shadow:inset 0 0 32px rgba(87,255,34,.045),0 0 30px rgba(87,255,34,.08) !important; }
+.kiosk-v3 .ck2-choice-member { border:1.5px solid rgba(42,143,255,.62) !important; box-shadow:inset 0 0 32px rgba(42,143,255,.05),0 0 30px rgba(42,143,255,.1) !important; }
+.kiosk-v3 .ck2-choice-icon { width:48px !important; height:48px !important; border-radius:16px !important; display:grid; place-items:center; margin-bottom:12px; }
+.kiosk-v3 .ck2-choice-express .ck2-choice-icon { color:var(--kp-green) !important; background:rgba(104,255,52,.1) !important; }
+.kiosk-v3 .ck2-choice-member .ck2-choice-icon { color:#4eb9ff !important; background:rgba(35,137,255,.12) !important; }
+.kiosk-v3 .ck2-choice-kicker { font-size:11px !important; letter-spacing:.18em !important; font-weight:900 !important; }
+.kiosk-v3 .ck2-choice strong { margin-top:2px; font-size:clamp(22px,1.85vw,31px) !important; line-height:1 !important; }
+.kiosk-v3 .ck2-choice small { margin-top:10px; color:#aebbd0 !important; font-size:clamp(13px,1vw,17px) !important; line-height:1.35 !important; }
+.kiosk-v3 .ck2-choice .ck2-arrow { margin-top:auto; align-self:flex-end; font-size:28px; }
+
+.kv3-offer-card {
+  position:absolute; z-index:35; left:42.4vw; bottom:17vh; width:17.25vw; min-height:220px;
+  padding:22px; border-radius:24px; border:1.5px solid rgba(180,72,255,.64);
+  background:linear-gradient(145deg,rgba(21,7,33,.94),rgba(6,4,15,.96)); color:#fff; text-align:left;
+  display:flex; flex-direction:column; align-items:flex-start; box-shadow:inset 0 0 34px rgba(168,64,255,.06),0 0 32px rgba(166,55,255,.12),0 24px 50px rgba(0,0,0,.38);
+}
+.kv3-offer-card:active { transform:scale(.975); }
+.kv3-offer-icon { width:48px; height:48px; display:grid; place-items:center; border-radius:16px; color:#c56cff; background:rgba(172,64,255,.13); margin-bottom:12px; }
+.kv3-offer-icon svg { width:27px; height:27px; }
+.kv3-offer-kicker { color:#cf8cff; font-size:11px; font-weight:900; letter-spacing:.18em; }
+.kv3-offer-card strong { margin-top:2px; font-size:clamp(22px,1.65vw,29px); line-height:1; text-transform:uppercase; }
+.kv3-offer-card small { margin-top:10px; color:#c4b5d5; font-size:clamp(13px,.95vw,16px); line-height:1.35; }
+.kv3-offer-cta { margin-top:auto; width:100%; min-height:38px; display:flex; align-items:center; gap:8px; color:#d895ff; font-size:12px; font-weight:900; letter-spacing:.04em; }
+.kv3-offer-cta svg { width:16px; }
+.kv3-offer-cta b { margin-left:auto; font-size:24px; }
+
+.kv3-payment-dock {
+  position:absolute; z-index:38; left:6vw; bottom:4.1vh; min-height:62px; width:53.6vw;
+  display:flex; align-items:center; gap:18px; padding:8px 18px; border-radius:18px;
+  border:1px solid rgba(101,164,230,.17); background:rgba(2,7,14,.72); backdrop-filter:blur(14px);
+}
+.kv3-payment-label { flex:0 0 auto; color:#8193ac; font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+.kv3-payment-dock img, .kv3-payment-dock svg { max-height:27px !important; width:auto !important; }
+
+/* -------------------------------------------------------------------------- */
+/* MEMBER QR / CONNECTED                                                     */
+/* -------------------------------------------------------------------------- */
+.kiosk-v3 .ck2-member > .ck2-topbar { left:var(--kp-safe-x) !important; right:var(--kp-safe-x) !important; top:var(--kp-safe-y) !important; min-height:70px !important; }
+.kiosk-v3 .ck2-member-grid { position:absolute !important; inset:13vh 6vw 8vh !important; display:grid !important; grid-template-columns:minmax(0,1fr) minmax(420px,.8fr) !important; gap:5vw !important; align-items:center !important; }
+.kiosk-v3 .ck2-member-copy { text-align:left !important; align-items:flex-start !important; }
+.kiosk-v3 .ck2-member-copy h1 { font-size:clamp(48px,5.2vw,86px) !important; line-height:.92 !important; letter-spacing:-.055em !important; }
+.kiosk-v3 .ck2-member-copy h1 strong { color:#32b8ff !important; text-shadow:0 0 28px rgba(31,142,255,.3); }
+.kiosk-v3 .ck2-member-copy > p { max-width:650px; font-size:clamp(17px,1.4vw,24px) !important; line-height:1.45; color:var(--kp-muted) !important; }
+.kiosk-v3 .ck2-member-rate { font-size:clamp(40px,4vw,68px) !important; }
+.kiosk-v3 .ck2-qr-card { border-radius:30px !important; padding:26px !important; background:linear-gradient(160deg,rgba(8,18,34,.94),rgba(2,6,13,.96)) !important; border:1px solid rgba(57,152,255,.42) !important; box-shadow:0 0 70px rgba(14,103,255,.14),inset 0 1px rgba(255,255,255,.05) !important; }
+.kiosk-v3 .ck2-qr-wrap { border-radius:24px !important; padding:16px !important; background:#fff !important; box-shadow:0 0 0 1px rgba(255,255,255,.75),0 0 26px rgba(43,154,255,.16) !important; }
+.kiosk-v3 .ck2-qr-wrap svg { width:min(34vh,330px) !important; height:min(34vh,330px) !important; display:block; }
+.kiosk-v3 .ck2-qr-instruction { font-size:clamp(15px,1.2vw,20px) !important; }
+.kiosk-v3 .ck2-journey-control { z-index:70 !important; min-height:58px !important; font-size:16px !important; border-radius:18px !important; background:rgba(2,7,14,.92) !important; border:1px solid rgba(66,158,255,.3) !important; }
+.kiosk-v3 .ck2-journey-control button { min-height:44px !important; padding:0 18px !important; }
+.kiosk-v3 .ck2-connected-card { min-width:min(720px,78vw) !important; border-radius:34px !important; padding:54px !important; background:linear-gradient(145deg,rgba(4,15,30,.96),rgba(2,5,12,.98)) !important; border:1px solid rgba(49,154,255,.48) !important; box-shadow:0 0 80px rgba(25,119,255,.18) !important; }
+.kiosk-v3 .ck2-connected-card h1 { font-size:clamp(44px,4.8vw,78px) !important; }
+.kiosk-v3 .ck2-connected-card p { font-size:clamp(18px,1.55vw,26px) !important; color:var(--kp-muted) !important; }
+
+/* -------------------------------------------------------------------------- */
+/* EXPRESS / CORE KIOSK                                                      */
+/* -------------------------------------------------------------------------- */
+.kiosk-v3 .kiosk-root { padding:var(--kp-safe-y) var(--kp-safe-x) !important; }
+.kiosk-v3 .kiosk-root > header { position:relative; z-index:25; min-height:68px; border-bottom:1px solid rgba(102,164,232,.13); padding-bottom:10px; }
+.kiosk-v3 .kiosk-root > header button, .kiosk-v3 .kiosk-root > header [role="button"] { min-height:52px; font-size:16px; }
+.kiosk-v3 .kiosk-root > main { min-height:calc(100vh - 92px) !important; max-width:none !important; position:relative; z-index:8; }
+
+.kiosk-v3 .kiosk-idle-stage { width:min(1050px,69vw) !important; margin-right:24vw; }
+.kiosk-v3 .kiosk-idle-hero h1 { font-size:clamp(42px,4.1vw,70px) !important; }
+.kiosk-v3 .kiosk-idle-hero p { font-size:clamp(17px,1.35vw,23px) !important; }
+.kiosk-v3 .kiosk-slot-grid { max-width:860px !important; gap:16px !important; }
+.kiosk-v3 .kiosk-slot-card { min-height:175px !important; padding:17px !important; border-radius:24px !important; background:linear-gradient(145deg,rgba(6,16,30,.88),rgba(2,6,13,.94)) !important; border:1px solid rgba(60,150,255,.24) !important; box-shadow:0 18px 35px rgba(0,0,0,.26) !important; }
+.kiosk-v3 .kiosk-slot-card.ring-4 { border-color:rgba(54,191,255,.74) !important; box-shadow:0 0 32px rgba(31,155,255,.2),inset 0 0 25px rgba(39,139,255,.06) !important; }
+.kiosk-v3 .kiosk-slot-card .text-5xl { font-size:clamp(30px,3vw,48px) !important; }
+
+.kiosk-v3 .kiosk-pricing-stage { max-width:1080px !important; margin-right:14vw; gap:20px !important; }
+.kiosk-v3 .kiosk-pricing-stage > h2 { font-size:clamp(42px,4.5vw,72px) !important; }
+.kiosk-v3 .kiosk-pricing-card { border-radius:30px !important; background:linear-gradient(145deg,rgba(5,15,29,.94),rgba(2,6,13,.96)) !important; border:1px solid rgba(66,160,255,.34) !important; box-shadow:0 0 65px rgba(22,105,255,.12) !important; }
+.kiosk-v3 .kiosk-pricing-card .text-6xl, .kiosk-v3 .kiosk-pricing-card .sm\:text-7xl { font-size:clamp(40px,4.2vw,68px) !important; }
+
+.kiosk-v3 .kiosk-qr-stage { max-width:1180px !important; margin-right:8vw; gap:42px !important; }
+.kiosk-v3 .kiosk-qr-stage h2 { font-size:clamp(42px,4.2vw,68px) !important; }
+.kiosk-v3 .kiosk-qr-stage p { font-size:clamp(17px,1.45vw,24px) !important; }
+.kiosk-v3 .kiosk-qr-stage .bg-white { box-shadow:0 0 0 1px rgba(255,255,255,.8),0 0 36px rgba(41,161,255,.18) !important; }
+.kiosk-v3 .kiosk-qr-stage .animate-pulse-ring { opacity:.22 !important; }
+
+.kiosk-v3 .kiosk-release-stage { max-width:1050px !important; margin-right:10vw; }
+.kiosk-v3 .kiosk-release-stage h2 { font-size:clamp(40px,4.3vw,70px) !important; text-align:center; }
+.kiosk-v3 .kiosk-release-stage p { font-size:clamp(18px,1.5vw,25px) !important; }
+
+.kiosk-v3 .kiosk-root .bg-gradient-success { background:radial-gradient(circle at 35% 25%,#b7ff9c,#56ed36 48%,#1fa316) !important; box-shadow:0 0 50px rgba(102,255,70,.28) !important; }
+
+/* Error/support states remain prominent without looking like admin pages. */
+.kiosk-v3 .kiosk-root [class*="bg-destructive/20"],
+.kiosk-v3 .kiosk-root [class*="bg-warning/20"] { border:1px solid rgba(255,176,77,.25); box-shadow:0 0 35px rgba(255,133,58,.1); }
+
+/* Keep QR modules flat and scan-safe. */
+.kiosk-v3 svg[role="img"], .kiosk-v3 .ck2-qr-wrap svg { filter:none !important; }
+
+@media (max-width: 1100px), (max-height: 690px) {
+  .kv3-station-hero { right:3vw; top:18vh; width:25vw; height:58vh; }
+  .kiosk-v3 .ck2-hero-copy { top:15vh; }
+  .kiosk-v3 .ck2-hero-copy h1 { font-size:clamp(43px,5vw,68px) !important; }
+  .kiosk-v3 .ck2-choice-grid { bottom:16vh; }
+  .kv3-offer-card { bottom:16vh; }
+  .kiosk-v3 .ck2-choice, .kv3-offer-card { min-height:190px !important; padding:17px !important; }
+  .kv3-payment-dock { bottom:2.4vh; }
+  .kiosk-v3 .ck2-member-grid { inset:13vh 4vw 6vh !important; grid-template-columns:1fr 390px !important; }
+  .kiosk-v3 .ck2-qr-wrap svg { width:270px !important; height:270px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-v3 *, .kv3-runtime * { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+}
