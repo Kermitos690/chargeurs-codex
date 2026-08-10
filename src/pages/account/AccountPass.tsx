@@ -4,12 +4,15 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
+  ExternalLink,
   Gem,
   Loader2,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Smartphone,
   WalletCards,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +34,8 @@ type State = {
   chargePoints: CustomerChargePoints;
 };
 
+type ManageAction = "portal" | "cancel_at_period_end" | "resume";
+
 const initial: State = {
   loading: true,
   error: false,
@@ -43,6 +48,9 @@ export default function AccountPass() {
   const [state, setState] = useState<State>(initial);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
+  const [managementAction, setManagementAction] = useState<ManageAction | null>(null);
+  const [managementMessage, setManagementMessage] = useState<string | null>(null);
+  const [managementError, setManagementError] = useState<string | null>(null);
   const membershipReturn = useMemo(() => new URLSearchParams(window.location.search).get("membership"), []);
 
   const load = useCallback(async () => {
@@ -65,6 +73,8 @@ export default function AccountPass() {
 
   const plan = membershipPlan(state.membership);
   const membershipActive = Boolean(state.membership && ["active", "trialing"].includes(state.membership.status));
+  const cancellationScheduled = Boolean(membershipActive && state.membership?.cancel_at_period_end);
+  const periodEnd = state.membership?.stripe_current_period_end ?? state.membership?.ends_at ?? null;
   const qrUrl = useMemo(() => {
     if (!state.walletPass?.public_pass_id) return "";
     const url = new URL("/compte/login", window.location.origin);
@@ -108,6 +118,37 @@ export default function AccountPass() {
     }
   };
 
+  const manage = async (action: ManageAction) => {
+    if (managementAction) return;
+    if (action === "cancel_at_period_end") {
+      const confirmed = window.confirm("Programmer l’arrêt de l’adhésion à la fin de la période déjà payée ? Vos avantages resteront actifs jusque-là.");
+      if (!confirmed) return;
+    }
+    setManagementAction(action);
+    setManagementError(null);
+    setManagementMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-membership-manage", { body: { action } });
+      if (error || !data?.ok) throw new Error(String(data?.error ?? "MEMBERSHIP_MANAGE_UNAVAILABLE"));
+      if (action === "portal" && data.portalUrl) {
+        window.location.assign(String(data.portalUrl));
+        return;
+      }
+      if (action === "cancel_at_period_end") {
+        setManagementMessage(data.periodEnd
+          ? `L’arrêt est programmé pour le ${formatAccountDate(String(data.periodEnd))}. Les avantages restent actifs jusqu’à cette date.`
+          : "L’arrêt à la fin de la période a été programmé.");
+      } else if (action === "resume") {
+        setManagementMessage("Le renouvellement automatique est de nouveau actif.");
+      }
+      await load();
+    } catch {
+      setManagementError("La modification de l’adhésion n’a pas pu être confirmée. Aucun changement n’est présenté comme effectué.");
+    } finally {
+      setManagementAction(null);
+    }
+  };
+
   if (state.loading) {
     return <div className="glass mt-6 grid min-h-[50vh] place-items-center rounded-3xl"><Loader2 className="h-9 w-9 animate-spin text-primary" /></div>;
   }
@@ -134,6 +175,13 @@ export default function AccountPass() {
           Souscription interrompue. Aucune adhésion n’est affichée comme active sans confirmation Stripe.
         </div>
       )}
+      {cancellationScheduled && (
+        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+          Renouvellement désactivé. Votre adhésion et vos avantages restent actifs jusqu’au {periodEnd ? formatAccountDate(periodEnd) : "terme de la période en cours"}.
+        </div>
+      )}
+      {managementMessage && <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm text-success">{managementMessage}</div>}
+      {managementError && <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">{managementError}</div>}
 
       <section className="overflow-hidden rounded-[2rem] border border-violet-300/20 bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,.22),transparent_35%),linear-gradient(145deg,rgba(9,6,20,.98),rgba(3,7,16,.98))] p-6 shadow-[0_30px_80px_rgba(0,0,0,.45)] sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
@@ -147,13 +195,28 @@ export default function AccountPass() {
                 ? "Votre adhésion est liée à ce compte. Les avantages affichés ci-dessous proviennent du backend Chargeurs.ch."
                 : "Aucune adhésion active n’est actuellement liée à ce compte. Le Checkout utilise automatiquement le plan actif configuré côté serveur."}
             </p>
-            {!membershipActive && (
+            {!membershipActive ? (
               <div className="mt-5">
                 <Button onClick={() => void subscribe()} disabled={subscribing} className="rounded-full bg-violet-500 px-6 font-bold text-white hover:bg-violet-400">
                   {subscribing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WalletCards className="mr-2 h-4 w-4" />}
                   {state.membership?.status === "pending" ? "Reprendre la souscription" : "Devenir Client Chargeurs"}
                 </Button>
                 {subscribeError && <p className="mt-3 max-w-xl text-sm text-destructive">{subscribeError}</p>}
+              </div>
+            ) : (
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button variant="outline" className="rounded-full" onClick={() => void manage("portal")} disabled={Boolean(managementAction)}>
+                  {managementAction === "portal" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}Gérer le paiement
+                </Button>
+                {cancellationScheduled ? (
+                  <Button variant="outline" className="rounded-full border-success/30 text-success" onClick={() => void manage("resume")} disabled={Boolean(managementAction)}>
+                    {managementAction === "resume" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Reprendre le renouvellement
+                  </Button>
+                ) : (
+                  <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={() => void manage("cancel_at_period_end")} disabled={Boolean(managementAction)}>
+                    {managementAction === "cancel_at_period_end" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}Arrêter au renouvellement
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -167,7 +230,13 @@ export default function AccountPass() {
             <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
             <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
             {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit adhésion / renouvellement" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
-            <Info icon={CalendarClock} label="Prochaine échéance" value={state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—"} />
+            <Info
+              icon={CalendarClock}
+              label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"}
+              value={cancellationScheduled
+                ? (periodEnd ? formatAccountDate(periodEnd) : "—")
+                : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")}
+            />
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
