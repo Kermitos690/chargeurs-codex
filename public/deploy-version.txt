@@ -1,4 +1,4 @@
 Chargeurs.ch kiosk deployment marker
-Requested production refresh: 2026-08-10 16:43 Europe/Zurich
-Includes kiosk artwork guard and native fallback from c626dfff5eb10b8b1e7d2ce1eb238424680b14df
-Purpose: trigger exactly one fresh production deployment now that Vercel preview builds are Ready, and verify the physical kiosk serves the latest build.
+Requested production refresh: 2026-08-10 16:52 Europe/Zurich
+Includes viewport/fallback positioning fix from b8864227ae589afbaff3be40830a5951c55e7fb7
+Purpose: trigger exactly one fresh production deployment for the corrected full-screen kiosk layout.
