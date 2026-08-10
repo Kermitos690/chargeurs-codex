@@ -24,15 +24,13 @@ export default function Pay() {
   const { rentalSessionId } = useParams();
   const search = window.location.search;
   const sessionCode = new URLSearchParams(search).get("c") ?? "";
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [status, setStatus] = useState<PayStatus>({ state: "loading", checkout_url: null, failure_code: null, selected_slot_num: null });
 
   useEffect(() => {
     if (!rentalSessionId || !sessionCode) return;
     let cancelled = false;
     const load = async () => {
-      // Scoped accessor — requires both the session UUID and its public code
-      // (bearer secret). A guessable/shared UUID alone is not sufficient.
       const { data } = await supabase.rpc("kiosk_session_status", { p_id: rentalSessionId, p_code: sessionCode });
       if (cancelled) return;
       const r = data as PayStatus | null;
@@ -44,17 +42,10 @@ export default function Pay() {
       });
     };
     void load();
-    // Once Stripe has redirected back to this page the UI must react to the
-    // hardware event quickly. BATTERY_BORROW_OUT now projects the release
-    // server-side immediately, so sub-second polling is cheap and avoids the
-    // old 2.5 s visual lag without ever sending a hardware command.
     const i = window.setInterval(() => void load(), 800);
     return () => { cancelled = true; window.clearInterval(i); };
   }, [rentalSessionId, sessionCode]);
 
-  // The URL may be the Stripe success_url or cancel_url, but it is never proof
-  // of payment. Only the scoped server projection (fed by verified webhooks)
-  // may switch this page to a confirmed state.
   const state = status.state ?? "unknown";
   const paid = isServerConfirmedPayment(state);
   const releasePending = isServerReleasePending(state);
@@ -63,6 +54,26 @@ export default function Pay() {
   const serverPresentation = kioskPaymentPresentation(state, status.failure_code);
   const releaseProblem = serverPresentation?.phase === "support";
   const checkoutCanOpen = Boolean(status.checkout_url && CHECKOUT_OPEN_STATES.has(state));
+  const readyCopy = {
+    fr: {
+      title: "Prenez votre batterie",
+      slot: (slot: number) => `Elle vous attend dans le slot ${slot}.`,
+      generic: "Votre batterie est prête à la borne.",
+      marketing: "Restez chargé, où que vous alliez.",
+    },
+    en: {
+      title: "Take your powerbank",
+      slot: (slot: number) => `It is waiting in slot ${slot}.`,
+      generic: "Your powerbank is ready at the station.",
+      marketing: "Stay charged wherever you go.",
+    },
+    de: {
+      title: "Nimm deine Powerbank",
+      slot: (slot: number) => `Sie wartet in Fach ${slot}.`,
+      generic: "Deine Powerbank ist an der Station bereit.",
+      marketing: "Bleib geladen, wohin du auch gehst.",
+    },
+  }[lang];
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden px-5 py-6">
@@ -93,17 +104,18 @@ export default function Pay() {
           </motion.div>
         ) : paid ? (
           <motion.div initial={{ opacity: 0, scale: 0.92, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: "spring", stiffness: 180, damping: 18 }} className="glass-strong liquid-border relative flex w-full max-w-sm flex-col items-center gap-5 overflow-hidden rounded-[2rem] p-8 shadow-[0_30px_90px_rgba(0,0,0,.34),0_0_55px_rgba(34,211,238,.14)]">
-            <motion.div aria-hidden className="absolute -top-20 h-44 w-44 rounded-full bg-cyan-400/20 blur-3xl" animate={{ scale: [1, 1.18, 1], opacity: [.5, .85, .5] }} transition={{ duration: 2.6, repeat: Infinity }} />
+            <motion.div aria-hidden className="absolute -top-20 h-44 w-44 rounded-full bg-emerald-400/20 blur-3xl" animate={{ scale: [1, 1.18, 1], opacity: [.5, .85, .5] }} transition={{ duration: 2.6, repeat: Infinity }} />
             <motion.div initial={{ scale: 0, rotate: -16 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 210, damping: 15 }} className="relative grid h-28 w-28 place-items-center rounded-full bg-gradient-success shadow-glow-success">
               <CheckCircle2 className="h-16 w-16 text-success-foreground" />
             </motion.div>
-            <h1 className="relative font-display text-3xl font-extrabold">{t("kiosk.success.title")}</h1>
-            {status.selected_slot_num ? (
-              <div className="relative w-full rounded-2xl border border-cyan-200/20 bg-slate-950/20 px-5 py-4">
-                <p className="text-sm font-semibold uppercase tracking-[.18em] text-cyan-100/70">{t("kiosk.slot.label", { slot: status.selected_slot_num })}</p>
-                <p className="mt-1 text-lg font-semibold text-foreground">{t("kiosk.success.slot", { slot: status.selected_slot_num })}</p>
-              </div>
-            ) : <p className="relative text-muted-foreground">{t("kiosk.success.generic")}</p>}
+            <h1 className="relative font-display text-3xl font-extrabold">{readyCopy.title}</h1>
+            <p className="relative text-lg font-semibold text-slate-100/85">{status.selected_slot_num ? readyCopy.slot(status.selected_slot_num) : readyCopy.generic}</p>
+            {status.selected_slot_num && (
+              <motion.div initial={{ scale: .88, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: .08 }} className="relative grid h-24 w-24 place-items-center rounded-[1.5rem] border border-cyan-100/30 bg-cyan-300/10 font-display text-6xl font-black text-cyan-100 shadow-[0_0_34px_rgba(34,211,238,.2)]">
+                {status.selected_slot_num}
+              </motion.div>
+            )}
+            <p className="relative text-sm font-semibold text-cyan-100/70">{readyCopy.marketing}</p>
             <div className="relative flex items-center gap-2 text-success"><ShieldCheck className="h-4 w-4" />{t("qr.secured")}</div>
           </motion.div>
         ) : releasePending ? (
