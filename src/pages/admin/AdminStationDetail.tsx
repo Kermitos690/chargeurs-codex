@@ -5,8 +5,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { RefreshCw, Loader2, Wifi, WifiOff, Battery, TabletSmartphone, Copy, Ban, type LucideIcon } from "lucide-react";
+import { RefreshCw, Loader2, Wifi, WifiOff, Battery, TabletSmartphone, Copy, Ban, AlertTriangle, CircleCheck, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 
 type KioskDevice = {
   id: string; station_id: string; label: string | null; active: boolean;
@@ -18,6 +19,34 @@ type PairingReveal = {
   pairingCodeId: string; pairingCode: string; createdAt: string; expiresAt: string;
   stationId: string; organizationName: string;
 };
+
+type SlotDiagnostic = {
+  slot_num: number; battery_id: string | null; battery_present: boolean | null;
+  charge_percent: number | null; temperature_c: number | null; online: boolean | null;
+  health_status: string | null; self_check: string; error_code: string | null;
+  fault_type: string | null; fault_cause: string | null; rentable: boolean;
+  confidence: string; customer_status: string; source_timestamps: Record<string, string>;
+  age_seconds: number | null; conflicts: string[]; diagnostic_flags: string[];
+};
+
+const statusLabel = (status: string) => ({
+  ready: "Prête", recommended: "Recommandée", charging: "En recharge",
+  checking: "Vérification", unavailable: "Indisponible",
+  return_available: "Libre pour un retour", technical_issue: "Problème technique", maintenance: "Maintenance",
+}[status] ?? status);
+
+const diagnosticLabel = (flag: string) => ({
+  zero_charge_reported: "charge signalée à 0 % : location bloquée",
+  battery_id: "identifiants batterie contradictoires",
+  charge_percent: "niveaux de charge contradictoires",
+  battery_present: "présence de batterie contradictoire",
+  online: "états réseau contradictoires",
+}[flag] ?? flag);
+
+const needsOperatorAlert = (slot: SlotDiagnostic) =>
+  ["technical_issue", "maintenance"].includes(slot.customer_status) ||
+  slot.diagnostic_flags.length > 0 || slot.conflicts.length > 0 ||
+  Boolean(slot.error_code || slot.fault_type || slot.fault_cause);
 
 export default function AdminStationDetail() {
   const { stationId } = useParams();
@@ -31,17 +60,20 @@ export default function AdminStationDetail() {
   const [pairing, setPairing] = useState<PairingReveal | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SlotDiagnostic[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: st }, { data: sl }, { data: ev }, { data: rt }, { data: kd }] = await Promise.all([
+    const [{ data: st }, { data: sl }, { data: ev }, { data: rt }, { data: kd }, { data: snapshot }] = await Promise.all([
       supabase.from("stations").select("*").eq("station_id", stationId).maybeSingle(),
       supabase.from("slots").select("*").eq("station_id", stationId).order("slot_num"),
       supabase.from("cabinet_events").select("*").eq("station_id", stationId).order("received_at", { ascending: false }).limit(8),
       supabase.from("rental_sessions").select("*").eq("station_id", stationId).in("state", ["active_rental", "battery_taken", "ejected"]).order("created_at", { ascending: false }).limit(1),
       supabase.functions.invoke("kiosk-admin", { body: { action: "list" } }),
+      supabase.functions.invoke("cabinet-slot-diagnostics", { body: { stationId } }),
     ]);
     setStation(st); setSlots(sl ?? []); setEvents(ev ?? []); setRental(rt?.[0] ?? null);
     setKiosks(((kd as { devices?: KioskDevice[] } | null)?.devices ?? []).filter((device) => device.station_id === stationId));
+    setDiagnostics(((snapshot as { slots?: SlotDiagnostic[] } | null)?.slots ?? []));
   }, [stationId]);
   useEffect(() => { load(); }, [load]);
 
@@ -78,6 +110,9 @@ export default function AdminStationDetail() {
   const enrollmentUrl = pairing ? `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/kiosk-enroll` : "";
 
   if (!station) return <Loader2 className="h-8 w-8 animate-spin text-primary" />;
+  const connection = stationConnectionState(station);
+  const isOnline = connection === "online";
+  const activeAlerts = diagnostics.filter(needsOperatorAlert);
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -93,7 +128,7 @@ export default function AdminStationDetail() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <Info label="Statut" value={station.online ? "En ligne" : "Hors ligne"} icon={station.online ? Wifi : WifiOff} tone={station.online ? "text-success" : "text-muted-foreground"} />
+        <Info label="Statut fournisseur" value={stationConnectionLabel(station)} icon={isOnline ? Wifi : WifiOff} tone={isOnline ? "text-success" : connection === "unknown" ? "text-warning" : "text-muted-foreground"} />
         <Info label="Signal" value={station.signal ?? "—"} />
         <Info label="Disponibles" value={station.rentable_count} />
         <Info label="Dernière sync" value={station.last_sync_at ? new Date(station.last_sync_at).toLocaleTimeString() : "—"} />
@@ -114,6 +149,32 @@ export default function AdminStationDetail() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      <section className={cn("rounded-2xl border p-5", activeAlerts.length ? "border-warning/45 bg-warning/10" : "border-success/35 bg-success/10")}>
+        <div className="flex items-start gap-3">
+          {activeAlerts.length ? <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-warning" /> : <CircleCheck className="mt-0.5 h-6 w-6 shrink-0 text-success" />}
+          <div>
+            <h2 className="font-display text-xl font-bold">Alertes actives de la borne</h2>
+            <p className="text-sm text-muted-foreground">Vue opérateur basée sur le snapshot fournisseur le plus récent. Un slot libre pour un retour n’est pas une alerte.</p>
+          </div>
+        </div>
+        {activeAlerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{activeAlerts.map((slot) => (
+          <div key={slot.slot_num} className="rounded-xl border border-warning/30 bg-background/35 p-3 text-sm">
+            <div className="font-bold">Slot {slot.slot_num} — {statusLabel(slot.customer_status)}</div>
+            <div className="mt-1 text-muted-foreground">{[...slot.diagnostic_flags, ...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).map(diagnosticLabel).join(" · ") || "Contrôle opérateur requis"}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Âge : {slot.age_seconds == null ? "inconnu" : `${slot.age_seconds}s`} · confiance : {slot.confidence}</div>
+          </div>
+        ))}</div> : <p className="mt-3 text-sm text-success">Aucune anomalie active dans le dernier snapshot. Les emplacements vides sont suivis comme retours possibles.</p>}
+      </section>
+
+      <section className="glass liquid-border rounded-2xl p-6">
+        <div className="mb-4"><h2 className="font-display text-xl font-bold">Diagnostic fournisseur par slot</h2><p className="text-sm text-muted-foreground">Vue technique multi-source, en lecture seule. Les données ambiguës ne rendent jamais une batterie louable.</p></div>
+        {diagnostics.length === 0 ? <p className="text-muted-foreground">Aucun snapshot technique récent. Utilisez Synchroniser ou vérifiez l’accès fournisseur.</p> : (
+          <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-left text-sm"><thead className="border-b border-border text-muted-foreground"><tr><th className="p-2">Slot</th><th className="p-2">Batterie</th><th className="p-2">Charge</th><th className="p-2">Temp.</th><th className="p-2">État</th><th className="p-2">Self-check</th><th className="p-2">Confiance</th><th className="p-2">Âge</th><th className="p-2">Louable</th><th className="p-2">Anomalies</th></tr></thead><tbody>
+            {diagnostics.map((slot) => <tr key={slot.slot_num} className="border-b border-border/50 align-top"><td className="p-2 font-bold">{slot.slot_num}</td><td className="p-2 font-mono text-xs">{slot.battery_id ?? "—"}</td><td className="p-2">{slot.customer_status === "return_available" ? "— (retour)" : slot.charge_percent == null ? "non interprété" : `${Math.round(slot.charge_percent)} %`}</td><td className="p-2">{slot.temperature_c == null ? "—" : `${slot.temperature_c.toFixed(1)} °C`}</td><td className="p-2">{statusLabel(slot.customer_status)}</td><td className="p-2">{slot.self_check}</td><td className="p-2">{slot.confidence}</td><td className="p-2">{slot.age_seconds == null ? "—" : `${slot.age_seconds}s`}</td><td className="p-2">{slot.rentable ? "oui" : "non"}</td><td className="p-2 text-xs text-warning">{[...slot.diagnostic_flags, ...slot.conflicts, slot.error_code, slot.fault_type, slot.fault_cause].filter(Boolean).map(diagnosticLabel).join(" · ") || "—"}</td></tr>)}
+          </tbody></table></div>
         )}
       </section>
 

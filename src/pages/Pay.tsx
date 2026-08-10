@@ -8,7 +8,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
-import { isServerCancelledPayment, isServerConfirmedPayment } from "@/lib/paymentPresentation";
+import { isServerCancelledPayment, isServerConfirmedPayment, isServerReleasePending } from "@/lib/paymentPresentation";
 
 export default function Pay() {
   const { rentalSessionId } = useParams();
@@ -37,6 +37,7 @@ export default function Pay() {
   // of payment. Only the scoped server projection (fed by a verified webhook)
   // may switch this page to a confirmed state.
   const paid = isServerConfirmedPayment(state);
+  const releasePending = isServerReleasePending(state);
   const cancelled = isServerCancelledPayment(state);
 
   return (
@@ -55,6 +56,13 @@ export default function Pay() {
             </div>
             <h1 className="font-display text-3xl font-extrabold">{t("success.title")}</h1>
             <p className="text-muted-foreground">{t("pay.return")}</p>
+          </motion.div>
+        ) : releasePending ? (
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="glass-strong liquid-border flex w-full max-w-sm flex-col items-center gap-6 rounded-3xl p-8">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <h1 className="font-display text-2xl font-bold">{t("pay.release_pending.title")}</h1>
+            <p className="text-muted-foreground">{t("pay.release_pending")}</p>
+            <div className="flex items-center gap-2 text-success"><ShieldCheck className="h-4 w-4" />{t("qr.secured")}</div>
           </motion.div>
         ) : cancelled ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-5">

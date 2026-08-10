@@ -870,6 +870,7 @@ export type Database = {
           shop_id: string | null
           started_at: string | null
           state: string
+          state_version: number
           station_id: string
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
@@ -916,6 +917,7 @@ export type Database = {
           shop_id?: string | null
           started_at?: string | null
           state?: string
+          state_version?: number
           station_id: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
@@ -962,6 +964,7 @@ export type Database = {
           shop_id?: string | null
           started_at?: string | null
           state?: string
+          state_version?: number
           station_id?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
@@ -1077,6 +1080,9 @@ export type Database = {
           online: boolean | null
           partner_id: string | null
           price_per_period: number | null
+          provider_last_error: string | null
+          provider_last_error_at: string | null
+          provider_last_success_at: string | null
           raw_data: Json | null
           rentable_count: number | null
           returnable_count: number | null
@@ -1098,6 +1104,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
@@ -1119,6 +1128,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
@@ -1432,6 +1444,20 @@ export type Database = {
       kiosk_session_status: {
         Args: { p_code: string; p_id: string }
         Returns: Json
+      }
+      create_reserved_kiosk_rental_session: {
+        Args: { p_session: Json }
+        Returns: Database["public"]["Tables"]["rental_sessions"]["Row"]
+      }
+      transition_rental_session: {
+        Args: {
+          p_session_id: string
+          p_expected_state_version: number
+          p_target_state: string
+          p_event_id: string
+          p_metadata?: Json
+        }
+        Returns: Database["public"]["Tables"]["rental_sessions"]["Row"]
       }
       resolve_price_profile: {
         Args: { p_device: string; p_shop: string; p_station: string }

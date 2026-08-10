@@ -4,14 +4,31 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, auditLog, requireAdmin } from "../_shared/db.ts";
-import { areHardwareEjectionsEnabled, ejectByRent, isChargeNowConfigured, orderCreate } from "../_shared/chargenow.ts";
+import {
+  areHardwareEjectionsEnabled,
+  chargeNowMode,
+  ejectByRent,
+  ejectByRentWithOneTimeRentalPermit,
+  isChargeNowConfigured,
+  type OneTimeRentalEjectionPermit,
+  orderCreate,
+  orderCreateWithOneTimeRentalPermit,
+} from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
+import { needsSupplierReleaseConfirmation } from "../_shared/ejectionResult.ts";
 
 const MAX_RETRIES = 3;
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
+type OneTimePermitRow = {
+  id: string;
+  rental_session_id: string;
+  station_id: string;
+  slot_num: number;
+  expires_at: string;
+};
 
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -35,6 +52,7 @@ function safeCode(value: unknown, fallback: string): string {
 async function authorizeCaller(
   req: Request,
   db: DB,
+  oneTime: { rentalSessionId: string; permitId: string | null },
 ): Promise<{ ok: true; actor: string } | { ok: false }> {
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -42,7 +60,19 @@ async function authorizeCaller(
     return { ok: true, actor: "service_role" };
   }
   const adminId = await requireAdmin(req, db);
-  return adminId ? { ok: true, actor: adminId } : { ok: false };
+  if (adminId) return { ok: true, actor: adminId };
+  // The UUID is an expiring, one-time bearer capability. It must be bound to
+  // the exact rental before it can replace an administrator/service token.
+  if (!oneTime.permitId || !/^[0-9a-f-]{36}$/i.test(oneTime.permitId)) return { ok: false };
+  const { data, error } = await db.from("one_time_rental_ejection_permits")
+    .select("id")
+    .eq("id", oneTime.permitId)
+    .eq("rental_session_id", oneTime.rentalSessionId)
+    .is("consumed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error || !data) return { ok: false };
+  return { ok: true, actor: "one_time_ejection_permit" };
 }
 
 function extractReleasedBattery(payload: unknown): { batteryId: string | null; slotNum: number | null } {
@@ -322,9 +352,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
-  const caller = await authorizeCaller(req, db);
-  if (!caller.ok) return reply({ ok: false, error: "FORBIDDEN" }, 403);
-
   let rentalSessionId = "";
   let session: Session | null = null;
   let hardwareCommandIssued = false;
@@ -335,6 +362,9 @@ Deno.serve(async (req) => {
     if (!/^[0-9a-f-]{36}$/i.test(rentalSessionId)) {
       return reply({ ok: false, error: "INVALID_RENTAL_ID" }, 400);
     }
+    const oneTimePermitId = typeof body.oneTimePermitId === "string" ? body.oneTimePermitId : null;
+    const caller = await authorizeCaller(req, db, { rentalSessionId, permitId: oneTimePermitId });
+    if (!caller.ok) return reply({ ok: false, error: "FORBIDDEN" }, 403);
 
     const { data, error: sessionError } = await db.from("rental_sessions")
       .select("*").eq("id", rentalSessionId).maybeSingle();
@@ -342,13 +372,37 @@ Deno.serve(async (req) => {
     if (!data) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
     session = data as Session;
 
+    const cabinetId = String(session.cabinet_id || session.station_id || "");
+    const requestedSlotNum = Number(session.selected_slot_num);
+    const { data: permitData, error: permitError } = await db
+      .from("one_time_rental_ejection_permits")
+      .select("id, rental_session_id, station_id, slot_num, expires_at")
+      .eq("rental_session_id", session.id)
+      .is("consumed_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    if (permitError) throw permitError;
+    const permit = permitData as OneTimePermitRow | null;
+    // This is the sole exception to the hardware kill switch. It requires a
+    // short-lived server-only permit that matches the exact paid rental,
+    // cabinet and slot, and can never operate outside ChargeNow test mode.
+    const oneTimeTestResume = Boolean(
+      session.state === "needs_support" &&
+      session.failure_code === "HARDWARE_EJECTION_DISABLED" &&
+      chargeNowMode() === "test" &&
+      permit &&
+      permit.rental_session_id === session.id &&
+      permit.station_id === cabinetId &&
+      permit.slot_num === requestedSlotNum,
+    );
+
     if (["ejected", "battery_taken", "active_rental", "battery_returned", "closed", "completed"].includes(session.state)) {
       return reply({ ok: true, alreadyDone: true, batteryId: session.battery_id ?? null });
     }
     if (["refund_pending", "refunded"].includes(session.state)) {
       return reply({ ok: true, compensated: true, state: session.state });
     }
-    if (session.state === "needs_support" && session.failure_code === "HARDWARE_EJECTION_DISABLED") {
+    if (session.state === "needs_support" && session.failure_code === "HARDWARE_EJECTION_DISABLED" && !oneTimeTestResume) {
       const blocked = await markHardwareReleaseBlocked(db, session);
       return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED", ...blocked });
     }
@@ -357,6 +411,26 @@ Deno.serve(async (req) => {
     }
     if (!["authorized", "prepaid"].includes(String(session.settlement_status))) {
       return reply({ ok: false, error: "PAYMENT_NOT_CONFIRMED" }, 409);
+    }
+
+    // A previous staging gate can leave the canonical state machine in
+    // `failed` before any supplier command is issued. Do not silently reuse
+    // the old release_requested event: record the explicit, one-time operator
+    // resume first, then continue the ordinary release sequence.
+    if (oneTimeTestResume && permit) {
+      await appendRentalEvent(db, {
+        rentalId: rentalSessionId,
+        eventType: "test_ejection_resumed",
+        idempotencyKey: `test_ejection_resumed:${rentalSessionId}:${permit.id}`,
+        paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+        stationId: String(session.station_id ?? "") || null,
+        metadata: {
+          actor: caller.actor,
+          permit_id: permit.id,
+          previous_failure_code: session.failure_code ?? null,
+          requested_slot_num: requestedSlotNum,
+        },
+      });
     }
 
     await appendRentalEvent(db, {
@@ -368,7 +442,7 @@ Deno.serve(async (req) => {
       metadata: { actor: caller.actor },
     });
 
-    if (!areHardwareEjectionsEnabled()) {
+    if (!areHardwareEjectionsEnabled() && !oneTimeTestResume) {
       const blocked = await markHardwareReleaseBlocked(db, session);
       // HTTP 200 acknowledges the internal webhook request. The business
       // result remains explicit and terminal, preventing a retry loop.
@@ -387,7 +461,7 @@ Deno.serve(async (req) => {
       const compensation = await compensateBeforeHardwareRequest(db, session, slotDecision.error);
       return reply({ ok: false, error: slotDecision.error, compensation }, 409);
     }
-    const requestedSlotNum = slotDecision.slotNum;
+    const resolvedSlotNum = slotDecision.slotNum;
 
     const retry = Number(session.retry_count ?? 0);
     if (retry >= MAX_RETRIES) {
@@ -398,12 +472,50 @@ Deno.serve(async (req) => {
     const { data: locked, error: lockError } = await db.from("rental_sessions")
       .update({ state: "ejecting", retry_count: retry + 1 })
       .eq("id", session.id)
-      .in("state", ["payment_succeeded", "chargenow_failed", "eject_failed"])
+      .in("state", oneTimeTestResume
+        ? ["payment_succeeded", "chargenow_failed", "eject_failed", "needs_support"]
+        : ["payment_succeeded", "chargenow_failed", "eject_failed"])
       .select("id");
     if (lockError) throw lockError;
     if (!locked || locked.length === 0) return reply({ ok: true, alreadyInProgress: true }, 202);
 
-    const cabinetId = String(session.cabinet_id || session.station_id || "");
+    let consumedPermit: OneTimeRentalEjectionPermit | null = null;
+    if (oneTimeTestResume && permit) {
+      // Consume before the supplier call. A network timeout after this point is
+      // physically ambiguous and must be reconciled, never retried as a second
+      // ejection.
+      const { data: consumed, error: consumeError } = await db
+        .from("one_time_rental_ejection_permits")
+        .update({ consumed_at: new Date().toISOString() })
+        .eq("id", permit.id)
+        .is("consumed_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .select("id");
+      if (consumeError) throw consumeError;
+      if (!consumed || consumed.length !== 1) {
+        await markSupportRequired(
+          db,
+          session,
+          "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED",
+          "L'autorisation unique a expiré ou a déjà été utilisée.",
+        );
+        return reply({ ok: false, error: "ONE_TIME_RENTAL_EJECTION_NOT_PERMITTED" }, 409);
+      }
+      consumedPermit = {
+        id: permit.id,
+        rentalSessionId: permit.rental_session_id,
+        stationId: permit.station_id,
+        slotNum: permit.slot_num,
+        expiresAt: permit.expires_at,
+      };
+      await auditLog(db, {
+        actor: caller.actor,
+        action: "rental.one_time_test_ejection_consumed",
+        target: session.id,
+        data: { permit_id: permit.id, cabinet_id: cabinetId, slot_num: requestedSlotNum },
+      });
+    }
+
     if (!cabinetId) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CABINET_ID_MISSING");
       return reply({ ok: false, error: "CABINET_ID_MISSING", compensation }, 409);
@@ -415,7 +527,12 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL") ?? "",
         rentalSessionId,
       );
-      const order = await orderCreate({ deviceId: cabinetId, callbackURL });
+      const order = oneTimeTestResume
+        ? await orderCreateWithOneTimeRentalPermit(
+          { deviceId: cabinetId, callbackURL },
+          consumedPermit as OneTimeRentalEjectionPermit,
+        )
+        : await orderCreate({ deviceId: cabinetId, callbackURL });
       const orderData = order.data as {
         data?: { tradeNo?: string; orderId?: string };
         tradeNo?: string;
@@ -459,19 +576,49 @@ Deno.serve(async (req) => {
     // From this line onward, any thrown error is physically ambiguous: the HTTP
     // request may have reached the supplier even when no response is available.
     hardwareCommandIssued = true;
-    const ejection = await ejectByRent(cabinetId, requestedSlotNum, tradeNo ?? undefined);
+    const ejection = oneTimeTestResume
+      ? await ejectByRentWithOneTimeRentalPermit(
+        cabinetId,
+        resolvedSlotNum,
+        tradeNo ?? "",
+        rentalSessionId,
+        consumedPermit as OneTimeRentalEjectionPermit,
+      )
+      : await ejectByRent(cabinetId, resolvedSlotNum, tradeNo ?? undefined);
     const released = extractReleasedBattery(ejection.data);
-    const selectedSlotNum = released.slotNum ?? requestedSlotNum;
+    const selectedSlotNum = released.slotNum ?? resolvedSlotNum;
 
     await logApi(db, {
       service: "chargenow",
       endpoint: "/cabinet/ejectByRent",
       method: "POST",
       status_code: ejection.status,
-      request: { cabinetId, slotNum: requestedSlotNum, tradeNo },
+      request: { cabinetId, slotNum: resolvedSlotNum, tradeNo, one_time_test_resume: oneTimeTestResume },
       response: { ok: ejection.ok, batteryId: released.batteryId, slotNum: selectedSlotNum },
       error: ejection.ok ? null : safeCode(ejection.error, "EJECTION_UNCONFIRMED"),
     });
+
+    if (needsSupplierReleaseConfirmation(ejection, released.batteryId)) {
+      // The supplier received the physical request at the HTTP layer but did
+      // not provide a usable battery identity. Do not retry and do not present
+      // this normal asynchronous window as a support failure. This also covers
+      // an otherwise-successful C3 response that omits batteryId.
+      const code = "EJECTION_PROVIDER_CONFIRMATION_PENDING";
+      const { error: pendingUpdateError } = await db.from("rental_sessions").update({
+        state: "ejecting",
+        chargenow_status: "release_provider_confirmation_pending",
+        failure_code: code,
+        failure_message: "La commande d'ouverture a été reçue par le fournisseur; confirmation matérielle en attente.",
+      }).eq("id", session.id);
+      if (pendingUpdateError) throw pendingUpdateError;
+      await auditLog(db, {
+        actor: caller.actor,
+        action: "rental.release.provider_confirmation_pending",
+        target: session.id,
+        data: { cabinet_id: cabinetId, trade_no: tradeNo, slot_num: selectedSlotNum, provider_code: ejection.error },
+      });
+      return reply({ ok: true, state: "ejecting", confirmationPending: true }, 202);
+    }
 
     if (!ejection.ok) {
       const code = safeCode(ejection.error, "EJECTION_UNCONFIRMED");
@@ -486,7 +633,7 @@ Deno.serve(async (req) => {
         session,
         code,
         "Résultat d'éjection incertain — réconciliation ChargeNow obligatoire avant toute compensation.",
-        { cabinetId, tradeNo, requestedSlotNum },
+        { cabinetId, tradeNo, requestedSlotNum: resolvedSlotNum },
       );
       return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
     }

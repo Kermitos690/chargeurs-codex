@@ -6,9 +6,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import Kiosk from "./pages/Kiosk.tsx";
+import KioskJourneyGate from "./pages/KioskJourneyGate.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
+import PaymentChoice from "./pages/PaymentChoice.tsx";
+import RentalProgress from "./pages/RentalProgress.tsx";
+import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
+import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -21,6 +25,8 @@ import AccountPayments from "./pages/account/AccountPayments.tsx";
 import AccountSupport from "./pages/account/AccountSupport.tsx";
 import AccountProfile from "./pages/account/AccountProfile.tsx";
 import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
+import AccountConnect from "./pages/account/AccountConnect.tsx";
+import AccountScanner from "./pages/account/AccountScanner.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
@@ -57,6 +63,8 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
+          <KioskReturnOverlay />
+          <KioskHelpLauncher />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
@@ -65,13 +73,17 @@ const App = () => (
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<Kiosk />} />
-            <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
+            <Route path="/kiosk/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/kiosk/station/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
+            <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
             <Route path="/compte/login" element={<AccountAuth />} />
             <Route path="/compte/reset-password" element={<AccountResetPassword />} />
+            <Route path="/compte/connect/:token" element={<AccountConnect />} />
+            <Route path="/compte/scanner" element={<AccountScanner />} />
             <Route path="/compte" element={<AccountLayout />}>
               <Route index element={<AccountHome />} />
               <Route path="locations" element={<AccountRentals />} />

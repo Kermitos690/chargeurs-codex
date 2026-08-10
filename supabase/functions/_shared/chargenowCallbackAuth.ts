@@ -53,7 +53,10 @@ export async function buildChargeNowCallbackUrl(
 ): Promise<string> {
   if (!supabaseUrl) throw new Error("SUPABASE_INTERNAL_CONFIG_MISSING");
   const url = new URL("/functions/v1/chargenow-rent-callback", supabaseUrl);
-  url.searchParams.set("rental", rentalId);
+  // The callback handler resolves the rental from the provider trade number
+  // before verification. Emitting a single query parameter avoids the
+  // provider's historic HTML rewrite of `&token` into `amp;token`.
+  // The HMAC remains scoped to one rental and cannot authenticate another one.
   url.searchParams.set("token", await chargeNowCallbackToken(rentalId));
   return url.toString();
 }
@@ -71,8 +74,14 @@ export async function verifyChargeNowCallback(
   if (legacySecret && safeEqual(legacyHeader, legacySecret)) return true;
 
   const url = new URL(req.url);
+  // Older provider callbacks were generated through an HTML context and can
+  // arrive with a query key named `amp;token`. Keep compatibility only for a
+  // rental-scoped HMAC: newly generated URLs always use canonical `&token=`.
+  // This fixes in-flight historical orders without accepting a global secret
+  // from the query string or perpetuating the malformed URL format.
   const provided = req.headers.get("x-chargenow-callback-token")
     ?? url.searchParams.get("token")
+    ?? url.searchParams.get("amp;token")
     ?? "";
   const scopedRental = url.searchParams.get("rental") ?? rentalId;
   if (scopedRental !== rentalId) return false;

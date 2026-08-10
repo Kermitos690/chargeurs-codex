@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { PublicNav } from "@/components/public/PublicNav";
@@ -51,7 +52,7 @@ export default function Index() {
   useEffect(() => {
     supabase
       .from("stations")
-      .select("station_id, name, location_name, online")
+      .select("station_id, name, location_name, online, status")
       .order("station_id")
       .then(({ data, error }) => {
         setStations(data ?? []);
@@ -96,18 +97,19 @@ export default function Index() {
           <h2 className="font-display text-3xl font-bold sm:text-4xl">Bornes Chargeurs.ch</h2>
           <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes publiées et connectées apparaissent automatiquement à partir des données de la plateforme.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleStations.map((station) => (
-              <Link key={station.station_id} to={publicStationPath(station.station_id)} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
+            {visibleStations.map((station) => {
+              const connection = stationConnectionState(station);
+              return <Link key={station.station_id} to={publicStationPath(station.station_id)} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
                 <div className="flex items-start justify-between gap-3">
                   <MonitorSmartphone className="h-7 w-7 text-primary" />
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${station.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{station.online ? "Disponible" : "Hors ligne"}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${connection === "online" ? "bg-success/15 text-success" : connection === "unknown" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>{connection === "online" ? "Disponible" : stationConnectionLabel(station)}</span>
                 </div>
                 <div className="mt-4 font-mono text-xs text-muted-foreground">{station.station_id}</div>
                 <div className="text-lg font-bold">{station.name}</div>
                 {station.location_name && <div className="text-sm text-muted-foreground">{station.location_name}</div>}
                 <div className="mt-4 inline-flex items-center gap-1 text-sm text-primary">Voir la borne <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></div>
               </Link>
-            ))}
+            })}
           </div>
           {loadingStations && <p className="mt-4 text-sm text-muted-foreground">Synchronisation de l'état des bornes…</p>}
           {!loadingStations && stationsError && <p className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">La disponibilité des bornes est momentanément indisponible. Aucune donnée de démonstration n’est affichée.</p>}

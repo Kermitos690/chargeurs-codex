@@ -7,6 +7,7 @@ import {
   HelpCircle,
   Loader2,
   MapPin,
+  QrCode,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -63,9 +64,13 @@ export default function AccountHome() {
       <section className="glass-strong liquid-border overflow-hidden rounded-3xl p-6 sm:p-8">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"><Sparkles className="h-3.5 w-3.5" />Espace client</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-success/25 bg-success/10 px-3 py-1 text-xs font-semibold text-success"><Sparkles className="h-3.5 w-3.5" />Client Chargeurs</span>
             <h1 className="mt-4 font-display text-3xl font-extrabold sm:text-4xl">Bonjour {displayName}</h1>
-            <p className="mt-2 max-w-xl text-muted-foreground">Suivez vos locations, paiements et demandes d'assistance depuis un espace protégé par votre compte.</p>
+            <p className="mt-2 max-w-xl text-muted-foreground">Scannez une borne depuis votre compte pour la connecter instantanément et profiter du tarif client.</p>
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Votre tarif</p><p className="font-display text-3xl font-extrabold text-success">1,00 CHF / h</p></div>
+              <Button asChild className="rounded-full bg-gradient-success px-6 py-5 font-bold text-success-foreground"><Link to="/compte/scanner"><QrCode className="mr-2 h-5 w-5" />Scanner une borne</Link></Button>
+            </div>
           </div>
           <Button variant="outline" size="sm" className="self-start rounded-full" onClick={() => void load()} disabled={state.loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${state.loading ? "animate-spin" : ""}`} />Actualiser
@@ -110,10 +115,10 @@ export default function AccountHome() {
             </section>
           ) : (
             <section className="glass rounded-3xl p-7 text-center">
-              <BatteryCharging className="mx-auto h-10 w-10 text-primary" />
-              <h2 className="mt-3 font-display text-xl font-bold">Aucune location en cours</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Trouvez une borne disponible pour louer votre prochaine batterie.</p>
-              <Button asChild className="mt-5 rounded-full bg-gradient-primary"><Link to="/?section=bornes">Trouver une borne</Link></Button>
+              <QrCode className="mx-auto h-10 w-10 text-success" />
+              <h2 className="mt-3 font-display text-xl font-bold">Prêt à louer ?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Sur la borne, choisissez le parcours vert puis scannez son QR depuis cette app.</p>
+              <Button asChild className="mt-5 rounded-full bg-gradient-success text-success-foreground"><Link to="/compte/scanner">Scanner une borne</Link></Button>
             </section>
           )}
         </>
