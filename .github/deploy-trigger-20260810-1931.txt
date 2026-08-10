@@ -1,0 +1,2 @@
+Trigger GitHub Actions prebuilt deployment for kiosk V3 premium build.
+Source main expected to include cb90093109bb2ff3f5402e1f9810ebc60e33e4e7 or descendant.
