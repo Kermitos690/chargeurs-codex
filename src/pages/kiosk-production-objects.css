@@ -70,9 +70,67 @@
 }
 @keyframes kpObjectRing { 50% { transform:scaleX(1.06); opacity:.68; } }
 
+/* Master journey rail on the home scene. Help remains a separate transverse action. */
+.kv3-home-master-rail {
+  position:absolute;
+  left:50%;
+  top:3px;
+  width:min(540px,38vw);
+  transform:translateX(-50%);
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  pointer-events:none;
+}
+.kv3-home-master-step {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  color:rgba(157,177,205,.42);
+}
+.kv3-home-master-step:not(:last-child)::after {
+  content:"";
+  position:absolute;
+  z-index:-1;
+  top:15px;
+  left:calc(50% + 16px);
+  width:calc(100% - 32px);
+  height:1px;
+  background:rgba(92,137,191,.25);
+}
+.kv3-home-master-step span {
+  display:grid;
+  width:31px;
+  height:31px;
+  place-items:center;
+  border-radius:50%;
+  border:1px solid rgba(103,159,218,.28);
+  background:rgba(3,8,15,.92);
+  font-size:12px;
+  font-weight:900;
+}
+.kv3-home-master-step small {
+  font-size:clamp(8px,.55vw,10px);
+  font-weight:800;
+  letter-spacing:.08em;
+  white-space:nowrap;
+}
+.kv3-home-master-step.is-current { color:#79d1ff; }
+.kv3-home-master-step.is-current span {
+  border-color:#2aa4ff;
+  color:#d5f5ff;
+  box-shadow:0 0 10px #1787ff,0 0 24px rgba(23,135,255,.42),inset 0 0 12px rgba(45,163,255,.16);
+}
+
 /* Keep the master home uncluttered: the sculpture is a subtle edge object there,
    and becomes more visually present once the customer enters a journey. */
 .ck2-home ~ * .kv3-lightning-stage { opacity:.58; }
 
-@media(max-width:1100px),(max-height:690px){.kv3-lightning-stage{left:-1.5vw;width:17vw;min-width:145px;height:43vh;min-height:245px;bottom:2vh;}}
+@media(max-width:1100px),(max-height:690px){
+  .kv3-lightning-stage{left:-1.5vw;width:17vw;min-width:145px;height:43vh;min-height:245px;bottom:2vh;}
+  .kv3-home-master-rail{width:min(470px,40vw);}
+  .kv3-home-master-step span{width:27px;height:27px;}
+  .kv3-home-master-step:not(:last-child)::after{top:13px;left:calc(50% + 14px);width:calc(100% - 28px);}
+}
 @media(prefers-reduced-motion:reduce){.kv3-lightning-ring{animation:none!important;}}
