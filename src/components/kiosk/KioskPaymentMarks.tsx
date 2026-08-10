@@ -1,4 +1,6 @@
-function BrandTile({ children, label }: { children: React.ReactNode; label: string }) {
+import type { ReactNode } from "react";
+
+function BrandTile({ children, label }: { children: ReactNode; label: string }) {
   return (
     <span
       role="img"
