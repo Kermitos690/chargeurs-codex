@@ -31,11 +31,6 @@ export function KioskV3HomeChrome() {
   const refresh = lang === "de" ? "Aktualisieren" : lang === "en" ? "Refresh" : "Actualiser";
   const help = lang === "de" ? "Hilfe" : lang === "en" ? "Help" : "Aide";
   const payments = lang === "de" ? "Sicher bezahlen" : lang === "en" ? "Secure payment" : "Paiement sécurisé";
-  const steps = lang === "de"
-    ? ["AUSWAHL", "ZAHLUNG", "AUSGABE", "MIETE", "RÜCKGABE"]
-    : lang === "en"
-      ? ["CHOOSE", "PAYMENT", "RELEASE", "RENTAL", "RETURN"]
-      : ["CHOIX", "PAIEMENT", "DÉPART", "LOCATION", "RETOUR"];
 
   const refreshReadOnly = () => {
     const underlyingRefresh = document.querySelector<HTMLButtonElement>(".ck2-home .ck2-top-actions > .ck2-pill");
@@ -49,13 +44,6 @@ export function KioskV3HomeChrome() {
     <>
       <header className="kv3-home-topbar">
         <div className="kv3-home-brand"><BrandLogo size="md" /></div>
-        <div className="kv3-home-master-rail" aria-label="Parcours de location">
-          {steps.map((step, index) => (
-            <div className={`kv3-home-master-step ${index === 0 ? "is-current" : ""}`} key={step}>
-              <span>{index + 1}</span><small>{step}</small>
-            </div>
-          ))}
-        </div>
         <div className="kv3-home-actions">
           <button type="button" className="kv3-home-control" onClick={refreshReadOnly} disabled={refreshing}>
             <RefreshCw className={refreshing ? "kv3-spin" : ""} /> <span>{refresh}</span>
