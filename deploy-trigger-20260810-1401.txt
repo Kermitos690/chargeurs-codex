@@ -1,0 +1,1 @@
+Trigger Vercel production deployment for current main HEAD 55074255412d2f83ac7164625e3a01e52d1a8146 at 2026-08-10 14:01 Europe/Zurich.
