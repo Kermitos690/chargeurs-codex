@@ -1,0 +1,1 @@
+Deployment trigger for Chargeurs.ch staging. No runtime logic change.
