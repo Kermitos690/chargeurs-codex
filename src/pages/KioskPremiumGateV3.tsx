@@ -7,6 +7,7 @@ import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
 import "./kiosk-production-scenes.css";
 import "./kiosk-production-return.css";
+import "./kiosk-production-help.css";
 
 /**
  * Production kiosk entry.
