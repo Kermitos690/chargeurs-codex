@@ -1,8 +1,19 @@
 import Stripe from "https://esm.sh/stripe@18.5.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  fulfilMembershipCheckout,
+  syncMembershipFromInvoice,
+  syncMembershipSubscription,
+} from "../_shared/membershipStripe.ts";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 const db=()=>createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false}});
+
+function stripeClient(){
+  const key=(Deno.env.get("STRIPE_SECRET_KEY")??"").trim();
+  if(!(key.startsWith("sk_test_")||key.startsWith("rk_test_"))) throw new Error("STRIPE_TEST_KEY_REQUIRED");
+  return new Stripe(key,{apiVersion:"2025-09-30.clover",httpClient:Stripe.createFetchHttpClient()});
+}
 
 function canonicalize(v:unknown):string{
   if(v===null||typeof v!=="object") return JSON.stringify(v);
@@ -13,9 +24,7 @@ function canonicalize(v:unknown):string{
 async function hashSnapshot(v:unknown){const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(canonicalize(v)));return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join("");}
 
 async function recoverManualCard(rawEvent:any){
-  const key=(Deno.env.get("STRIPE_SECRET_KEY")??"").trim();
-  if(!(key.startsWith("sk_test_")||key.startsWith("rk_test_"))) throw new Error("STRIPE_TEST_KEY_REQUIRED");
-  const stripe=new Stripe(key,{apiVersion:"2025-09-30.clover",httpClient:Stripe.createFetchHttpClient()});
+  const stripe=stripeClient();
   const object=rawEvent?.data?.object??{};
   const rentalId=typeof object?.metadata?.rental_session_id==="string"?object.metadata.rental_session_id:null;
   let piId:string|null=null;
@@ -71,6 +80,27 @@ async function recoverManualCard(rawEvent:any){
   return {handled:true,replayed:false,release_status:release.status};
 }
 
+async function handleMembershipEvent(rawEvent:any){
+  const type=String(rawEvent?.type??"");
+  const object=rawEvent?.data?.object??{};
+  const eventId=String(rawEvent?.id??"");
+  const admin=db();
+
+  if(type==="checkout.session.completed"&&object?.metadata?.payment_purpose==="customer_membership"){
+    const handled=await fulfilMembershipCheckout(admin,stripeClient(),object as Stripe.Checkout.Session,eventId);
+    return {handled,type};
+  }
+  if(type==="customer.subscription.created"||type==="customer.subscription.updated"||type==="customer.subscription.deleted"){
+    const handled=await syncMembershipSubscription(admin,object as Stripe.Subscription,eventId,type==="customer.subscription.deleted");
+    return {handled,type};
+  }
+  if(type==="invoice.paid"||type==="invoice.payment_failed"){
+    const handled=await syncMembershipFromInvoice(admin,stripeClient(),object as Stripe.Invoice,eventId);
+    return {handled,type};
+  }
+  return {handled:false,type};
+}
+
 Deno.serve(async(req)=>{
   if(req.method!=="POST") return json({error:"METHOD_NOT_ALLOWED"},405);
   const raw=await req.text();
@@ -79,7 +109,18 @@ Deno.serve(async(req)=>{
   const forwarded=await fetch(`${base}/functions/v1/stripe-webhook`,{method:"POST",headers:{"content-type":"application/json","stripe-signature":signature},body:raw});
   const forwardedText=await forwarded.text();
   if(!forwarded.ok) return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":forwarded.headers.get("content-type")??"application/json"}});
-  let event:any=null; try{event=JSON.parse(raw);}catch{return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":"application/json"}});}
+
+  let event:any=null;
+  try{event=JSON.parse(raw);}catch{return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":"application/json"}});}
+
+  try{
+    const membership=await handleMembershipEvent(event);
+    if(membership.handled) return json({received:true,forwarded:true,membership});
+  }catch(error){
+    console.error("stripe-webhook-gateway membership",error instanceof Error?error.message:"UNKNOWN_ERROR");
+    return json({error:"MEMBERSHIP_WEBHOOK_PROCESSING_FAILED"},500);
+  }
+
   if(!["payment_intent.amount_capturable_updated","checkout.session.completed"].includes(String(event?.type??""))) return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":"application/json"}});
   try{const recovery=await recoverManualCard(event);return json({received:true,forwarded:true,recovery});}catch(error){console.error("stripe-webhook-gateway recovery",error);return json({error:"MANUAL_CARD_RECOVERY_FAILED"},500);}
 });
