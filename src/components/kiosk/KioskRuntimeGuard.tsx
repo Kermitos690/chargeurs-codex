@@ -15,9 +15,34 @@ export function currentKioskStation(): string | null {
 }
 
 export function hasMeaningfulKioskContent(root: ParentNode = document): boolean {
-  const main = root.querySelector("main");
-  const content = main?.textContent?.replace(/\s+/g, "").trim() ?? "";
-  return content.length >= 5;
+  // The kiosk has several legitimate top-level surfaces. The premium customer
+  // gate intentionally does not render a <main>, so checking <main> alone made
+  // the blank-screen guard replace a perfectly healthy member QR / connected
+  // screen after four seconds. Treat any known kiosk surface with actual text
+  // or visible/interactive content as rendered.
+  const selectors = [
+    ".kiosk-quarantine",
+    ".premium-kiosk",
+    ".cinematic-home",
+    ".kiosk-root",
+    "main",
+  ];
+
+  for (const selector of selectors) {
+    const surface = root.querySelector(selector);
+    if (!surface) continue;
+
+    const content = surface.textContent?.replace(/\s+/g, "").trim() ?? "";
+    if (content.length >= 5) return true;
+
+    // Loading states can be intentionally text-light but still render a real
+    // spinner/visual. A genuine empty React mount has none of these descendants.
+    if (surface.querySelector("button, a, svg, img, canvas, [role='status'], [role='dialog']")) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function RecoveryScreen({ reason }: { reason: "blank" | "crash" }) {
