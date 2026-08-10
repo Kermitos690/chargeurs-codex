@@ -6,6 +6,27 @@ import { toast } from "sonner";
 import { Wifi, WifiOff, RefreshCw, ChevronRight, Loader2 } from "lucide-react";
 import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 
+type SyncResult = {
+  ok?: boolean;
+  configured?: boolean;
+  error?: string;
+  results?: Array<{ ok?: boolean; stationId?: string; error?: string }>;
+};
+
+function syncFailureMessage(data: SyncResult | null, invocationError?: string) {
+  if (data?.configured === false || data?.error === "CHARGENOW_NOT_CONFIGURED") return "API ChargeNow non configurée";
+  if (invocationError) return invocationError;
+  if (data?.error) return data.error;
+  const failed = data?.results?.filter((row) => row.ok === false) ?? [];
+  if (failed.length) {
+    const first = failed[0];
+    return failed.length === 1
+      ? `Synchronisation impossible pour ${first.stationId ?? "une borne"}${first.error ? ` : ${first.error}` : ""}`
+      : `${failed.length} bornes n’ont pas pu être synchronisées`;
+  }
+  return "Synchronisation impossible";
+}
+
 export default function AdminStations() {
   const [stations, setStations] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -18,11 +39,19 @@ export default function AdminStations() {
 
   const syncAll = async () => {
     setSyncing(true);
-    const { data } = await supabase.functions.invoke("sync-cabinet-status", { body: {} });
-    if ((data as any)?.configured === false) toast.error("API ChargeNow non configurée");
-    else toast.success("Synchronisation terminée");
-    await load();
-    setSyncing(false);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-cabinet-status", { body: {} });
+      const result = data as SyncResult | null;
+      const failed = result?.results?.some((row) => row.ok === false) ?? false;
+      if (error || !result?.ok || failed) {
+        toast.error(syncFailureMessage(result, error?.message));
+      } else {
+        toast.success("Synchronisation terminée");
+      }
+      await load();
+    } finally {
+      setSyncing(false);
+    }
   };
 
   return (
