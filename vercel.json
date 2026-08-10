@@ -4,6 +4,11 @@
   "installCommand": "npm ci --no-audit --no-fund",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/kiosk/cinematic-artwork.js": {
+      "includeFiles": "src/pages/chargeurs-cinematic-home.b64"
+    }
+  },
   "headers": [
     {
       "source": "/kiosk/(.*)",
