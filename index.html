@@ -12,6 +12,17 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/kiosk-screen1-preview.css" />
     <link rel="stylesheet" href="/kiosk-artwork-fallback.css" />
+    <style>
+      /* Native kiosk fallback must not inherit the centred 16:9 photo transforms. */
+      html[data-kiosk-artwork="missing"] body #root .cinematic-home .cinematic-home__topbar,
+      html[data-kiosk-artwork="missing"] body #root .cinematic-home .cinematic-home__content,
+      html[data-kiosk-artwork="missing"] body #root .cinematic-home .cinematic-home__scene {
+        transform: none !important;
+      }
+      html[data-kiosk-artwork="missing"] body #root .cinematic-home .cinematic-home__scene {
+        left: auto !important;
+      }
+    </style>
     <link rel="alternate" hreflang="fr-CH" href="https://chargeurs.ch/" />
     <link rel="alternate" hreflang="x-default" href="https://chargeurs.ch/" />
     <meta name="theme-color" content="#0a1024" />
