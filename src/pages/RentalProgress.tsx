@@ -77,6 +77,8 @@ const COPY = {
     captured: "Montant capturé",
     released: "Autorisation libérée",
     refunded: "Remboursement",
+    refundDone: "Location remboursée",
+    refundDoneSub: "La batterie n’a pas été libérée pour cette tentative. Le serveur a confirmé la compensation du paiement.",
     supplemental: "Complément",
     returnStation: "Borne de retour",
     returnSlot: "Slot de retour",
@@ -92,11 +94,11 @@ const COPY = {
   },
   de: {
     recovered: "Powerbank entnommen!",
-    activeSub: "Ihre Miete läuft.", duration: "Mietdauer", rate: "Aktueller Tarif", current: "Aktuell geschätzter Betrag", final: "Bestätigter Endpreis", start: "Start", active: "Miete aktiv", slot: "Fach", session: "Sitzungs-ID", cap: "24-h-Limit", returnBy: "Rückgabe", guarantee: "Sicherheitsbetrag", payment: "Zahlungsmittel", find: "Station für die Rückgabe finden", passHint: "Sie laden häufig?", passCta: "Meinen Pass ansehen", faqReturn: "Wie gebe ich die Powerbank zurück?", conditions: "Tarife & Bedingungen", help: "Brauchen Sie Hilfe?", returned: "Rückgabe erkannt", returnedSub: "Die Powerbank ist zurück. Der Server berechnet und bestätigt den Endbetrag.", done: "Miete abgeschlossen", doneSub: "Rückgabe und Abrechnung sind bestätigt.", captured: "Belasteter Betrag", released: "Freigegebene Autorisierung", refunded: "Rückerstattung", supplemental: "Zusatzbetrag", returnStation: "Rückgabestation", returnSlot: "Rückgabefach", support: "Prüfung erforderlich", supportSub: "Ihre Rückgabe ist erfasst. Die Abrechnung benötigt eine Serverprüfung; kein unbestätigter Betrag wird als endgültig angezeigt.", secured: "Garantie bestätigt", release: "Die Station bereitet Ihre Powerbank vor. Kehren Sie zum Stationsbildschirm zurück.", waiting: "Miete wird aktualisiert…", card: "Karte / Wallet", twint: "TWINT", estimateNote: "Während der Miete ist der Betrag eine Schätzung auf Basis des beim Start fixierten Tarifs. Der Endpreis wird nach der Rückgabe bestätigt.", legal: "Belastete, freigegebene oder erstattete Beträge gelten erst nach Serverbestätigung als endgültig.",
+    activeSub: "Ihre Miete läuft.", duration: "Mietdauer", rate: "Aktueller Tarif", current: "Aktuell geschätzter Betrag", final: "Bestätigter Endpreis", start: "Start", active: "Miete aktiv", slot: "Fach", session: "Sitzungs-ID", cap: "24-h-Limit", returnBy: "Rückgabe", guarantee: "Sicherheitsbetrag", payment: "Zahlungsmittel", find: "Station für die Rückgabe finden", passHint: "Sie laden häufig?", passCta: "Meinen Pass ansehen", faqReturn: "Wie gebe ich die Powerbank zurück?", conditions: "Tarife & Bedingungen", help: "Brauchen Sie Hilfe?", returned: "Rückgabe erkannt", returnedSub: "Die Powerbank ist zurück. Der Server berechnet und bestätigt den Endbetrag.", done: "Miete abgeschlossen", doneSub: "Rückgabe und Abrechnung sind bestätigt.", captured: "Belasteter Betrag", released: "Freigegebene Autorisierung", refunded: "Rückerstattung", refundDone: "Miete erstattet", refundDoneSub: "Für diesen Versuch wurde keine Powerbank freigegeben. Der Server hat die Zahlungskompensation bestätigt.", supplemental: "Zusatzbetrag", returnStation: "Rückgabestation", returnSlot: "Rückgabefach", support: "Prüfung erforderlich", supportSub: "Ihre Rückgabe ist erfasst. Die Abrechnung benötigt eine Serverprüfung; kein unbestätigter Betrag wird als endgültig angezeigt.", secured: "Garantie bestätigt", release: "Die Station bereitet Ihre Powerbank vor. Kehren Sie zum Stationsbildschirm zurück.", waiting: "Miete wird aktualisiert…", card: "Karte / Wallet", twint: "TWINT", estimateNote: "Während der Miete ist der Betrag eine Schätzung auf Basis des beim Start fixierten Tarifs. Der Endpreis wird nach der Rückgabe bestätigt.", legal: "Belastete, freigegebene oder erstattete Beträge gelten erst nach Serverbestätigung als endgültig.",
   },
   en: {
     recovered: "Powerbank collected!",
-    activeSub: "Your rental is in progress.", duration: "Rental duration", rate: "Current rate", current: "Current estimated amount", final: "Confirmed final price", start: "Start", active: "Rental active", slot: "Slot", session: "Session ID", cap: "24 h cap", returnBy: "Return", guarantee: "Security amount", payment: "Payment method", find: "Find a kiosk to return", passHint: "Charge often?", passCta: "View my Pass", faqReturn: "How do I return my powerbank?", conditions: "Pricing & conditions", help: "Need help?", returned: "Return detected", returnedSub: "Your powerbank is back. The server is calculating and confirming the final amount.", done: "Rental completed", doneSub: "Your return and settlement are confirmed.", captured: "Captured amount", released: "Authorisation released", refunded: "Refund", supplemental: "Supplement", returnStation: "Return kiosk", returnSlot: "Return slot", support: "Review required", supportSub: "Your return is recorded. Settlement requires server review; no unconfirmed amount is presented as final.", secured: "Guarantee confirmed", release: "The kiosk is preparing your powerbank. Return to the kiosk screen.", waiting: "Updating your rental…", card: "Card / wallet", twint: "TWINT", estimateNote: "During the rental, the amount is an estimate based on the tariff frozen at the start. The final price is confirmed after return.", legal: "Captured, released or refunded amounts are only shown as final after server confirmation.",
+    activeSub: "Your rental is in progress.", duration: "Rental duration", rate: "Current rate", current: "Current estimated amount", final: "Confirmed final price", start: "Start", active: "Rental active", slot: "Slot", session: "Session ID", cap: "24 h cap", returnBy: "Return", guarantee: "Security amount", payment: "Payment method", find: "Find a kiosk to return", passHint: "Charge often?", passCta: "View my Pass", faqReturn: "How do I return my powerbank?", conditions: "Pricing & conditions", help: "Need help?", returned: "Return detected", returnedSub: "Your powerbank is back. The server is calculating and confirming the final amount.", done: "Rental completed", doneSub: "Your return and settlement are confirmed.", captured: "Captured amount", released: "Authorisation released", refunded: "Refund", refundDone: "Rental refunded", refundDoneSub: "No powerbank was released for this attempt. The server confirmed the payment compensation.", supplemental: "Supplement", returnStation: "Return kiosk", returnSlot: "Return slot", support: "Review required", supportSub: "Your return is recorded. Settlement requires server review; no unconfirmed amount is presented as final.", secured: "Guarantee confirmed", release: "The kiosk is preparing your powerbank. Return to the kiosk screen.", waiting: "Updating your rental…", card: "Card / wallet", twint: "TWINT", estimateNote: "During the rental, the amount is an estimate based on the tariff frozen at the start. The final price is confirmed after return.", legal: "Captured, released or refunded amounts are only shown as final after server confirmation.",
   },
 } as const;
 
@@ -190,6 +192,7 @@ export default function RentalProgress() {
 
   const state = status.state ?? "";
   const completed = state === "completed" && status.settlement_status === "settled";
+  const isRefunded = state === "refunded";
   const returned = state === "battery_returned";
   const active = ["ejected", "active_rental", "battery_taken"].includes(state);
   const releasing = ["payment_succeeded", "ejecting"].includes(state);
@@ -206,6 +209,18 @@ export default function RentalProgress() {
   const final = Number(status.final_amount_cents ?? 0);
   const released = status.settlement_strategy === "manual_capture" ? Math.max(0, deposit - captured) : 0;
   const paymentMethod = status.checkout_payment_mode === "twint_prepaid" || status.stripe_payment_method_type === "twint" ? c.twint : c.card;
+
+  if (isRefunded) {
+    return <MobileShell>
+      <StatePanel icon={<RotateCcw className="h-8 w-8 text-amber-300" />} title={c.refundDone} text={c.refundDoneSub} />
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
+        <InfoCell label={c.refunded} value={money(refunded, currency)} />
+        <InfoCell label={c.session} value={status.public_session_code ?? publicCode} mono />
+      </div>
+      <div className="mt-4"><LegalNote text={c.legal} /></div>
+      <div className="mt-4"><ActionLinks c={c} /></div>
+    </MobileShell>;
+  }
 
   if (completed) {
     return <MobileShell>
