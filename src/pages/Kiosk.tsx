@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
-  ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle, CreditCard,
+  ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle,
   Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +28,7 @@ import { acceptsKioskStateVersion } from "@/lib/kioskStateVersion";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
+import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -650,7 +651,7 @@ export default function Kiosk() {
             <span>{t("kiosk.refresh")}</span>
           </Button>
           <Button
-            onClick={() => setShowHelp(true)}
+            onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}
             variant="ghost"
             className="gap-2 rounded-full border border-border px-5 py-5 text-base"
             aria-label={t("kiosk.help")}
@@ -698,8 +699,8 @@ export default function Kiosk() {
               <section className={`kiosk-idle-stage relative isolate flex flex-col items-center overflow-hidden ${splitLayoutPreview ? "gap-3 rounded-[2rem] glass-strong liquid-border p-4" : "gap-3"}`}>
                 <KioskHolographicFloor />
                 <div className="kiosk-idle-hero relative z-10 flex flex-col items-center gap-3">
-                  <h1 className={`font-display font-extrabold leading-tight ${splitLayoutPreview ? "text-3xl" : "text-4xl sm:text-5xl"}`}>{t("kiosk.choose.title")}</h1>
-                  <p className={`${splitLayoutPreview ? "text-base" : "text-lg sm:text-xl"} text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
+                  <h1 className={`font-display font-black leading-[.95] tracking-tight ${splitLayoutPreview ? "text-4xl" : "text-5xl sm:text-7xl"}`}>{t("kiosk.choose.title")}</h1>
+                  <p className={`${splitLayoutPreview ? "text-lg" : "text-xl sm:text-2xl"} max-w-4xl font-medium text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
                   {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
                   {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
                 </div>
@@ -707,8 +708,8 @@ export default function Kiosk() {
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
               <div className="kiosk-slot-grid relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
-                {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
-                  slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
+                {([1, 3, 2, 4] as const).map((physicalSlotNum) => slots.find((slot) => slot.slot_num === physicalSlotNum) ?? {
+                  slot_num: physicalSlotNum, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
                   const selected = slot.slot_num === slotNum;
                   return <motion.button key={slot.slot_num} type="button" disabled={!slot.rentable}
@@ -719,10 +720,10 @@ export default function Kiosk() {
                       : { opacity: 1, y: 0, scale: 1 }}
                     transition={selected ? { duration: .65, ease: "easeOut" } : { delay: index * .05, duration: .3 }}
                     whileTap={slot.rentable ? { scale: .96 } : undefined}
-                    className={`kiosk-slot-card glass liquid-border relative min-h-44 rounded-3xl p-4 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : slot.status === "return_available" ? "cursor-default opacity-85" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
+                    className={`kiosk-slot-card glass liquid-border relative min-h-52 rounded-3xl p-5 text-left transition ${slot.rentable ? "hover:scale-[1.02]" : slot.status === "return_available" ? "cursor-default opacity-85" : "cursor-not-allowed opacity-60"} ${selected ? "ring-4 ring-primary shadow-glow" : ""}`}>
                     {slot.recommended && <span className="absolute right-3 top-3 rounded-full bg-success px-2 py-1 text-xs font-bold text-success-foreground">{t("kiosk.slot.recommended")}</span>}
                     {selected && <span className="absolute bottom-3 right-3 rounded-full bg-primary/20 px-2 py-1 text-xs font-bold text-primary">{t("kiosk.slot.selected")}</span>}
-                    <div className="text-base font-bold text-foreground/90">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
+                    <div className="text-xl font-black text-foreground/90">{t("kiosk.slot.label", { slot: slot.slot_num })}</div>
                     <PowerbankScene charge={slot.charge_percent} selected={selected} recommended={slot.recommended} rentable={slot.rentable} returnAvailable={slot.status === "return_available"} />
                     {slot.status === "return_available" ? <>
                       <div className="mt-3 text-base font-bold text-cyan-100">{t("kiosk.slot.return_available")}</div>
@@ -731,7 +732,7 @@ export default function Kiosk() {
                       <div className="mt-3 text-base font-bold text-muted-foreground">{t("kiosk.slot.charge_unknown")}</div>
                       <div className="mt-4 h-3 rounded-full bg-muted/80" aria-hidden="true" />
                     </> : <>
-                      <div className="mt-2 text-4xl font-extrabold tracking-tight">{`${Math.round(slot.charge_percent)}%`}</div>
+                      <div className="mt-2 text-5xl font-black tracking-tight">{`${Math.round(slot.charge_percent)}%`}</div>
                       <div className="mt-2 h-3 overflow-hidden rounded-full border border-white/10 bg-slate-950/45"><motion.div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-500 to-violet-400 shadow-[0_0_18px_rgba(34,211,238,.85)]" initial={{ width: 0 }} animate={{ width: `${Math.max(0, Math.min(100, slot.charge_percent))}%` }} transition={{ duration: .55, ease: "easeOut" }} /></div>
                     </>}
                     <div className="mt-3 text-base font-bold">{t(`kiosk.slot.${slot.status}`)}</div>
@@ -803,8 +804,8 @@ export default function Kiosk() {
                 <p className="mt-4 text-2xl font-medium text-muted-foreground">{t("kiosk.qr.phone")}</p>
                 <div className="mt-9 w-full rounded-[2rem] border border-white/15 bg-slate-950/20 p-6 text-left">
                   <div className="flex items-center gap-3 text-xl font-bold"><Smartphone className="h-7 w-7 text-primary" />{t("kiosk.qr.methods")}</div>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    {["TWINT", "Apple Pay", "Google Pay", "Link", t("kiosk.qr.card")].map((method) => <span key={method} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold"><CreditCard className="h-4 w-4 text-cyan-200" />{method}</span>)}
+                  <div className="mt-5">
+                    <KioskPaymentMarks cardLabel={t("kiosk.qr.card")} />
                   </div>
                   <p className="mt-5 text-base text-muted-foreground">{t("kiosk.qr.eligibility")}</p>
                 </div>
