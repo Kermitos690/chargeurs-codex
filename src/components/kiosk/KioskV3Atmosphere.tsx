@@ -1,8 +1,16 @@
 import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
+import { useI18n } from "@/i18n/i18n";
 
 /** Visual-only production atmosphere. No payment/rental state lives here. */
 export function KioskV3Atmosphere() {
+  const { lang } = useI18n();
+  const display = {
+    fr: { title: "Bienvenue", subtitle: "Choisissez votre option", status: "4 slots · connectés" },
+    en: { title: "Welcome", subtitle: "Choose your option", status: "4 slots · connected" },
+    de: { title: "Willkommen", subtitle: "Wähle deine Option", status: "4 Slots · verbunden" },
+  }[lang];
+
   return (
     <div className="kv3-atmosphere" aria-hidden="true">
       <div className="kv3-vignette" />
@@ -31,10 +39,14 @@ export function KioskV3Atmosphere() {
         <div className="kv3-station-shadow" />
         <div className="kv3-station-body">
           <div className="kv3-station-top" />
-          <div className="kv3-station-side"><span className="kv3-side-mark">⚡</span></div>
+          <div className="kv3-station-side" />
           <div className="kv3-station-face">
-            <div className="kv3-station-screen"><strong>Chargeurs.ch</strong><span>Power when you need it</span><small>4 slots · connected</small></div>
-            <div className="kv3-station-brand">⚡ <strong>Chargeurs.ch</strong></div>
+            <div className="kv3-station-screen">
+              <strong>{display.title}</strong>
+              <span>{display.subtitle}</span>
+              <small>{display.status}</small>
+            </div>
+            <div className="kv3-station-brand"><span className="kv3-station-brand-mark" /> <strong>Chargeurs.ch</strong></div>
             <div className="kv3-station-slots">
               {[1, 2, 3, 4].map((slot) => <div className="kv3-station-slot" key={slot}><span className="kv3-station-slot-led" /><i>{slot}</i></div>)}
             </div>
