@@ -19,14 +19,15 @@ const ALL_INTERNAL = [
   "maintenance_technician", "staff", "operator", "viewer",
 ] as const;
 const OPERATIONS = ["super_admin", "admin", "operations_admin", "operator"] as const;
+// Physical/provider mutation-capable screens intentionally exclude the generic
+// operator role unless their backend exposes a separate read-only contract.
+const OPERATIONS_ADMIN = ["super_admin", "admin", "operations_admin"] as const;
 const OPERATIONS_READ = [...OPERATIONS, "support_agent", "maintenance_technician", "staff", "viewer"] as const;
 const FINANCE = ["super_admin", "admin", "finance_admin"] as const;
 const FINANCE_READ = [...FINANCE, "support_agent", "operations_admin", "staff", "viewer"] as const;
 const SUPPORT = ["super_admin", "admin", "operations_admin", "support_agent", "maintenance_technician", "operator"] as const;
 const SUPER_ONLY = ["super_admin"] as const;
 
-// Grouped back-office navigation. Shared by the desktop sidebar and the
-// mobile hamburger sheet so labels and order stay perfectly in sync.
 export const ADMIN_NAV: AdminNavGroup[] = [
   {
     label: "Pilotage",
@@ -38,7 +39,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
       { to: "/admin/stations", icon: Server, label: "Bornes", roles: OPERATIONS_READ },
       { to: "/admin/kiosk-devices", icon: TabletSmartphone, label: "Tablettes kiosque", roles: OPERATIONS_READ },
       { to: "/admin/remote-kiosk", icon: TabletSmartphone, label: "Écran à distance", roles: OPERATIONS },
-      { to: "/admin/battery-qualification", icon: Gauge, label: "Qualification batteries", roles: OPERATIONS },
+      { to: "/admin/battery-qualification", icon: Gauge, label: "Qualification batteries", roles: OPERATIONS_ADMIN },
       { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes", roles: FINANCE_READ },
       { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)", roles: FINANCE_READ },
     ],
@@ -67,8 +68,8 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { to: "/admin/rental-flow-health", icon: HeartPulse, label: "Santé parcours", roles: SUPPORT },
       { to: "/admin/api-health", icon: Activity, label: "Santé API", roles: OPERATIONS_READ },
-      { to: "/admin/api-coverage", icon: ListChecks, label: "Couverture API", roles: OPERATIONS },
-      { to: "/admin/test-monitor", icon: ClipboardCheck, label: "Contrôle de test", roles: OPERATIONS },
+      { to: "/admin/api-coverage", icon: ListChecks, label: "Couverture API", roles: OPERATIONS_ADMIN },
+      { to: "/admin/test-monitor", icon: ClipboardCheck, label: "Contrôle de test", roles: OPERATIONS_ADMIN },
       { to: "/admin/events", icon: Radio, label: "Événements", roles: SUPPORT },
     ],
   },
