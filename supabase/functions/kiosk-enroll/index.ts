@@ -3,7 +3,10 @@ import { adminClient } from "../_shared/db.ts";
 import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
 
 const STAGING_SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
-const STAGING_KIOSK_ORIGIN = "https://chargeurs-ch-staging.vercel.app";
+// The existing Vercel project historically named `esim-telegram-bot` is now
+// the Chargeurs.ch staging frontend. New kiosk enrollments must be pinned to
+// that active project rather than the retired chargeurs-ch-staging alias.
+const STAGING_KIOSK_ORIGIN = "https://esim-telegram-bot.vercel.app";
 
 type EnrollmentResult = {
   ok?: boolean;
