@@ -6,12 +6,31 @@ Deno.test("rental-session browser preflight permits the kiosk credential and ide
   assertMatch(source, /OPTIONS[\s\S]{0,160}rentalCorsHeaders/);
 });
 
-Deno.test("Checkout remains hosted QR payment with Stripe-managed dynamic methods and a locale", async () => {
-  const source = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
-  assertMatch(source, /locale,/);
-  assertMatch(source, /checkoutLocale\(session\.customer_language/);
-  assertMatch(source, /Dashboard configuration/);
-  if (/payment_method_types\s*:/.test(source)) {
-    throw new Error("Hosted Checkout must not be restricted to a fixed payment_method_types list");
+Deno.test("kiosk launches a localized Chargeurs phone portal and Stripe is created only after the phone payment choice", async () => {
+  const launcher = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
+  const portal = await Deno.readTextFile("supabase/functions/payment-portal/index.ts");
+  const stripe = await Deno.readTextFile("supabase/functions/public-stripe-checkout/index.ts");
+
+  // The kiosk returns a Chargeurs-hosted phone URL; it does not instantiate
+  // Stripe or collect payment credentials itself.
+  assertMatch(launcher, /\/functions\/v1\/payment-portal/);
+  assertMatch(launcher, /customer_language/);
+  assertMatch(launcher, /&lang=\$\{lang\}/);
+  if (/new Stripe\s*\(/.test(launcher)) {
+    throw new Error("The kiosk payment launcher must not instantiate Stripe directly");
   }
+
+  // The phone portal carries the locale into the server-side payment choice.
+  assertMatch(portal, /langOf\(/);
+  assertMatch(portal, /\/functions\/v1\/public-stripe-checkout/);
+  assertMatch(portal, /language:lang/);
+
+  // Stripe Checkout is hosted on the phone and preserves the customer locale.
+  // Payment methods are intentionally mode-specific because the guarantee
+  // mechanics differ: card uses manual capture, TWINT uses prepaid+refund.
+  assertMatch(stripe, /locale:lang/);
+  assertMatch(stripe, /payment_method_types:mode==="card_hold"\?\["card"\]:\["twint"\]/);
+  assertMatch(stripe, /capture_method="manual"/);
+  assertMatch(stripe, /setup_future_usage="off_session"/);
+  assertMatch(stripe, /STRIPE_TEST_KEY_REQUIRED/);
 });
