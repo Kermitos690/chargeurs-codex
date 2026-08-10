@@ -1,12 +1,15 @@
-// kiosk-admin — admin-gated provisioning of per-kiosk authentication tokens.
-// Each physical kiosk tablet is bound to a station and receives an individual
-// secret token. Only the SHA-256 hash is stored. The plaintext token is shown
-// ONCE on creation/rotation. Supports provision, rotate, revoke, list.
-// A token can be used only by the kiosk_quote() SQL function, strictly bound to
-// the kiosk's station_id — preventing one kiosk from impersonating another.
+// kiosk-admin — RBAC-gated provisioning of per-kiosk authentication tokens.
+// Read-only back-office roles may inspect devices/pairing status. Provision,
+// rotate, revoke and pairing mutations remain restricted to platform operators.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, requireAdmin, auditLog } from "../_shared/db.ts";
+import { adminClient, getCaller, auditLog } from "../_shared/db.ts";
 import { newSixDigitPairingCode, sha256Hex } from "../_shared/kioskEnrollment.ts";
+
+const READ_ROLES = [
+  "super_admin", "admin", "operations_admin", "operator", "support_agent",
+  "maintenance_technician", "staff", "viewer",
+] as const;
+const WRITE_ROLES = ["super_admin", "admin", "operations_admin"] as const;
 
 function newToken(): string {
   const bytes = new Uint8Array(32);
@@ -24,8 +27,10 @@ Deno.serve(async (req) => {
   const json = (b: unknown, s = 200) =>
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-  const adminId = await requireAdmin(req, db);
-  if (!adminId) return json({ ok: false, error: "FORBIDDEN" }, 403);
+  const { userId, roles } = await getCaller(req, db);
+  if (!userId || !roles.some((role) => READ_ROLES.includes(role as typeof READ_ROLES[number]))) {
+    return json({ ok: false, error: "FORBIDDEN" }, 403);
+  }
 
   try {
     const { action, deviceId, pairingCodeId, stationId, label, ttlDays, ttlMinutes } = await req.json();
@@ -33,15 +38,20 @@ Deno.serve(async (req) => {
     if (action === "list") {
       const [{ data: devices, error: deviceError }, { data: pairingCodes, error: pairingError }] = await Promise.all([
         db.from("kiosk_devices")
-        .select("id,station_id,organization_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at,device_public_id,app_version,enrolled_at,revoked_at")
-        .order("created_at", { ascending: false }),
+          .select("id,station_id,organization_id,label,active,token_revoked,token_expires_at,token_rotated_at,last_seen_at,device_public_id,app_version,enrolled_at,revoked_at")
+          .order("created_at", { ascending: false }),
         db.from("kiosk_pairing_codes")
-        .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at,failed_attempt_count,last_failed_attempt_at,organization:organizations(slug,legal_name)")
-        .order("created_at", { ascending: false }),
+          .select("id,station_id,organization_id,label,expires_at,used_at,used_by_device_id,created_at,failed_attempt_count,last_failed_attempt_at,organization:organizations(slug,legal_name)")
+          .order("created_at", { ascending: false }),
       ]);
       if (deviceError || pairingError) throw deviceError ?? pairingError;
       return json({ ok: true, devices: devices ?? [], pairingCodes: pairingCodes ?? [] });
     }
+
+    if (!roles.some((role) => WRITE_ROLES.includes(role as typeof WRITE_ROLES[number]))) {
+      return json({ ok: false, error: "FORBIDDEN_WRITE" }, 403);
+    }
+    const adminId = userId;
 
     if (action === "create_pairing_code") {
       if (!stationId) return json({ ok: false, error: "MISSING_STATION" }, 400);
@@ -52,9 +62,6 @@ Deno.serve(async (req) => {
       if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
       if (!station.organization_id) return json({ ok: false, error: "STATION_ORGANIZATION_MISSING" }, 409);
 
-      // Keep only one usable code per station. This makes a renewal safe: a
-      // code copied earlier can no longer be redeemed after a new one is
-      // issued, while used codes remain immutable for audit purposes.
       const invalidatedAt = new Date().toISOString();
       const { data: invalidatedCodes, error: invalidationError } = await db
         .from("kiosk_pairing_codes")
@@ -73,10 +80,6 @@ Deno.serve(async (req) => {
       }
 
       const expiresAt = new Date(Date.now() + minutes * 60_000).toISOString();
-      // Six digits give a finite code space. A unique hash collision with an
-      // older code is harmless but must not turn into a 500: generate a fresh
-      // value and retry a bounded number of times. The plaintext value never
-      // enters an audit record or log.
       let pairingCode = "";
       let data: { id: string; station_id: string; organization_id: string; created_at: string; expires_at: string } | null = null;
       for (let attempt = 0; attempt < 5 && !data; attempt += 1) {
@@ -164,7 +167,6 @@ Deno.serve(async (req) => {
         actor: adminId, action: `kiosk.token.${action}`, target: row.id,
         data: { station_id: row.station_id, expires },
       });
-      // Plaintext token returned exactly once.
       return json({ ok: true, device: { id: row.id, station_id: row.station_id }, token });
     }
 
