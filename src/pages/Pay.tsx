@@ -17,6 +17,8 @@ type PayStatus = {
   failure_code?: string | null;
 };
 
+const CHECKOUT_OPEN_STATES = new Set(["created", "checkout_created", "payment_pending"]);
+
 export default function Pay() {
   const { rentalSessionId } = useParams();
   const search = window.location.search;
@@ -54,6 +56,7 @@ export default function Pay() {
   const refunded = state === "refunded";
   const serverPresentation = kioskPaymentPresentation(state, status.failure_code);
   const releaseProblem = serverPresentation?.phase === "support";
+  const checkoutCanOpen = Boolean(status.checkout_url && CHECKOUT_OPEN_STATES.has(state));
 
   return (
     <div className="relative flex min-h-screen flex-col px-5 py-6">
@@ -67,7 +70,7 @@ export default function Pay() {
         {refunded ? (
           <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="glass-strong liquid-border flex w-full max-w-sm flex-col items-center gap-5 rounded-3xl p-8">
             <div className="grid h-24 w-24 place-items-center rounded-full bg-warning/15">
-              <RotateCcw className="h-13 w-13 text-warning" />
+              <RotateCcw className="h-12 w-12 text-warning" />
             </div>
             <h1 className="font-display text-3xl font-extrabold">{t("kiosk.state.refunded.title")}</h1>
             <p className="text-muted-foreground">{t("kiosk.state.refunded.subtitle")}</p>
@@ -76,7 +79,7 @@ export default function Pay() {
         ) : releaseProblem && serverPresentation ? (
           <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="glass-strong liquid-border flex w-full max-w-sm flex-col items-center gap-5 rounded-3xl p-8">
             <div className="grid h-24 w-24 place-items-center rounded-full bg-warning/15">
-              <AlertTriangle className="h-13 w-13 text-warning" />
+              <AlertTriangle className="h-12 w-12 text-warning" />
             </div>
             <h1 className="font-display text-2xl font-bold">{t(serverPresentation.titleKey)}</h1>
             <p className="text-muted-foreground">{t(serverPresentation.subtitleKey)}</p>
@@ -102,22 +105,17 @@ export default function Pay() {
             <div className="grid h-24 w-24 place-items-center rounded-full bg-destructive/20">
               <XCircle className="h-14 w-14 text-destructive" />
             </div>
-            <h1 className="font-display text-2xl font-bold">{t("qr.cancel")}</h1>
-            <p className="max-w-sm text-muted-foreground">{t("error.generic")}</p>
-            {status.checkout_url && (
-              <Button asChild className="rounded-full bg-gradient-primary px-8 py-5 text-lg font-bold">
-                <a href={status.checkout_url}>{t("pay.open")}</a>
-              </Button>
-            )}
+            <h1 className="font-display text-2xl font-bold">{serverPresentation ? t(serverPresentation.titleKey) : t("kiosk.state.cancelled.title")}</h1>
+            <p className="max-w-sm text-muted-foreground">{serverPresentation ? t(serverPresentation.subtitleKey) : t("kiosk.state.cancelled.subtitle")}</p>
           </motion.div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-strong liquid-border flex w-full max-w-sm flex-col items-center gap-6 rounded-3xl p-8">
             <h1 className="font-display text-2xl font-bold">{t("pay.title")}</h1>
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="text-muted-foreground">{t("pay.pending")}</p>
-            {status.checkout_url && (
+            {checkoutCanOpen && (
               <Button asChild className="w-full gap-2 rounded-full bg-gradient-primary py-6 text-lg font-bold shadow-glow">
-                <a href={status.checkout_url}><ExternalLink className="h-5 w-5" />{t("pay.open")}</a>
+                <a href={status.checkout_url!}><ExternalLink className="h-5 w-5" />{t("pay.open")}</a>
               </Button>
             )}
             <p className="text-sm text-muted-foreground">{t("pay.methods")}</p>
