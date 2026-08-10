@@ -37,6 +37,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { to: "/admin/stations", icon: Server, label: "Bornes", roles: OPERATIONS_READ },
       { to: "/admin/kiosk-devices", icon: TabletSmartphone, label: "Tablettes kiosque", roles: OPERATIONS_READ },
+      { to: "/admin/remote-kiosk", icon: TabletSmartphone, label: "Écran à distance", roles: OPERATIONS },
       { to: "/admin/battery-qualification", icon: Gauge, label: "Qualification batteries", roles: OPERATIONS },
       { to: "/admin/orders", icon: ShoppingCart, label: "Locations / Commandes", roles: FINANCE_READ },
       { to: "/admin/rentals", icon: BatteryCharging, label: "Locations (legacy)", roles: FINANCE_READ },
