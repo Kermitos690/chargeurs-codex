@@ -33,7 +33,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships")
-      .select("id,status,starts_at,renews_at,ends_at,plan_id,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)")
+      .select("id,status,starts_at,renews_at,ends_at,plan_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -70,7 +70,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     incidents = incidentsResult.data ?? [];
   }
 
-  // Deliberately omit Stripe customer/subscription IDs and Wallet token hashes.
+  // Deliberately omit Stripe customer/subscription/checkout IDs and Wallet token hashes.
   return {
     profile: profileResult.data ?? null,
     rentals,
