@@ -15,13 +15,12 @@ export function currentKioskStation(): string | null {
 }
 
 export function hasMeaningfulKioskContent(root: ParentNode = document): boolean {
-  // The kiosk has several legitimate top-level surfaces. The premium customer
-  // gate intentionally does not render a <main>, so checking <main> alone made
-  // the blank-screen guard replace a perfectly healthy member QR / connected
-  // screen after four seconds. Treat any known kiosk surface with actual text
-  // or visible/interactive content as rendered.
+  // The kiosk has several legitimate top-level surfaces. The customer gate,
+  // including Premium V2, intentionally has text-light loading/connected states,
+  // so checking <main> alone would replace healthy UI with the recovery screen.
   const selectors = [
     ".kiosk-quarantine",
+    ".ck2-shell",
     ".premium-kiosk",
     ".cinematic-home",
     ".kiosk-root",
