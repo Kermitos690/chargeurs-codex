@@ -59,15 +59,45 @@ function safeOrigin(value: unknown): string | null {
     return null;
   }
 }
-async function ensurePaymentStarted(db: any, session: any) {
-  const { data: orchestrator, error } = await db.from("rental_orchestrator_snapshots")
+
+async function loadOrCreateOrchestrator(db: any, session: any) {
+  const read = async () => {
+    const { data, error } = await db.from("rental_orchestrator_snapshots")
+      .select("state,version")
+      .eq("rental_id", session.id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+
+  let orchestrator = await read();
+  if (orchestrator) return orchestrator;
+
+  const { data: created, error: createError } = await db.from("rental_orchestrator_snapshots")
+    .insert({
+      rental_id: session.id,
+      state: "created",
+      version: 0,
+      station_id: session.station_id ?? null,
+      battery_id: session.battery_id ?? null,
+    })
     .select("state,version")
-    .eq("rental_id", session.id)
     .maybeSingle();
-  if (error) throw error;
-  if (!orchestrator) throw new Error("ORCHESTRATOR_SNAPSHOT_MISSING");
+
+  if (!createError && created) return created;
+  if (createError && createError.code !== "23505") throw createError;
+
+  orchestrator = await read();
+  if (!orchestrator) throw new Error("ORCHESTRATOR_SNAPSHOT_CREATE_FAILED");
+  return orchestrator;
+}
+
+async function ensurePaymentStarted(db: any, session: any) {
+  const orchestrator = await loadOrCreateOrchestrator(db, session);
   if (String(orchestrator.state) === "payment_pending") return;
-  if (String(orchestrator.state) !== "created") throw new Error(`PAYMENT_STATE_${String(orchestrator.state).toUpperCase()}`);
+  if (String(orchestrator.state) !== "created") {
+    throw new Error(`PAYMENT_STATE_${String(orchestrator.state).toUpperCase()}`);
+  }
   const { error: appendError } = await db.rpc("append_rental_orchestrator_event", {
     p_rental_id: session.id,
     p_expected_version: Number(orchestrator.version ?? 0),
@@ -94,12 +124,14 @@ Deno.serve(async (req) => {
   );
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
+  let db: any = null;
+  let rentalSessionId = "";
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
+    rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
     if (!rentalSessionId) return json({ ok: false, error: "MISSING_SESSION" }, 400);
 
-    const db = admin();
+    db = admin();
     const { data: session, error } = await db.from("rental_sessions")
       .select("*")
       .eq("id", rentalSessionId)
@@ -144,7 +176,6 @@ Deno.serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     });
 
-    // Reuse an already-created real Stripe Checkout capability if it is still open.
     if (session.stripe_checkout_session_id) {
       try {
         const existing = await stripe.checkout.sessions.retrieve(String(session.stripe_checkout_session_id));
@@ -160,7 +191,7 @@ Deno.serve(async (req) => {
           });
         }
       } catch {
-        // If Stripe cannot reuse it, create a fresh idempotent Checkout below.
+        // Create a fresh idempotent Checkout below if the old Stripe object cannot be reused.
       }
     }
 
@@ -186,9 +217,6 @@ Deno.serve(async (req) => {
       locale: lang,
       client_reference_id: String(session.id),
       customer_creation: "always",
-      // No payment_method_types: Stripe Dashboard dynamic payment methods stay
-      // active, including TWINT when eligible. Only card is overridden to
-      // manual capture; other methods keep their normal automatic capture.
       payment_method_options: {
         card: {
           capture_method: "manual",
@@ -221,7 +249,7 @@ Deno.serve(async (req) => {
       success_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/progress?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
       cancel_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/cancel?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
     }, {
-      idempotencyKey: `rental_direct_checkout:v4:${session.id}:${pricingHash}`,
+      idempotencyKey: `rental_direct_checkout:v5:${session.id}:${pricingHash}`,
     });
 
     const expiresIso = new Date(expiresAt * 1000).toISOString();
@@ -278,11 +306,25 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     const raw = error as any;
+    const errorCode = typeof raw?.code === "string" ? raw.code : (error instanceof Error ? error.message : "UNKNOWN");
     console.error("create-stripe-checkout direct", {
       name: error instanceof Error ? error.name : "error",
       code: raw?.code ?? null,
       param: raw?.param ?? null,
+      correlationId,
     });
+    if (db && rentalSessionId) {
+      await db.from("audit_logs").insert({
+        action: "stripe.checkout.failed",
+        target: rentalSessionId,
+        data: {
+          code: String(errorCode).slice(0, 120),
+          stripe_param: typeof raw?.param === "string" ? raw.param.slice(0, 120) : null,
+          error_type: typeof raw?.type === "string" ? raw.type.slice(0, 80) : null,
+          correlation_id: correlationId,
+        },
+      }).then(() => {}, () => {});
+    }
     return json({
       ok: false,
       error: typeof raw?.code === "string" ? `STRIPE_${raw.code.toUpperCase()}` : "STRIPE_CHECKOUT_FAILED",
