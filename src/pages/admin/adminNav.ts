@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users, TabletSmartphone, KeyRound, Gauge,
+  Building2, Users, TabletSmartphone, KeyRound, Gauge, Crown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +48,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { to: "/admin/payments", icon: CreditCard, label: "Paiements", roles: FINANCE_READ },
       { to: "/admin/pricing", icon: Tag, label: "Tarification", roles: FINANCE_READ },
+      { to: "/admin/customer-program", icon: Crown, label: "Client Chargeurs", roles: FINANCE_READ },
     ],
   },
   {
