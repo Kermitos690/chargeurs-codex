@@ -27,6 +27,13 @@ html.kiosk-mode #root {
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.kiosk-root .font-display {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Inter, system-ui, sans-serif !important;
+  letter-spacing: -0.045em;
 }
 
 .kiosk-root > main {
@@ -41,17 +48,112 @@ html.kiosk-mode #root {
   padding-bottom: 0 !important;
 }
 
+/* Replace the former four-line help popover with the full-screen FAQ launcher
+   mounted by KioskHelpLauncher. The legacy button is hidden only on kiosk. */
+.kiosk-root > header button:has(svg.lucide-circle-help) {
+  display: none !important;
+}
+
+.kiosk-global-help {
+  min-width: 7.2rem;
+}
+
 /* Customer pricing: keep the commercial message immediate. The detailed
-   billing unit/deposit still belongs to the payment/legal detail layer, not
-   the kiosk hero. */
+   billing unit/guarantee belongs to the next screen, not the attract hero. */
 .kiosk-pricing-card > div:last-child > p {
   display: none !important;
 }
 
-/* Stripe decides the eligible payment methods on the customer's phone.
-   Do not hard-code a promise of TWINT/Wallet availability on the station. */
+/* The first screen should have the same visual confidence as the QR screen:
+   larger hierarchy, stronger price cue and readable copy from 1–2 metres. */
+.kiosk-idle-hero h1 {
+  font-size: clamp(3.2rem, 5.8vw, 6rem) !important;
+  line-height: .94 !important;
+  font-weight: 950 !important;
+  max-width: 10ch;
+  text-wrap: balance;
+}
+.kiosk-idle-hero > p {
+  font-size: clamp(1.25rem, 2vw, 1.75rem) !important;
+  line-height: 1.25;
+  max-width: 31rem;
+}
+.kiosk-idle-hero > .text-gradient-cyan {
+  order: -1;
+  font-size: clamp(3.5rem, 6vw, 6.4rem) !important;
+  line-height: .9;
+  font-weight: 950 !important;
+  letter-spacing: -.055em;
+  filter: drop-shadow(0 0 24px rgba(34,211,238,.22));
+}
+.kiosk-idle-cta button {
+  min-height: 4.35rem;
+  padding-left: 2.4rem !important;
+  padding-right: 2.4rem !important;
+  font-size: clamp(1.3rem, 1.8vw, 1.7rem) !important;
+  font-weight: 900 !important;
+}
+
+/* Physical cabinet layout is column-major on DTA21269:
+     1 | 3
+     2 | 4
+   Keep the data identity untouched and place the four rendered cards in their
+   real physical positions. */
+.kiosk-slot-grid > :nth-child(1) { grid-column: 1; grid-row: 1; }
+.kiosk-slot-grid > :nth-child(2) { grid-column: 1; grid-row: 2; }
+.kiosk-slot-grid > :nth-child(3) { grid-column: 2; grid-row: 1; }
+.kiosk-slot-grid > :nth-child(4) { grid-column: 2; grid-row: 2; }
+
+/* Payment methods are selected on the customer's phone. The kiosk now shows
+   recognisable payment marks rather than a row of generic credit-card icons.
+   This does not claim that every wallet is available on every handset. */
 .kiosk-qr-stage > div:first-child > div.mt-9 {
+  display: block !important;
+  background: linear-gradient(145deg, rgba(2,8,23,.34), rgba(30,41,59,.18));
+  box-shadow: inset 0 1px rgba(255,255,255,.05), 0 18px 45px rgba(0,0,0,.12);
+}
+
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span {
+  min-height: 3.25rem;
+  border: 0 !important;
+  border-radius: .9rem !important;
+  background: white !important;
+  color: #08101f !important;
+  padding: .7rem 1rem !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,.2);
+  font-size: 1.05rem !important;
+  font-weight: 900 !important;
+}
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span > svg {
   display: none !important;
+}
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span::before {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-right: .15rem;
+  font-size: 1.35rem;
+  font-weight: 950;
+  line-height: 1;
+}
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span:nth-child(1)::before {
+  content: "";
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-right: .45rem;
+  border-radius: .18rem;
+  transform: rotate(45deg);
+  background: conic-gradient(#55d6ec 0 25%, #63de8c 0 50%, #f8c64d 0 75%, #ff5c79 0);
+}
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span:nth-child(2)::before { content: ""; }
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span:nth-child(3)::before { content: "G"; color: #4285f4; }
+/* Link is an optional Stripe acceleration layer rather than a separate rental
+   guarantee contract. Do not promise it on the cabinet. */
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span:nth-child(4) { display: none !important; }
+.kiosk-qr-stage > div:first-child > div.mt-9 > .mt-5.flex.flex-wrap.gap-3 > span:nth-child(5)::before {
+  content: "▰";
+  font-size: 1.15rem;
 }
 
 /* Public session codes are useful to support/diagnostics, not to customers. */
@@ -77,5 +179,22 @@ html.kiosk-mode #root {
     min-height: 100% !important;
     margin: 0 !important;
     border-radius: 0 !important;
+  }
+
+  .kiosk-idle-stage h1 {
+    font-size: clamp(3rem, 5vw, 5rem) !important;
+  }
+  .kiosk-idle-hero > .text-gradient-cyan {
+    font-size: clamp(3.2rem, 5.6vw, 5.8rem) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .kiosk-global-help {
+    right: 10.5rem !important;
+    top: .8rem !important;
+    min-width: auto;
+    padding-left: .85rem !important;
+    padding-right: .85rem !important;
   }
 }
