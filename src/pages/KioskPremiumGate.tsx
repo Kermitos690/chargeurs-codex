@@ -11,8 +11,10 @@ import {
   KIOSK_JOURNEY_STORAGE_KEY,
   KIOSK_PAIRING_STORAGE_KEY,
 } from "@/lib/kioskEdgeProxy";
+import cinematicArtwork from "./chargeurs-cinematic-home.b64?raw";
 import "./kiosk-premium-gate.css";
 import "./kiosk-da-master.css";
+import "./kiosk-cinematic-home.css";
 
 type SegmentPrice = {
   segment: "guest" | "member";
@@ -53,6 +55,8 @@ type Stage = "hero" | "member" | "connected" | "guest";
 
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
+
+const cinematicArtworkSrc = `data:image/jpeg;base64,${cinematicArtwork.trim()}`;
 
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
@@ -117,9 +121,6 @@ export default function KioskPremiumGate() {
         (data.kioskActionRequired === true || (state && KIOSK_RESUMABLE_STATES.has(state)))
       );
 
-      // The kiosk must not resurrect a completed/active-rental/support screen on
-      // app relaunch. Once the battery has left the cabinet, tracking belongs on
-      // the phone and the public tablet returns to the premium home screen.
       if (mustResumeOnKiosk) {
         try {
           const journey = sessionStorage.getItem(KIOSK_JOURNEY_STORAGE_KEY);
@@ -259,69 +260,66 @@ export default function KioskPremiumGate() {
     );
   }
 
+  const guestCurrency = options?.guest?.currency ?? "CHF";
+  const guestHourly = money(options?.guest?.hourly_cents, guestCurrency);
+  const guestCap = money(options?.guest?.daily_cap_cents, guestCurrency);
+
   return (
-    <div className="premium-kiosk da-master-screen da-home">
-      <div className="da-ambient da-ambient-left" aria-hidden="true" />
-      <div className="da-ambient da-ambient-right" aria-hidden="true" />
-      <div className="da-smoke da-smoke-a" aria-hidden="true" />
-      <div className="da-smoke da-smoke-b" aria-hidden="true" />
-      <header className="da-topbar">
-        <div className="da-brand"><BrandLogo size="md" /></div>
-        <nav className="da-nav">
-          <button type="button" onClick={() => window.location.reload()}>↻ Actualiser</button>
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>? FAQ / Aide</button>
-          <LanguageSwitcher className="da-language-switcher" />
-        </nav>
-      </header>
+    <main className="cinematic-home" data-kiosk-cinematic-home="true">
+      <img className="cinematic-home__art" src={cinematicArtworkSrc} alt="" aria-hidden="true" />
 
-      <main className="da-home-grid">
-        <section className="da-copy-column">
-          <div className="da-hero-title">
-            <span>PLUS DE</span>
-            <span>BATTERIE ?</span>
-            <strong>RÉGLÉ.</strong>
-          </div>
-          <div className="da-price-strip">
-            <span className="da-price-dot">⚡</span>
-            <strong>{money(options?.guest?.hourly_cents, options?.guest?.currency)}</strong>
-            <span>/ heure</span>
-            {options?.guest?.daily_cap_cents ? <><i>•</i><span>Plafond journalier</span><strong>{money(options.guest.daily_cap_cents, options.guest.currency)}</strong></> : null}
-          </div>
+      <div className="cinematic-home__price-mask" aria-label={`Tarif ${guestHourly} par heure, plafond journalier ${guestCap}`}>
+        <div className="cinematic-home__price">
+          <span className="cinematic-home__bolt-icon">⚡</span>
+          <strong>{guestHourly}</strong>
+          <span>/ heure</span>
+          <span className="cinematic-home__sep">•</span>
+          <span className="cinematic-home__cap-label">Plafond journalier</span>
+          <strong>{guestCap}</strong>
+        </div>
+      </div>
 
-          <div className="da-choice-row">
-            <button className="da-choice da-choice-express" onClick={chooseGuest} disabled={!options?.guest}>
-              <span className="da-choice-icon">⚡</span>
-              <span className="da-choice-kicker">LOCATION</span>
-              <strong>EXPRESS</strong>
-              <small>Sans compte.<br/>Payez sur votre téléphone et partez.</small>
-              <span className="da-choice-arrow">→</span>
-            </button>
+      <button
+        type="button"
+        className="cinematic-home__hit cinematic-home__refresh"
+        aria-label="Actualiser"
+        onClick={() => window.location.reload()}
+      >
+        <span className="cinematic-home__sr">Actualiser</span>
+      </button>
 
-            <button className="da-choice da-choice-client" onClick={() => void startMember()} disabled={!options?.memberAvailable}>
-              <span className="da-choice-icon">◉</span>
-              <span className="da-choice-kicker">CLIENT</span>
-              <strong>CHARGEURS</strong>
-              <small>Connectez-vous par QR.<br/>Profitez de vos avantages.</small>
-              <span className="da-choice-arrow">→</span>
-            </button>
-          </div>
-        </section>
+      <button
+        type="button"
+        className="cinematic-home__hit cinematic-home__help"
+        aria-label="Aide"
+        onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}
+      >
+        <span className="cinematic-home__sr">Aide</span>
+      </button>
 
-        <section className="da-scene" aria-label="Borne Chargeurs.ch">
-          <div className="da-cabinet">
-            <div className="da-cabinet-screen">
-              <BrandLogo size="sm" />
-              <div><strong>Bienvenue</strong><span>Choisissez votre option</span></div>
-            </div>
-            <div className="da-cabinet-body">
-              <BrandLogo size="sm" />
-              <div className="da-slots">
-                {[1,2,3,4].map((slot) => <span key={slot}><i>{slot}</i><b /></span>)}
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+      <div className="cinematic-home__language" aria-label="Langues">
+        <LanguageSwitcher />
+      </div>
+
+      <button
+        type="button"
+        className="cinematic-home__hit cinematic-home__express"
+        aria-label="Location Express"
+        disabled={!options?.guest}
+        onClick={chooseGuest}
+      >
+        <span className="cinematic-home__sr">Location Express</span>
+      </button>
+
+      <button
+        type="button"
+        className="cinematic-home__hit cinematic-home__client"
+        aria-label="Client Chargeurs"
+        disabled={!options?.memberAvailable}
+        onClick={() => void startMember()}
+      >
+        <span className="cinematic-home__sr">Client Chargeurs</span>
+      </button>
+    </main>
   );
 }
