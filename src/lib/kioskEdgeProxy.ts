@@ -8,7 +8,8 @@
  * header, is never placed in a URL, and is still hashed/verified by the Edge
  * Function.
  */
-const PUBLIC_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const STAGING_PUBLIC_SUPABASE_KEY = "sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d";
+const PUBLIC_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_PUBLIC_SUPABASE_KEY;
 
 export const KIOSK_PAIRING_STORAGE_KEY = "chargeurs:kiosk:customer-pairing-id";
 export const KIOSK_JOURNEY_STORAGE_KEY = "chargeurs:kiosk:customer-journey";
