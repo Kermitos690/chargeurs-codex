@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircle2, Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Crown, Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useCustomer } from "@/hooks/useCustomer";
 
-type ClaimState = "idle" | "claiming" | "success" | "expired" | "error";
+type ClaimState = "idle" | "claiming" | "success" | "membership" | "expired" | "error";
+type MemberSummary = {
+  planCode?: string;
+  planName?: string;
+  currency?: string;
+  hourlyCents?: number | null;
+  dailyCapCents?: number | null;
+  includedMinutes?: number | null;
+  renewalCreditCents?: number | null;
+  renewsAt?: string | null;
+};
+
+function money(cents: number | null | undefined, currency = "CHF") {
+  return cents == null ? "—" : new Intl.NumberFormat("fr-CH", { style: "currency", currency }).format(Number(cents) / 100);
+}
 
 export default function AccountConnect() {
   const { token = "" } = useParams();
@@ -16,6 +30,7 @@ export default function AccountConnect() {
   const [state, setState] = useState<ClaimState>("idle");
   const [stationId, setStationId] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [member, setMember] = useState<MemberSummary | null>(null);
 
   const currentPath = useMemo(() => `/compte/connect/${encodeURIComponent(token)}`, [token]);
 
@@ -34,12 +49,14 @@ export default function AccountConnect() {
         if (cancelled) return;
         const code = String(data?.error ?? error?.message ?? "");
         if (error || !data?.ok) {
-          if (code.includes("EXPIRED")) setState("expired");
+          if (code.includes("MEMBERSHIP_REQUIRED")) setState("membership");
+          else if (code.includes("EXPIRED")) setState("expired");
           else setState("error");
           setErrorCode(code || "PAIRING_CLAIM_FAILED");
           return;
         }
         setStationId(String(data.stationId ?? ""));
+        setMember((data.member ?? null) as MemberSummary | null);
         setState("success");
       });
 
@@ -58,7 +75,7 @@ export default function AccountConnect() {
               <Loader2 className="h-10 w-10 animate-spin text-success" />
             </div>
             <h1 className="mt-6 font-display text-3xl font-extrabold">Connexion à la borne…</h1>
-            <p className="mt-3 text-muted-foreground">Votre compte Chargeurs est vérifié et relié à cette location de manière sécurisée.</p>
+            <p className="mt-3 text-muted-foreground">Votre identité et votre adhésion Client Chargeurs sont vérifiées côté serveur avant d’activer le tarif membre.</p>
           </>
         )}
 
@@ -68,18 +85,36 @@ export default function AccountConnect() {
               <CheckCircle2 className="h-12 w-12 text-success" />
             </div>
             <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-success/25 bg-success/10 px-4 py-2 text-sm font-bold text-success">
-              <ShieldCheck className="h-4 w-4" />Client connecté
+              <ShieldCheck className="h-4 w-4" />Adhésion vérifiée
             </p>
             <h1 className="mt-5 font-display text-3xl font-extrabold">Borne connectée</h1>
             <p className="mt-3 text-muted-foreground">
-              {stationId ? `La borne ${stationId} reconnaît maintenant votre compte.` : "La borne reconnaît maintenant votre compte."}
+              {stationId ? `La borne ${stationId} reconnaît maintenant votre adhésion.` : "La borne reconnaît maintenant votre adhésion."}
             </p>
             <div className="mt-6 rounded-2xl border border-success/20 bg-success/10 p-5">
-              <p className="text-sm text-muted-foreground">Votre tarif client</p>
-              <p className="mt-1 font-display text-4xl font-extrabold text-success">1,00 CHF / h</p>
+              <p className="text-sm text-muted-foreground">{member?.planName ?? "Client Chargeurs"}</p>
+              <p className="mt-1 font-display text-4xl font-extrabold text-success">{money(member?.hourlyCents, member?.currency)} / h</p>
+              {member?.dailyCapCents != null && <p className="mt-2 text-sm text-muted-foreground">Plafond journalier {money(member.dailyCapCents, member.currency)}</p>}
+              {Number(member?.includedMinutes ?? 0) > 0 && <p className="mt-1 text-sm text-muted-foreground">{member?.includedMinutes} min incluses dans votre plan</p>}
             </div>
             <p className="mt-5 text-sm text-muted-foreground">Vous pouvez reprendre sur l’écran de la borne.</p>
             <Button onClick={() => navigate("/compte", { replace: true })} className="mt-6 w-full rounded-full bg-gradient-success py-6 text-lg font-bold text-success-foreground">
+              Retour à mon compte
+            </Button>
+          </>
+        )}
+
+        {state === "membership" && (
+          <>
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-violet-500/15">
+              <Crown className="h-10 w-10 text-violet-300" />
+            </div>
+            <h1 className="mt-6 font-display text-2xl font-extrabold">Adhésion Client Chargeurs requise</h1>
+            <p className="mt-3 text-muted-foreground">Votre compte est bien connecté, mais aucun abonnement membre actif n’a été trouvé. Le tarif membre n’a donc pas été activé sur la borne.</p>
+            <Button onClick={() => navigate("/compte/pass", { replace: true })} className="mt-6 w-full rounded-full bg-violet-500 py-6 text-lg font-bold text-white hover:bg-violet-400">
+              Voir Chargeurs+ Pass
+            </Button>
+            <Button onClick={() => navigate("/compte", { replace: true })} variant="ghost" className="mt-2 w-full rounded-full py-5">
               Retour à mon compte
             </Button>
           </>
