@@ -13,6 +13,7 @@ import PaymentChoice from "./pages/PaymentChoice.tsx";
 import RentalProgress from "./pages/RentalProgress.tsx";
 import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
+import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
@@ -66,6 +67,7 @@ const App = () => (
         <Router>
           <KioskReturnOverlay />
           <KioskHelpLauncher />
+          <KioskOffersLauncher />
           <KioskOperationalGuard />
           <Routes>
             <Route path="/" element={<Index />} />
@@ -95,7 +97,6 @@ const App = () => (
             </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />
-
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />
