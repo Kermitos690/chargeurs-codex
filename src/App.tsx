@@ -55,6 +55,7 @@ import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
 import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
 import AdminBatteryQualification from "./pages/admin/AdminBatteryQualification.tsx";
+import AdminCustomerProgram from "./pages/admin/AdminCustomerProgram.tsx";
 import LegalPage from "./pages/LegalPage.tsx";
 
 const queryClient = new QueryClient();
@@ -110,6 +111,7 @@ const App = () => (
               <Route path="orders" element={<AdminOrders />} />
               <Route path="pricing" element={<AdminPricing />} />
               <Route path="pricing/:id" element={<AdminPricingDetail />} />
+              <Route path="customer-program" element={<AdminCustomerProgram />} />
               <Route path="partners" element={<AdminPartners />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
