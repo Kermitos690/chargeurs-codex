@@ -1,18 +1,12 @@
 // ChargeNow global cabinet-event gateway.
+// ChargeNow E1 does not expose a configurable secret header. This gateway
+// authenticates the provider URL with a receiver-scoped HMAC and forwards the
+// request internally using the canonical x-event-secret contract.
 //
-// ChargeNow E1 does not expose a configurable secret header for event push.
-// This public gateway therefore accepts only a derived HMAC token in the URL,
-// scoped to this single receiver. The raw ChargeNow callback/event secret never
-// leaves the Edge Function environment. After verification, the request is
-// forwarded internally to the canonical cabinet-event-push receiver using the
-// existing x-event-secret header contract.
-//
-// ChargeNow cabinet clocks are not guaranteed to be synchronized with our
-// server. For events carrying a stable provider event/message id, replay safety
-// is therefore owned by the UNIQUE external_event_id constraint in the canonical
-// receiver. We preserve the provider timestamp for audit but remove it from the
-// canonical freshness gate. Events without a stable id retain the strict
-// timestamp replay window in cabinet-event-push.
+// Cabinet clocks are not authoritative. Every authenticated JSON push is given
+// a stable external event id (provider id when available, otherwise a SHA-256
+// fingerprint of the original body). The canonical receiver's UNIQUE event-id
+// constraint therefore owns replay protection without trusting provider time.
 
 const encoder = new TextEncoder();
 const MAX_BODY_BYTES = 64 * 1024;
@@ -39,14 +33,15 @@ function safeEqual(a: string, b: string): boolean {
 
 async function expectedToken(rawSecret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(rawSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
+    "raw", encoder.encode(rawSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(TOKEN_SCOPE));
   return base64Url(new Uint8Array(signature));
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function reply(body: unknown, status: number) {
@@ -56,27 +51,32 @@ function reply(body: unknown, status: number) {
   });
 }
 
-function normalizedProviderBody(rawBody: string, contentType: string): string {
+async function normalizedProviderBody(rawBody: string, contentType: string): Promise<string> {
   if (!contentType.includes("application/json")) return rawBody;
   try {
     const payload = JSON.parse(rawBody) as Record<string, unknown>;
     const nested = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
-      ? payload.data as Record<string, unknown>
-      : {};
-    const stableEventId = ["messageId", "eventId", "msgId", "id"]
-      .map((key) => payload[key] ?? nested[key])
+      ? { ...(payload.data as Record<string, unknown>) }
+      : null;
+
+    const existingEventId = ["messageId", "eventId", "msgId", "id"]
+      .map((key) => payload[key] ?? nested?.[key])
       .find((value) => (typeof value === "string" && value.trim()) || (typeof value === "number" && Number.isFinite(value)));
-
-    // Without a stable identity, leave the body untouched so the canonical
-    // receiver continues to enforce its strict timestamp freshness window.
-    if (stableEventId == null) return rawBody;
-
-    for (const key of ["timestamp", "ts", "eventTime", "time"] as const) {
-      if (payload[key] != null) {
-        if (payload.providerTimestamp == null) payload.providerTimestamp = payload[key];
-        delete payload[key];
-      }
+    if (existingEventId == null) {
+      payload.eventId = `gw_${(await sha256Hex(rawBody)).slice(0, 40)}`;
     }
+
+    const timestampKeys = ["timestamp", "ts", "eventTime", "time"] as const;
+    const providerTimestamp = timestampKeys
+      .map((key) => payload[key] ?? nested?.[key])
+      .find((value) => value !== undefined && value !== null);
+    if (providerTimestamp != null && payload.providerTimestamp == null) payload.providerTimestamp = providerTimestamp;
+
+    for (const key of timestampKeys) {
+      delete payload[key];
+      if (nested) delete nested[key];
+    }
+    if (nested) payload.data = nested;
     return JSON.stringify(payload);
   } catch {
     return rawBody;
@@ -92,9 +92,7 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const provided = url.searchParams.get("token") ?? req.headers.get("x-chargenow-push-token") ?? "";
-  if (!safeEqual(provided, await expectedToken(rawSecret))) {
-    return reply({ ok: false, error: "INVALID_PUSH_TOKEN" }, 401);
-  }
+  if (!safeEqual(provided, await expectedToken(rawSecret))) return reply({ ok: false, error: "INVALID_PUSH_TOKEN" }, 401);
 
   const body = await req.text();
   if (body.length > MAX_BODY_BYTES) return reply({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
@@ -102,11 +100,8 @@ Deno.serve(async (req) => {
   const contentType = req.headers.get("content-type") ?? "application/json";
   const upstream = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/cabinet-event-push`, {
     method: "POST",
-    headers: {
-      "Content-Type": contentType,
-      "x-event-secret": rawSecret,
-    },
-    body: normalizedProviderBody(body, contentType),
+    headers: { "Content-Type": contentType, "x-event-secret": rawSecret },
+    body: await normalizedProviderBody(body, contentType),
   });
 
   const text = await upstream.text();
