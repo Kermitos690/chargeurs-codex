@@ -25,10 +25,9 @@ const SEVERITY: Record<string, string> = {
   POS_INFO_STATUS: "info",
 };
 
-const MAX_BODY_BYTES = 64 * 1024; // 64 KB cap on the inbound payload.
-const REPLAY_WINDOW_MS = 5 * 60 * 1000; // accept events at most 5 min old/future.
+const MAX_BODY_BYTES = 64 * 1024;
+const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
-// Tolerant typed view of an inbound ChargeNow hardware event payload.
 export interface EventPayload {
   eventType?: string; type?: string; event?: string;
   deviceId?: string; cabinetid?: string; cabinetId?: string; stationId?: string;
@@ -37,10 +36,6 @@ export interface EventPayload {
   [k: string]: unknown;
 }
 
-// Production safety: the unsigned dev override is ONLY honored when the runtime
-// is EXPLICITLY marked as a non-production environment. If ENVIRONMENT is unset
-// or anything other than development/test/local, we treat the runtime as
-// production and the unsigned override has NO effect (fail-closed by default).
 export function unsignedAllowed(env: (k: string) => string | undefined = (k) => Deno.env.get(k)): boolean {
   const allow = env("ALLOW_UNSIGNED_CHARGENOW_EVENTS") === "true";
   const mode = (env("ENVIRONMENT") ?? env("DENO_ENV") ?? "production").toLowerCase();
@@ -48,7 +43,6 @@ export function unsignedAllowed(env: (k: string) => string | undefined = (k) => 
   return allow && nonProd;
 }
 
-// Constant-time string comparison (avoids timing side-channels).
 function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let r = 0;
@@ -66,7 +60,10 @@ function mergedPayload(payload: EventPayload): Record<string, unknown> {
   const nested = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
     ? payload.data as Record<string, unknown>
     : {};
-  return { ...payload, ...nested };
+  const eventData = payload.eventData && typeof payload.eventData === "object" && !Array.isArray(payload.eventData)
+    ? payload.eventData as Record<string, unknown>
+    : {};
+  return { ...payload, ...nested, ...eventData };
 }
 
 function firstString(source: Record<string, unknown>, keys: string[]): string | null {
@@ -114,9 +111,13 @@ async function delegateBatteryReturn(
     "deviceId", "cabinetid", "cabinetId", "stationId", "cabinetSn",
     "givebackDeviceId", "returnDeviceId", "returnStationId",
   ]);
-  const tradeNo = firstString(merged, ["tradeNo", "trade_no", "orderNo"]);
+  // ChargeNow global BATTERY_IN uses `orderId` for the same immutable rental
+  // order identifier exposed as tradeNo by the rental order/detail APIs.
+  const tradeNo = firstString(merged, ["tradeNo", "trade_no", "orderNo", "orderId"]);
+  // ChargeNow global BATTERY_IN uses `returnBatteryId`; rental callbacks and
+  // order detail use batteryId. Treat both as aliases, never infer from slots.
   const batteryId = firstString(merged, [
-    "batteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
+    "batteryId", "returnBatteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
   ]);
   const slotNum = firstInteger(merged, [
     "slotNum", "slot", "slotId", "position", "givebackSlot", "returnSlot",
@@ -124,13 +125,7 @@ async function delegateBatteryReturn(
 
   if (!eventId || !stationId || !tradeNo || !batteryId || slotNum == null) {
     if (rawDuplicate) {
-      return j({
-        received: true,
-        deduplicated: true,
-        settlement_triggered: false,
-        requires_reconciliation: true,
-        reason: "RETURN_IDENTITY_INCOMPLETE",
-      }, 200);
+      return j({ received: true, deduplicated: true, settlement_triggered: false, requires_reconciliation: true, reason: "RETURN_IDENTITY_INCOMPLETE" }, 200);
     }
     await returnIncident(db, "RETURN_IDENTITY_INCOMPLETE", {
       external_event_id: eventId,
@@ -139,16 +134,9 @@ async function delegateBatteryReturn(
       battery_id: batteryId,
       slot_num: slotNum,
     });
-    return j({
-      received: true,
-      settlement_triggered: false,
-      requires_reconciliation: true,
-      reason: "RETURN_IDENTITY_INCOMPLETE",
-    }, 202);
+    return j({ received: true, settlement_triggered: false, requires_reconciliation: true, reason: "RETURN_IDENTITY_INCOMPLETE" }, 202);
   }
 
-  // A return station can differ from the origin station. The immutable rent
-  // order plus battery identity is the exact business correlation key.
   const { data: matches, error: matchError } = await db.from("rental_sessions")
     .select("id,apifox_trade_no,battery_id")
     .eq("apifox_trade_no", tradeNo)
@@ -166,20 +154,12 @@ async function delegateBatteryReturn(
       slot_num: slotNum,
       match_count: matches?.length ?? 0,
     });
-    return j({
-      received: true,
-      settlement_triggered: false,
-      requires_reconciliation: true,
-      reason: code,
-    }, 202);
+    return j({ received: true, settlement_triggered: false, requires_reconciliation: true, reason: code }, 202);
   }
 
   const supabaseUrl = env("SUPABASE_URL") ?? "";
   if (!supabaseUrl) {
-    await returnIncident(db, "SUPABASE_INTERNAL_CONFIG_MISSING", {
-      external_event_id: eventId,
-      rental_session_id: matches[0].id,
-    });
+    await returnIncident(db, "SUPABASE_INTERNAL_CONFIG_MISSING", { external_event_id: eventId, rental_session_id: matches[0].id });
     return j({ ok: false, error: "SUPABASE_INTERNAL_CONFIG_MISSING" }, 503);
   }
 
@@ -197,22 +177,10 @@ async function delegateBatteryReturn(
     }),
   });
   const result = await response.json().catch(() => null) as Record<string, unknown> | null;
-  if (!response.ok) {
-    return j({ ok: false, error: "CANONICAL_RETURN_PIPELINE_FAILED" }, 502);
-  }
-  return j({
-    received: true,
-    delegated: true,
-    duplicate: result?.duplicate === true,
-    settlement_triggered: result?.settlement_triggered === true,
-    settlement_ok: result?.settlement_ok === true,
-  }, response.status);
+  if (!response.ok) return j({ ok: false, error: "CANONICAL_RETURN_PIPELINE_FAILED" }, 502);
+  return j({ received: true, delegated: true, duplicate: result?.duplicate === true, settlement_triggered: result?.settlement_triggered === true, settlement_ok: result?.settlement_ok === true }, response.status);
 }
 
-// Core request handler — exported and dependency-injected so the full signed
-// branch (secret gate, replay window, size cap, atomic dedup, state machine)
-// can be exercised by the automated integration harness with a fake db and a
-// temporary in-process secret. Production wires it to the real admin client.
 export async function handleEvent(
   req: Request,
   db: SupabaseClient,
@@ -222,30 +190,17 @@ export async function handleEvent(
 
   const expectedSecret = env("CHARGENOW_CALLBACK_SECRET") ?? env("CHARGENOW_EVENT_SECRET");
   const allowUnsigned = unsignedAllowed(env);
-
-  // ---- Fail-closed auth gate ----
   if (!expectedSecret) {
-    if (!allowUnsigned) {
-      return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "ChargeNow callback secret not configured" }, 503);
-    }
-    // else: explicit dev override in a non-production runtime — proceed unauthenticated.
+    if (!allowUnsigned) return j({ ok: false, error: "CONFIGURATION_ERROR", detail: "ChargeNow callback secret not configured" }, 503);
   } else {
     const url = new URL(req.url);
-    const provided = req.headers.get("x-event-secret")
-      ?? req.headers.get("x-chargenow-secret")
-      ?? url.searchParams.get("secret")
-      ?? "";
-    if (!safeEqual(provided, expectedSecret)) {
-      return j({ ok: false, error: "INVALID_EVENT_SECRET" }, 401);
-    }
+    const provided = req.headers.get("x-event-secret") ?? req.headers.get("x-chargenow-secret") ?? url.searchParams.get("secret") ?? "";
+    if (!safeEqual(provided, expectedSecret)) return j({ ok: false, error: "INVALID_EVENT_SECRET" }, 401);
   }
 
   try {
-    // ---- Size guard ----
     const raw = await req.text();
-    if (raw.length > MAX_BODY_BYTES) {
-      return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
-    }
+    if (raw.length > MAX_BODY_BYTES) return j({ ok: false, error: "PAYLOAD_TOO_LARGE" }, 413);
     let payload: EventPayload = {};
     try { payload = raw ? JSON.parse(raw) : {}; } catch { return j({ ok: false, error: "INVALID_JSON" }, 400); }
 
@@ -253,23 +208,13 @@ export async function handleEvent(
     const eventType = firstString(flattened, ["eventType", "type", "event"]) ?? "UNKNOWN";
     const stationId = firstString(flattened, ["deviceId", "cabinetid", "cabinetId", "stationId"]);
 
-    // ---- Replay window (only enforced when a timestamp is present) ----
     const tsRaw = payload.timestamp ?? payload.ts ?? payload.eventTime ?? payload.time ?? null;
     if (tsRaw != null) {
-      const tsMs = typeof tsRaw === "number"
-        ? (tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) // seconds vs ms
-        : Date.parse(String(tsRaw));
-      if (!Number.isNaN(tsMs) && Math.abs(Date.now() - tsMs) > REPLAY_WINDOW_MS) {
-        return j({ ok: false, error: "STALE_EVENT" }, 408);
-      }
+      const tsMs = typeof tsRaw === "number" ? (tsRaw < 1e12 ? tsRaw * 1000 : tsRaw) : Date.parse(String(tsRaw));
+      if (!Number.isNaN(tsMs) && Math.abs(Date.now() - tsMs) > REPLAY_WINDOW_MS) return j({ ok: false, error: "STALE_EVENT" }, 408);
     }
 
-    // ---- Atomic idempotency via a UNIQUE DB constraint ----
-    // We rely on the partial UNIQUE index cabinet_events_external_event_id_uniq.
-    // Two simultaneous duplicate callbacks race on the INSERT; exactly one wins,
-    // the other gets a unique-violation (23505) and is treated as a no-op.
     const eventId = firstString(flattened, ["messageId", "eventId", "msgId", "id"]);
-
     const { error: insErr } = await db.from("cabinet_events").insert({
       station_id: stationId,
       event_type: eventType,
@@ -278,24 +223,16 @@ export async function handleEvent(
       external_event_id: eventId,
     });
     const duplicate = (insErr as { code?: string } | null)?.code === "23505";
-    if (insErr && !duplicate) {
-      return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
-    }
+    if (insErr && !duplicate) return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
 
-    // The canonical return inbox owns retry/dedup state. Even when the raw
-    // cabinet event already exists, delegate a complete BATTERY_IN again so a
-    // previously failed canonical handler can be reclaimed safely.
-    if (eventType === "BATTERY_IN") {
-      return await delegateBatteryReturn(db, payload, eventId, env, duplicate);
-    }
+    // Even a duplicate raw event may need to be delegated again if a previous
+    // canonical attempt failed. The callback inbox is itself idempotent.
+    if (eventType === "BATTERY_IN") return await delegateBatteryReturn(db, payload, eventId, env, duplicate);
     if (duplicate) return j({ received: true, deduplicated: true }, 200);
 
     if (stationId) {
-      if (eventType === "CABINET_ONLINE") {
-        await db.from("stations").update({ online: true, status: "online" }).eq("station_id", stationId);
-      } else if (eventType === "CABINET_OFFLINE") {
-        await db.from("stations").update({ online: false, status: "offline" }).eq("station_id", stationId);
-      }
+      if (eventType === "CABINET_ONLINE") await db.from("stations").update({ online: true, status: "online" }).eq("station_id", stationId);
+      else if (eventType === "CABINET_OFFLINE") await db.from("stations").update({ online: false, status: "offline" }).eq("station_id", stationId);
     }
 
     return j({ received: true }, 200);
