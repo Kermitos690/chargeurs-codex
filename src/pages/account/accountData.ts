@@ -55,6 +55,64 @@ export type CustomerProfile = {
   marketing_consent: boolean;
 };
 
+export type CustomerMembershipPlan = {
+  id: string;
+  code: string;
+  name: string;
+  currency: string;
+  annual_fee_cents: number;
+  renewal_credit_cents: number;
+  hourly_cents: number;
+  daily_cap_cents: number;
+  billing_interval: "month" | "year";
+  billing_interval_count: number;
+  included_minutes: number | null;
+  discount_percent: number | null;
+};
+
+export type CustomerMembership = {
+  id: string;
+  status: string;
+  starts_at: string | null;
+  renews_at: string | null;
+  ends_at: string | null;
+  plan_id: string;
+  customer_membership_plans: CustomerMembershipPlan | CustomerMembershipPlan[] | null;
+};
+
+export type CustomerWalletPass = {
+  id: string;
+  membership_id: string | null;
+  public_pass_id: string;
+  status: string;
+  provider_status: "not_issued" | "pending" | "issued" | "update_pending" | "error" | "revoked";
+  pass_revision: number;
+  token_version: number;
+  apple_serial_number: string | null;
+  google_object_id: string | null;
+  last_generated_at: string | null;
+  last_synced_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerChargePoints = {
+  balance: number;
+  lastActivityAt: string | null;
+};
+
+export type PrivateAccountSummary = {
+  rentals: CustomerRental[];
+  payments: CustomerPayment[];
+  refunds: CustomerRefund[];
+  incidents: CustomerIncident[];
+  profile: Record<string, unknown> | null;
+  membership: CustomerMembership | null;
+  walletPass: CustomerWalletPass | null;
+  chargePoints: CustomerChargePoints;
+};
+
 export const ACTIVE_RENTAL_STATES = new Set(["ejected", "battery_taken", "active_rental"]);
 
 export const RENTAL_STATE_LABELS: Record<string, string> = {
@@ -93,9 +151,21 @@ export function formatAccountMoney(amount: number | null, currency: string | nul
   }).format(amount);
 }
 
+export function formatCents(cents: number | null | undefined, currency = "CHF") {
+  if (cents == null) return "—";
+  return formatAccountMoney(Number(cents) / 100, currency);
+}
+
 export function formatAccountDate(value: string | null) {
   if (!value) return "—";
   return new Date(value).toLocaleString("fr-CH", { dateStyle: "medium", timeStyle: "short" });
+}
+
+export function membershipPlan(membership: CustomerMembership | null): CustomerMembershipPlan | null {
+  if (!membership?.customer_membership_plans) return null;
+  return Array.isArray(membership.customer_membership_plans)
+    ? membership.customer_membership_plans[0] ?? null
+    : membership.customer_membership_plans;
 }
 
 export async function fetchCustomerRentals(limit = 100): Promise<CustomerRental[]> {
@@ -108,13 +178,7 @@ export async function fetchCustomerPayments(limit = 100): Promise<CustomerPaymen
   return summary.payments.slice(0, limit);
 }
 
-export async function fetchPrivateAccountSummary(): Promise<{
-  rentals: CustomerRental[];
-  payments: CustomerPayment[];
-  refunds: CustomerRefund[];
-  incidents: CustomerIncident[];
-  profile: Record<string, unknown> | null;
-}> {
+export async function fetchPrivateAccountSummary(): Promise<PrivateAccountSummary> {
   const { data, error } = await supabase.functions.invoke("account-privacy", {
     body: { action: "summary" },
   });
@@ -125,6 +189,12 @@ export async function fetchPrivateAccountSummary(): Promise<{
     refunds: (data.data?.refunds ?? []) as CustomerRefund[],
     incidents: (data.data?.incidents ?? []) as CustomerIncident[],
     profile: (data.data?.profile ?? null) as Record<string, unknown> | null,
+    membership: (data.data?.membership ?? null) as CustomerMembership | null,
+    walletPass: (data.data?.walletPass ?? null) as CustomerWalletPass | null,
+    chargePoints: {
+      balance: Number(data.data?.chargePoints?.balance ?? 0),
+      lastActivityAt: data.data?.chargePoints?.lastActivityAt ?? null,
+    },
   };
 }
 
