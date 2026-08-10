@@ -5,20 +5,24 @@ import { load } from "js-yaml";
 // Lightweight OpenAPI 3.1 validation: parses the YAML, checks core invariants
 // and the frozen list of endpoints. A full spec validator runs in the manual
 // staging workflow (redocly CLI).
-describe("openapi/platform-api-v1.yaml", () => {
-  const spec = load(readFileSync("openapi/platform-api-v1.yaml", "utf8")) as {
+describe("docs/openapi/chargeurs-api-v1.yaml", () => {
+  const spec = load(readFileSync("docs/openapi/chargeurs-api-v1.yaml", "utf8")) as {
     openapi: string;
     info: { title: string; version: string };
     servers: Array<{ url: string; variables?: Record<string, unknown> }>;
     paths: Record<string, Record<string, unknown>>;
-    components: { securitySchemes: Record<string, unknown> };
+    components: {
+      securitySchemes: Record<string, unknown>;
+      schemas: Record<string, { additionalProperties?: boolean; properties?: Record<string, unknown> }>;
+    };
   };
 
   it("declares OpenAPI 3.1", () => {
     expect(spec.openapi).toMatch(/^3\.1/);
   });
   it("has a parametrisable staging server", () => {
-    expect(spec.servers[0].url).toMatch(/\{baseUrl\}/);
+    expect(spec.servers[0].url).toMatch(/\{project\}\.supabase\.co/);
+    expect(spec.servers[0].variables).toHaveProperty("project");
   });
   it("exposes only the frozen v1 read-only endpoints", () => {
     const expected = [
@@ -32,6 +36,7 @@ describe("openapi/platform-api-v1.yaml", () => {
       "/v1/pricing/quote",
       "/v1/rentals/{rentalId}",
       "/v1/rentals/{rentalId}/events",
+      "/v1/incidents",
     ].sort();
     expect(Object.keys(spec.paths).sort()).toEqual(expected);
   });
@@ -47,5 +52,19 @@ describe("openapi/platform-api-v1.yaml", () => {
   });
   it("defines a bearer security scheme", () => {
     expect(spec.components.securitySchemes.bearerAuth).toBeTruthy();
+  });
+  it("exposes an explicitly scoped and allowlisted incident representation", () => {
+    const operation = spec.paths["/v1/incidents"].get as Record<string, unknown>;
+    const incident = spec.components.schemas.Incident;
+    expect(operation["x-required-scope"]).toBe("incidents:read");
+    expect(incident.additionalProperties).toBe(false);
+    expect(Object.keys(incident.properties ?? {}).sort()).toEqual([
+      "created_at",
+      "id",
+      "resolved",
+      "severity",
+      "type",
+      "updated_at",
+    ]);
   });
 });

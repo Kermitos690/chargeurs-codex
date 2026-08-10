@@ -3,10 +3,20 @@
 // Roles live in the separate user_roles table (never on profiles) to prevent
 // privilege escalation. A safety guard prevents removing the last admin.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, requireAdmin, auditLog } from "../_shared/db.ts";
+import { adminClient, requireSuperAdmin, auditLog } from "../_shared/db.ts";
 
 // Roles that may be assigned from the back-office UI.
-const ASSIGNABLE = ["admin", "super_admin", "staff", "operator", "viewer"] as const;
+const ASSIGNABLE = [
+  "super_admin", "admin", "platform_admin", "operations_admin", "finance_admin",
+  "support_manager", "support_agent", "maintenance_manager", "maintenance_technician",
+  "powerbank_manager", "mifi_manager", "advertising_manager", "reports_analyst",
+  "franchise_owner", "franchise_admin", "franchise_staff",
+  "agency_owner", "agency_admin", "agency_staff",
+  "partner_owner", "partner_staff", "venue_manager", "venue_staff",
+  "vip_customer", "customer",
+  // Preserved while existing installations migrate to the production matrix.
+  "staff", "operator", "viewer",
+] as const;
 type Assignable = (typeof ASSIGNABLE)[number];
 
 function json(body: unknown, status = 200) {
@@ -19,7 +29,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
 
-  const adminId = await requireAdmin(req, db);
+  const adminId = await requireSuperAdmin(req, db);
   if (!adminId) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
   let payload: { action?: string; userId?: string; role?: string; email?: string };

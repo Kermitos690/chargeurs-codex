@@ -1,11 +1,14 @@
 // pricing-admin — authoritative server-side admin API for the pricing engine.
-// All mutations are role-gated (admin/super_admin) and audited. Operator/viewer
+// All mutations are role-gated (finance/admin) and audited. Read-only roles
 // get read + simulate only. The frontend NEVER uses service_role directly.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, getCaller, auditLog } from "../_shared/db.ts";
 
-const WRITE_ROLES = ["admin", "super_admin"];
-const READ_ROLES = ["admin", "super_admin", "operator", "viewer"];
+const WRITE_ROLES = ["admin", "super_admin", "finance_admin"];
+const READ_ROLES = [
+  "admin", "super_admin", "finance_admin", "operations_admin",
+  "support_agent", "operator", "viewer",
+];
 
 // Editable pricing fields (whitelist — never trust arbitrary client keys).
 const FIELDS = [

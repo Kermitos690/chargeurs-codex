@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import { canView, canWrite as canWriteFn, isSuperAdmin as isSuperFn } from "@/lib/roles";
+import {
+  canManageFinance as canManageFinanceFn,
+  canView,
+  canWrite as canWriteFn,
+  isSuperAdmin as isSuperFn,
+} from "@/lib/roles";
 
 
 export function useAuth() {
@@ -32,16 +37,12 @@ export function useAuth() {
       setIsAdmin(canView(r));
       setLoading(false);
     });
-    // Ensure a profile row exists for this user (RLS: users upsert own profile).
-    supabase.from("profiles").upsert(
-      { id: user.id, email: user.email ?? null },
-      { onConflict: "id", ignoreDuplicates: false },
-    ).then(() => {});
   }, [user]);
 
   // Write access is restricted to roles the backend `requireAdmin` accepts.
   const canWrite = canWriteFn(roles);
+  const canManageFinance = canManageFinanceFn(roles);
   const isSuperAdmin = isSuperFn(roles);
 
-  return { user, roles, isAdmin, canWrite, isSuperAdmin, loading };
+  return { user, roles, isAdmin, canWrite, canManageFinance, isSuperAdmin, loading };
 }

@@ -1,22 +1,78 @@
-project_id = "zoybkzkvvsbnqqarlaii"
+project_id = "chargeurs-codex-local"
 
+[auth]
+site_url = "https://chargeurs-ch-staging.vercel.app"
+additional_redirect_urls = [
+  "https://chargeurs-ch-staging.vercel.app/admin",
+  "https://chargeurs-ch-staging.vercel.app/admin/reset-password",
+  "https://chargeurs-ch-staging.vercel.app/compte",
+  "https://chargeurs-ch-staging.vercel.app/compte/reset-password",
+  "https://chargeurs-ch-staging.vercel.app/compte/connect/**",
+  "https://chargeurs-ch-staging.vercel.app/account",
+  "https://chargeurs-ch-staging.vercel.app/account/reset-password",
+]
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "1m"
+otp_length = 8
+otp_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[storage.vector]
+enabled = false
+
+[functions.platform-api]
+verify_jwt = false
+[functions.api-key-admin]
+verify_jwt = true
 [functions.stripe-webhook]
 verify_jwt = false
-
 [functions.cabinet-event-push]
 verify_jwt = false
-
 [functions.sync-cabinet-status]
 verify_jwt = false
-
 [functions.create-rental-session]
 verify_jwt = false
-
 [functions.create-stripe-checkout]
 verify_jwt = false
-
+[functions.public-stripe-checkout]
+verify_jwt = false
+[functions.payment-portal]
+verify_jwt = false
+[functions.kiosk-return-summary]
+verify_jwt = false
+[functions.process-rental-email-outbox]
+verify_jwt = false
 [functions.eject-after-payment]
 verify_jwt = false
-
+[functions.reconcile-pending-ejection]
+verify_jwt = false
 [functions.chargenow-rent-callback]
+verify_jwt = false
+[functions.settle-rental-payment]
+verify_jwt = false
+[functions.kiosk-enroll]
+verify_jwt = false
+[functions.public-contact]
+verify_jwt = false
+[functions.account-privacy]
+verify_jwt = true
+[functions.customer-pairing-create]
+verify_jwt = false
+[functions.customer-pairing-status]
+verify_jwt = false
+[functions.customer-pairing-claim]
+verify_jwt = true
+[functions.kiosk-customer-options]
+verify_jwt = false
+[functions.dta-pilot-qualification]
+verify_jwt = true
+[functions.dta-pilot-callback]
 verify_jwt = false

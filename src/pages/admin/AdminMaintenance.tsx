@@ -1,19 +1,45 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { AlertTriangle, ShieldCheck, RefreshCw, Radio, Loader2 } from "lucide-react";
+import { AlertTriangle, ShieldCheck, RefreshCw, Radio, Loader2, Inbox } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 export default function AdminMaintenance() {
-  const [stationId, setStationId] = useState("DTA21269");
+  const [stationId, setStationId] = useState("");
   const [slotNum, setSlotNum] = useState("1");
-  const [pushUrl, setPushUrl] = useState(`https://zoybkzkvvsbnqqarlaii.supabase.co/functions/v1/cabinet-event-push`);
+  const [pushUrl, setPushUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [requests, setRequests] = useState<Array<{
+    id: string; request_type: string; name: string; email: string; station_id: string | null;
+    organization: string | null; message: string; status: string; created_at: string;
+  }>>([]);
+
+  const loadRequests = useCallback(async () => {
+    const db = supabase as any;
+    const { data, error } = await db.from("public_contact_requests")
+      .select("id,request_type,name,email,station_id,organization,message,status,created_at")
+      .in("status", ["new", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (!error) setRequests(data ?? []);
+  }, []);
+
+  useEffect(() => { loadRequests(); }, [loadRequests]);
+
+  const setRequestStatus = async (id: string, status: "in_progress" | "resolved") => {
+    const db = supabase as any;
+    const { error } = await db.from("public_contact_requests").update({
+      status,
+      resolved_at: status === "resolved" ? new Date().toISOString() : null,
+    }).eq("id", id);
+    if (error) toast.error("La demande n'a pas pu être mise à jour.");
+    else { toast.success("Demande mise à jour"); loadRequests(); }
+  };
 
   const call = async (actionType: string, extra: Record<string, unknown> = {}) => {
     setBusy(actionType);
@@ -32,6 +58,30 @@ export default function AdminMaintenance() {
     <div className="animate-fade-in max-w-3xl space-y-6">
       <h1 className="font-display text-3xl font-bold">Maintenance</h1>
       <p className="text-muted-foreground">Actions administrateur exécutées côté serveur uniquement. Les actions dangereuses agissent sur le matériel.</p>
+
+      <section className="glass liquid-border space-y-4 rounded-2xl p-6">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold"><Inbox className="mr-2 inline h-5 w-5" />Demandes support et partenaires</h2>
+          <Button variant="ghost" size="sm" onClick={loadRequests}><RefreshCw className="mr-2 h-4 w-4" />Actualiser</Button>
+        </div>
+        {requests.length === 0 ? <p className="text-sm text-muted-foreground">Aucune demande ouverte.</p> : requests.map((request) => (
+          <article key={request.id} className="rounded-xl border border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold">{request.name} · {request.request_type === "support" ? "Support" : "Installation partenaire"}</p>
+                <p className="text-sm text-muted-foreground">{request.email} · {new Date(request.created_at).toLocaleString("fr-CH")}</p>
+                {(request.station_id || request.organization) && <p className="mt-1 text-sm">{request.station_id ?? request.organization}</p>}
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs">{request.status}</span>
+            </div>
+            <p className="mt-3 whitespace-pre-wrap text-sm">{request.message}</p>
+            <div className="mt-4 flex gap-2">
+              {request.status === "new" && <Button size="sm" variant="outline" onClick={() => setRequestStatus(request.id, "in_progress")}>Prendre en charge</Button>}
+              <Button size="sm" onClick={() => setRequestStatus(request.id, "resolved")}>Marquer résolue</Button>
+            </div>
+          </article>
+        ))}
+      </section>
 
       <section className="glass liquid-border grid gap-3 rounded-2xl p-6 sm:grid-cols-2">
         <div>

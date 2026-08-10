@@ -1,0 +1,76 @@
+name: Platform API CI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-api-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
+
+      - name: Type-check frontend
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Validate OpenAPI document
+        run: npx --yes @redocly/cli@1.25.5 lint docs/openapi/chargeurs-api-v1.yaml
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check Platform API functions
+        run: >-
+          deno check --allow-import
+          supabase/functions/platform-api/index.ts
+          supabase/functions/api-key-admin/index.ts
+          supabase/functions/_shared/platformApi.ts
+          supabase/functions/_shared/apiClientAdmin.ts
+
+      - name: Run Platform API unit tests
+        run: >-
+          deno test --allow-env --allow-net --no-check
+          supabase/functions/tests/platform_api.test.ts
+          supabase/functions/tests/api_client_admin.test.ts
+
+      - name: Run isolated PostgreSQL migration contract
+        run: >-
+          psql -h 127.0.0.1 -U postgres -d postgres
+          -f supabase/tests/platform_api_migration.sql

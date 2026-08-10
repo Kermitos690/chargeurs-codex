@@ -1,0 +1,51 @@
+name: DTA21269 battery qualification CI
+
+# Cost control: qualification can contact staging dependencies and is never run
+# automatically. Launch it explicitly only for a deliberate pilot qualification.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta-pilot-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install npm dependencies for Deno npm: imports
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Type-check qualification functions
+        run: >-
+          deno check --node-modules-dir=manual --allow-import
+          supabase/functions/dta-pilot-qualification/index.ts
+          supabase/functions/dta-pilot-callback/index.ts
+          supabase/functions/_shared/dtaPilot.ts
+          supabase/functions/_shared/dtaPilotCallbackAuth.ts
+
+      - name: Run qualification unit tests
+        run: >-
+          deno test --node-modules-dir=manual --allow-env --allow-net --no-check
+          supabase/functions/tests/dta_pilot.test.ts
+
+      - name: Verify fail-closed gates are documented
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '^DTA21269_FREEPAY_ENABLED=false$' .env.example
+          grep -q '^CHARGENOW_MUTATIONS_ENABLED=false$' .env.example
+          grep -q '^CHARGENOW_MODE=test$' .env.example

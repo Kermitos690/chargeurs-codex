@@ -27,11 +27,44 @@ import { jsonResponse, stubFetch } from "./_fakes.ts";
 
 Deno.env.set("CHARGENOW_BASIC_AUTH", "dGVzdC10b2tlbg==");
 Deno.env.set("CHARGENOW_API_BASE_URL", "https://example.test/cdb-open-api/v1");
+Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "true");
 const cn = await import("../_shared/chargenow.ts");
 
 const HTTP_ERRORS = [400, 401, 403, 404, 409, 429, 500] as const;
 
 type ApiResult = Awaited<ReturnType<typeof cn.cabinetQuery>>;
+
+Deno.test("mutations are blocked centrally unless the feature flag is exactly true", async () => {
+  const previous = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.orderCreate({ deviceId: "DTA21269" });
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_MUTATIONS_DISABLED");
+    assertEquals(s.calls.length, 0);
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previous);
+  }
+});
+
+Deno.test("super-admin confirmation never bypasses the global mutation kill switch", async () => {
+  const previous = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.orderClose("ORDER-TEST", { superAdminConfirmed: true });
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_MUTATIONS_DISABLED");
+    assertEquals(s.calls.length, 0);
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previous);
+  }
+});
 
 // Generic helper: run an op, assert success mapping + auth header present.
 async function expectSuccess(
@@ -292,6 +325,35 @@ Deno.test("C2 ejectByRepair — builds POST with cabinetid/slotNum (mock only)",
 });
 Deno.test("C2 ejectByRepair — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRepair("DTA21269", 1)));
 
+Deno.test("C2 one-time maintenance permit bypasses no other mutation gate", async () => {
+  const previousMutations = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  const previousPermit = Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  Deno.env.set("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT", JSON.stringify({
+    id: "permit-test-1", stationId: "DTA21269", slotNum: 1, expiresAt: "2099-01-01T00:00:00.000Z",
+  }));
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const allowed = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1);
+    assertEquals(allowed.ok, true);
+    assertEquals(s.calls.length, 1);
+    const blocked = await cn.ejectByRepairWithOneTimePermit("DTA21269", 2);
+    assertEquals(blocked.ok, false);
+    assertEquals(blocked.error, "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED");
+    assertEquals(s.calls.length, 1);
+    const otherMutation = await cn.orderCreate({ deviceId: "DTA21269" });
+    assertEquals(otherMutation.ok, false);
+    assertEquals(otherMutation.error, "CHARGENOW_MUTATIONS_DISABLED");
+    assertEquals(s.calls.length, 1);
+  } finally {
+    s.restore();
+    if (previousMutations === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previousMutations);
+    if (previousPermit === undefined) Deno.env.delete("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+    else Deno.env.set("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT", previousPermit);
+  }
+});
+
 // ----------------------------------------------------------------
 // C3 — Eject By Rent (POST /cabinet/ejectByRent) — BLOCKED_BY_SAFETY
 // ----------------------------------------------------------------
@@ -308,6 +370,38 @@ Deno.test("C3 ejectByRent — builds POST with cabinetid/rentOrderId/slotNum (mo
   );
 });
 Deno.test("C3 ejectByRent — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRent("DTA21269", 3, "ORD-1")));
+
+Deno.test("C3 ejectByRent — slot 0 is fail-closed without a confirmed provider convention", async () => {
+  const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_SLOT_ZERO_NOT_ALLOWED");
+    assertEquals(s.calls.length, 0, "fail-closed validation must happen before fetch");
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+    else Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", previous);
+  }
+});
+
+Deno.test("C3 ejectByRent — slot 0 is sent only in explicit provider-auto-select mode", async () => {
+  const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
+  Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", "provider_auto_select");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
+    assertEquals(result.ok, true);
+    assertEquals(s.calls.length, 1);
+    assert(s.calls[0].url.includes("slotNum=0"));
+  } finally {
+    s.restore();
+    if (previous === undefined) Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");
+    else Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", previous);
+  }
+});
 
 // ----------------------------------------------------------------
 // E1 — Event Push Config (POST /cabinet/eventPush/config) — BLOCKED_BY_SAFETY

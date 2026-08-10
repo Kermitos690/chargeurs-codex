@@ -3,8 +3,10 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin } from "../_shared/db.ts";
 import {
-  ejectByRepair, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
+  ejectByRepairWithOneTimePermit, oneTimeMaintenanceEjectionPermit, operationPop, eventPushConfig, cabinetQuery, isChargeNowConfigured,
+  type OneTimeMaintenanceEjectionPermit,
 } from "../_shared/chargenow.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -21,8 +23,9 @@ Deno.serve(async (req) => {
 
     // Real backend health probe (no secrets exposed, only booleans).
     if (actionType === "health_check") {
-      const stripe = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
-      const webhookSecret = Boolean(Deno.env.get("STRIPE_WEBHOOK_SECRET"));
+      const stripeRuntime = validateStripeTestRuntime({ requireWebhookSecret: true });
+      const stripe = stripeRuntime.ok;
+      const webhookSecret = stripeRuntime.ok;
       const chargenow = isChargeNowConfigured();
       // Webhook is "live" only if the secret is set AND at least one verified
       // Stripe webhook event has been processed.
@@ -54,11 +57,62 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const stationActions = new Set(["test_auth", "sync_status", "eject_by_repair", "operation_pop"]);
+    if (stationActions.has(actionType) && (typeof stationId !== "string" || !/^[A-Za-z0-9_-]{4,64}$/.test(stationId))) {
+      return new Response(JSON.stringify({ ok: false, error: "VALID_STATION_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (["eject_by_repair", "operation_pop"].includes(actionType)
+      && (!Number.isInteger(Number(slotNum)) || Number(slotNum) < 1 || Number(slotNum) > 128)) {
+      return new Response(JSON.stringify({ ok: false, error: "VALID_SLOT_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // A physical repair ejection is never unlocked by the broad provider flag
+    // alone. It needs an exact, short-lived server-only permit. No client can
+    // select a different cabinet or slot, and the permit is consumed after one
+    // recorded attempt (including an ambiguous timeout).
+    let oneTimePermit: OneTimeMaintenanceEjectionPermit | null = null;
+    if (actionType === "eject_by_repair") {
+      const permit = oneTimeMaintenanceEjectionPermit();
+      const permitMatches = permit
+        && permit.stationId === stationId
+        && permit.slotNum === Number(slotNum)
+        && Date.parse(permit.expiresAt) > Date.now();
+      if (!permitMatches) {
+        return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      oneTimePermit = permit;
+      const { count, error: priorAttemptError } = await db.from("maintenance_actions")
+        .select("id", { count: "exact", head: true })
+        .eq("action_type", "eject_by_repair")
+        .contains("params", { oneTimePermitId: permit.id });
+      if (priorAttemptError) throw priorAttemptError;
+      if ((count ?? 0) > 0) {
+        return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_ALREADY_ATTEMPTED" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    if (["operation_pop", "config_event_push"].includes(actionType)) {
+      return new Response(JSON.stringify({ ok: false, error: "PHYSICAL_MUTATION_NOT_PERMITTED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (actionType === "config_event_push") {
+      try {
+        const parsed = new URL(String(eventPushUrl ?? ""));
+        if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error("invalid");
+      } catch {
+        return new Response(JSON.stringify({ ok: false, error: "VALID_HTTPS_EVENT_PUSH_URL_REQUIRED" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     let result;
     switch (actionType) {
       case "test_auth":
         // Non-destructive credential check.
-        result = await cabinetQuery(stationId ?? "DTA21269");
+        result = await cabinetQuery(stationId);
         break;
       case "sync_status":
         result = await cabinetQuery(stationId);
@@ -67,7 +121,7 @@ Deno.serve(async (req) => {
         result = await eventPushConfig(eventPushUrl);
         break;
       case "eject_by_repair": // ⚠️ DANGEROUS
-        result = await ejectByRepair(stationId, Number(slotNum));
+        result = await ejectByRepairWithOneTimePermit(stationId, Number(slotNum));
         break;
       case "operation_pop": // ⚠️ DANGEROUS
         result = await operationPop(stationId, Number(slotNum));
@@ -83,7 +137,7 @@ Deno.serve(async (req) => {
     });
     await db.from("maintenance_actions").insert({
       station_id: stationId, action_type: actionType,
-      params: { slotNum, eventPushUrl }, result: result.data ?? { error: result.error }, performed_by: adminId,
+      params: { slotNum, eventPushUrl, ...(oneTimePermit ? { oneTimePermitId: oneTimePermit.id } : {}) }, result: result.data ?? { error: result.error }, performed_by: adminId,
     });
 
     return new Response(JSON.stringify({ ok: result.ok, result: result.data, error: result.error }), {

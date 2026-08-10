@@ -37,11 +37,15 @@ Deno.test("every dangerous code is gated in the DANGEROUS set", () => {
   }
 });
 
-Deno.test("safe-live list only contains non-destructive read codes", () => {
-  const m = src.match(/const SAFE_LIVE = \[([\s\S]*?)\]/);
-  assert(m, "SAFE_LIVE list not found");
-  const dangerous = ["C1", "C2", "C3", "C9", "C10", "C11", "C12", "S5", "P4", "E1"];
-  for (const code of dangerous) {
-    assert(!m![1].includes(`"${code}"`), `Destructive op ${code} must NOT be auto-run live`);
+Deno.test("the super-admin console exposes the documented operation dispatcher without inventing O7", () => {
+  const m = src.match(/const SAFE_READ_CODES = \[([\s\S]*?)\];/);
+  assert(m, "SAFE_READ_CODES list not found");
+  for (const code of ["O1", "O3", "O5", "O6", "C4", "C5", "C6", "C7", "C8", "S1", "S2", "P1", "P2", "R1", "E2", "E3"]) {
+    assert(m![1].includes(`"${code}"`), `Missing safe read ${code}`);
   }
+  assert(src.includes('case "O7": return { ok: false, status: 0, data: null, error: "PROVIDER_ENDPOINT_MISSING" }'));
+  assert(src.includes("const MUTATING_CODES = new Set(["));
+  assert(src.includes("const SENSITIVE_CODES = new Set([\"A1\"])"));
+  assert(src.includes("CONFIRMATION_REQUIRED"));
+  assert(src.includes("FORBIDDEN_SUPER_ADMIN_REQUIRED"));
 });

@@ -1,23 +1,57 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, RefreshCw, Lock, LogOut, KeyRound, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { forceSetStation } from "@/lib/kioskLock";
+import { readKioskToken } from "@/lib/kioskFetch";
 
 const KIOSK_TOKEN_KEY = "kiosk_token";
 
-function readToken(): string {
+function maskToken(t: string): string {
+  if (!t) return "aucun token enregistré";
+  // A diagnostics screen must never reveal a reusable credential, even in
+  // shortened form. Presence and length are enough to diagnose provisioning.
+  return `présent (${t.length} car.)`;
+}
+
+type NativeIntegrationStatus = {
+  cabinet?: { protocol?: string; commandMode?: string };
+  vendorCompatibility?: {
+    state?: string;
+    installed?: boolean;
+    enabled?: boolean;
+    versionName?: string;
+    publicBridgeStatus?: string;
+    canReuseVendorConnection?: boolean;
+  };
+  physicalEjectionEnabled?: boolean;
+};
+
+type NativeWindow = Window & {
+  ChargeursNative?: { getHardwareIntegrationStatus?: () => string };
+};
+
+function nativeIntegrationStatus(): NativeIntegrationStatus | null {
   try {
-    return localStorage.getItem(KIOSK_TOKEN_KEY) ?? "";
+    const native = (window as NativeWindow).ChargeursNative;
+    const raw = native?.getHardwareIntegrationStatus?.();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as NativeIntegrationStatus;
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
-    return "";
+    return null;
   }
 }
 
-function maskToken(t: string): string {
-  if (!t) return "aucun token enregistré";
-  const head = t.slice(0, 10);
-  return `${head}… (${t.length} car.)`;
+function vendorStateLabel(state?: string): string {
+  switch (state) {
+    case "VENDOR_APP_NOT_INSTALLED": return "application fournisseur absente";
+    case "VENDOR_APP_DISABLED": return "application fournisseur désactivée";
+    case "VENDOR_APP_PRESENT_NO_LAUNCHER": return "application fournisseur sans lanceur";
+    case "VENDOR_APP_PRESENT_NO_PUBLIC_BRIDGE": return "application fournisseur détectée — aucun pont public";
+    case "VENDOR_APP_STATUS_UNAVAILABLE": return "état fournisseur indisponible";
+    default: return "non vérifiable depuis ce navigateur";
+  }
 }
 
 type Props = {
@@ -27,8 +61,15 @@ type Props = {
   net: "online" | "offline";
   chargenowConfigured: boolean | null;
   stationOnline: boolean | null;
+  stationStatus: string | null;
   swUrl: string | null;
   needRefresh: boolean;
+  lastFailure?: {
+    code: string;
+    correlationId?: string;
+    sessionId?: string;
+    step: string;
+  } | null;
   onApplyUpdate: () => void;
   onClose: () => void;
 };
@@ -44,11 +85,20 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: "ok"
 }
 
 export function KioskDiagnostics(props: Props) {
-  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, swUrl, needRefresh, onApplyUpdate, onClose } = props;
+  const { stationId, lockedStation, lastSync, net, chargenowConfigured, stationOnline, stationStatus, swUrl, needRefresh, lastFailure, onApplyUpdate, onClose } = props;
   const [relocked, setRelocked] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
-  const [savedToken, setSavedToken] = useState(readToken());
+  const [savedToken, setSavedToken] = useState(() => readKioskToken() ?? "");
   const [tokenSaved, setTokenSaved] = useState(false);
+  const [nativeIntegration, setNativeIntegration] = useState<NativeIntegrationStatus | null>(null);
+
+  const nativeWrapper = Boolean((window as NativeWindow).ChargeursNative);
+
+  useEffect(() => {
+    // Reading a metadata-only bridge state is safe and lets operators see why
+    // a vendor APK cannot be used as a hardware SDK by this independent app.
+    setNativeIntegration(nativeIntegrationStatus());
+  }, []);
 
   const tokenReady = savedToken.length >= 24;
   const chargenowValue = !tokenReady
@@ -114,11 +164,29 @@ export function KioskDiagnostics(props: Props) {
         <Row label="Dernière synchro" value={lastSync ? new Date(lastSync).toLocaleString("fr-CH") : "—"} />
         <Row label="Réseau Internet" value={net === "online" ? "connecté" : "indisponible"} tone={net === "online" ? "ok" : "bad"} />
         <Row label="API ChargeNow" value={chargenowValue} tone={chargenowTone} />
-        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationOnline === false ? "bad" : "warn"} />
+        <Row label="Borne physique" value={!tokenReady ? "activation requise" : stationOnline == null ? "—" : stationOnline ? "en ligne" : stationStatus === "unknown" ? "statut fournisseur à vérifier" : "hors ligne"} tone={!tokenReady ? "warn" : stationOnline ? "ok" : stationStatus === "unknown" ? "warn" : stationOnline === false ? "bad" : "warn"} />
+        {nativeIntegration && (
+          <>
+            <Row
+              label="App fournisseur"
+              value={vendorStateLabel(nativeIntegration.vendorCompatibility?.state)}
+              tone={nativeIntegration.vendorCompatibility?.installed ? "warn" : "bad"}
+            />
+            <Row
+              label="Pont matériel local"
+              value={nativeIntegration.cabinet?.protocol ?? "non disponible"}
+              tone={nativeIntegration.cabinet?.protocol === "NOT_CONFIGURED" ? "warn" : "ok"}
+            />
+          </>
+        )}
         <Row label="Stripe" value="vérifié côté serveur au paiement" />
         <Row label="Token kiosk" value={maskToken(savedToken)} tone={tokenReady ? "ok" : "bad"} />
+        <Row label="Dernière étape" value={lastFailure?.step ?? "—"} tone={lastFailure ? "bad" : undefined} />
+        <Row label="Dernier code" value={lastFailure?.code ?? "—"} tone={lastFailure ? "bad" : undefined} />
+        <Row label="Corrélation" value={lastFailure?.correlationId ?? "—"} />
+        <Row label="Session location" value={lastFailure?.sessionId ?? "—"} />
 
-        <div className="mt-5 rounded-2xl border border-border/40 p-4">
+        {!nativeWrapper && <div className="mt-5 rounded-2xl border border-border/40 p-4">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
             <KeyRound className="h-4 w-4" />
             {savedToken ? "Remplacer le token kiosk" : "Enregistrer le token kiosk"}
@@ -142,7 +210,13 @@ export function KioskDiagnostics(props: Props) {
           >
             {tokenSaved ? <><Check className="h-4 w-4" />Token enregistré ✓</> : <><KeyRound className="h-4 w-4" />Enregistrer le token</>}
           </Button>
-        </div>
+        </div>}
+
+        {nativeIntegration?.vendorCompatibility?.installed && (
+          <p className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-3 text-xs leading-relaxed text-muted-foreground">
+            L’APK fournisseur peut être installée sur cette tablette, mais Android ne permet pas à Chargeurs.ch de réutiliser sa connexion série, ses fichiers privés ou son service interne sans SDK/contrat fournisseur public. Le cloud ChargeNow reste appelé uniquement par le backend sécurisé.
+          </p>
+        )}
 
         <div className="mt-5 flex flex-col gap-2">
           {needRefresh && (

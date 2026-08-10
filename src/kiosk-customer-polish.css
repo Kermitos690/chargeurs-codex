@@ -1,0 +1,50 @@
+/* Customer-facing kiosk polish. Kept separate from operational layout rules so
+   marketing/UI iteration cannot change station or payment logic. */
+
+/* The BLUE/GREEN entry screen must read clearly from a standing distance. */
+.kiosk-root main section > .mb-7 h1 {
+  font-size: clamp(3.8rem, 6.5vw, 7rem) !important;
+  line-height: .9 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 950 !important;
+  text-wrap: balance;
+}
+.kiosk-root main section > .mb-7 p {
+  margin-top: 1.25rem !important;
+  font-size: clamp(1.45rem, 2.2vw, 2.25rem) !important;
+  line-height: 1.18 !important;
+  font-weight: 650 !important;
+}
+.kiosk-root main button[class*="bg-blue-500/10"],
+.kiosk-root main button[class*="bg-emerald-500/10"] {
+  min-height: 26rem !important;
+  padding: 2.5rem !important;
+}
+.kiosk-root main button[class*="bg-blue-500/10"] h2,
+.kiosk-root main button[class*="bg-emerald-500/10"] h2 {
+  font-size: clamp(3rem, 4.5vw, 5.25rem) !important;
+  line-height: .95 !important;
+  letter-spacing: -.045em !important;
+  font-weight: 950 !important;
+}
+
+/* Payment brands are visual marks, not tiny generic pills. */
+.kiosk-qr-stage [aria-label*="TWINT"] > span {
+  min-width: 9.5rem;
+  min-height: 4rem;
+}
+
+/* Do not expose implementation language around Stripe on the public cabinet.
+   Stripe still processes the payment; the cabinet focuses on customer choices. */
+.kiosk-qr-stage > div:first-child > div.mt-9 > p {
+  display: none !important;
+}
+.kiosk-qr-stage > div:last-child > div.mt-6 > span:first-child {
+  display: none !important;
+}
+
+.kiosk-global-help {
+  min-height: 3.25rem !important;
+  min-width: 7.75rem !important;
+  font-size: 1.15rem !important;
+}

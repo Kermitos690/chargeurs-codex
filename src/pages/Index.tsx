@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import { stationConnectionLabel, stationConnectionState } from "@/lib/stationConnection";
 import { supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { PublicNav } from "@/components/public/PublicNav";
@@ -13,6 +14,7 @@ import {
   Undo2, CreditCard, Smartphone, Apple, MapPin, Mail, HelpCircle, Clock3, Building2,
 } from "lucide-react";
 import { formatChf, PUBLIC_PRICING } from "@/lib/publicPricing";
+import { publicStationPath } from "./public/publicStationData";
 
 const STEPS = [
   { icon: MapPin, title: "Trouvez une borne", text: "Repérez une borne Chargeurs.ch dans un bar, restaurant, hôtel ou lieu partenaire." },
@@ -26,12 +28,6 @@ const PAYMENTS = [
   { icon: CreditCard, label: "Carte bancaire" },
   { icon: Apple, label: "Apple Pay" },
   { icon: Zap, label: "Google Pay" },
-];
-
-const DEMO_STATIONS = [
-  { station_id: "DTA21269", name: "Borne de démonstration 1", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
-  { station_id: "DTA21277", name: "Borne de démonstration 2", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
-  { station_id: "DTA22032", name: "Borne de démonstration 3", location_name: "Zone de test Chargeurs.ch", online: false, demo: true },
 ];
 
 const FAQ = [
@@ -49,16 +45,18 @@ function Section({ id, children, className = "" }: { id: string; children: React
 export default function Index() {
   const [stations, setStations] = useState<any[]>([]);
   const [loadingStations, setLoadingStations] = useState(true);
+  const [stationsError, setStationsError] = useState(false);
   const [searchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
 
   useEffect(() => {
     supabase
       .from("stations")
-      .select("station_id, name, location_name, online")
+      .select("station_id, name, location_name, online, status")
       .order("station_id")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         setStations(data ?? []);
+        setStationsError(Boolean(error));
         setLoadingStations(false);
       });
   }, []);
@@ -71,7 +69,7 @@ export default function Index() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [requestedSection]);
 
-  const visibleStations = useMemo(() => stations.length ? stations : DEMO_STATIONS, [stations]);
+  const visibleStations = useMemo(() => stations, [stations]);
 
   return (
     <div className="relative min-h-screen">
@@ -97,22 +95,25 @@ export default function Index() {
 
         <Section id="bornes">
           <h2 className="font-display text-3xl font-bold sm:text-4xl">Bornes Chargeurs.ch</h2>
-          <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes connectées apparaissent automatiquement. Les trois équipements ci-dessous restent affichés en démonstration lorsqu'ils sont hors ligne.</p>
+          <p className="mt-2 max-w-3xl text-muted-foreground">Les bornes publiées et connectées apparaissent automatiquement à partir des données de la plateforme.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleStations.map((station) => (
-              <Link key={station.station_id} to={`/kiosk/${station.station_id}`} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
+            {visibleStations.map((station) => {
+              const connection = stationConnectionState(station);
+              return <Link key={station.station_id} to={publicStationPath(station.station_id)} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
                 <div className="flex items-start justify-between gap-3">
                   <MonitorSmartphone className="h-7 w-7 text-primary" />
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${station.online ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{station.online ? "Disponible" : station.demo ? "Démonstration" : "Hors ligne"}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${connection === "online" ? "bg-success/15 text-success" : connection === "unknown" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>{connection === "online" ? "Disponible" : stationConnectionLabel(station)}</span>
                 </div>
                 <div className="mt-4 font-mono text-xs text-muted-foreground">{station.station_id}</div>
                 <div className="text-lg font-bold">{station.name}</div>
                 {station.location_name && <div className="text-sm text-muted-foreground">{station.location_name}</div>}
-                <div className="mt-4 inline-flex items-center gap-1 text-sm text-primary">Ouvrir le kiosque <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></div>
+                <div className="mt-4 inline-flex items-center gap-1 text-sm text-primary">Voir la borne <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></div>
               </Link>
-            ))}
+            })}
           </div>
           {loadingStations && <p className="mt-4 text-sm text-muted-foreground">Synchronisation de l'état des bornes…</p>}
+          {!loadingStations && stationsError && <p className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">La disponibilité des bornes est momentanément indisponible. Aucune donnée de démonstration n’est affichée.</p>}
+          {!loadingStations && !stationsError && visibleStations.length === 0 && <p className="mt-4 rounded-2xl border border-border bg-card/70 p-4 text-sm text-muted-foreground">Aucune borne publique n’est actuellement publiée. Revenez prochainement ou contactez le support.</p>}
         </Section>
 
         <Section id="comment">
@@ -169,7 +170,7 @@ export default function Index() {
       <footer className="mx-auto w-full max-w-6xl px-6 py-10 sm:px-10">
         <div className="flex flex-col items-center justify-between gap-4 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row">
           <span>© {new Date().getFullYear()} Chargeurs.ch · Location de powerbanks en Suisse romande</span>
-          <div className="flex gap-4"><Link to="/partenaires">Partenaires</Link><Link to="/support">Support</Link><Link to="/admin" className="text-muted-foreground/70">Administration</Link></div>
+          <div className="flex flex-wrap justify-center gap-4"><Link to="/partenaires">Partenaires</Link><Link to="/support">Support</Link><Link to="/legal/conditions">Conditions</Link><Link to="/legal/confidentialite">Confidentialité</Link><Link to="/legal/mentions-legales">Mentions légales</Link><Link to="/admin" className="text-muted-foreground/70">Administration</Link></div>
         </div>
       </footer>
     </div>

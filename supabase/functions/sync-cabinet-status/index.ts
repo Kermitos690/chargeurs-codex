@@ -1,36 +1,111 @@
 // sync-cabinet-status — pulls REAL cabinet/slot/battery state from ChargeNow
-// and updates the database. No mock data: if the API is not configured or a
-// station is unreachable, the station is marked unknown/offline.
+// and updates the database. No mock data. Supplier business states are kept
+// distinct from transport reachability so a "temporarily unavailable" cabinet
+// is never mislabeled as physically offline.
 //
 // Authorization:
 // - admins may synchronize one station or all stations;
 // - a provisioned kiosk may synchronize only the station bound to its token.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, logApi, requireAdmin, verifyKioskDevice } from "../_shared/db.ts";
-import { cabinetQuery, isChargeNowConfigured } from "../_shared/chargenow.ts";
+import {
+  cabinetQuery,
+  isChargeNowConfigured,
+  type ApiResult,
+} from "../_shared/chargenow.ts";
+import {
+  parseChargeNowCabinetStatus,
+  type ParsedCabinetStatus,
+} from "../_shared/chargenowStatus.ts";
 
-// Typed (tolerant) view of the documented ChargeNow "Get Device Info" payload.
-interface CabinetInfo {
-  online?: boolean; onlineStatus?: number; status?: string;
-  slots?: number; slotNum?: number; totalSlots?: number; emptySlots?: number;
-  signal?: number; signalStrength?: number;
-}
-interface BatteryInfo {
-  slotNum?: number; slot?: number; slotId?: number;
-  batteryId?: string; sn?: string; bid?: string;
-  vol?: number; batteryCapacity?: number; power?: number; electricity?: number;
-}
-interface CabinetPayload {
-  cabinet?: CabinetInfo; batteries?: BatteryInfo[]; slots?: BatteryInfo[]; data?: CabinetPayload;
-}
+const functionCorsHeaders = {
+  ...corsHeaders,
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-supabase-api-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  headers: { ...functionCorsHeaders, "Content-Type": "application/json" },
 });
 
+type ProviderAttempt = {
+  transport: "primary_get";
+  endpoint: string;
+  result: ApiResult;
+  parsed: ParsedCabinetStatus | null;
+};
+
+type KnownBusinessState =
+  | { kind: "offline"; error: "CHARGENOW_DEVICE_OFFLINE" }
+  | { kind: "online_unavailable"; error: "CHARGENOW_ALL_CHARGERS_RECHARGING" }
+  | null;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function businessCode(data: unknown): string | number | null {
+  if (!isRecord(data) || data.code === undefined || data.code === null) return null;
+  return typeof data.code === "number" || typeof data.code === "string" ? data.code : null;
+}
+
+function normalizedBusinessCode(data: unknown): string {
+  return String(businessCode(data) ?? "").trim();
+}
+
+function knownBusinessState(attempts: ProviderAttempt[]): KnownBusinessState {
+  const latest = attempts.at(-1);
+  if (!latest || latest.result.status < 200 || latest.result.status >= 300) return null;
+  const code = normalizedBusinessCode(latest.result.data);
+  if (code === "2005") return { kind: "offline", error: "CHARGENOW_DEVICE_OFFLINE" };
+  if (code === "2009") return { kind: "online_unavailable", error: "CHARGENOW_ALL_CHARGERS_RECHARGING" };
+  return null;
+}
+
+// Some ChargeNow deployments serialize the documented business code 0 as "0".
+function isEffectiveSuccess(result: ApiResult): boolean {
+  if (result.ok) return true;
+  return result.status >= 200 && result.status < 300 && normalizedBusinessCode(result.data) === "0";
+}
+
+function usableAttempt(attempt: ProviderAttempt): boolean {
+  return isEffectiveSuccess(attempt.result) && Boolean(attempt.parsed?.recognized);
+}
+
+function sanitizedAttempt(attempt: ProviderAttempt) {
+  return {
+    transport: attempt.transport,
+    status: attempt.result.status,
+    businessCode: businessCode(attempt.result.data),
+    recognized: attempt.parsed?.recognized ?? false,
+    error: attempt.result.error,
+  };
+}
+
+function stableProviderError(attempts: ProviderAttempt[]): string {
+  const known = knownBusinessState(attempts);
+  if (known) return known.error;
+  if (attempts.some((attempt) => [401, 403].includes(attempt.result.status))) return "CHARGENOW_AUTH_REJECTED";
+  if (attempts.some((attempt) => attempt.result.status === 404)) return "CHARGENOW_DEVICE_NOT_FOUND";
+  if (attempts.some((attempt) => isEffectiveSuccess(attempt.result) && !attempt.parsed?.recognized)) {
+    return "CHARGENOW_RESPONSE_UNRECOGNIZED";
+  }
+  return attempts.at(-1)?.result.error ?? "CHARGENOW_UNREACHABLE";
+}
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    const requestedHeaders = req.headers.get("Access-Control-Request-Headers")?.trim();
+    return new Response("ok", {
+      headers: {
+        ...functionCorsHeaders,
+        ...(requestedHeaders ? { "Access-Control-Allow-Headers": requestedHeaders } : {}),
+      },
+    });
+  }
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   const db = adminClient();
@@ -41,8 +116,6 @@ Deno.serve(async (req) => {
 
     const adminId = await requireAdmin(req, db);
     if (!adminId) {
-      // Kiosks are fail-closed and station-bound. A kiosk can never request the
-      // all-stations branch and cannot impersonate another cabinet.
       if (!stationId) return json({ ok: false, error: "KIOSK_STATION_REQUIRED" }, 400);
       const auth = await verifyKioskDevice(req, db, stationId);
       if (!auth.ok) return json({ ok: false, error: auth.error }, auth.status);
@@ -66,87 +139,153 @@ Deno.serve(async (req) => {
 
     for (const st of stations ?? []) {
       const deviceId = (st.cabinet_id as string) || (st.station_id as string);
-      const res = await cabinetQuery(deviceId);
+      const attempts: ProviderAttempt[] = [];
+
+      const primaryResult = await cabinetQuery(deviceId);
+      const primaryAttempt: ProviderAttempt = {
+        transport: "primary_get",
+        endpoint: "/rent/cabinet/query",
+        result: primaryResult,
+        parsed: primaryResult.data == null ? null : parseChargeNowCabinetStatus(primaryResult.data),
+      };
+      attempts.push(primaryAttempt);
       await logApi(db, {
-        service: "chargenow", endpoint: "/rent/cabinet/query", method: "GET",
-        status_code: res.status, request: { deviceId }, response: res.data, error: res.error,
+        service: "chargenow", endpoint: primaryAttempt.endpoint, method: "GET",
+        status_code: primaryResult.status, request: { deviceId }, response: primaryResult.data, error: primaryResult.error,
       });
 
-      if (!res.ok || !res.data) {
+      const chosen = attempts.find(usableAttempt);
+      const providerReachable = attempts.some((attempt) => attempt.result.status > 0);
+
+      if (!chosen?.parsed) {
+        const observedAt = new Date().toISOString();
+        const known = knownBusinessState(attempts);
+        const error = stableProviderError(attempts);
+
+        if (known?.kind === "offline") {
+          await db.from("stations").update({
+            status: "offline",
+            online: false,
+            provider_last_error_at: observedAt,
+            provider_last_error: error,
+          }).eq("station_id", st.station_id);
+          results.push({
+            stationId: st.station_id, ok: false, configured: true,
+            providerReachable, stateKnown: true, online: false, status: "offline",
+            availability: "offline", error, attempts: attempts.map(sanitizedAttempt), observedAt,
+          });
+          continue;
+        }
+
+        if (known?.kind === "online_unavailable") {
+          await db.from("stations").update({
+            status: "online",
+            online: true,
+            rentable_count: 0,
+            provider_last_error_at: observedAt,
+            provider_last_error: error,
+          }).eq("station_id", st.station_id);
+          results.push({
+            stationId: st.station_id, ok: true, configured: true,
+            providerReachable: true, stateKnown: true, online: true, status: "online",
+            availability: "recharging", rentableCount: 0,
+            error, attempts: attempts.map(sanitizedAttempt), observedAt,
+          });
+          continue;
+        }
+
+        // Unknown supplier/transport failure: do NOT assert physical offline.
+        // Keep the last confirmed inventory snapshot and expose online=null.
         await db.from("stations").update({
-          status: "unknown", online: false, last_sync_at: new Date().toISOString(),
+          status: "unknown",
+          online: null,
+          provider_last_error_at: observedAt,
+          provider_last_error: error,
         }).eq("station_id", st.station_id);
-        results.push({ stationId: st.station_id, ok: false, error: res.error ?? "CHARGENOW_UNREACHABLE" });
+        results.push({
+          stationId: st.station_id, ok: false, configured: true,
+          providerReachable, stateKnown: false, online: null, status: "unknown",
+          error, attempts: attempts.map(sanitizedAttempt), observedAt,
+        });
         continue;
       }
 
-      // Tolerant parsing of the documented response shape.
-      const d = (res.data ?? {}) as CabinetPayload;
-      const payload = (d.data ?? d) as CabinetPayload;
-      // Documented response shape (Apifox "1.Get Device Info" — GET /rent/cabinet/query):
-      //   data.cabinet  : { online, slots (total), emptySlots, busySlots, signal, qrCode, id, shopId, ... }
-      //   data.batteries: [{ slotNum, vol, batteryId }]  (batteries currently present & rentable)
-      //   data.priceStrategy / data.shop
-      const cab = (payload.cabinet ?? payload) as CabinetInfo;
-      const online = cab.online === true || cab.onlineStatus === 1 || cab.status === "online";
-
-      // Batteries available to rent come from data.batteries[].
-      const batteries: BatteryInfo[] = Array.isArray(payload.batteries)
-        ? payload.batteries
-        : (Array.isArray(payload.slots) ? payload.slots : []).filter(
-            (s: BatteryInfo) => s.batteryId || s.sn || s.bid,
-          );
-
-      // total = number of physical slots; emptySlots = returnable capacity.
-      const total = Number(cab.slots ?? cab.slotNum ?? cab.totalSlots ?? 0);
-      const rentable = batteries.length;
-      const returnable = Number(cab.emptySlots ?? (total ? total - batteries.length : 0));
+      const parsed = chosen.parsed;
       const syncedAt = new Date().toISOString();
+      const status = parsed.online === true ? "online" : parsed.online === false ? "offline" : "unknown";
+      const online = parsed.online;
+      const total = parsed.totalCount ?? 0;
+      const rentable = parsed.rentableCount;
+      const returnable = parsed.returnableCount ?? 0;
 
       await db.from("stations").update({
-        status: online ? "online" : "offline",
+        status,
         online,
-        signal: cab.signal ?? cab.signalStrength ?? null,
+        provider_shop_id: parsed.providerShopId ?? undefined,
+        location_name: parsed.providerShopAddress ?? parsed.providerShopName ?? undefined,
+        signal: parsed.signal,
         rentable_count: rentable,
         returnable_count: returnable,
         total_count: total,
         last_sync_at: syncedAt,
-        raw_data: payload,
+        provider_last_success_at: syncedAt,
+        provider_last_error_at: null,
+        provider_last_error: null,
+        raw_data: parsed.payload,
       }).eq("station_id", st.station_id);
 
-      // Upsert one slot row per battery currently present.
-      for (const b of batteries) {
-        const slotNum = b.slotNum ?? b.slot ?? b.slotId;
-        if (slotNum == null) continue;
-        const bid = b.batteryId ?? b.sn ?? b.bid ?? null;
+      const observedSlots = new Set<number>();
+      for (const battery of parsed.batteries) {
+        if (battery.slotNum == null || !battery.batteryId) continue;
+        observedSlots.add(battery.slotNum);
         await db.from("slots").upsert({
           station_id: st.station_id,
-          slot_num: Number(slotNum),
-          status: bid ? "occupied" : "empty",
-          battery_id: bid,
-          raw_data: b,
+          slot_num: battery.slotNum,
+          status: "occupied",
+          battery_id: battery.batteryId,
+          raw_data: battery.raw,
         }, { onConflict: "station_id,slot_num" });
+        await db.from("batteries").upsert({
+          battery_id: battery.batteryId,
+          station_id: st.station_id,
+          slot_num: battery.slotNum,
+          status: "in_station",
+          power_level: battery.powerLevel,
+          raw_data: battery.raw,
+        }, { onConflict: "battery_id" });
+      }
 
-        if (bid) {
-          await db.from("batteries").upsert({
-            battery_id: bid,
-            station_id: st.station_id,
-            slot_num: Number(slotNum),
-            status: "in_station",
-            // "vol" is the documented battery voltage/charge field.
-            power_level: b.vol ?? b.batteryCapacity ?? b.power ?? b.electricity ?? null,
-            raw_data: b,
-          }, { onConflict: "battery_id" });
+      const { data: previousSlots } = await db
+        .from("slots")
+        .select("slot_num, battery_id")
+        .eq("station_id", st.station_id);
+      for (const previous of previousSlots ?? []) {
+        if (observedSlots.has(previous.slot_num)) continue;
+        await db.from("slots")
+          .update({ status: "available", battery_id: null, raw_data: null })
+          .eq("station_id", st.station_id)
+          .eq("slot_num", previous.slot_num);
+        if (previous.battery_id) {
+          await db.from("batteries")
+            .update({ station_id: null, slot_num: null, status: "unknown" })
+            .eq("battery_id", previous.battery_id);
         }
       }
 
       results.push({
         stationId: st.station_id,
         ok: true,
-        online,
+        configured: true,
+        providerReachable: true,
+        stateKnown: parsed.online !== null,
+        online: parsed.online,
+        status,
         rentableCount: rentable,
         returnableCount: returnable,
         totalCount: total,
+        signal: parsed.signal,
+        transport: chosen.transport,
+        attempts: attempts.map(sanitizedAttempt),
         syncedAt,
       });
     }

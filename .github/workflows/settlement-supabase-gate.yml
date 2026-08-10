@@ -1,0 +1,115 @@
+name: Chargeurs.ch Settlement Supabase Gate
+
+# Cost control: this workflow is manual only. Dry-run is the default.
+on:
+  workflow_dispatch:
+    inputs:
+      project_ref:
+        description: "Dedicated non-production Supabase project ref"
+        required: true
+        default: ""
+        type: string
+      apply_migrations:
+        description: "Apply pending migrations after reviewing the dry-run"
+        required: true
+        default: false
+        type: boolean
+      deploy_functions:
+        description: "Deploy the reviewed rental lifecycle Edge Functions"
+        required: true
+        default: false
+        type: boolean
+      confirmation:
+        description: "Required for writes: APPLY_CHARGEURS_SETTLEMENT_STAGING"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargeurs-settlement-supabase-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: settlement-staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ inputs.project_ref }}
+      PRODUCTION_SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
+      HISTORICAL_AMBIGUOUS_PROJECT_REF: zoybkzkvvsbnqqarlaii
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: supabase/setup-cli@v2
+        with:
+          version: 2.101.0
+
+      - name: Validate staging identity and write intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SUPABASE_PROJECT_REF PRODUCTION_SUPABASE_PROJECT_REF; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing encrypted configuration: ${missing[*]}" >&2
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$PRODUCTION_SUPABASE_PROJECT_REF" ]; then
+            echo "Production project refused." >&2
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$HISTORICAL_AMBIGUOUS_PROJECT_REF" ]; then
+            echo "Historical ambiguous project refused." >&2
+            exit 1
+          fi
+          if { [ "${{ inputs.apply_migrations }}" = "true" ] || [ "${{ inputs.deploy_functions }}" = "true" ]; } \
+             && [ "${{ inputs.confirmation }}" != "APPLY_CHARGEURS_SETTLEMENT_STAGING" ]; then
+            echo "Exact confirmation phrase required for writes." >&2
+            exit 1
+          fi
+
+      - name: Link selected staging project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Inspect and dry-run pending migrations
+        run: |
+          set -euo pipefail
+          supabase migration list --linked --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all --dry-run
+
+      - name: Apply migrations after explicit confirmation
+        if: inputs.apply_migrations == true
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --include-all --yes
+
+      - name: Verify required migrations and lint schema
+        if: inputs.apply_migrations == true
+        run: |
+          set -euo pipefail
+          supabase migration list --linked --password "$SUPABASE_DB_PASSWORD" | tee /tmp/migrations.txt
+          grep -q "20260715033000" /tmp/migrations.txt
+          grep -q "20260715170500" /tmp/migrations.txt
+          grep -q "20260715041000" /tmp/migrations.txt
+          grep -q "20260715042000" /tmp/migrations.txt
+          grep -q "20260715210000" /tmp/migrations.txt
+          supabase db lint --linked --schema public --level error --fail-on error
+
+      - name: Deploy reviewed Edge Functions
+        if: inputs.deploy_functions == true
+        run: |
+          set -euo pipefail
+          for function_name in \
+            create-stripe-checkout \
+            stripe-webhook \
+            eject-after-payment \
+            chargenow-rent-callback \
+            settle-rental-payment; do
+            supabase functions deploy "$function_name" --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          done

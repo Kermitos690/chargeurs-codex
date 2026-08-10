@@ -870,6 +870,7 @@ export type Database = {
           shop_id: string | null
           started_at: string | null
           state: string
+          state_version: number
           station_id: string
           stripe_checkout_session_id: string | null
           stripe_customer_id: string | null
@@ -916,6 +917,7 @@ export type Database = {
           shop_id?: string | null
           started_at?: string | null
           state?: string
+          state_version?: number
           station_id: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
@@ -962,6 +964,7 @@ export type Database = {
           shop_id?: string | null
           started_at?: string | null
           state?: string
+          state_version?: number
           station_id?: string
           stripe_checkout_session_id?: string | null
           stripe_customer_id?: string | null
@@ -1077,6 +1080,9 @@ export type Database = {
           online: boolean | null
           partner_id: string | null
           price_per_period: number | null
+          provider_last_error: string | null
+          provider_last_error_at: string | null
+          provider_last_success_at: string | null
           raw_data: Json | null
           rentable_count: number | null
           returnable_count: number | null
@@ -1098,6 +1104,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
@@ -1119,6 +1128,9 @@ export type Database = {
           online?: boolean | null
           partner_id?: string | null
           price_per_period?: number | null
+          provider_last_error?: string | null
+          provider_last_error_at?: string | null
+          provider_last_success_at?: string | null
           raw_data?: Json | null
           rentable_count?: number | null
           returnable_count?: number | null
@@ -1433,6 +1445,20 @@ export type Database = {
         Args: { p_code: string; p_id: string }
         Returns: Json
       }
+      create_reserved_kiosk_rental_session: {
+        Args: { p_session: Json }
+        Returns: Database["public"]["Tables"]["rental_sessions"]["Row"]
+      }
+      transition_rental_session: {
+        Args: {
+          p_session_id: string
+          p_expected_state_version: number
+          p_target_state: string
+          p_event_id: string
+          p_metadata?: Json
+        }
+        Returns: Database["public"]["Tables"]["rental_sessions"]["Row"]
+      }
       resolve_price_profile: {
         Args: { p_device: string; p_shop: string; p_station: string }
         Returns: {
@@ -1451,6 +1477,29 @@ export type Database = {
         | "super_admin"
         | "customer"
         | "kiosk_device"
+        | "platform_admin"
+        | "support_manager"
+        | "maintenance_manager"
+        | "powerbank_manager"
+        | "mifi_manager"
+        | "advertising_manager"
+        | "reports_analyst"
+        | "franchise_owner"
+        | "franchise_admin"
+        | "franchise_staff"
+        | "agency_owner"
+        | "agency_admin"
+        | "agency_staff"
+        | "venue_manager"
+        | "venue_staff"
+        | "vip_customer"
+        | "operations_admin"
+        | "finance_admin"
+        | "support_agent"
+        | "maintenance_technician"
+        | "partner_owner"
+        | "partner_staff"
+        | "api_client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1587,6 +1636,29 @@ export const Constants = {
         "super_admin",
         "customer",
         "kiosk_device",
+        "platform_admin",
+        "support_manager",
+        "maintenance_manager",
+        "powerbank_manager",
+        "mifi_manager",
+        "advertising_manager",
+        "reports_analyst",
+        "franchise_owner",
+        "franchise_admin",
+        "franchise_staff",
+        "agency_owner",
+        "agency_admin",
+        "agency_staff",
+        "venue_manager",
+        "venue_staff",
+        "vip_customer",
+        "operations_admin",
+        "finance_admin",
+        "support_agent",
+        "maintenance_technician",
+        "partner_owner",
+        "partner_staff",
+        "api_client",
       ],
     },
   },

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Chargeurs.ch Kiosk</string>
+    <string name="brand_name">⚡  Chargeurs.ch</string>
+    <string name="splash_connecting">⚡  Chargeurs.ch\n\nConnexion sécurisée à votre borne…</string>
+    <string name="provision_title">Activation de la borne</string>
+    <string name="provision_help">Créez un code numérique temporaire à six chiffres dans le back-office, puis saisissez-le ici. La borne et son identité sont attribuées par le serveur.</string>
+    <string name="secure_storage_checking">Vérification du stockage sécurisé de la tablette…</string>
+    <string name="secure_storage_ready">Stockage sécurisé prêt.</string>
+    <string name="secure_storage_repaired">Stockage sécurisé réparé. Vous pouvez saisir un nouveau code.</string>
+    <string name="secure_storage_unavailable">Activation bloquée : stockage sécurisé indisponible (%1$s). Ouvrez Diagnostics avant d’utiliser un code.</string>
+    <string name="secure_storage_must_be_ready">Le stockage sécurisé doit être prêt avant d’utiliser un code d’activation.</string>
+    <string name="pairing_code">Code d’appairage temporaire à six chiffres</string>
+    <string name="invalid_pairing_code">Saisissez exactement six chiffres.</string>
+    <string name="enrollment_not_configured">L’URL d’appairage n’est pas configurée dans cette version de l’APK.</string>
+    <string name="enrollment_failed">L’appairage a échoué. Vérifiez le code, sa date d’expiration et la connexion Internet.</string>
+    <string name="enrollment_in_progress">Appairage en cours…</string>
+    <string name="activate">Activer</string>
+    <string name="reprovision_warning">Le code expire et ne peut être utilisé qu’une fois. Après activation, un changement de borne exige une révocation côté back-office et un nouveau code.</string>
+    <string name="diagnostics_title">Diagnostic du terminal</string>
+    <string name="diagnostics_close">Fermer</string>
+    <string name="network_unavailable">Connexion Internet indisponible</string>
+    <string name="download_blocked">Téléchargement bloqué en mode kiosk.</string>
+    <string name="navigation_blocked_title">Navigation bloquée</string>
+    <string name="navigation_blocked_message">Le kiosk a refusé une page hors du domaine autorisé ou une connexion non sécurisée.</string>
+    <string name="reload">Recharger</string>
+    <string name="startup_error">Chargeurs.ch\n\nDémarrage impossible\n\nCode : %1$s\nVérifiez Android System WebView/Chrome, puis redémarrez la tablette.\n\nDiagnostic : %2$s</string>
+</resources>

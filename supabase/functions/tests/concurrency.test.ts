@@ -17,7 +17,7 @@ function req(body: unknown) {
   });
 }
 
-Deno.test("two identical BATTERY_IN callbacks in parallel => one row, one effect", async () => {
+Deno.test("two incomplete BATTERY_IN callbacks in parallel => one raw row, no guessed rental", async () => {
   const d = new FakeDb();
   d.uniqueCols["cabinet_events"] = "external_event_id";
   d.seed("stations", [{ station_id: "S1" }]);
@@ -28,12 +28,12 @@ Deno.test("two identical BATTERY_IN callbacks in parallel => one row, one effect
     handleEvent(req(e), asClient(d), env),
   ]);
   const codes = [r1.status, r2.status].sort();
-  assertEquals(codes, [200, 200]);
+  assertEquals(codes, [200, 202]);
   assertEquals(d.tables["cabinet_events"].length, 1);
-  assertEquals(d.tables["rental_sessions"][0].state, "battery_returned");
-  // Exactly one state-advancing update was applied.
+  assertEquals(d.tables["rental_sessions"][0].state, "active_rental");
+  // No heuristic state-advancing update is allowed.
   const advanced = d.updates.filter((u) => u.table === "rental_sessions" && u.patch.state === "battery_returned");
-  assertEquals(advanced.length, 1);
+  assertEquals(advanced.length, 0);
 });
 
 Deno.test("two DIFFERENT events in parallel => two rows, both processed", async () => {

@@ -1,0 +1,57 @@
+name: Chargeurs.ch Android Kiosk Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-staging-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build staging APK
+        working-directory: android-kiosk
+        env:
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+        run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
+
+      - name: Prepare artifact
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          test -s "$apk"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          test -n "$apksigner_path"
+          "$apksigner_path" verify --verbose "$apk"
+          aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
+          test -n "$aapt_path"
+          version_name="$($aapt_path dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+          test -n "$version_name"
+          mkdir -p dist
+          artifact_name="Chargeurs_CH_Kiosk_${version_name}.apk"
+          cp "$apk" "dist/$artifact_name"
+          sha256sum "dist/$artifact_name" > dist/SHA256SUMS.txt
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-kiosk-${{ steps.artifact.outputs.artifact_name }}
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/*

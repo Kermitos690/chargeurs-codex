@@ -7,9 +7,50 @@ const EXPECTED_KIOSK_QUOTE = {
   periodMinutes: 30,
   firstPeriodCents: 75,
   depositCents: 3_000,
+  dailyCapCents: 1_800,
+  nonReturnCents: 9_900,
 } as const;
 
+const KIOSK_TOKEN_PATTERN = /^kt_[A-Za-z0-9_-]{24,128}$/;
+const KIOSK_PAIRING_CODE_PATTERN = /^\d{6}$/;
+
 type TokenReader = () => string | null;
+
+export function isValidKioskToken(value: unknown): value is string {
+  return typeof value === "string" && KIOSK_TOKEN_PATTERN.test(value.trim());
+}
+
+export function isValidKioskPairingCode(value: unknown): value is string {
+  return typeof value === "string" && KIOSK_PAIRING_CODE_PATTERN.test(value.trim());
+}
+
+/**
+ * The native wrapper injects the credential into sessionStorage so it is not
+ * persisted in the WebView profile. localStorage remains a deliberate browser
+ * fallback for legacy/manual kiosk provisioning only.
+ *
+ * Six-digit pairing codes are never accepted as runtime kiosk credentials. They
+ * must first be redeemed by kiosk-enroll for a real station-bound token (kt_).
+ */
+export function readKioskToken(): string | null {
+  try {
+    const candidate = sessionStorage.getItem(KIOSK_TOKEN_KEY) ?? localStorage.getItem(KIOSK_TOKEN_KEY);
+    return isValidKioskToken(candidate) ? candidate.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function storeKioskToken(token: string): boolean {
+  const normalized = token.trim();
+  if (!isValidKioskToken(normalized)) return false;
+  try {
+    localStorage.setItem(KIOSK_TOKEN_KEY, normalized);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
@@ -41,25 +82,22 @@ export function isSafeKioskQuote(value: unknown): boolean {
   return String(quote.currency ?? "").toUpperCase() === EXPECTED_KIOSK_QUOTE.currency
     && Number(quote.period_minutes) === EXPECTED_KIOSK_QUOTE.periodMinutes
     && Number(quote.duration_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
+    && Number(quote.price_per_period_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
     && Number(quote.final_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
-    && Number(quote.deposit_cents) === EXPECTED_KIOSK_QUOTE.depositCents;
+    && Number(quote.deposit_cents) === EXPECTED_KIOSK_QUOTE.depositCents
+    && Number(quote.daily_cap_cents) === EXPECTED_KIOSK_QUOTE.dailyCapCents
+    && Number(quote.unreturned_fee_cents) === EXPECTED_KIOSK_QUOTE.nonReturnCents;
 }
 
 export function buildKioskAwareRequestInit(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  readToken: TokenReader = () => {
-    try {
-      return localStorage.getItem(KIOSK_TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  },
+  readToken: TokenReader = readKioskToken,
 ): RequestInit {
   if (!isKioskCabinetSyncRequest(input)) return init;
 
   const token = readToken()?.trim();
-  if (!token) return init;
+  if (!isValidKioskToken(token)) return init;
 
   const headers = new Headers(init.headers);
   if (!headers.has("X-Kiosk-Token")) headers.set("X-Kiosk-Token", token);

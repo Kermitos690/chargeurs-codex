@@ -1,147 +1,452 @@
-// rental-admin-action — admin-gated operations on rental sessions:
-//   retry_chargenow | refund | reconcile | manual_review
-// Role rules: refund requires super_admin; others require operator+.
-// Refunds are idempotent and never executed from the frontend directly.
+// Privileged rental operations:
+//   retry_chargenow | reconcile | retry_settlement | declare_non_return |
+//   refund | manual_review
+//
+// operator+: retry/reconcile/manual review
+// super_admin: full refund and explicit non-return declaration
+//
+// No automatic non-return deadline is invented. A 99 CHF non-return settlement
+// starts only after an explicit, audited super-admin decision.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { adminClient, logApi } from "../_shared/db.ts";
+import { adminClient, auditLog, logApi } from "../_shared/db.ts";
+import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { refundPaymentIntentBalance } from "../_shared/stripeRefundRuntime.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 
-const STRIPE_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
+type DB = ReturnType<typeof adminClient>;
+type Session = Record<string, any>;
 
-async function rolesOf(req: Request, db: ReturnType<typeof adminClient>): Promise<{ uid: string | null; roles: string[] }> {
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { ...corsHeaders, "Content-Type": "application/json" },
+});
+
+function safeCode(error: unknown): string {
+  if (error instanceof OrchestratorError) return error.code;
+  if (error instanceof Error && /^[A-Z0-9_:-]+$/.test(error.message)) return error.message.slice(0, 120);
+  return error instanceof Error ? error.name : "UNKNOWN_ERROR";
+}
+
+async function rolesOf(req: Request, db: DB): Promise<{ uid: string | null; roles: string[] }> {
   const auth = req.headers.get("Authorization");
   if (!auth) return { uid: null, roles: [] };
-  const { data: { user } } = await db.auth.getUser(auth.replace("Bearer ", ""));
+  const { data: { user } } = await db.auth.getUser(auth.replace(/^Bearer\s+/i, ""));
   if (!user) return { uid: null, roles: [] };
-  const { data } = await db.from("user_roles").select("role").eq("user_id", user.id);
-  return { uid: user.id, roles: (data ?? []).map((r: { role: string }) => r.role) };
+  const { data, error } = await db.from("user_roles").select("role").eq("user_id", user.id);
+  if (error) throw error;
+  return { uid: user.id, roles: (data ?? []).map((row: { role: string }) => row.role) };
+}
+
+async function callInternalFunction(
+  functionName: string,
+  body: Record<string, unknown>,
+): Promise<{ ok: boolean; status: number; result: unknown }> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!supabaseUrl || !serviceRole) {
+    return { ok: false, status: 503, result: { error: "SUPABASE_INTERNAL_CONFIG_MISSING" } };
+  }
+  const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceRole}` },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({ error: `HTTP_${response.status}` }));
+  return { ok: response.ok, status: response.status, result };
+}
+
+async function callSettlement(
+  rentalSessionId: string,
+  returnState: "normal" | "not_returned",
+  finalAt: string,
+) {
+  return callInternalFunction("settle-rental-payment", { rentalSessionId, returnState, finalAt });
+}
+
+function parsedTimestamp(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    const date = new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric);
+    if (Number.isFinite(date.getTime())) return date.toISOString();
+  }
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function firstString(source: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function firstInteger(source: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = source[key];
+    const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+    if (Number.isInteger(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
+
+function parseReturnEvidence(payload: unknown) {
+  const root = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown> : {};
+  const nested = root.data && typeof root.data === "object" && !Array.isArray(root.data)
+    ? root.data as Record<string, unknown> : {};
+  const order = nested.order && typeof nested.order === "object" && !Array.isArray(nested.order)
+    ? nested.order as Record<string, unknown> : {};
+  const merged = { ...root, ...nested, ...order };
+  return {
+    returnedAt: parsedTimestamp(
+      merged.pGivebackTime ?? merged.givebackTime ?? merged.returnTime ?? merged.pReturnTime,
+    ),
+    returnStationId: firstString(merged, [
+      "pGivebackDeviceid", "givebackDeviceId", "returnDeviceId", "returnCabinetId",
+      "returnStationId", "deviceId", "cabinetId",
+    ]),
+    batteryId: firstString(merged, [
+      "batteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
+    ]),
+    slotNum: firstInteger(merged, [
+      "pGivebackSlotid", "pGivebackSlot", "givebackSlotId", "givebackSlot",
+      "returnSlot", "slotNum", "slotId", "position",
+    ]),
+  };
+}
+
+async function orchestratorState(db: DB, rentalId: string): Promise<string | null> {
+  const { data, error } = await db.from("rental_orchestrator_snapshots")
+    .select("state").eq("rental_id", rentalId).maybeSingle();
+  if (error) throw error;
+  return typeof data?.state === "string" ? data.state : null;
+}
+
+async function openIncident(
+  db: DB,
+  session: Session,
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+) {
+  const { error } = await db.from("system_incidents").insert({
+    type: "rental_admin_action",
+    severity: "high",
+    message,
+    data: { rental_session_id: session.id, station_id: session.station_id, code, ...details },
+    resolved: false,
+  });
+  if (error) throw error;
+  await auditLog(db, {
+    action: "rental.admin.incident",
+    target: String(session.id),
+    data: { code, ...details },
+  });
+}
+
+async function applyReconciledReturn(
+  db: DB,
+  session: Session,
+  input: { uid: string; returnedAt: string; returnStationId: string; batteryId: string; slotNum: number },
+) {
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "return_detected",
+    idempotencyKey: `return_detected:admin_reconcile:${session.apifox_trade_no}:${input.batteryId}:${input.returnStationId}:${input.slotNum}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: input.returnStationId,
+    batteryId: input.batteryId,
+    occurredAt: input.returnedAt,
+    metadata: {
+      source: "admin_reconcile", actor: input.uid, tradeNo: session.apifox_trade_no,
+      returnStationId: input.returnStationId, returnedSlotNum: input.slotNum,
+    },
+  });
+  const { error } = await db.from("rental_sessions").update({
+    state: "battery_returned",
+    chargenow_status: "returned",
+    returned_at: session.returned_at ?? input.returnedAt,
+    return_station_id: input.returnStationId,
+    returned_slot_num: input.slotNum,
+  }).eq("id", session.id);
+  if (error) throw error;
+}
+
+async function appendAdministrativeRefund(
+  db: DB,
+  session: Session,
+  uid: string,
+  refundedCents: number,
+  providerIds: string[],
+) {
+  const state = await orchestratorState(db, String(session.id));
+  if (!state) throw new OrchestratorError("ORCHESTRATOR_SNAPSHOT_MISSING");
+  if (state === "completed") {
+    await auditLog(db, {
+      actor: uid,
+      action: "rental.post_completion_refund",
+      target: String(session.id),
+      data: { refunded_cents: refundedCents, provider_ids: providerIds },
+    });
+    return;
+  }
+  if (state === "refunded") return;
+  if (!["authorized", "release_requested", "pricing_finalized", "payment_captured"].includes(state)) {
+    throw new OrchestratorError("ADMIN_REFUND_STATE_NOT_ALLOWED", `Refund refused from ${state}`);
+  }
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "payment_refunded",
+    idempotencyKey: `payment_refunded:admin:${session.id}:${refundedCents}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    batteryId: String(session.battery_id ?? "") || null,
+    finalAmountChf: Number(session.final_amount_cents ?? 0) / 100,
+    metadata: { actor: uid, refundedCents, providerIds },
+  });
+  await appendRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "rental_completed",
+    idempotencyKey: `rental_completed:admin_refund:${session.id}`,
+    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+    stationId: String(session.station_id ?? "") || null,
+    batteryId: String(session.battery_id ?? "") || null,
+    finalAmountChf: 0,
+    metadata: { actor: uid, reason: "admin_full_refund" },
+  });
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   const db = adminClient();
-  const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
     const { uid, roles } = await rolesOf(req, db);
     if (!uid) return json({ ok: false, error: "FORBIDDEN" }, 403);
     const isAdmin = roles.includes("admin") || roles.includes("super_admin");
-    const isOperator = isAdmin || roles.includes("operator");
+    const isOperator = isAdmin || roles.includes("operations_admin") || roles.includes("operator");
     const isSuper = roles.includes("super_admin");
-
-    // Defense-in-depth: every action requires operator+ (refund additionally
-    // requires super_admin, checked in its branch). Authorize BEFORE parsing
-    // params so non-privileged callers always get a clean 403, never a hint.
     if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
 
-    const { action, rentalSessionId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const action = typeof body.action === "string" ? body.action : "";
+    const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
     if (!action || !rentalSessionId) return json({ ok: false, error: "MISSING_PARAMS" }, 400);
 
-    const { data: session } = await db.from("rental_sessions").select("*").eq("id", rentalSessionId).maybeSingle();
+    const { data: session, error: sessionError } = await db.from("rental_sessions")
+      .select("*").eq("id", rentalSessionId).maybeSingle();
+    if (sessionError) throw sessionError;
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
     if (action === "retry_chargenow") {
-      if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
-      const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/eject-after-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-        body: JSON.stringify({ rentalSessionId }),
+      const result = await callInternalFunction("eject-after-payment", { rentalSessionId });
+      await logApi(db, {
+        service: "admin", endpoint: "retry_chargenow", method: "POST",
+        status_code: result.status, request: { rentalSessionId, by: uid }, response: result.result,
       });
-      const data = await r.json();
-      await logApi(db, { service: "admin", endpoint: "retry_chargenow", method: "POST", status_code: r.status, request: { rentalSessionId, by: uid }, response: data });
-      return json({ ok: true, result: data });
+      return json({ ok: result.ok, result: result.result }, result.ok ? 200 : result.status);
     }
 
     if (action === "manual_review") {
-      if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
-      await db.from("rental_sessions").update({ state: "manual_review", failure_message: "Placée en revue manuelle par un opérateur." }).eq("id", rentalSessionId);
-      await logApi(db, { service: "admin", endpoint: "manual_review", method: "POST", status_code: 200, request: { rentalSessionId, by: uid } });
+      const { error } = await db.from("rental_sessions").update({
+        state: "manual_review",
+        settlement_status: session.settlement_status === "settled" ? "settled" : "manual_review",
+        failure_message: "Placée en revue manuelle par un opérateur.",
+      }).eq("id", rentalSessionId);
+      if (error) throw error;
+      await auditLog(db, { actor: uid, action: "rental.manual_review", target: rentalSessionId });
       return json({ ok: true });
     }
 
+    if (action === "retry_settlement") {
+      const state = await orchestratorState(db, rentalSessionId);
+      const nonReturn = state === "non_return" || Boolean(session.non_return_declared_at);
+      if (!nonReturn && (
+        !session.returned_at || !session.battery_id || !session.return_station_id ||
+        session.returned_slot_num == null
+      )) {
+        return json({ ok: false, error: "RETURN_CORRELATION_INCOMPLETE" }, 409);
+      }
+      const finalAt = nonReturn
+        ? String(session.non_return_declared_at ?? new Date().toISOString())
+        : String(session.returned_at);
+      const settlement = await callSettlement(
+        rentalSessionId, nonReturn ? "not_returned" : "normal", finalAt,
+      );
+      await logApi(db, {
+        service: "admin", endpoint: "retry_settlement", method: "POST",
+        status_code: settlement.status,
+        request: { rentalSessionId, by: uid, returnState: nonReturn ? "not_returned" : "normal" },
+        response: settlement.result,
+      });
+      return json({ ok: settlement.ok, settlement: settlement.result }, settlement.ok ? 200 : settlement.status);
+    }
+
+    if (action === "declare_non_return") {
+      if (!isSuper) return json({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED" }, 403);
+      if (session.returned_at || session.state === "battery_returned") {
+        return json({ ok: false, error: "BATTERY_ALREADY_RETURNED" }, 409);
+      }
+      if (session.settlement_status === "settled") {
+        return json({ ok: false, error: "SETTLEMENT_ALREADY_FINAL" }, 409);
+      }
+      if (!session.battery_id || !(session.started_at || session.ejected_at)) {
+        return json({ ok: false, error: "BATTERY_RELEASE_NOT_CONFIRMED" }, 409);
+      }
+      const declaredAt = String(session.non_return_declared_at ?? new Date().toISOString());
+      await appendRentalEvent(db, {
+        rentalId: rentalSessionId,
+        eventType: "non_return_declared",
+        idempotencyKey: `non_return_declared:${rentalSessionId}`,
+        paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
+        stationId: String(session.station_id ?? "") || null,
+        batteryId: String(session.battery_id),
+        occurredAt: declaredAt,
+        metadata: { actor: uid, targetTotalCents: 9900 },
+      });
+      const { error: declarationError } = await db.from("rental_sessions").update({
+        non_return_declared_at: declaredAt,
+        non_return_declared_by: uid,
+      }).eq("id", rentalSessionId);
+      if (declarationError) throw declarationError;
+      await auditLog(db, {
+        actor: uid, action: "rental.non_return.declared", target: rentalSessionId,
+        data: { previous_state: session.state, declared_at: declaredAt, target_total_cents: 9900 },
+      });
+      const settlement = await callSettlement(rentalSessionId, "not_returned", declaredAt);
+      await logApi(db, {
+        service: "admin", endpoint: "declare_non_return", method: "POST",
+        status_code: settlement.status, request: { rentalSessionId, by: uid },
+        response: settlement.result,
+      });
+      return json({
+        ok: settlement.ok, non_return_declared: true, settlement: settlement.result,
+      }, settlement.ok ? 200 : settlement.status);
+    }
+
     if (action === "reconcile") {
-      if (!isOperator) return json({ ok: false, error: "FORBIDDEN" }, 403);
-      // Re-read ChargeNow order status if we have a tradeNo, then apply the
-      // result to the local state machine (not just metadata).
-      const { orderQuery } = await import("../_shared/chargenow.ts");
-      let cn: unknown = null;
-      let applied: { chargenow_status: string; state?: string } | null = null;
       if (!session.apifox_trade_no) {
-        await logApi(db, { service: "admin", endpoint: "reconcile", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: { skipped: "NO_TRADE_NO" } });
-        return json({ ok: true, chargenow: null, chargenow_skipped: true, reason: "NO_TRADE_NO" });
+        return json({ ok: true, chargenow_skipped: true, reason: "NO_TRADE_NO" });
       }
-
-      const res = await orderQuery(session.apifox_trade_no);
-      cn = res.data;
-      if (!res.ok) {
-        applied = { chargenow_status: "query_error" };
-      } else {
-        // Tolerant parsing of the documented rent-order response shape.
-        interface RentOrder {
-          pGivebackTime?: string | number | null; givebackTime?: string | number | null;
-          returnTime?: string | number | null; pReturnTime?: string | number | null;
-          pGivebackDeviceid?: string | null; givebackDeviceId?: string | null; returnSlot?: string | null;
-          data?: RentOrder;
-        }
-        const d = ((res.data as RentOrder) ?? {}) as RentOrder;
-        const o = (d.data ?? d) as RentOrder;
-        // AUTHORITATIVE return signal = a physical giveback timestamp returned
-        // by ChargeNow. We deliberately do NOT treat a generic "completed"/
-        // closed order, a missing order, or a finished flag as a return: those
-        // can be true without the battery being back in a valid slot.
-        const returnTime = o.pGivebackTime ?? o.givebackTime ?? o.returnTime ?? o.pReturnTime ?? null;
-        const givebackSlot = o.pGivebackDeviceid ?? o.givebackDeviceId ?? o.returnSlot ?? null;
-        const returned = Boolean(returnTime);
-
-        if (returned) {
-          // State machine: only advance to battery_returned from an in-flight
-          // rental. Never regress terminal/support states.
-          const ADVANCEABLE = ["active_rental", "battery_taken", "ejected"];
-          if (ADVANCEABLE.includes(session.state)) {
-            applied = { chargenow_status: "returned", state: "battery_returned" };
-          } else {
-            // Returned per ChargeNow but local state is terminal or unexpected
-            // → record metadata only, do NOT mutate the state machine.
-            applied = { chargenow_status: "returned" };
-          }
-          await logApi(db, { service: "admin", endpoint: "reconcile:return", method: "POST", status_code: 200, request: { rentalSessionId, by: uid, fromState: session.state }, response: { returnTime, givebackSlot } });
-        } else {
-          applied = { chargenow_status: "borrowing" };
-        }
+      const { orderQuery } = await import("../_shared/chargenow.ts");
+      const provider = await orderQuery(session.apifox_trade_no);
+      if (!provider.ok) {
+        await db.from("rental_sessions").update({ chargenow_status: "query_error" }).eq("id", rentalSessionId);
+        await logApi(db, {
+          service: "admin", endpoint: "reconcile", method: "POST", status_code: 502,
+          request: { rentalSessionId, by: uid }, response: { ok: false }, error: "CHARGENOW_QUERY_ERROR",
+        });
+        return json({ ok: false, error: "CHARGENOW_QUERY_ERROR" }, 502);
       }
-
-
-      const update: Record<string, unknown> = { chargenow_status: applied.chargenow_status };
-      if (applied.state) {
-        update.state = applied.state;
-        if (applied.state === "battery_returned") update.returned_at = new Date().toISOString();
+      const evidence = parseReturnEvidence(provider.data);
+      if (!evidence.returnedAt) {
+        await db.from("rental_sessions").update({ chargenow_status: "borrowing" }).eq("id", rentalSessionId);
+        return json({ ok: true, returned: false, chargenow_status: "borrowing" });
       }
-      await db.from("rental_sessions").update(update).eq("id", rentalSessionId);
-      await logApi(db, { service: "admin", endpoint: "reconcile", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: { cn, applied } });
-      return json({ ok: true, chargenow: cn, applied });
+      if (!evidence.returnStationId || !evidence.batteryId || evidence.slotNum == null) {
+        await openIncident(
+          db, session, "RETURN_IDENTITY_INCOMPLETE",
+          "ChargeNow indique un retour mais ne fournit pas la batterie, la borne et le slot nécessaires à un règlement automatique.",
+          { tradeNo: session.apifox_trade_no },
+        );
+        return json({ ok: false, error: "RETURN_IDENTITY_INCOMPLETE" }, 409);
+      }
+      if (!session.battery_id || String(session.battery_id) !== evidence.batteryId) {
+        await openIncident(
+          db, session, "RETURN_BATTERY_MISMATCH",
+          "La batterie indiquée par ChargeNow ne correspond pas à celle délivrée.",
+          { expectedBattery: session.battery_id ?? null, observedBattery: evidence.batteryId,
+            tradeNo: session.apifox_trade_no },
+        );
+        return json({ ok: false, error: "RETURN_BATTERY_MISMATCH" }, 409);
+      }
+      await applyReconciledReturn(db, session, {
+        uid, returnedAt: evidence.returnedAt, returnStationId: evidence.returnStationId,
+        batteryId: evidence.batteryId, slotNum: evidence.slotNum,
+      });
+      const settlement = await callSettlement(rentalSessionId, "normal", evidence.returnedAt);
+      await logApi(db, {
+        service: "admin", endpoint: "reconcile:return", method: "POST",
+        status_code: settlement.status, request: { rentalSessionId, by: uid, fromState: session.state },
+        response: { ...evidence, settlementOk: settlement.ok },
+      });
+      return json({ ok: settlement.ok, returned: true, evidence, settlement: settlement.result },
+        settlement.ok ? 200 : settlement.status);
     }
 
     if (action === "refund") {
       if (!isSuper) return json({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED" }, 403);
-      if (!STRIPE_KEY) return json({ ok: false, error: "STRIPE_NOT_CONFIGURED" });
-      // Idempotency: don't refund twice.
-      const { data: pay } = await db.from("payments").select("*").eq("rental_session_id", rentalSessionId).order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (!pay || !pay.stripe_payment_intent_id) return json({ ok: false, error: "NO_PAYMENT_INTENT" });
-      if (pay.status === "refunded" || pay.refunded_at) return json({ ok: true, alreadyRefunded: true });
+      const stripeRuntime = validateStripeTestRuntime();
+      if (!stripeRuntime.ok) return json({ ok: false, error: stripeRuntime.error }, 503);
+      const state = await orchestratorState(db, rentalSessionId);
+      if (["released", "active"].includes(String(state)) && !session.returned_at) {
+        return json({ ok: false, error: "BATTERY_NOT_RETURNED" }, 409);
+      }
+      if (["return_detected", "non_return"].includes(String(state))) {
+        return json({ ok: false, error: "FINAL_PRICING_REQUIRED_BEFORE_REFUND" }, 409);
+      }
 
-      const stripe = new Stripe(STRIPE_KEY, { apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient() });
-      const refund = await stripe.refunds.create(
-        { payment_intent: pay.stripe_payment_intent_id },
-        { idempotencyKey: `refund_${rentalSessionId}` },
+      const { data: payment, error: paymentReadError } = await db.from("payments").select("*")
+        .eq("rental_session_id", rentalSessionId).order("created_at", { ascending: false })
+        .limit(1).maybeSingle();
+      if (paymentReadError) throw paymentReadError;
+      if (!payment?.stripe_payment_intent_id) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
+
+      const stripe = new Stripe(stripeRuntime.secretKey, {
+        apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient(),
+      });
+      const providerIds: string[] = [];
+      const initialRefund = await refundPaymentIntentBalance(
+        stripe,
+        payment.stripe_payment_intent_id,
+        `admin_refund_${rentalSessionId}_initial`,
       );
-      await db.from("payments").update({ status: "refunded", refund_id: refund.id, refunded_at: new Date().toISOString() }).eq("id", pay.id);
-      await db.from("rental_sessions").update({ state: "refunded" }).eq("id", rentalSessionId);
-      await logApi(db, { service: "stripe", endpoint: "refunds.create", method: "POST", status_code: 200, request: { rentalSessionId, by: uid }, response: { id: refund.id } });
-      return json({ ok: true, refund_id: refund.id });
+      providerIds.push(...initialRefund.providerIds);
+      let refundedCents = initialRefund.refundedCents;
+
+      const supplementalId = String(session.stripe_supplemental_payment_intent_id ?? "");
+      if (supplementalId) {
+        const supplementalRefund = await refundPaymentIntentBalance(
+          stripe,
+          supplementalId,
+          `admin_refund_${rentalSessionId}_supplemental`,
+        );
+        providerIds.push(...supplementalRefund.providerIds);
+        refundedCents += supplementalRefund.refundedCents;
+      }
+      if (providerIds.length === 0 && payment.status === "refunded") {
+        return json({ ok: true, alreadyRefunded: true });
+      }
+
+      await appendAdministrativeRefund(db, session, uid, refundedCents, providerIds);
+      const now = new Date().toISOString();
+      const { error: paymentUpdateError } = await db.from("payments").update({
+        status: "refunded", refund_id: providerIds[0] ?? payment.refund_id,
+        refunded_at: now, amount_refunded_cents: refundedCents,
+      }).eq("id", payment.id);
+      if (paymentUpdateError) throw paymentUpdateError;
+      const { error: sessionUpdateError } = await db.from("rental_sessions").update({
+        state: "refunded", settlement_status: "settled", settlement_error: null,
+        settlement_locked_at: null, settled_at: now, refunded_amount_cents: refundedCents,
+        closed_at: now,
+      }).eq("id", rentalSessionId);
+      if (sessionUpdateError) throw sessionUpdateError;
+      await auditLog(db, {
+        actor: uid, action: "rental.refunded", target: rentalSessionId,
+        data: { provider_ids: providerIds, refunded_cents: refundedCents },
+      });
+      return json({ ok: true, provider_ids: providerIds, refunded_cents: refundedCents });
     }
 
     return json({ ok: false, error: "UNKNOWN_ACTION" }, 400);
-  } catch (e) {
-    return json({ ok: false, error: String(e) }, 500);
+  } catch (error) {
+    const code = safeCode(error);
+    console.error("rental-admin-action failed", code);
+    return json({ ok: false, error: code === "UNKNOWN_ERROR" ? "ADMIN_ACTION_INTERNAL_ERROR" : code }, 500);
   }
 });

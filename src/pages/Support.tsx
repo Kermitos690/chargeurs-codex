@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PublicNav } from "@/components/public/PublicNav";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { Button } from "@/components/ui/button";
+import { PublicContactForm } from "@/components/public/PublicContactForm";
 
 const SUPPORT_CASES = [
   { icon: AlertTriangle, title: "La batterie ne sort pas", text: "Préparez l'identifiant de la borne et l'heure du paiement. Nous vérifions la commande et l'état du slot." },
@@ -36,6 +37,14 @@ export default function Support() {
             </article>
           ))}
         </section>
+
+        <div className="mt-10">
+          <PublicContactForm
+            requestType="support"
+            title="Ouvrir une demande de support"
+            description="La demande est enregistrée dans le back-office et traitée par l'équipe support. Ne saisissez jamais de numéro de carte complet."
+          />
+        </div>
 
         <section className="mt-10 rounded-3xl border border-border bg-card/70 p-8">
           <h2 className="font-display text-2xl font-bold">Informations utiles à transmettre</h2>

@@ -1,0 +1,405 @@
+/* Chargeurs.ch kiosk V2 — landscape-first retail shell.
+   The kiosk is a fixed 16:9 product surface, not a scrolling website. */
+
+html.kiosk-mode,
+html.kiosk-mode body,
+html.kiosk-mode #root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+html.kiosk-mode {
+  font-size: clamp(14px, 1vw, 18px);
+}
+
+.kiosk-root {
+  --kiosk-safe-x: clamp(20px, 2.15vw, 42px);
+  --kiosk-safe-y: clamp(18px, 2.2vh, 30px);
+  --kiosk-header-h: clamp(56px, 7.2vh, 72px);
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh !important;
+  padding: var(--kiosk-safe-y) var(--kiosk-safe-x) !important;
+  display: grid !important;
+  grid-template-rows: var(--kiosk-header-h) minmax(0, 1fr);
+  gap: clamp(12px, 1.5vh, 18px);
+  overflow: hidden !important;
+  background:
+    radial-gradient(ellipse at 10% 8%, rgba(37, 99, 235, .24), transparent 38%),
+    radial-gradient(ellipse at 92% 88%, rgba(124, 58, 237, .22), transparent 42%),
+    linear-gradient(145deg, rgba(3, 12, 36, .96), rgba(5, 26, 76, .93) 46%, rgba(9, 12, 43, .97));
+}
+
+.kiosk-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0 32%, rgba(103, 232, 249, .035) 43%, transparent 54%),
+    radial-gradient(ellipse at 50% 116%, rgba(14, 165, 233, .2), transparent 46%);
+}
+
+.kiosk-root > header {
+  position: relative;
+  z-index: 30;
+  min-height: 0;
+  height: 100%;
+  padding: 0 !important;
+  align-items: center !important;
+}
+
+.kiosk-root > header > button:first-child {
+  transform-origin: left center;
+  transform: scale(clamp(1.02, 1.1vw, 1.18));
+}
+
+.kiosk-root > header > div:last-child {
+  gap: clamp(8px, 1vw, 14px) !important;
+}
+
+.kiosk-root > header button {
+  min-height: clamp(48px, 5.8vh, 58px) !important;
+  font-size: clamp(.95rem, 1.18vw, 1.25rem) !important;
+}
+
+.kiosk-root > main {
+  position: relative;
+  z-index: 10;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+}
+
+.kiosk-root > main > div {
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+/* ---------- chooser ---------- */
+.kiosk-idle-stage {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-items: stretch !important;
+  gap: clamp(10px, 1.35vh, 16px) !important;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: clamp(24px, 2.5vw, 38px);
+  padding: clamp(16px, 2vh, 24px) clamp(18px, 2vw, 30px) !important;
+  background:
+    linear-gradient(180deg, rgba(7, 28, 78, .66), rgba(3, 16, 49, .74)),
+    radial-gradient(ellipse at 50% 50%, rgba(12, 87, 180, .14), transparent 58%);
+  box-shadow: inset 0 1px rgba(255,255,255,.08), 0 28px 80px rgba(0,0,0,.23);
+}
+
+/* Retire the old photographic attract scene from the chooser. The cards are
+   now the product visual; this prevents a low-resolution cabinet image from
+   competing with charge information. */
+.kiosk-idle-stage > .pointer-events-none.absolute.inset-0 {
+  display: none !important;
+}
+
+.kiosk-idle-hero {
+  gap: clamp(3px, .65vh, 8px) !important;
+  justify-content: center;
+}
+
+.kiosk-idle-hero h1 {
+  margin: 0 !important;
+  font-size: clamp(2.25rem, 4.1vw, 4.9rem) !important;
+  line-height: .94 !important;
+  letter-spacing: -.055em !important;
+  font-weight: 950 !important;
+  text-wrap: balance;
+}
+
+.kiosk-idle-hero p {
+  margin: 0 !important;
+  font-size: clamp(1rem, 1.35vw, 1.55rem) !important;
+  line-height: 1.14 !important;
+}
+
+.kiosk-idle-hero p.text-sm {
+  display: none !important;
+}
+
+.kiosk-idle-hero > div:last-child {
+  margin-top: clamp(2px, .3vh, 5px);
+  font-size: clamp(1.55rem, 2.15vw, 2.65rem) !important;
+  line-height: 1 !important;
+  font-weight: 950 !important;
+}
+
+.kiosk-slot-grid {
+  width: min(100%, 1180px) !important;
+  max-width: none !important;
+  min-height: 0;
+  height: 100%;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.3vh, 16px) clamp(12px, 1.3vw, 20px) !important;
+  align-self: center;
+  justify-self: center;
+}
+
+.kiosk-slot-card {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: clamp(12px, 1.35vh, 18px) clamp(14px, 1.35vw, 20px) !important;
+  border-radius: clamp(18px, 1.8vw, 28px) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(18, 62, 133, .68), rgba(7, 25, 72, .62)) !important;
+  border-color: rgba(160, 215, 255, .22) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.09), 0 16px 40px rgba(0,0,0,.16);
+}
+
+.kiosk-slot-card:disabled {
+  filter: saturate(.72);
+}
+
+.kiosk-slot-card > div:first-of-type {
+  font-size: clamp(1rem, 1.25vw, 1.35rem) !important;
+}
+
+.kiosk-slot-card .kiosk-slot-visual {
+  height: clamp(32px, 4.4vh, 44px) !important;
+  min-height: 32px;
+  margin-top: clamp(4px, .5vh, 7px) !important;
+}
+
+.kiosk-slot-card .text-5xl {
+  margin-top: clamp(3px, .35vh, 5px) !important;
+  font-size: clamp(2.15rem, 3.2vw, 3.65rem) !important;
+  line-height: .95 !important;
+}
+
+.kiosk-slot-card .h-3 {
+  height: clamp(7px, .8vh, 10px) !important;
+  margin-top: clamp(5px, .55vh, 8px) !important;
+}
+
+.kiosk-slot-card > div:last-child {
+  margin-top: clamp(5px, .55vh, 8px) !important;
+  font-size: clamp(.92rem, 1.12vw, 1.2rem) !important;
+  line-height: 1.05 !important;
+}
+
+.kiosk-slot-card > span.absolute {
+  font-size: clamp(.72rem, .82vw, .9rem) !important;
+  padding: .32rem .58rem !important;
+}
+
+.kiosk-idle-cta {
+  width: 100%;
+  flex-direction: row !important;
+  justify-content: center;
+  gap: clamp(14px, 1.6vw, 24px) !important;
+  min-height: clamp(56px, 7vh, 72px);
+}
+
+.kiosk-idle-cta button {
+  min-height: clamp(54px, 6.8vh, 68px) !important;
+  min-width: min(38vw, 520px);
+  padding: 0 clamp(30px, 4vw, 60px) !important;
+  font-size: clamp(1.15rem, 1.65vw, 1.75rem) !important;
+  font-weight: 950 !important;
+}
+
+.kiosk-idle-cta span {
+  font-size: clamp(1rem, 1.2vw, 1.3rem) !important;
+}
+
+/* ---------- pricing ---------- */
+.kiosk-pricing-stage {
+  height: 100%;
+  min-height: 0;
+  max-width: 90rem !important;
+  justify-content: center;
+  gap: clamp(16px, 2.2vh, 28px) !important;
+}
+
+.kiosk-pricing-stage > h2 {
+  font-size: clamp(2.6rem, 4.7vw, 5rem) !important;
+  line-height: .95;
+}
+
+.kiosk-pricing-card {
+  max-height: min(54vh, 470px);
+  padding: clamp(22px, 3vw, 42px) !important;
+}
+
+/* ---------- Stripe QR ---------- */
+.kiosk-qr-stage {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  max-width: 96rem !important;
+  margin: auto;
+  padding: clamp(10px, 1.3vh, 16px) clamp(10px, 1.2vw, 20px) !important;
+  grid-template-columns: minmax(0, .9fr) minmax(420px, 1.1fr) !important;
+  gap: clamp(22px, 3vw, 52px) !important;
+}
+
+.kiosk-qr-stage > div:first-child {
+  min-width: 0;
+}
+
+.kiosk-qr-stage > div:first-child > div:first-child {
+  font-size: clamp(2.3rem, 4.1vw, 4.8rem) !important;
+  line-height: .92 !important;
+}
+
+.kiosk-qr-stage h2 {
+  margin-top: clamp(10px, 1.5vh, 18px) !important;
+  font-size: clamp(2.5rem, 4.25vw, 4.9rem) !important;
+  line-height: .93 !important;
+  letter-spacing: -.05em !important;
+}
+
+.kiosk-qr-stage h2 + p {
+  margin-top: clamp(8px, 1vh, 12px) !important;
+  font-size: clamp(1.15rem, 1.55vw, 1.7rem) !important;
+}
+
+.kiosk-qr-stage > div:first-child > div.mt-9 {
+  margin-top: clamp(16px, 2vh, 24px) !important;
+  padding: clamp(14px, 1.7vw, 22px) !important;
+  border-radius: clamp(18px, 2vw, 28px) !important;
+}
+
+.kiosk-qr-stage [role="img"] {
+  height: clamp(48px, 6.2vh, 64px) !important;
+  min-width: clamp(112px, 9.8vw, 158px) !important;
+  padding-inline: clamp(12px, 1.2vw, 20px) !important;
+  border-radius: 16px !important;
+}
+
+.kiosk-qr-stage [aria-label="TWINT"] {
+  box-shadow: 0 12px 36px rgba(0, 191, 221, .2), 0 12px 34px rgba(0,0,0,.2) !important;
+}
+
+.kiosk-qr-stage > div:last-child {
+  min-height: 0;
+  justify-content: center;
+}
+
+.kiosk-qr-stage svg[role="img"],
+.kiosk-qr-stage svg:not(.lucide) {
+  max-width: min(38vw, 390px) !important;
+  max-height: min(43vh, 390px) !important;
+}
+
+.kiosk-qr-stage .glass-strong.bg-white {
+  padding: clamp(14px, 1.8vw, 24px) !important;
+  border-radius: clamp(24px, 2.4vw, 38px) !important;
+}
+
+/* ---------- release ---------- */
+.kiosk-release-stage {
+  height: 100%;
+  min-height: 0;
+  justify-content: center;
+  gap: clamp(10px, 1.5vh, 18px) !important;
+}
+
+.kiosk-release-stage > div:first-child {
+  max-width: min(72vw, 980px) !important;
+  max-height: 57vh;
+}
+
+.kiosk-release-stage h2 {
+  font-size: clamp(2.5rem, 4.4vw, 5rem) !important;
+  line-height: .96 !important;
+}
+
+.kiosk-release-stage p {
+  font-size: clamp(1.2rem, 1.7vw, 1.85rem) !important;
+  line-height: 1.2 !important;
+}
+
+/* ---------- success / errors ---------- */
+.kiosk-root > main .bg-gradient-success {
+  width: clamp(96px, 12vh, 142px) !important;
+  height: clamp(96px, 12vh, 142px) !important;
+}
+
+.kiosk-root > main .bg-gradient-success svg {
+  width: 58% !important;
+  height: 58% !important;
+}
+
+.kiosk-root > main h2 {
+  max-width: 92vw;
+  text-wrap: balance;
+}
+
+.kiosk-root > main p {
+  text-wrap: pretty;
+}
+
+/* ---------- FAQ ---------- */
+.kiosk-global-help {
+  top: var(--kiosk-safe-y) !important;
+  right: clamp(210px, 18vw, 310px) !important;
+  min-height: clamp(48px, 5.8vh, 58px) !important;
+  min-width: 7.5rem !important;
+  font-size: clamp(.95rem, 1.18vw, 1.25rem) !important;
+}
+
+.kiosk-root ~ [role="dialog"],
+.kiosk-quarantine ~ [role="dialog"] {
+  font-size: 1rem;
+}
+
+/* Keep FAQ usable on the physical display without scrolling the entire page. */
+[role="dialog"][aria-modal="true"] > div {
+  max-height: calc(100dvh - 2 * var(--kiosk-safe-y, 24px));
+}
+
+/* ---------- native/display scaling resilience ---------- */
+@media (max-height: 780px) {
+  .kiosk-root {
+    --kiosk-safe-y: 14px;
+    --kiosk-header-h: 52px;
+    gap: 10px;
+  }
+  .kiosk-idle-stage { padding-block: 12px !important; }
+  .kiosk-idle-hero h1 { font-size: clamp(2.05rem, 3.8vw, 3.7rem) !important; }
+  .kiosk-slot-card { padding-block: 10px !important; }
+  .kiosk-slot-card .kiosk-slot-visual { height: 30px !important; }
+  .kiosk-slot-card .text-5xl { font-size: clamp(1.9rem, 2.85vw, 2.85rem) !important; }
+  .kiosk-idle-cta { min-height: 52px; }
+  .kiosk-idle-cta button { min-height: 50px !important; }
+  .kiosk-qr-stage [role="img"] { height: 46px !important; min-width: 105px !important; }
+}
+
+@media (max-width: 1200px) {
+  .kiosk-root { --kiosk-safe-x: 20px; }
+  .kiosk-qr-stage { grid-template-columns: minmax(0, .88fr) minmax(360px, 1.12fr) !important; }
+}
+
+/* Never allow a browser accessibility/font-size increase to push the CTA below
+   the panel. Cards shrink before footer content is sacrificed. */
+@supports (height: 100dvh) {
+  .kiosk-idle-stage,
+  .kiosk-pricing-stage,
+  .kiosk-qr-stage,
+  .kiosk-release-stage { max-height: 100%; overflow: hidden; }
+}

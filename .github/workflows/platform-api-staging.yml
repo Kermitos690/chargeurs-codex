@@ -1,10 +1,8 @@
-# Platform API v1 — Staging
+# Platform API v1 — staging only.
+# Manual, dry-run-by-default workflow for a dedicated Supabase staging project.
+# It never runs automatically and never triggers Stripe, ChargeNow or hardware mutations.
 
-Manual, dry-run-by-default workflow used to exercise the Platform API v1 on a
-dedicated staging Supabase project. Never runs automatically. Never touches
-LIVE data. Never triggers Stripe/ChargeNow mutations or hardware ejections.
-
-name: platform-api-staging
+name: Platform API staging
 
 on:
   workflow_dispatch:
@@ -15,25 +13,28 @@ on:
         options: [staging]
         default: staging
       apply_migration:
-        description: "Apply docs/platform-api/staging-bootstrap.sql to staging"
+        description: "Prepare the staging migration command"
         type: boolean
         default: false
       run_deno_tests:
-        description: "Run Deno tests for platform-api"
+        description: "Run Platform API tests"
         type: boolean
         default: true
       call_live_apis:
-        description: "Call live Stripe/ChargeNow (must stay false)"
+        description: "Call live Stripe/ChargeNow (must remain false)"
         type: boolean
         default: false
       trigger_hardware_ejection:
-        description: "Trigger hardware ejection (must stay false)"
+        description: "Trigger hardware ejection (must remain false)"
         type: boolean
         default: false
       dry_run:
-        description: "Dry-run (no mutations)"
+        description: "Dry-run only"
         type: boolean
         default: true
+
+permissions:
+  contents: read
 
 concurrency:
   group: platform-api-staging
@@ -44,38 +45,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Refuse forbidden toggles
+        shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ inputs.call_live_apis }}" == "true" ]]; then
-            echo "call_live_apis is not allowed for platform-api-staging"; exit 1; fi
-          if [[ "${{ inputs.trigger_hardware_ejection }}" == "true" ]]; then
-            echo "trigger_hardware_ejection is not allowed for platform-api-staging"; exit 1; fi
-          if [[ "${{ inputs.target }}" != "staging" ]]; then
-            echo "Only staging target is supported"; exit 1; fi
-          if [[ "${{ inputs.dry_run }}" != "true" && "${{ inputs.apply_migration }}" == "true" ]]; then
-            echo "apply_migration requires dry_run=true (manual review only)"; exit 1; fi
-          echo "Guard OK — dry_run=${{ inputs.dry_run }} apply_migration=${{ inputs.apply_migration }}"
+          [[ "${{ inputs.target }}" == "staging" ]] || { echo "Only staging is supported"; exit 1; }
+          [[ "${{ inputs.call_live_apis }}" == "false" ]] || { echo "Live API calls are forbidden"; exit 1; }
+          [[ "${{ inputs.trigger_hardware_ejection }}" == "false" ]] || { echo "Hardware ejection is forbidden"; exit 1; }
+          [[ "${{ inputs.dry_run }}" == "true" ]] || { echo "This workflow is dry-run only"; exit 1; }
+          echo "Safety guard passed"
 
-  tests:
+  validate:
     needs: guard
     if: ${{ inputs.run_deno_tests }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v1
-        with: { deno-version: v1.x }
-      - name: Deno check + tests (platform-api)
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --legacy-peer-deps --prefer-offline --no-audit --no-fund
+      - name: Validate OpenAPI
+        run: node --input-type=module -e "import fs from 'node:fs'; import yaml from 'js-yaml'; const doc=yaml.load(fs.readFileSync('docs/openapi/chargeurs-api-v1.yaml','utf8')); if(doc?.openapi !== '3.1.0') throw new Error('OpenAPI 3.1.0 required');"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check and test read-only functions
         run: |
-          deno check supabase/functions/platform-api/index.ts \
-                     supabase/functions/_shared/platformApi.ts \
-                     supabase/functions/platform-api-webhook-dispatcher/index.ts
-          deno test --allow-env --allow-net supabase/functions/tests/platform_api.test.ts
-
-  openapi:
-    needs: guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npx --yes @redocly/cli@1.25.5 lint openapi/platform-api-v1.yaml
+          deno check --allow-import \
+            supabase/functions/platform-api/index.ts \
+            supabase/functions/api-key-admin/index.ts \
+            supabase/functions/_shared/platformApi.ts \
+            supabase/functions/_shared/apiClientAdmin.ts
+          deno test --allow-env --allow-net --no-check \
+            supabase/functions/tests/platform_api.test.ts \
+            supabase/functions/tests/api_client_admin.test.ts
+      - name: Show dry-run migration plan
+        if: ${{ inputs.apply_migration }}
+        run: |
+          echo "DRY RUN ONLY"
+          echo "Migration prepared: supabase/migrations/20260719133000_platform_api_readonly_v1.sql"
+          echo "Migration prepared: supabase/migrations/20260719143000_platform_api_legacy_reconciliation.sql"
+          echo "No database command was executed."

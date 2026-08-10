@@ -1,0 +1,501 @@
+openapi: 3.1.0
+info:
+  title: Chargeurs.ch Platform API
+  version: 1.1.0-readonly
+  description: |
+    API publique en lecture seule pour les stations, l'inventaire,
+    les tarifs calculés côté serveur et les locations appartenant au client API.
+    Les états et événements de location proviennent du Rental Orchestrator canonique.
+    Aucun paiement, création de location, éjection, retour ou appel matériel n'est exposé.
+servers:
+  - url: https://{project}.supabase.co/functions/v1/platform-api
+    description: Supabase Edge Function staging
+    variables:
+      project:
+        default: PROJECT_REF_STAGING
+        description: Référence du projet Supabase staging
+security:
+  - bearerAuth: []
+  - apiKeyHeader: []
+tags:
+  - name: Health
+  - name: Client
+  - name: Stations
+  - name: Pricing
+  - name: Rentals
+  - name: Incidents
+paths:
+  /v1/health:
+    get:
+      tags: [Health]
+      summary: Vérifier que l'API répond
+      security: []
+      responses:
+        '200':
+          description: Service disponible
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, time, mode]
+                properties:
+                  status: { type: string, const: ok }
+                  version: { type: string, const: v1 }
+                  time: { type: string, format: date-time }
+                  mode: { type: string, const: read-only }
+  /v1/health/details:
+    get:
+      tags: [Health]
+      summary: Vérifier les dépendances générales
+      x-required-scope: health:read
+      responses:
+        '200':
+          description: État détaillé
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            X-Quota-Remaining: { $ref: '#/components/headers/QuotaRemaining' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthDetails' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/me:
+    get:
+      tags: [Client]
+      summary: Informations du client API authentifié
+      responses:
+        '200':
+          description: Client courant
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            X-Quota-Remaining: { $ref: '#/components/headers/QuotaRemaining' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientMe' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/stations:
+    get:
+      tags: [Stations]
+      summary: Lister les stations
+      x-required-scope: stations:read
+      parameters:
+        - name: online
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Liste des stations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stations, count]
+                properties:
+                  stations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Station' }
+                  count: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/stations/{stationId}:
+    get:
+      tags: [Stations]
+      summary: Lire une station
+      x-required-scope: stations:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Station trouvée
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Station' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/stations/{stationId}/availability:
+    get:
+      tags: [Stations]
+      summary: Lire la disponibilité d'une station
+      x-required-scope: inventory:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Disponibilité
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Availability' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/stations/{stationId}/inventory:
+    get:
+      tags: [Stations]
+      summary: Lire les compartiments et batteries
+      x-required-scope: inventory:read
+      parameters:
+        - $ref: '#/components/parameters/StationId'
+      responses:
+        '200':
+          description: Inventaire
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Inventory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/pricing/quote:
+    post:
+      tags: [Pricing]
+      summary: Calculer un devis tarifaire canonique
+      description: Le serveur ignore tout montant fourni par le client.
+      x-required-scope: pricing:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              oneOf:
+                - required: [station_id]
+                - required: [device_id]
+              properties:
+                station_id: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$', example: DTA21269 }
+                device_id: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$', example: DTA21269 }
+      responses:
+        '200':
+          description: Devis calculé
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PricingQuote' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Tarification canonique indisponible
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/rentals/{rentalId}:
+    get:
+      tags: [Rentals]
+      summary: Lire une location appartenant au client
+      description: L'état retourné provient du snapshot du Rental Orchestrator lorsqu'il existe.
+      x-required-scope: rentals:read
+      parameters:
+        - $ref: '#/components/parameters/RentalId'
+      responses:
+        '200':
+          description: Location
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rental' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/rentals/{rentalId}/events:
+    get:
+      tags: [Rentals]
+      summary: Lire le journal canonique d'une location
+      description: Les événements proviennent exclusivement de rental_orchestrator_events.
+      x-required-scope: rentals:read
+      parameters:
+        - $ref: '#/components/parameters/RentalId'
+      responses:
+        '200':
+          description: Événements canoniques versionnés
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rental_id, source, events]
+                properties:
+                  rental_id: { type: string, format: uuid }
+                  source: { type: string, const: rental_orchestrator_events }
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/RentalEvent' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: Lister les incidents opérationnels non sensibles
+      description: |
+        Retourne uniquement l'identifiant, le type, la sévérité, l'état de
+        résolution et les horodatages. Les champs internes `message` et `data`
+        ne sont jamais exposés par cette route.
+      x-required-scope: incidents:read
+      parameters:
+        - name: resolved
+          in: query
+          required: false
+          schema: { type: boolean }
+        - name: severity
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$' }
+        - name: type
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          description: Avec `limit`, ne peut pas dépasser la fenêtre bornée de 10000 résultats.
+          schema: { type: integer, minimum: 0, maximum: 9999, default: 0 }
+      responses:
+        '200':
+          description: Page d'incidents expurgés
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IncidentList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: ChargeursApiKey
+      description: Clé commençant par chg_test_ ou chg_live_.
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Clé commençant par chg_test_ ou chg_live_.
+  headers:
+    RequestId:
+      description: Identifiant UUID de la requête.
+      schema: { type: string, format: uuid }
+    QuotaRemaining:
+      description: Requêtes restantes dans la fenêtre la plus restrictive.
+      schema: { type: integer, minimum: 0 }
+  parameters:
+    StationId:
+      name: stationId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{4,32}$' }
+      example: DTA21269
+    RentalId:
+      name: rentalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    HealthDetails:
+      type: object
+      required: [status, time, dependencies]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        time: { type: string, format: date-time }
+        dependencies:
+          type: object
+          required: [database, chargenow_configured, stripe_configured]
+          properties:
+            database: { type: string, enum: [up, down] }
+            chargenow_configured: { type: boolean }
+            stripe_configured: { type: boolean }
+    ClientMe:
+      type: object
+      required: [client_id, environment, scopes, quota]
+      properties:
+        client_id: { type: string, format: uuid }
+        environment: { type: string, enum: [test, live] }
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [health:read, stations:read, inventory:read, pricing:read, rentals:read, incidents:read]
+        quota:
+          type: object
+          required: [per_minute, per_day]
+          properties:
+            per_minute: { type: integer, minimum: 1 }
+            per_day: { type: integer, minimum: 1 }
+    Station:
+      type: object
+      required: [id, online, rentable, returnable, total_slots, currency]
+      properties:
+        id: { type: string, example: DTA21269 }
+        name: { type: [string, 'null'] }
+        location: { type: [string, 'null'] }
+        online: { type: boolean }
+        status: { type: [string, 'null'] }
+        rentable: { type: integer, minimum: 0 }
+        returnable: { type: integer, minimum: 0 }
+        total_slots: { type: integer, minimum: 0 }
+        currency: { type: string, example: CHF }
+        last_sync_at: { type: [string, 'null'], format: date-time }
+    Availability:
+      type: object
+      required: [station_id, online, rentable, returnable, total_slots]
+      properties:
+        station_id: { type: string }
+        online: { type: boolean }
+        rentable: { type: integer, minimum: 0 }
+        returnable: { type: integer, minimum: 0 }
+        total_slots: { type: integer, minimum: 0 }
+        last_sync_at: { type: [string, 'null'], format: date-time }
+    Inventory:
+      type: object
+      required: [station_id, online, slots]
+      properties:
+        station_id: { type: string }
+        online: { type: boolean }
+        last_sync_at: { type: [string, 'null'], format: date-time }
+        slots:
+          type: array
+          items:
+            type: object
+            required: [slot_num, status, battery_id]
+            properties:
+              slot_num: { type: integer }
+              status: { type: [string, 'null'] }
+              battery_id: { type: [string, 'null'] }
+    PricingQuote:
+      type: object
+      properties:
+        currency: { type: string, example: CHF }
+        period_minutes: { type: integer }
+        initial_fee_cents: { type: integer }
+        period_price_cents: { type: integer }
+        total_cents: { type: integer }
+        deposit_cents: { type: integer }
+        profile_id: { type: [string, 'null'] }
+        profile_version: { type: [integer, 'null'] }
+        computed_at: { type: [string, 'null'], format: date-time }
+    Rental:
+      type: object
+      required: [id, state]
+      properties:
+        id: { type: string, format: uuid }
+        station_id: { type: [string, 'null'] }
+        state: { type: string }
+        orchestrator_version: { type: [integer, 'null'], minimum: 0 }
+        battery_id: { type: [string, 'null'] }
+        amount_expected: { type: [number, 'null'] }
+        amount_paid: { type: [number, 'null'] }
+        final_amount_chf: { type: [number, 'null'] }
+        currency: { type: [string, 'null'] }
+        failure_reason: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        paid_at: { type: [string, 'null'], format: date-time }
+        ejected_at: { type: [string, 'null'], format: date-time }
+        returned_at: { type: [string, 'null'], format: date-time }
+        closed_at: { type: [string, 'null'], format: date-time }
+        canonical_updated_at: { type: [string, 'null'], format: date-time }
+    RentalEvent:
+      type: object
+      required: [id, type, occurred_at, resulting_state, version, data]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        occurred_at: { type: string, format: date-time }
+        resulting_state: { type: string }
+        version: { type: integer, minimum: 1 }
+        data: {}
+    Incident:
+      type: object
+      additionalProperties: false
+      required: [id, type, severity, resolved, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        severity: { type: string }
+        resolved: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    IncidentList:
+      type: object
+      additionalProperties: false
+      required: [incidents, pagination]
+      properties:
+        incidents:
+          type: array
+          items: { $ref: '#/components/schemas/Incident' }
+        pagination:
+          type: object
+          additionalProperties: false
+          required: [limit, offset, returned, has_more, next_offset]
+          properties:
+            limit: { type: integer, minimum: 1, maximum: 100 }
+            offset: { type: integer, minimum: 0, maximum: 9999 }
+            returned: { type: integer, minimum: 0, maximum: 100 }
+            has_more: { type: boolean }
+            next_offset: { type: [integer, 'null'], minimum: 0, maximum: 9999 }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        request_id: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: Requête invalide
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Clé absente, invalide ou révoquée
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Scope insuffisant
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Ressource introuvable ou non détenue par le client
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Quota dépassé
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InternalError:
+      description: Erreur interne sans détail fournisseur ni donnée sensible
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

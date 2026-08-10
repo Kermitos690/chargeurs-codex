@@ -6,16 +6,28 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import Kiosk from "./pages/Kiosk.tsx";
+import KioskJourneyGate from "./pages/KioskJourneyGate.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
+import PaymentChoice from "./pages/PaymentChoice.tsx";
+import RentalProgress from "./pages/RentalProgress.tsx";
+import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
+import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
+import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
+import PublicStation from "./pages/public/PublicStation.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
 import AccountLayout from "./pages/account/AccountLayout.tsx";
-import AccountDashboard from "./pages/account/AccountDashboard.tsx";
+import AccountHome from "./pages/account/AccountHome.tsx";
+import AccountRentals from "./pages/account/AccountRentals.tsx";
+import AccountPayments from "./pages/account/AccountPayments.tsx";
+import AccountSupport from "./pages/account/AccountSupport.tsx";
+import AccountProfile from "./pages/account/AccountProfile.tsx";
 import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
+import AccountConnect from "./pages/account/AccountConnect.tsx";
+import AccountScanner from "./pages/account/AccountScanner.tsx";
 import AdminAuth from "./pages/admin/AdminAuth.tsx";
 import ResetPassword from "./pages/admin/ResetPassword.tsx";
 import AdminUsers from "./pages/admin/AdminUsers.tsx";
@@ -39,6 +51,8 @@ import AdminPartners from "./pages/admin/AdminPartners.tsx";
 import AdminRentalFlowHealth from "./pages/admin/AdminRentalFlowHealth.tsx";
 import AdminTestMonitor from "./pages/admin/AdminTestMonitor.tsx";
 import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
+import AdminBatteryQualification from "./pages/admin/AdminBatteryQualification.tsx";
+import LegalPage from "./pages/LegalPage.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
@@ -50,21 +64,34 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
+          <KioskReturnOverlay />
+          <KioskHelpLauncher />
+          <KioskOperationalGuard />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
             <Route path="/support" element={<Support />} />
+            <Route path="/bornes/:stationId" element={<PublicStation />} />
+            <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<Kiosk />} />
-            <Route path="/kiosk/station/:stationId" element={<Kiosk />} />
+            <Route path="/kiosk/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/kiosk/station/:stationId" element={<KioskJourneyGate />} />
+            <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
+            <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/success" element={<Pay />} />
             <Route path="/pay/:rentalSessionId/cancel" element={<Pay />} />
             <Route path="/compte/login" element={<AccountAuth />} />
             <Route path="/compte/reset-password" element={<AccountResetPassword />} />
+            <Route path="/compte/connect/:token" element={<AccountConnect />} />
+            <Route path="/compte/scanner" element={<AccountScanner />} />
             <Route path="/compte" element={<AccountLayout />}>
-              <Route index element={<AccountDashboard />} />
+              <Route index element={<AccountHome />} />
+              <Route path="locations" element={<AccountRentals />} />
+              <Route path="paiements" element={<AccountPayments />} />
+              <Route path="support" element={<AccountSupport />} />
+              <Route path="profil" element={<AccountProfile />} />
             </Route>
             <Route path="/admin/login" element={<AdminAuth />} />
             <Route path="/admin/reset-password" element={<ResetPassword />} />
@@ -82,6 +109,7 @@ const App = () => (
               <Route path="shops" element={<AdminShops />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="test-monitor" element={<AdminTestMonitor />} />
+              <Route path="battery-qualification" element={<AdminBatteryQualification />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="users" element={<AdminUsers />} />

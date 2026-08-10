@@ -10,61 +10,87 @@ import * as cn from "../_shared/chargenow.ts";
 const DANGEROUS = new Set([
   "C1", "C2", "C3", "C9", "C10", "C11", "C12", "S5", "P4", "E1",
 ]);
+const MUTATING_CODES = new Set([
+  "O2", "O4", "C1", "C2", "C3", "C9", "C10", "C11", "C12",
+  "S3", "S4", "S5", "P3", "P4", "P5", "P6", "E1",
+]);
+const SENSITIVE_CODES = new Set(["A1"]);
 
-const TEST_STATION = "DTA21277"; // live, online test cabinet (Gaetan Test Shop)
+const TEST_STATION = "DTA21269"; // dedicated Chargeurs.ch staging pilot
 
 type Result = { ok: boolean; status: number; data: unknown; error: string | null };
 
-async function dispatch(code: string, p: Record<string, unknown>): Promise<Result> {
+async function dispatch(code: string, p: Record<string, unknown>, superAdminMutation = false): Promise<Result> {
   const s = (k: string, d = "") => String(p[k] ?? d);
   const n = (k: string, d = 0) => Number(p[k] ?? d);
+  const context = { superAdminConfirmed: superAdminMutation };
   switch (code) {
     case "A1": return await cn.oauth2Login(s("username"), s("passwordSha256"));
     case "O1": return await cn.cabinetQuery(s("deviceId", TEST_STATION));
-    case "O2": return await cn.orderCreate({ deviceId: s("deviceId", TEST_STATION), callbackURL: s("callbackURL") || undefined });
+    case "O2": return await cn.orderCreate({ deviceId: s("deviceId", TEST_STATION), callbackURL: s("callbackURL") || undefined }, context);
     case "O3": return await cn.orderQuery(s("tradeNo"));
-    case "O4": return await cn.orderClose(s("tradeNo"));
+    case "O4": return await cn.orderClose(s("tradeNo"), context);
     case "O5": return await cn.orderDetail(s("tradeNo"));
     case "O6": return await cn.cabinetListGeo({ coordType: s("coordType", "GCJ-02"), zoomLevel: s("zoomLevel", "5"), lat: s("lat", "46.54"), lng: s("lng", "6.67"), showPrice: true });
-    case "O7": return await cn.cabinetQueryPost(s("deviceId", TEST_STATION));
-    case "C1": return await cn.cabinetOperation({ cabinetid: s("cabinetid", TEST_STATION), slotNum: n("slotNum"), operationType: (s("operationType", "heartbeat") as cn.CabinetOperationType), reason: s("reason", "admin") });
-    case "C2": return await cn.ejectByRepair(s("cabinetid", TEST_STATION), n("slotNum"));
-    case "C3": return await cn.ejectByRent(s("cabinetid", TEST_STATION), n("slotNum"), s("rentOrderId") || undefined);
+    case "O7": return { ok: false, status: 0, data: null, error: "PROVIDER_ENDPOINT_MISSING" };
+    case "C1": return await cn.cabinetOperation({ cabinetid: s("cabinetid", TEST_STATION), slotNum: n("slotNum"), operationType: (s("operationType", "heartbeat") as cn.CabinetOperationType), reason: s("reason", "admin") }, context);
+    case "C2": return await cn.ejectByRepair(s("cabinetid", TEST_STATION), n("slotNum"), context);
+    case "C3": return await cn.ejectByRent(s("cabinetid", TEST_STATION), n("slotNum"), s("rentOrderId") || undefined, context);
     case "C4": return await cn.cabinetDetail(s("cabinetId", TEST_STATION));
     case "C5": return await cn.getDeviceByShopId(s("shopid", "630bdd3b23"));
     case "C6": return await cn.getAllDevicePage(s("page", "1"), s("limit", "20"));
     case "C7": return await cn.batteryListByCabinetId(s("cabinetId", TEST_STATION));
     case "C8": return await cn.slotByCabinetId(s("cabinetId", TEST_STATION));
-    case "C9": return await cn.bind2shop(s("qrcode"), s("newshopid"));
-    case "C10": return await cn.bindAd({ cabinetIdList: (p.cabinetIdList as string[]) ?? [], isRestart: Boolean(p.isRestart), adConfigList: (p.adConfigList as unknown[]) ?? [] });
-    case "C11": return await cn.unbindShop((p.deviceIds as string[]) ?? []);
-    case "C12": return await cn.publishAd({ cabinetIdList: (p.cabinetIdList as string[]) ?? [], restart: Boolean(p.restart), adConfigList: (p.adConfigList as unknown[]) ?? [] });
+    case "C9": return await cn.bind2shop(s("qrcode"), s("newshopid"), context);
+    case "C10": return await cn.bindAd({ cabinetIdList: (p.cabinetIdList as string[]) ?? [], isRestart: Boolean(p.isRestart), adConfigList: (p.adConfigList as unknown[]) ?? [] }, context);
+    case "C11": return await cn.unbindShop((p.deviceIds as string[]) ?? [], context);
+    case "C12": return await cn.publishAd({ cabinetIdList: (p.cabinetIdList as string[]) ?? [], restart: Boolean(p.restart), adConfigList: (p.adConfigList as unknown[]) ?? [] }, context);
     case "S1": return await cn.getShopList();
     case "S2": return await cn.shopDetail(s("shopid", "630bdd3b23"));
-    case "S3": return await cn.shopCreate((p.body as Record<string, unknown>) ?? {});
-    case "S4": return await cn.shopUpdate((p.body as Record<string, unknown>) ?? {});
-    case "S5": return await cn.shopDelete(s("shopid"));
+    case "S3": return await cn.shopCreate((p.body as Record<string, unknown>) ?? {}, context);
+    case "S4": return await cn.shopUpdate((p.body as Record<string, unknown>) ?? {}, context);
+    case "S5": return await cn.shopDelete(s("shopid"), context);
     case "P1": return await cn.priceStrategyPage((p.body as Record<string, unknown>) ?? {});
     case "P2": return await cn.priceStrategyDetail(s("priceId"));
-    case "P3": return await cn.priceStrategySave((p.body as { name: string }) ?? { name: "test" });
-    case "P4": return await cn.priceStrategyDelete((p.priceIds as number[]) ?? []);
-    case "P5": return await cn.priceStrategyBind({ shopId: s("shopId"), priceId: n("priceId"), customType: n("customType") });
-    case "P6": return await cn.priceStrategyUnbind({ shopId: s("shopId"), customType: n("customType") });
+    case "P3": return await cn.priceStrategySave((p.body as { name: string }) ?? { name: "test" }, context);
+    case "P4": return await cn.priceStrategyDelete((p.priceIds as number[]) ?? [], context);
+    case "P5": return await cn.priceStrategyBind({ shopId: s("shopId"), priceId: n("priceId"), customType: n("customType") }, context);
+    case "P6": return await cn.priceStrategyUnbind({ shopId: s("shopId"), customType: n("customType") }, context);
     case "R1": return await cn.orderList((p.filters as Record<string, string>) ?? {});
-    case "E1": return await cn.eventPushConfig(s("pushUrl"), (p.eventSubscriptions as cn.EventSubscription[]) ?? []);
+    case "E1": return await cn.eventPushConfig(s("pushUrl"), (p.eventSubscriptions as cn.EventSubscription[]) ?? [], context);
     case "E2": return await cn.eventPushConfigGet();
     case "E3": return { ok: true, status: 200, data: { note: "E3 is the public receiver edge function cabinet-event-push" }, error: null };
     default: return { ok: false, status: 400, data: null, error: "UNKNOWN_CODE" };
   }
 }
 
-// Codes that are safe to run live automatically (non-destructive).
-const SAFE_LIVE = ["O1", "O5", "O6", "O7", "C4", "C5", "C6", "C7", "C8", "S1", "S2", "P1", "P2", "R1", "E2"];
+// Operations that only read the documented provider API. The suite runs them
+// sequentially and never calls a mutation, even though a few documented reads
+// happen to use POST. A detail request is skipped, not guessed, when the list
+// calls did not supply a sample identifier from this organization.
+const SAFE_READ_CODES = [
+  "O1", "O3", "O5", "O6", "C4", "C5", "C6", "C7", "C8",
+  "S1", "S2", "P1", "P2", "R1", "E2", "E3",
+];
 
-// Mutations that are NON-destructive and may be exercised live (Level B):
-//   O3 — query order status (idempotent read of a trade).
-// All other mutations create/alter/eject and are NOT auto-run live.
-const SAFE_LIVE_MUTATIONS = ["O3"];
+function firstString(value: unknown, keys: string[]): string {
+  if (!value || typeof value !== "object") return "";
+  const object = value as Record<string, unknown>;
+  for (const key of keys) {
+    const direct = object[key];
+    if (typeof direct === "string" || typeof direct === "number") return String(direct);
+  }
+  for (const nestedKey of ["data", "page", "records", "list", "rows"]) {
+    const nested = object[nestedKey];
+    if (Array.isArray(nested) && nested.length) {
+      const found = firstString(nested[0], keys);
+      if (found) return found;
+    }
+    const found = firstString(nested, keys);
+    if (found) return found;
+  }
+  return "";
+}
 
 // Mutation classification used to seed Level A / Level C verdicts.
 const MUTATION_META: Record<string, { name: string; dangerous: boolean }> = {
@@ -83,6 +109,16 @@ const MUTATION_META: Record<string, { name: string; dangerous: boolean }> = {
   C3: { name: "Eject By Rent", dangerous: true },
   E1: { name: "Cabinet Event Push Config", dangerous: true },
 };
+
+function confirmationPhrase(code: string, params: Record<string, unknown>): string {
+  const cabinetId = String(params.cabinetid ?? params.cabinetId ?? params.deviceId ?? "").trim().toUpperCase();
+  const slotNum = Number(params.slotNum);
+  if (code === "C2" && cabinetId && slotNum === 0) return `EJECTER TOUT ${cabinetId}`;
+  if (["C1", "C2", "C3"].includes(code) && cabinetId && Number.isInteger(slotNum)) {
+    return `EXECUTER ${code} ${cabinetId} SLOT ${slotNum}`;
+  }
+  return `EXECUTER ${code}`;
+}
 
 // Redact obvious secret-bearing keys before persisting a test_runs row.
 function redactForLog(obj: unknown): unknown {
@@ -118,36 +154,40 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ---- Bulk: run all safe live tests and record proof ----
+    // ---- Bulk: run every safe, documented provider read and record proof ----
     if (action === "run_safe_live") {
       const results: Record<string, Result> = {};
-      // Derive real IDs so parametrised reads (O5, P2) test meaningfully.
-      let realTradeNo = "";
-      let realPriceId = "";
-      try {
-        const ol = await cn.orderList({});
-        realTradeNo = String((ol.data as { page?: { records?: Array<{ pOrderid?: string }> } })?.page?.records?.[0]?.pOrderid ?? "");
-      } catch { /* ignore */ }
-      try {
-        const pp = await cn.priceStrategyPage({});
-        realPriceId = String((pp.data as { page?: { records?: Array<{ priceId?: number }> } })?.page?.records?.[0]?.priceId ?? "");
-      } catch { /* ignore */ }
-      const paramFor: Record<string, Record<string, unknown>> = {
-        O5: { tradeNo: realTradeNo },
-        P2: { priceId: realPriceId },
+      const stationParams = { deviceId: TEST_STATION, cabinetId: TEST_STATION };
+      const seed: Record<string, Result> = {
+        S1: await dispatch("S1", {}),
+        P1: await dispatch("P1", {}),
+        R1: await dispatch("R1", {}),
       };
-      for (const code of SAFE_LIVE) {
-        const res = await dispatch(code, paramFor[code] ?? {});
+      const shopId = firstString(seed.S1.data, ["shopid", "shopId", "id"]);
+      const priceId = firstString(seed.P1.data, ["priceId", "id"]);
+      const tradeNo = firstString(seed.R1.data, ["tradeNo", "pOrderid", "orderNo"]);
+      const paramFor: Record<string, Record<string, unknown>> = {
+        O1: { deviceId: TEST_STATION }, O6: {}, C4: stationParams,
+        C5: { shopid: shopId }, C6: { page: "1", limit: "20" },
+        C7: stationParams, C8: stationParams, S1: {}, S2: { shopid: shopId },
+        P1: {}, P2: { priceId }, R1: {}, E2: {}, E3: {},
+        O3: { tradeNo }, O5: { tradeNo },
+      };
+      for (const code of SAFE_READ_CODES) {
+        const requiredSample = ["O3", "O5"].includes(code) ? tradeNo
+          : ["C5", "S2"].includes(code) ? shopId
+          : code === "P2" ? priceId : "available";
+        const res = requiredSample
+          ? (seed[code] ?? await dispatch(code, paramFor[code] ?? {}))
+          : { ok: false, status: 0, data: null, error: "SKIPPED_MISSING_SAMPLE_IDENTIFIER" };
         results[code] = res;
-        // O7 is a documented duplicate of O1 on an alternate host; treat its
-        // route as covered when O1 passed, but keep the raw result as proof.
-        const effectiveOk = code === "O7" ? (results["O1"]?.ok ?? res.ok) : res.ok;
         await db.from("api_coverage").update({
-          live_test_status: effectiveOk ? "pass" : "fail",
+          live_test_status: res.error === "SKIPPED_MISSING_SAMPLE_IDENTIFIER" ? "skipped" : res.ok ? "pass" : "fail",
           mock_test_status: "pass",
           live_result: res.data as object,
           last_error: res.error,
-          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, note: code === "O7" ? "Alternate-host variant of O1" : undefined },
+          proof_state: res.error === "SKIPPED_MISSING_SAMPLE_IDENTIFIER" ? "sample_required" : res.ok ? "live_verified" : "unverified",
+          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId },
         }).eq("code", code);
         await logApi(db, { service: "chargenow", endpoint: `coverage:${code}`, method: "GET", status_code: res.status, response: res.data, error: res.error });
       }
@@ -190,47 +230,8 @@ Deno.serve(async (req) => {
 
     // ---- Level B: run ONLY the non-destructive mutations live (no payment) ----
     if (action === "run_safe_live_mutations") {
-      const results: Record<string, Result> = {};
-      let realTradeNo = "";
-      try {
-        const ol = await cn.orderList({});
-        realTradeNo = String((ol.data as { page?: { records?: Array<{ pOrderid?: string }> } })?.page?.records?.[0]?.pOrderid ?? "");
-      } catch { /* ignore */ }
-      const paramFor: Record<string, Record<string, unknown>> = { O3: { tradeNo: realTradeNo } };
-      for (const code of SAFE_LIVE_MUTATIONS) {
-        const t0 = Date.now();
-        const params = paramFor[code] ?? {};
-        const res = await dispatch(code, params);
-        const dt = Date.now() - t0;
-        results[code] = res;
-        const correlation = `live-${code}-${Date.now()}`;
-        await db.from("test_runs").insert({
-          endpoint_code: code,
-          endpoint_name: MUTATION_META[code]?.name ?? code,
-          level: "B",
-          verdict: res.ok ? "live_verified" : "failed",
-          environment: "live",
-          cabinet_id: null,
-          correlation_id: correlation,
-          request_redacted: redactForLog(params),
-          response_redacted: redactForLog(res.data),
-          status_code: res.status,
-          duration_ms: dt,
-          physical_test_required: true,
-          error: res.error,
-          performed_by: adminId,
-        });
-        await db.from("api_coverage").update({
-          live_test_status: res.ok ? "pass" : "fail",
-          live_result: res.data as object,
-          last_error: res.error,
-          proof_state: res.ok ? "live_verified" : "unverified",
-          proof: { ranAt: new Date().toISOString(), status: res.status, by: adminId, correlation },
-        }).eq("code", code);
-        await logApi(db, { service: "chargenow", endpoint: `mutation:${code}`, method: "POST", status_code: res.status, request: params, response: res.data, error: res.error });
-      }
-      return new Response(JSON.stringify({ ok: true, results }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: false, error: "PROVIDER_MUTATION_DISABLED" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ---- Single op invoke ----
@@ -241,8 +242,9 @@ Deno.serve(async (req) => {
     }
     const params = (body.params as Record<string, unknown>) ?? {};
 
-    // A1 (oauth2Login) relays credentials to ChargeNow — super_admin only.
-    if (code === "A1") {
+    const isMutation = MUTATING_CODES.has(code);
+    const isSensitive = SENSITIVE_CODES.has(code);
+    if (isMutation || isSensitive) {
       const superId = await requireSuperAdmin(req, db);
       if (!superId) {
         return new Response(JSON.stringify({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED", code }),
@@ -252,12 +254,18 @@ Deno.serve(async (req) => {
 
     const isDangerous = DANGEROUS.has(code);
     const maintenanceMode = Boolean(body.maintenanceMode);
-    const confirm = Boolean(body.confirm);
-    const dryRun = isDangerous ? !confirm : Boolean(body.dryRun);
+    const expectedConfirmation = confirmationPhrase(code, params);
+    const confirmation = typeof body.confirmation === "string" ? body.confirmation.trim().toUpperCase() : "";
+    const confirm = Boolean(body.confirm) && confirmation === expectedConfirmation;
+    const dryRun = Boolean(body.dryRun);
 
     if (isDangerous && !maintenanceMode) {
       return new Response(JSON.stringify({ ok: false, error: "MAINTENANCE_MODE_REQUIRED", code }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if ((isMutation || isSensitive) && !confirm && !dryRun) {
+      return new Response(JSON.stringify({ ok: false, error: "CONFIRMATION_REQUIRED", code, expectedConfirmation }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const correlation = `op-${code}-${Date.now()}`;
     const cabinetId = String(params.cabinetid ?? params.cabinetId ?? "") || null;
@@ -285,7 +293,7 @@ Deno.serve(async (req) => {
     }
 
     const t0 = Date.now();
-    const res = await dispatch(code, params);
+    const res = await dispatch(code, params, isMutation && confirm);
     const dt = Date.now() - t0;
     await logApi(db, { service: "chargenow", endpoint: `op:${code}`, method: "POST", status_code: res.status, request: params, response: res.data, error: res.error });
     await db.from("api_coverage").update({
@@ -299,7 +307,7 @@ Deno.serve(async (req) => {
       endpoint_name: MUTATION_META[code]?.name ?? code,
       level: isDangerous ? "C" : "B",
       verdict: res.ok ? "live_verified" : "failed",
-      environment: "live",
+      environment: cn.chargeNowMode(),
       cabinet_id: cabinetId,
       correlation_id: correlation,
       request_redacted: redactForLog(params),

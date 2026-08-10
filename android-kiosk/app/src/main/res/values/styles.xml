@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ChargeursKiosk" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#090B1F</item>
+        <item name="android:colorAccent">#338BFF</item>
+        <item name="android:navigationBarColor">#081126</item>
+        <item name="android:statusBarColor">#081126</item>
+    </style>
+</resources>

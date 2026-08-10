@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { passwordRecoveryAuth, supabase } from "@/integrations/supabase/client";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-type Mode = "login" | "signup" | "forgot";
+type Mode = "login" | "forgot";
 
 export default function AdminAuth() {
   const nav = useNavigate();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(() =>
+    new URLSearchParams(window.location.search).get("mode") === "forgot" ? "forgot" : "login",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export default function AdminAuth() {
     setLoading(true);
     try {
       if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await passwordRecoveryAuth.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/admin/reset-password`,
         });
         if (error) throw error;
@@ -30,17 +32,8 @@ export default function AdminAuth() {
         setMode("login");
         return;
       }
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email, password, options: { emailRedirectTo: `${window.location.origin}/admin` },
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
-      // Attempt to claim admin (first user only).
-      await supabase.functions.invoke("claim-admin");
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       toast.success("Connecté");
       nav("/admin");
     } catch (err) {
@@ -51,7 +44,6 @@ export default function AdminAuth() {
   const title = mode === "forgot" ? "Mot de passe oublié" : "Admin";
   const subtitle =
     mode === "login" ? "Connectez-vous au tableau de bord"
-    : mode === "signup" ? "Créer le premier compte admin"
     : "Recevez un lien pour réinitialiser votre mot de passe";
 
   return (
@@ -70,7 +62,6 @@ export default function AdminAuth() {
         <Button type="submit" disabled={loading} className="mt-6 w-full rounded-full bg-gradient-primary py-6 text-lg font-bold shadow-glow">
           {loading ? <Loader2 className="h-5 w-5 animate-spin" />
             : mode === "login" ? "Se connecter"
-            : mode === "signup" ? "Créer le compte"
             : "Envoyer le lien"}
         </Button>
 
@@ -79,13 +70,11 @@ export default function AdminAuth() {
             Mot de passe oublié ?
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setMode(mode === "login" ? "signup" : "login")}
-          className="mt-2 w-full text-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          {mode === "login" ? "Créer un compte admin" : "J'ai déjà un compte"}
-        </button>
+        {mode === "forgot" && (
+          <button type="button" onClick={() => setMode("login")} className="mt-2 w-full text-center text-sm text-muted-foreground hover:text-foreground">
+            J'ai déjà un compte
+          </button>
+        )}
       </form>
     </div>
   );
