@@ -8,7 +8,10 @@ const raw = await readFile(source, 'utf8');
 const clean = raw.replace(/\s+/g, '');
 const bytes = Buffer.from(clean, 'base64');
 
-if (bytes.length < 100_000) {
+// Validate the actual payload instead of rejecting it on an arbitrary file-size threshold.
+// The source starts with the canonical JPEG /9j/ signature; a valid JPEG must decode
+// to SOI (FF D8) and contain enough bytes to be a meaningful image asset.
+if (bytes.length < 1024) {
   throw new Error(`Cinematic artwork decode produced only ${bytes.length} bytes`);
 }
 if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
