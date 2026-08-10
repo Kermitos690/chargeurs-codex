@@ -1,0 +1,62 @@
+name: Port kiosk help entry
+
+on:
+  push:
+    branches:
+      - codex/field-deployment-v1
+    paths:
+      - .github/workflows/port-kiosk-help-entry.yml
+
+permissions:
+  contents: write
+
+jobs:
+  port:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/field-deployment-v1
+          fetch-depth: 0
+      - name: Add FAQ entry to journey/recovery headers
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/pages/KioskJourneyGate.tsx')
+          s = p.read_text()
+          old_import = 'import { ArrowRight, CheckCircle2, Clock3, Loader2, QrCode, RefreshCw, Smartphone, UserRound, Zap } from "lucide-react";'
+          new_import = 'import { ArrowRight, CheckCircle2, Clock3, HelpCircle, Loader2, QrCode, RefreshCw, Smartphone, UserRound, Zap } from "lucide-react";'
+          if s.count(old_import) != 1:
+              raise SystemExit('unexpected lucide import shape')
+          s = s.replace(old_import, new_import, 1)
+
+          old_header = '''        <header className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between px-5 sm:px-8">
+          <BrandLogo size="md" />
+          <LanguageSwitcher />
+        </header>'''
+          new_header = '''        <header className="absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between px-5 sm:px-8">
+          <BrandLogo size="md" />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}
+              className="inline-flex h-11 items-center gap-2 rounded-full border border-white/15 bg-slate-950/40 px-5 text-base font-black text-white backdrop-blur-xl transition hover:bg-white/10 active:scale-95"
+            >
+              <HelpCircle className="h-5 w-5 text-cyan-200" />
+              {lang === "de" ? "Hilfe" : lang === "en" ? "Help" : "Aide"}
+            </button>
+            <LanguageSwitcher />
+          </div>
+        </header>'''
+          count = s.count(old_header)
+          if count != 2:
+              raise SystemExit(f'expected 2 journey headers, got {count}')
+          s = s.replace(old_header, new_header)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name "chargeurs-rc-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/KioskJourneyGate.tsx
+          git commit -m "feat: expose full FAQ from kiosk entry and recovery screens"
+          git push origin HEAD:codex/field-deployment-v1
