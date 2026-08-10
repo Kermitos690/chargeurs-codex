@@ -28,18 +28,62 @@ async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, use
 
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
   await claimVerifiedEmailRentals(db, user);
-  const { data: rentalsById, error: rentalsError } = await db.from("rental_sessions").select("*").eq("customer_user_id", user.id);
-  if (rentalsError) throw new Error("RENTALS_UNAVAILABLE");
-  const rentals = rentalsById ?? [];
-  const rentalIds = rentals.map((rental) => String(rental.id));
-  const { data: profile } = await db.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  if (rentalIds.length === 0) return { profile, rentals: [], payments: [], refunds: [], incidents: [] };
-  const [{ data: payments }, { data: refunds }, { data: incidents }] = await Promise.all([
-    db.from("payments").select("id,rental_session_id,provider,amount,currency,payment_method,status,created_at").in("rental_session_id", rentalIds),
-    db.from("refunds").select("id,rental_session_id,amount,currency,status,reason,created_at,updated_at").in("rental_session_id", rentalIds),
-    db.from("system_incidents").select("id,rental_session_id,type,severity,resolved,created_at,resolved_at").in("rental_session_id", rentalIds),
+
+  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult] = await Promise.all([
+    db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
+    db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
+    db.from("customer_memberships")
+      .select("id,status,starts_at,renews_at,ends_at,plan_id,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from("customer_wallet_passes")
+      .select("id,membership_id,public_pass_id,status,provider_status,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
   ]);
-  return { profile, rentals, payments: payments ?? [], refunds: refunds ?? [], incidents: incidents ?? [] };
+
+  if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
+  if (membershipResult.error) throw new Error("MEMBERSHIP_UNAVAILABLE");
+  if (walletResult.error) throw new Error("WALLET_PASS_UNAVAILABLE");
+  if (pointsResult.error) throw new Error("CHARGEPOINTS_UNAVAILABLE");
+
+  const rentals = rentalsResult.data ?? [];
+  const rentalIds = rentals.map((rental) => String(rental.id));
+  let payments: unknown[] = [];
+  let refunds: unknown[] = [];
+  let incidents: unknown[] = [];
+
+  if (rentalIds.length > 0) {
+    const [paymentsResult, refundsResult, incidentsResult] = await Promise.all([
+      db.from("payments").select("id,rental_session_id,provider,amount,currency,payment_method,status,created_at").in("rental_session_id", rentalIds),
+      db.from("refunds").select("id,rental_session_id,amount,currency,status,reason,created_at,updated_at").in("rental_session_id", rentalIds),
+      db.from("system_incidents").select("id,rental_session_id,type,severity,resolved,created_at,resolved_at").in("rental_session_id", rentalIds),
+    ]);
+    if (paymentsResult.error || refundsResult.error || incidentsResult.error) throw new Error("ACCOUNT_RELATED_DATA_UNAVAILABLE");
+    payments = paymentsResult.data ?? [];
+    refunds = refundsResult.data ?? [];
+    incidents = incidentsResult.data ?? [];
+  }
+
+  // Deliberately omit Stripe customer/subscription IDs and Wallet token hashes.
+  return {
+    profile: profileResult.data ?? null,
+    rentals,
+    payments,
+    refunds,
+    incidents,
+    membership: membershipResult.data ?? null,
+    walletPass: walletResult.data ?? null,
+    chargePoints: {
+      balance: Number(pointsResult.data?.balance ?? 0),
+      lastActivityAt: pointsResult.data?.last_activity_at ?? null,
+    },
+  };
 }
 
 Deno.serve(async (req) => {
