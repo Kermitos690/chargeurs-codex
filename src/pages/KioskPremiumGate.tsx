@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import { ArrowRight, Loader2, RefreshCw, UserRound, Zap } from "lucide-react";
+import { Loader2, UserRound } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import Kiosk from "./Kiosk";
@@ -214,70 +214,38 @@ export default function KioskPremiumGate() {
     );
   }
 
-  const guestRate = money(options?.guest?.hourly_cents, options?.guest?.currency);
-  const guestCap = money(options?.guest?.daily_cap_cents, options?.guest?.currency);
-
   return (
     <div className="premium-kiosk premium-hero">
-      <div className="premium-smoke premium-smoke-a" />
-      <div className="premium-smoke premium-smoke-b" />
-      <header className="premium-topbar">
-        <BrandLogo size="md" />
-        <div className="premium-top-actions">
-          <button type="button" onClick={() => window.location.reload()}><RefreshCw />Actualiser</button>
-          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>?&nbsp;&nbsp; FAQ / Aide</button>
-          <LanguageSwitcher />
-        </div>
-      </header>
-
-      <main className="premium-stage">
-        <section className="premium-copy">
-          <h1><span>PLUS DE</span><span>BATTERIE ?</span><strong>RÉGLÉ.</strong></h1>
-          <div className="premium-pricing"><Zap /> <b>{guestRate}</b><span>/ heure</span><i /> <span>Plafond journalier <b>{guestCap}</b></span></div>
-        </section>
-
-        <div className="premium-lightning-wrap" aria-hidden="true">
-          <div className="premium-lightning-glow" />
-          <div className="premium-lightning">ϟ</div>
-          <div className="premium-orbit premium-orbit-a" />
-          <div className="premium-orbit premium-orbit-b" />
-        </div>
-
-        <section className="premium-choice-row">
-          <button className="premium-choice premium-choice-express" onClick={chooseGuest} disabled={!options?.guest}>
-            <div className="premium-choice-icon"><Zap /></div>
-            <span>LOCATION</span>
-            <strong>EXPRESS</strong>
-            <hr />
-            <p>Sans compte.<br /><b>Payez et partez.</b></p>
-            <div className="premium-choice-arrow"><ArrowRight /></div>
-          </button>
-
-          <button className="premium-choice premium-choice-member" onClick={() => void startMember()} disabled={!options?.memberAvailable}>
-            <div className="premium-choice-icon"><UserRound /></div>
-            <span>CLIENT</span>
-            <strong>CHARGEURS</strong>
-            <hr />
-            <p>Connectez-vous.<br /><b>Profitez de vos avantages.</b></p>
-            <div className="premium-choice-arrow"><ArrowRight /></div>
-          </button>
-        </section>
-
-        <section className="premium-station" aria-label="Illustration de borne Chargeurs.ch">
-          <div className="premium-station-screen">
-            <div className="premium-station-screen-logo">ϟ chargeurs.ch</div>
-            <div className="premium-station-welcome">Bienvenue</div>
-            <div className="premium-station-sub">Choisissez votre option</div>
-            <div className="premium-wave" />
-          </div>
-          <div className="premium-station-body">
-            <div className="premium-station-brand">ϟ chargeurs.ch</div>
-            <div className="premium-slots">
-              {[1,2,3,4].map((slot) => <div className="premium-slot" key={slot}><span>{slot}</span><div className="premium-bank"><i /></div></div>)}
-            </div>
-          </div>
-        </section>
-      </main>
+      <div className="premium-hero-art" aria-hidden="true" />
+      <button
+        className="premium-hotspot premium-hotspot-refresh"
+        type="button"
+        aria-label="Actualiser"
+        onClick={() => window.location.reload()}
+      />
+      <button
+        className="premium-hotspot premium-hotspot-help"
+        type="button"
+        aria-label="FAQ / Aide"
+        onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}
+      />
+      <div className="premium-language-overlay" aria-label="Langues">
+        <LanguageSwitcher />
+      </div>
+      <button
+        className="premium-hotspot premium-hotspot-express"
+        type="button"
+        aria-label="Location express"
+        onClick={chooseGuest}
+        disabled={!options?.guest}
+      />
+      <button
+        className="premium-hotspot premium-hotspot-member"
+        type="button"
+        aria-label="Client Chargeurs"
+        onClick={() => void startMember()}
+        disabled={!options?.memberAvailable}
+      />
     </div>
   );
 }
