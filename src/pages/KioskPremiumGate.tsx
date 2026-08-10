@@ -55,7 +55,7 @@ type Stage = "hero" | "member" | "connected" | "guest";
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
 
-const CINEMATIC_ARTWORK_SRC = "/kiosk/cinematic-home.jpg?v=20260810-3";
+const CINEMATIC_ARTWORK_SRC = "/cinematic-home.jpg?v=20260810-4";
 
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
