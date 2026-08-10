@@ -37,6 +37,7 @@ import AdminLayout from "./pages/admin/AdminLayout.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
 import AdminStations from "./pages/admin/AdminStations.tsx";
 import AdminStationDetail from "./pages/admin/AdminStationDetail.tsx";
+import AdminRemoteKiosk from "./pages/admin/AdminRemoteKiosk.tsx";
 import AdminPayments from "./pages/admin/AdminPayments.tsx";
 import AdminRentals from "./pages/admin/AdminRentals.tsx";
 import AdminEvents from "./pages/admin/AdminEvents.tsx";
@@ -101,6 +102,7 @@ const App = () => (
               <Route index element={<AdminOverview />} />
               <Route path="stations" element={<AdminStations />} />
               <Route path="stations/:stationId" element={<AdminStationDetail />} />
+              <Route path="remote-kiosk" element={<AdminRemoteKiosk />} />
               <Route path="payments" element={<AdminPayments />} />
               <Route path="rentals" element={<AdminRentals />} />
               <Route path="orders" element={<AdminOrders />} />
