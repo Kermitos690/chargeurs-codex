@@ -123,6 +123,23 @@
   box-shadow:0 0 10px #1787ff,0 0 24px rgba(23,135,255,.42),inset 0 0 12px rgba(45,163,255,.16);
 }
 
+/* Physical station remains a brand anchor except on scan-heavy scenes. */
+.kv3-station-hero { transition: opacity .35s ease, transform .45s ease, filter .35s ease; }
+html[data-kiosk-scene="member"] .kv3-station-hero,
+html[data-kiosk-scene="payment"] .kv3-station-hero {
+  opacity:.16;
+  transform:translateX(6vw) scale(.92);
+  filter:blur(.2px) saturate(.72);
+}
+html[data-kiosk-scene="connected"] .kv3-station-hero,
+html[data-kiosk-scene="selection"] .kv3-station-hero,
+html[data-kiosk-scene="pricing"] .kv3-station-hero,
+html[data-kiosk-scene="release"] .kv3-station-hero,
+html[data-kiosk-scene="active"] .kv3-station-hero {
+  opacity:.92;
+  transform:none;
+}
+
 /* Keep the master home uncluttered: the sculpture is a subtle edge object there,
    and becomes more visually present once the customer enters a journey. */
 .ck2-home ~ * .kv3-lightning-stage { opacity:.58; }
@@ -133,4 +150,4 @@
   .kv3-home-master-step span{width:27px;height:27px;}
   .kv3-home-master-step:not(:last-child)::after{top:13px;left:calc(50% + 14px);width:calc(100% - 28px);}
 }
-@media(prefers-reduced-motion:reduce){.kv3-lightning-ring{animation:none!important;}}
+@media(prefers-reduced-motion:reduce){.kv3-lightning-ring{animation:none!important;}.kv3-station-hero{transition:none!important;}}
