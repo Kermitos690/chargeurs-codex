@@ -1,0 +1,79 @@
+/*
+ * Physical kiosk hotfix layer.
+ * Keep this last: it corrects layout containment/duplicate chrome without
+ * changing the V2 rental state machine or the scene-specific journey layouts.
+ */
+
+/* The premium home owns its own chrome. Hidden legacy controls must not keep
+   layout/hit-test boxes alive behind it. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-home > .ck2-topbar {
+  display: none !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-global-help {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-topbar {
+  z-index: 72 !important;
+}
+
+/* .ck2-choice-grid is nested inside the positioned hero copy. Absolute
+   positioning therefore used the hero as its containing block and could move
+   the cards over the headline/top bar on the real 16:9 screen. Anchor the
+   cards to the viewport instead. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+  position: fixed !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: 17vh !important;
+  left: 6vw !important;
+  width: 35.5vw !important;
+  margin: 0 !important;
+  transform: none !important;
+  z-index: 32 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
+  z-index: 22 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+  z-index: 34 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
+  z-index: 36 !important;
+}
+
+@media (max-width: 1366px), (max-height: 800px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
+    top: 14.5vh !important;
+    width: 57vw !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+    font-size: clamp(46px, 5.05vw, 72px) !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+    bottom: 15.5vh !important;
+    width: 36vw !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+    min-height: 186px !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+    bottom: 15.5vh !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
+    bottom: 2.8vh !important;
+  }
+}
+
+@media (max-height: 690px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+    bottom: 14vh !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+    min-height: 172px !important;
+  }
+}
