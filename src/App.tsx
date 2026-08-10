@@ -12,6 +12,7 @@ import Pay from "./pages/Pay.tsx";
 import PaymentChoice from "./pages/PaymentChoice.tsx";
 import RentalProgress from "./pages/RentalProgress.tsx";
 import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
+import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -63,6 +64,7 @@ const App = () => (
         <Sonner />
         <Router>
           <KioskReturnOverlay />
+          <KioskHelpLauncher />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
