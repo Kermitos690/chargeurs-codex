@@ -29,6 +29,13 @@ type SlotDiagnostic = {
   age_seconds: number | null; conflicts: string[]; diagnostic_flags: string[];
 };
 
+type SyncResult = {
+  ok?: boolean;
+  configured?: boolean;
+  error?: string;
+  results?: Array<{ ok?: boolean; stationId?: string; error?: string }>;
+};
+
 const statusLabel = (status: string) => ({
   ready: "Prête", recommended: "Recommandée", charging: "En recharge",
   checking: "Vérification", unavailable: "Indisponible",
@@ -48,6 +55,15 @@ const needsOperatorAlert = (slot: SlotDiagnostic) =>
   slot.diagnostic_flags.length > 0 || slot.conflicts.length > 0 ||
   Boolean(slot.error_code || slot.fault_type || slot.fault_cause);
 
+function syncErrorMessage(data: SyncResult | null, invocationError?: string) {
+  if (data?.configured === false || data?.error === "CHARGENOW_NOT_CONFIGURED") return "API ChargeNow non configurée";
+  if (invocationError) return invocationError;
+  if (data?.error) return data.error;
+  const failed = data?.results?.find((row) => row.ok === false);
+  if (failed) return failed.error ? `ChargeNow : ${failed.error}` : "La synchronisation fournisseur a échoué";
+  return "La synchronisation fournisseur a échoué";
+}
+
 export default function AdminStationDetail() {
   const { stationId } = useParams();
   const { canWrite } = useAuth();
@@ -63,7 +79,7 @@ export default function AdminStationDetail() {
   const [diagnostics, setDiagnostics] = useState<SlotDiagnostic[]>([]);
 
   const load = useCallback(async () => {
-    const [{ data: st }, { data: sl }, { data: ev }, { data: rt }, { data: kd }, { data: snapshot }] = await Promise.all([
+    const [stationResult, slotsResult, eventsResult, rentalResult, kioskResult, diagnosticResult] = await Promise.all([
       supabase.from("stations").select("*").eq("station_id", stationId).maybeSingle(),
       supabase.from("slots").select("*").eq("station_id", stationId).order("slot_num"),
       supabase.from("cabinet_events").select("*").eq("station_id", stationId).order("received_at", { ascending: false }).limit(8),
@@ -71,40 +87,68 @@ export default function AdminStationDetail() {
       supabase.functions.invoke("kiosk-admin", { body: { action: "list" } }),
       supabase.functions.invoke("cabinet-slot-diagnostics", { body: { stationId } }),
     ]);
-    setStation(st); setSlots(sl ?? []); setEvents(ev ?? []); setRental(rt?.[0] ?? null);
-    setKiosks(((kd as { devices?: KioskDevice[] } | null)?.devices ?? []).filter((device) => device.station_id === stationId));
-    setDiagnostics(((snapshot as { slots?: SlotDiagnostic[] } | null)?.slots ?? []));
+
+    if (stationResult.error) toast.error("Impossible de charger la borne.");
+    setStation(stationResult.data ?? null);
+    setSlots(slotsResult.data ?? []);
+    setEvents(eventsResult.data ?? []);
+    setRental(rentalResult.data?.[0] ?? null);
+
+    if (!kioskResult.error && kioskResult.data?.ok !== false) {
+      setKiosks(((kioskResult.data as { devices?: KioskDevice[] } | null)?.devices ?? []).filter((device) => device.station_id === stationId));
+    }
+    if (!diagnosticResult.error && diagnosticResult.data?.ok !== false) {
+      setDiagnostics(((diagnosticResult.data as { slots?: SlotDiagnostic[] } | null)?.slots ?? []));
+    }
   }, [stationId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const sync = async () => {
+    if (!canWrite || !stationId) return;
     setSyncing(true);
-    const { data } = await supabase.functions.invoke("sync-cabinet-status", { body: { stationId } });
-    if ((data as any)?.configured === false) toast.error("API ChargeNow non configurée");
-    else toast.success("Synchronisé");
-    await load(); setSyncing(false);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-cabinet-status", { body: { stationId } });
+      const result = data as SyncResult | null;
+      const failed = result?.results?.some((row) => row.ok === false) ?? false;
+      if (error || !result?.ok || failed) toast.error(syncErrorMessage(result, error?.message));
+      else toast.success("Synchronisation terminée");
+      await load();
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const createPairing = async () => {
-    if (!stationId) return;
+    if (!stationId || !canWrite) return;
     setProvisioning(true);
-    const { data, error } = await supabase.functions.invoke("kiosk-admin", {
-      body: { action: "create_pairing_code", stationId, label: `Station ${stationId}`, ttlMinutes: 10 },
-    });
-    setProvisioning(false);
-    if (error || !data?.ok) { toast.error(data?.error ?? error?.message ?? "Création du code impossible"); return; }
-    setPairing(data as PairingReveal);
-    toast.success("Code temporaire généré : une seule tablette peut l’utiliser.");
-    await load();
+    try {
+      const { data, error } = await supabase.functions.invoke("kiosk-admin", {
+        body: { action: "create_pairing_code", stationId, label: `Station ${stationId}`, ttlMinutes: 10 },
+      });
+      if (error || !data?.ok) {
+        const code = data?.error ?? error?.message;
+        toast.error(code === "STATION_ORGANIZATION_MISSING" ? "Cette borne n’est rattachée à aucune organisation." : (code ?? "Création du code impossible"));
+        return;
+      }
+      setPairing(data as PairingReveal);
+      toast.success("Code temporaire généré : une seule tablette peut l’utiliser.");
+      await load();
+    } finally {
+      setProvisioning(false);
+    }
   };
 
   const revokeKiosk = async (deviceId: string) => {
+    if (!canWrite) return;
     setRevoking(deviceId);
-    const { data, error } = await supabase.functions.invoke("kiosk-admin", { body: { action: "revoke", deviceId } });
-    setRevoking(null);
-    if (error || !data?.ok) { toast.error(data?.error ?? error?.message ?? "Révocation impossible"); return; }
-    toast.success("Kiosk révoqué — il ne peut plus demander de configuration.");
-    await load();
+    try {
+      const { data, error } = await supabase.functions.invoke("kiosk-admin", { body: { action: "revoke", deviceId } });
+      if (error || !data?.ok) { toast.error(data?.error ?? error?.message ?? "Révocation impossible"); return; }
+      toast.success("Kiosk révoqué — il ne peut plus demander de configuration.");
+      await load();
+    } finally {
+      setRevoking(null);
+    }
   };
 
   const enrollmentUrl = pairing ? `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/kiosk-enroll` : "";
@@ -122,9 +166,9 @@ export default function AdminStationDetail() {
           <h1 className="font-display text-3xl font-bold">{station.name}</h1>
           <p className="text-muted-foreground">{station.location_name}</p>
         </div>
-        <Button onClick={sync} disabled={syncing} className="gap-2 rounded-full bg-gradient-primary">
+        {canWrite && <Button onClick={sync} disabled={syncing} className="gap-2 rounded-full bg-gradient-primary">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Synchroniser
-        </Button>
+        </Button>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-4">
@@ -136,29 +180,21 @@ export default function AdminStationDetail() {
 
       <section className="glass liquid-border rounded-2xl p-6">
         <h2 className="mb-4 font-display text-xl font-bold">Carte des emplacements</h2>
-        {slots.length === 0 ? (
-          <p className="text-muted-foreground">Aucune donnée d'emplacement (synchronisation requise).</p>
-        ) : (
-          <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
-            {slots.map((sl) => (
-              <div key={sl.slot_num} className={cn("flex flex-col items-center gap-1 rounded-xl p-3",
-                sl.battery_id ? "bg-success/15" : "bg-muted/50")}>
-                <Battery className={cn("h-6 w-6", sl.battery_id ? "text-success" : "text-muted-foreground")} />
-                <span className="text-xs font-bold">#{sl.slot_num}</span>
-                <span className="truncate text-[10px] text-muted-foreground">{sl.battery_id ?? "vide"}</span>
-              </div>
-            ))}
-          </div>
+        {slots.length === 0 ? <p className="text-muted-foreground">Aucune donnée d'emplacement (synchronisation requise).</p> : (
+          <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">{slots.map((sl) => (
+            <div key={sl.slot_num} className={cn("flex flex-col items-center gap-1 rounded-xl p-3", sl.battery_id ? "bg-success/15" : "bg-muted/50")}>
+              <Battery className={cn("h-6 w-6", sl.battery_id ? "text-success" : "text-muted-foreground")} />
+              <span className="text-xs font-bold">#{sl.slot_num}</span>
+              <span className="truncate text-[10px] text-muted-foreground">{sl.battery_id ?? "vide"}</span>
+            </div>
+          ))}</div>
         )}
       </section>
 
       <section className={cn("rounded-2xl border p-5", activeAlerts.length ? "border-warning/45 bg-warning/10" : "border-success/35 bg-success/10")}>
         <div className="flex items-start gap-3">
           {activeAlerts.length ? <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-warning" /> : <CircleCheck className="mt-0.5 h-6 w-6 shrink-0 text-success" />}
-          <div>
-            <h2 className="font-display text-xl font-bold">Alertes actives de la borne</h2>
-            <p className="text-sm text-muted-foreground">Vue opérateur basée sur le snapshot fournisseur le plus récent. Un slot libre pour un retour n’est pas une alerte.</p>
-          </div>
+          <div><h2 className="font-display text-xl font-bold">Alertes actives de la borne</h2><p className="text-sm text-muted-foreground">Vue opérateur basée sur le snapshot fournisseur le plus récent. Un slot libre pour un retour n’est pas une alerte.</p></div>
         </div>
         {activeAlerts.length ? <div className="mt-4 grid gap-2 md:grid-cols-2">{activeAlerts.map((slot) => (
           <div key={slot.slot_num} className="rounded-xl border border-warning/30 bg-background/35 p-3 text-sm">
@@ -180,61 +216,35 @@ export default function AdminStationDetail() {
 
       <section className="glass liquid-border rounded-2xl p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="flex items-center gap-2 font-display text-xl font-bold"><TabletSmartphone className="h-5 w-5" /> Kiosk attribué</h2>
-            <p className="text-sm text-muted-foreground">L’attribution est initiée par cette borne. La tablette ne choisit jamais librement une station.</p>
-          </div>
-          {canWrite && <Button onClick={createPairing} disabled={provisioning} className="gap-2 rounded-full bg-gradient-primary">
-            {provisioning ? <Loader2 className="h-4 w-4 animate-spin" /> : <TabletSmartphone className="h-4 w-4" />}Attribuer un kiosk
-          </Button>}
+          <div><h2 className="flex items-center gap-2 font-display text-xl font-bold"><TabletSmartphone className="h-5 w-5" /> Kiosk attribué</h2><p className="text-sm text-muted-foreground">L’attribution est initiée par cette borne. La tablette ne choisit jamais librement une station.</p></div>
+          {canWrite && <Button onClick={createPairing} disabled={provisioning} className="gap-2 rounded-full bg-gradient-primary">{provisioning ? <Loader2 className="h-4 w-4 animate-spin" /> : <TabletSmartphone className="h-4 w-4" />}Attribuer un kiosk</Button>}
         </div>
         {kiosks.length === 0 ? <p className="text-sm text-muted-foreground">Aucun kiosk actif n’est encore attribué à cette borne.</p> : (
           <div className="space-y-2">{kiosks.map((device) => (
             <div key={device.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-3 text-sm">
               <div><strong>{device.label ?? "Tablette sans libellé"}</strong><span className="ml-2 font-mono text-xs text-muted-foreground">{device.device_public_id ? "identité Keystore enregistrée" : "en attente d’enrôlement"}</span><div className="text-xs text-muted-foreground">APK {device.app_version ?? "—"} · dernière activité {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "—"}</div></div>
-              {canWrite && device.active && !device.token_revoked && <Button variant="outline" size="sm" onClick={() => revokeKiosk(device.id)} disabled={revoking === device.id} className="gap-1"><Ban className="h-3.5 w-3.5" />Révoquer</Button>}
+              {canWrite && device.active && !device.token_revoked && <Button variant="outline" size="sm" onClick={() => void revokeKiosk(device.id)} disabled={revoking === device.id} className="gap-1"><Ban className="h-3.5 w-3.5" />Révoquer</Button>}
             </div>
           ))}</div>
         )}
         {pairing && (
           <div className="mt-5 grid gap-4 rounded-xl border border-primary/30 bg-primary/5 p-4 md:grid-cols-[auto_1fr]">
             <QRCodeSVG value={pairing.pairingCode} size={144} includeMargin />
-            <div className="space-y-2"><p className="font-semibold">Code numérique à usage unique lié à {pairing.stationId}</p><code className="block rounded bg-background p-3 text-2xl tracking-[0.3em]">{pairing.pairingCode}</code><p className="text-xs text-muted-foreground">Expire le {new Date(pairing.expiresAt).toLocaleString()} · Organisation : {pairing.organizationName}</p><p className="text-xs text-muted-foreground">Saisissez les six chiffres sur le pavé tactile de l’APK. Le QR reste une option technique secondaire. Endpoint : {enrollmentUrl || "configuré dans l’APK"}</p><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(pairing.pairingCode).then(() => toast.success("Code copié"))} className="gap-1"><Copy className="h-3.5 w-3.5" />Copier le code</Button></div>
+            <div className="space-y-2"><p className="font-semibold">Code numérique à usage unique lié à {pairing.stationId}</p><code className="block rounded bg-background p-3 text-2xl tracking-[0.3em]">{pairing.pairingCode}</code><p className="text-xs text-muted-foreground">Expire le {new Date(pairing.expiresAt).toLocaleString()} · Organisation : {pairing.organizationName}</p><p className="text-xs text-muted-foreground">Saisissez les six chiffres sur le pavé tactile de l’APK. Le QR reste une option technique secondaire. Endpoint : {enrollmentUrl || "configuré dans l’APK"}</p><Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(pairing.pairingCode).then(() => toast.success("Code copié"), () => toast.error("Copie impossible"))} className="gap-1"><Copy className="h-3.5 w-3.5" />Copier le code</Button></div>
           </div>
         )}
       </section>
 
-      {rental && (
-        <section className="glass liquid-border rounded-2xl p-6">
-          <h2 className="mb-2 font-display text-xl font-bold">Location active</h2>
-          <p className="font-mono text-sm">{rental.id}</p>
-          <p className="text-muted-foreground">État : {rental.state} · slot {rental.selected_slot_num ?? "—"}</p>
-        </section>
-      )}
+      {rental && <section className="glass liquid-border rounded-2xl p-6"><h2 className="mb-2 font-display text-xl font-bold">Location active</h2><p className="font-mono text-sm">{rental.id}</p><p className="text-muted-foreground">État : {rental.state} · slot {rental.selected_slot_num ?? "—"}</p></section>}
 
       <section className="glass liquid-border rounded-2xl p-6">
         <h2 className="mb-4 font-display text-xl font-bold">Derniers événements</h2>
-        {events.length === 0 ? <p className="text-muted-foreground">Aucun événement reçu.</p> : (
-          <ul className="space-y-2">
-            {events.map((e) => (
-              <li key={e.id} className="flex items-center justify-between border-b border-border/50 pb-2 text-sm">
-                <span className="font-medium">{e.event_type}</span>
-                <span className="text-muted-foreground">{new Date(e.received_at).toLocaleString()}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {events.length === 0 ? <p className="text-muted-foreground">Aucun événement reçu.</p> : <ul className="space-y-2">{events.map((e) => <li key={e.id} className="flex items-center justify-between border-b border-border/50 pb-2 text-sm"><span className="font-medium">{e.event_type}</span><span className="text-muted-foreground">{new Date(e.received_at).toLocaleString()}</span></li>)}</ul>}
       </section>
     </div>
   );
 }
 
 function Info({ label, value, icon: Icon, tone }: { label: string; value: ReactNode; icon?: LucideIcon; tone?: string }) {
-  return (
-    <div className="glass rounded-2xl p-5">
-      {Icon && <Icon className={cn("mb-2 h-5 w-5", tone)} />}
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-sm text-muted-foreground">{label}</div>
-    </div>
-  );
+  return <div className="glass rounded-2xl p-5">{Icon && <Icon className={cn("mb-2 h-5 w-5", tone)} />}<div className="text-2xl font-bold">{value}</div><div className="text-sm text-muted-foreground">{label}</div></div>;
 }
