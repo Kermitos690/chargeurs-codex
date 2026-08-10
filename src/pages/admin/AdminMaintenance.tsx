@@ -3,16 +3,25 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ShieldCheck, RefreshCw, Loader2, Inbox, LockKeyhole, Radio } from "lucide-react";
 
 const REQUEST_ROLES = new Set(["super_admin", "admin", "operations_admin", "support_agent"]);
 
+type StationOption = {
+  station_id: string;
+  name: string | null;
+  location_name: string | null;
+  online: boolean | null;
+  status: string | null;
+};
+
 export default function AdminMaintenance() {
   const { roles, canWrite } = useAuth();
   const canHandleRequests = roles.some((role) => REQUEST_ROLES.has(role));
   const [stationId, setStationId] = useState("");
+  const [stations, setStations] = useState<StationOption[]>([]);
+  const [stationsLoading, setStationsLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [requests, setRequests] = useState<Array<{
     id: string; request_type: string; name: string; email: string; station_id: string | null;
@@ -37,7 +46,30 @@ export default function AdminMaintenance() {
     }
   }, [canHandleRequests]);
 
+  const loadStations = useCallback(async () => {
+    if (!canWrite) { setStations([]); setStationId(""); return; }
+    setStationsLoading(true);
+    try {
+      const { data, error } = await supabase.from("stations")
+        .select("station_id,name,location_name,online,status")
+        .order("station_id");
+      if (error) {
+        toast.error("Impossible de charger la liste des bornes.");
+        return;
+      }
+      const next = (data ?? []) as StationOption[];
+      setStations(next);
+      setStationId((current) => {
+        if (current && next.some((station) => station.station_id === current)) return current;
+        return next.find((station) => station.online === true)?.station_id ?? next[0]?.station_id ?? "";
+      });
+    } finally {
+      setStationsLoading(false);
+    }
+  }, [canWrite]);
+
   useEffect(() => { void loadRequests(); }, [loadRequests]);
+  useEffect(() => { void loadStations(); }, [loadStations]);
 
   const setRequestStatus = async (id: string, status: "in_progress" | "resolved") => {
     if (!canHandleRequests) return;
@@ -52,7 +84,7 @@ export default function AdminMaintenance() {
 
   const call = async (actionType: "test_auth" | "sync_status") => {
     if (!canWrite) return;
-    if (!stationId.trim()) { toast.error("Saisissez l’identifiant de la borne."); return; }
+    if (!stationId.trim()) { toast.error("Sélectionnez une borne."); return; }
     setBusy(actionType);
     try {
       const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
@@ -68,6 +100,8 @@ export default function AdminMaintenance() {
       setBusy(null);
     }
   };
+
+  const selectedStation = stations.find((station) => station.station_id === stationId) ?? null;
 
   return (
     <div className="animate-fade-in max-w-3xl space-y-6">
@@ -98,15 +132,38 @@ export default function AdminMaintenance() {
       {canWrite && (
         <>
           <section className="glass liquid-border rounded-2xl p-6">
-            <label className="text-sm text-muted-foreground">Borne (cabinetId)</label>
-            <Input value={stationId} onChange={(e) => setStationId(e.target.value)} placeholder="DTA21269" />
+            <label htmlFor="maintenance-station" className="text-sm text-muted-foreground">Borne</label>
+            <div className="mt-2 flex gap-2">
+              <select
+                id="maintenance-station"
+                value={stationId}
+                onChange={(event) => setStationId(event.target.value)}
+                disabled={stationsLoading || stations.length === 0}
+                className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {stations.length === 0 && <option value="">Aucune borne disponible</option>}
+                {stations.map((station) => (
+                  <option key={station.station_id} value={station.station_id}>
+                    {station.station_id} — {station.name ?? station.location_name ?? "Borne Chargeurs.ch"}
+                  </option>
+                ))}
+              </select>
+              <Button type="button" variant="outline" onClick={() => void loadStations()} disabled={stationsLoading} className="gap-2">
+                {stationsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Actualiser
+              </Button>
+            </div>
+            {selectedStation && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                {selectedStation.location_name ?? "Emplacement non renseigné"} · {selectedStation.online ? "en ligne" : "hors ligne"} · état {selectedStation.status ?? "inconnu"}
+              </p>
+            )}
           </section>
 
           <section className="glass liquid-border space-y-3 rounded-2xl p-6">
             <h2 className="font-display text-lg font-bold text-success"><ShieldCheck className="mr-2 inline h-5 w-5" />Diagnostics sûrs</h2>
             <div className="flex flex-wrap gap-3">
-              <Button onClick={() => void call("test_auth")} disabled={!!busy} variant="ghost" className="gap-2 border border-border">{busy === "test_auth" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}Tester l'authentification API</Button>
-              <Button onClick={() => void call("sync_status")} disabled={!!busy} variant="ghost" className="gap-2 border border-border">{busy === "sync_status" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Lire l’état fournisseur</Button>
+              <Button onClick={() => void call("test_auth")} disabled={!!busy || !stationId} variant="ghost" className="gap-2 border border-border">{busy === "test_auth" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}Tester l'authentification API</Button>
+              <Button onClick={() => void call("sync_status")} disabled={!!busy || !stationId} variant="ghost" className="gap-2 border border-border">{busy === "sync_status" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Lire l’état fournisseur</Button>
             </div>
           </section>
         </>
