@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Loader2, UserRound } from "lucide-react";
@@ -55,7 +55,7 @@ type Stage = "hero" | "member" | "connected" | "guest";
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
 
-const cinematicArtworkSrc = "/api/kiosk/cinematic-artwork?v=20260810-2";
+const CINEMATIC_ARTWORK_SRC = "/kiosk/cinematic-home.jpg?v=20260810-3";
 
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
@@ -72,6 +72,8 @@ export default function KioskPremiumGate() {
   const [pairing, setPairing] = useState<PairingCreate | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
+  const [artworkFailed, setArtworkFailed] = useState(false);
+  const pairingSeenPending = useRef(false);
 
   const loadOptions = useCallback(async () => {
     const token = readKioskToken();
@@ -168,6 +170,8 @@ export default function KioskPremiumGate() {
     const token = readKioskToken();
     if (!token || !stationId || !options?.memberAvailable) return;
     setPairingError(null);
+    setPairing(null);
+    pairingSeenPending.current = false;
     document.documentElement.dataset.kioskJourney = "client";
     setStage("member");
     const { data, transportError } = await invokeKioskEdgeProxy<PairingCreate>(
@@ -198,15 +202,19 @@ export default function KioskPremiumGate() {
         setPairingError("PAIRING_EXPIRED");
         return;
       }
-      if (data.connected) {
-        try {
-          sessionStorage.setItem(KIOSK_JOURNEY_STORAGE_KEY, "member");
-          sessionStorage.setItem(KIOSK_PAIRING_STORAGE_KEY, pairing.pairingId!);
-        } catch { /* server remains authoritative */ }
-        document.documentElement.dataset.kioskJourney = "client";
-        setStage("connected");
-        window.setTimeout(() => setStage("guest"), 900);
+      if (!data.connected) {
+        pairingSeenPending.current = true;
+        return;
       }
+      if (!pairingSeenPending.current) return;
+
+      try {
+        sessionStorage.setItem(KIOSK_JOURNEY_STORAGE_KEY, "member");
+        sessionStorage.setItem(KIOSK_PAIRING_STORAGE_KEY, pairing.pairingId!);
+      } catch { /* server remains authoritative */ }
+      document.documentElement.dataset.kioskJourney = "client";
+      setStage("connected");
+      window.setTimeout(() => setStage("guest"), 1800);
     };
     void poll();
     const timer = window.setInterval(() => void poll(), 900);
@@ -267,12 +275,15 @@ export default function KioskPremiumGate() {
     <main className="cinematic-home" data-kiosk-cinematic-home="true">
       <img
         className="cinematic-home__art"
-        src={cinematicArtworkSrc}
+        src={CINEMATIC_ARTWORK_SRC}
         alt=""
         aria-hidden="true"
         decoding="sync"
         fetchPriority="high"
+        onLoad={() => setArtworkFailed(false)}
+        onError={() => setArtworkFailed(true)}
       />
+      {artworkFailed ? <div className="cinematic-home__asset-error">VISUAL_ASSET_LOAD_FAILED</div> : null}
 
       <div className="cinematic-home__price-mask" aria-label={`Tarif ${guestHourly} par heure, plafond journalier ${guestCap}`}>
         <div className="cinematic-home__price">
