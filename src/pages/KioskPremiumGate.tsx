@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import { Info, Loader2, QrCode, ShieldCheck, UserRound } from "lucide-react";
+import { Loader2, UserRound } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import Kiosk from "./Kiosk";
 import KioskJourneyGate from "./KioskJourneyGate";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -14,13 +13,13 @@ import {
   KIOSK_PAIRING_STORAGE_KEY,
 } from "@/lib/kioskEdgeProxy";
 import "./kiosk-premium-gate.css";
+import "./kiosk-da-master.css";
 
 type SegmentPrice = {
   segment: "guest" | "member";
   currency: string;
   hourly_cents: number | null;
   daily_cap_cents: number;
-  deposit_cents?: number | null;
 };
 
 type CustomerOptions = {
@@ -172,17 +171,13 @@ export default function KioskPremiumGate() {
   if (stage === "guest") return <Kiosk />;
 
   if (checking) {
-    return (
-      <div className="premium-kiosk premium-kiosk-loading">
-        <Loader2 className="h-14 w-14 animate-spin" />
-      </div>
-    );
+    return <div className="premium-kiosk da-master-screen da-loading"><Loader2 className="h-14 w-14 animate-spin" /></div>;
   }
 
   if (stage === "connected") {
     return (
-      <div className="premium-kiosk premium-connected">
-        <div className="premium-connected-ring"><UserRound /></div>
+      <div className="premium-kiosk da-master-screen da-client-screen da-connected">
+        <div className="da-connected-ring"><UserRound /></div>
         <h1>Compte connecté</h1>
         <p>Votre tarif client est activé.</p>
       </div>
@@ -192,48 +187,95 @@ export default function KioskPremiumGate() {
   if (stage === "member") {
     const connectUrl = pairing?.connectPath ? `${window.location.origin}${pairing.connectPath}` : null;
     return (
-      <div className="premium-kiosk premium-member-screen">
-        <div className="premium-member-panel">
+      <div className="premium-kiosk da-master-screen da-client-screen">
+        <header className="da-topbar">
           <BrandLogo size="md" />
-          <div className="premium-member-copy">
-            <span>CLIENT CHARGEURS</span>
-            <h1>Connectez votre compte</h1>
-            <p>Scannez ce QR avec l’appareil photo de votre téléphone. Aucune donnée personnelle n’est saisie sur la borne.</p>
-            <strong>{money(options?.member?.hourly_cents, options?.member?.currency)} / h</strong>
-          </div>
-          <button onClick={() => { setPairing(null); setStage("hero"); }}>Retour</button>
-        </div>
-        <div className="premium-member-qr">
-          {connectUrl && !pairingError ? (
-            <QRCodeSVG value={connectUrl} size={360} level="M" marginSize={2} />
-          ) : pairingError ? (
-            <div className="premium-member-error">Connexion temporairement indisponible</div>
-          ) : (
-            <Loader2 className="h-14 w-14 animate-spin" />
-          )}
+          <button className="da-top-action" onClick={() => { setPairing(null); setStage("hero"); }}>← Annuler</button>
+        </header>
+        <div className="da-member-layout">
+          <section className="da-member-copy">
+            <span className="da-eyebrow da-blue">CLIENT CHARGEURS</span>
+            <h1>Scannez ce QR avec<br/><strong>votre téléphone</strong></h1>
+            <p>Aucune donnée personnelle n’est saisie sur cette borne. La connexion est temporaire et sera fermée automatiquement.</p>
+            <div className="da-live-price da-blue">{money(options?.member?.hourly_cents, options?.member?.currency)} <small>/ h</small></div>
+          </section>
+          <section className="da-qr-panel">
+            {connectUrl && !pairingError ? (
+              <QRCodeSVG value={connectUrl} size={360} level="M" bgColor="#ffffff" fgColor="#000000" marginSize={2} />
+            ) : pairingError ? (
+              <div className="premium-member-error">Connexion temporairement indisponible</div>
+            ) : (
+              <Loader2 className="h-14 w-14 animate-spin" />
+            )}
+            <p>Ouvrez l’appareil photo de votre téléphone et scannez le code.</p>
+          </section>
         </div>
       </div>
     );
   }
 
-  const guestCap = money(options?.guest?.daily_cap_cents, options?.guest?.currency);
-  const deposit = money(options?.guest?.deposit_cents ?? 3000, options?.guest?.currency ?? "CHF");
-
   return (
-    <div className="premium-kiosk premium-hero premium-hero-confirmed">
-      <div className="premium-hero-art" aria-hidden="true" />
-      <button className="premium-hotspot premium-hotspot-refresh" type="button" aria-label="Actualiser" onClick={() => window.location.reload()} />
-      <button className="premium-hotspot premium-hotspot-help" type="button" aria-label="FAQ / Aide" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))} />
-      <div className="premium-language-overlay" aria-label="Langues"><LanguageSwitcher /></div>
-      <button className="premium-hotspot premium-hotspot-express" type="button" aria-label="Location express" onClick={chooseGuest} disabled={!options?.guest} />
-      <button className="premium-hotspot premium-hotspot-member" type="button" aria-label="Client Chargeurs" onClick={() => void startMember()} disabled={!options?.memberAvailable} />
+    <div className="premium-kiosk da-master-screen da-home">
+      <div className="da-ambient da-ambient-left" aria-hidden="true" />
+      <div className="da-ambient da-ambient-right" aria-hidden="true" />
+      <header className="da-topbar">
+        <BrandLogo size="md" />
+        <nav className="da-nav">
+          <button type="button" onClick={() => window.location.reload()}>↻ Actualiser</button>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>? FAQ / Aide</button>
+          <LanguageSwitcher />
+        </nav>
+      </header>
 
-      <footer className="premium-payment-strip">
-        <div className="premium-payment-secure"><ShieldCheck /><span>Paiement sécurisé<br />par <b>Stripe</b></span></div>
-        <div className="premium-payment-methods"><span className="premium-payment-label">PAYEZ AVEC</span><KioskPaymentMarks cardLabel="Carte" /></div>
-        <div className="premium-payment-guide"><QrCode /><span>Scannez avec l’appareil photo<br />puis choisissez votre moyen de paiement</span></div>
-        <div className="premium-payment-limits"><span><Info />Plafond journalier <b>{guestCap}</b></span><span><ShieldCheck />Caution <b>{deposit}</b></span></div>
-      </footer>
+      <main className="da-home-grid">
+        <section className="da-copy-column">
+          <div className="da-hero-title">
+            <span>PLUS DE</span>
+            <span>BATTERIE ?</span>
+            <strong>RÉGLÉ.</strong>
+          </div>
+          <div className="da-price-strip">
+            <span className="da-price-dot">⚡</span>
+            <strong>{money(options?.guest?.hourly_cents, options?.guest?.currency)}</strong>
+            <span>/ heure</span>
+            {options?.guest?.daily_cap_cents ? <><i>•</i><span>Plafond journalier</span><strong>{money(options.guest.daily_cap_cents, options.guest.currency)}</strong></> : null}
+          </div>
+
+          <div className="da-choice-row">
+            <button className="da-choice da-choice-express" onClick={chooseGuest} disabled={!options?.guest}>
+              <span className="da-choice-icon">⚡</span>
+              <span className="da-choice-kicker">LOCATION</span>
+              <strong>EXPRESS</strong>
+              <small>Sans compte.<br/>Payez sur votre téléphone et partez.</small>
+              <span className="da-choice-arrow">→</span>
+            </button>
+
+            <button className="da-choice da-choice-client" onClick={() => void startMember()} disabled={!options?.memberAvailable}>
+              <span className="da-choice-icon">◉</span>
+              <span className="da-choice-kicker">CLIENT</span>
+              <strong>CHARGEURS</strong>
+              <small>Connectez-vous par QR.<br/>Profitez de vos avantages.</small>
+              <span className="da-choice-arrow">→</span>
+            </button>
+          </div>
+        </section>
+
+        <section className="da-scene" aria-label="Borne Chargeurs.ch">
+          <div className="da-lightning" aria-hidden="true">ϟ</div>
+          <div className="da-cabinet">
+            <div className="da-cabinet-screen">
+              <BrandLogo size="sm" />
+              <div><strong>Bienvenue</strong><span>Choisissez votre option</span></div>
+            </div>
+            <div className="da-cabinet-body">
+              <BrandLogo size="sm" />
+              <div className="da-slots">
+                {[1,2,3,4].map((slot) => <span key={slot}><i>{slot}</i><b /></span>)}
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
