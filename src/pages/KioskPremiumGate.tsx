@@ -74,8 +74,16 @@ export default function KioskPremiumGate() {
 
   useEffect(() => {
     document.documentElement.classList.add("kiosk-mode");
-    return () => document.documentElement.classList.remove("kiosk-mode");
+    return () => {
+      document.documentElement.classList.remove("kiosk-mode");
+      delete document.documentElement.dataset.kioskJourney;
+    };
   }, []);
+
+  useEffect(() => {
+    if (stage === "hero") delete document.documentElement.dataset.kioskJourney;
+    if (stage === "member" || stage === "connected") document.documentElement.dataset.kioskJourney = "client";
+  }, [stage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +125,7 @@ export default function KioskPremiumGate() {
       sessionStorage.setItem(KIOSK_JOURNEY_STORAGE_KEY, "guest");
       sessionStorage.removeItem(KIOSK_PAIRING_STORAGE_KEY);
     } catch { /* noop */ }
+    document.documentElement.dataset.kioskJourney = "express";
     setStage("guest");
   };
 
@@ -124,6 +133,7 @@ export default function KioskPremiumGate() {
     const token = readKioskToken();
     if (!token || !stationId || !options?.memberAvailable) return;
     setPairingError(null);
+    document.documentElement.dataset.kioskJourney = "client";
     setStage("member");
     const { data, transportError } = await invokeKioskEdgeProxy<PairingCreate>(
       "/api/kiosk/customer-pairing-create",
@@ -158,6 +168,7 @@ export default function KioskPremiumGate() {
           sessionStorage.setItem(KIOSK_JOURNEY_STORAGE_KEY, "member");
           sessionStorage.setItem(KIOSK_PAIRING_STORAGE_KEY, pairing.pairingId!);
         } catch { /* server remains authoritative */ }
+        document.documentElement.dataset.kioskJourney = "client";
         setStage("connected");
         window.setTimeout(() => setStage("guest"), 900);
       }
@@ -218,6 +229,8 @@ export default function KioskPremiumGate() {
     <div className="premium-kiosk da-master-screen da-home">
       <div className="da-ambient da-ambient-left" aria-hidden="true" />
       <div className="da-ambient da-ambient-right" aria-hidden="true" />
+      <div className="da-smoke da-smoke-a" aria-hidden="true" />
+      <div className="da-smoke da-smoke-b" aria-hidden="true" />
       <header className="da-topbar">
         <BrandLogo size="md" />
         <nav className="da-nav">
