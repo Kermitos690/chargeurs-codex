@@ -56,7 +56,20 @@ type Stage = "hero" | "member" | "connected" | "guest";
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
 
-const cinematicArtworkSrc = `data:image/jpeg;base64,${cinematicArtwork.trim()}`;
+const createCinematicArtworkUrl = () => {
+  try {
+    const clean = cinematicArtwork.replace(/\s+/g, "");
+    const binary = window.atob(clean);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+  } catch (error) {
+    console.error("CINEMATIC_ARTWORK_DECODE_FAILED", error);
+    return "";
+  }
+};
+
+const cinematicArtworkSrc = createCinematicArtworkUrl();
 
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
@@ -266,7 +279,11 @@ export default function KioskPremiumGate() {
 
   return (
     <main className="cinematic-home" data-kiosk-cinematic-home="true">
-      <img className="cinematic-home__art" src={cinematicArtworkSrc} alt="" aria-hidden="true" />
+      {cinematicArtworkSrc ? (
+        <img className="cinematic-home__art" src={cinematicArtworkSrc} alt="" aria-hidden="true" />
+      ) : (
+        <div className="cinematic-home__art cinematic-home__art--fallback" aria-hidden="true" />
+      )}
 
       <div className="cinematic-home__price-mask" aria-label={`Tarif ${guestHourly} par heure, plafond journalier ${guestCap}`}>
         <div className="cinematic-home__price">
@@ -279,21 +296,11 @@ export default function KioskPremiumGate() {
         </div>
       </div>
 
-      <button
-        type="button"
-        className="cinematic-home__hit cinematic-home__refresh"
-        aria-label="Actualiser"
-        onClick={() => window.location.reload()}
-      >
+      <button type="button" className="cinematic-home__hit cinematic-home__refresh" aria-label="Actualiser" onClick={() => window.location.reload()}>
         <span className="cinematic-home__sr">Actualiser</span>
       </button>
 
-      <button
-        type="button"
-        className="cinematic-home__hit cinematic-home__help"
-        aria-label="Aide"
-        onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}
-      >
+      <button type="button" className="cinematic-home__hit cinematic-home__help" aria-label="Aide" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>
         <span className="cinematic-home__sr">Aide</span>
       </button>
 
@@ -301,23 +308,11 @@ export default function KioskPremiumGate() {
         <LanguageSwitcher />
       </div>
 
-      <button
-        type="button"
-        className="cinematic-home__hit cinematic-home__express"
-        aria-label="Location Express"
-        disabled={!options?.guest}
-        onClick={chooseGuest}
-      >
+      <button type="button" className="cinematic-home__hit cinematic-home__express" aria-label="Location Express" disabled={!options?.guest} onClick={chooseGuest}>
         <span className="cinematic-home__sr">Location Express</span>
       </button>
 
-      <button
-        type="button"
-        className="cinematic-home__hit cinematic-home__client"
-        aria-label="Client Chargeurs"
-        disabled={!options?.memberAvailable}
-        onClick={() => void startMember()}
-      >
+      <button type="button" className="cinematic-home__hit cinematic-home__client" aria-label="Client Chargeurs" disabled={!options?.memberAvailable} onClick={() => void startMember()}>
         <span className="cinematic-home__sr">Client Chargeurs</span>
       </button>
     </main>
