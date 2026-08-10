@@ -6,6 +6,7 @@ import "./kiosk-customer-polish.css";
 import "./kiosk-v2.css";
 import "./kiosk-v2-gate.css";
 import "./kiosk-v2-overlays.css";
+import "./kiosk-final-overrides.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
 
