@@ -221,7 +221,9 @@ Deno.serve(async (req) => {
         card: {
           capture_method: "manual",
           setup_future_usage: "off_session",
-          request_extended_authorization: "if_available",
+          // Do not request Stripe's extended-authorization card feature here.
+          // This account is not eligible for that advanced feature; requesting
+          // it makes Checkout fail before a payment page can be created.
         },
       },
       payment_intent_data: {
@@ -249,7 +251,9 @@ Deno.serve(async (req) => {
       success_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/progress?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
       cancel_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/cancel?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
     }, {
-      idempotencyKey: `rental_direct_checkout:v5:${session.id}:${pricingHash}`,
+      // v6 intentionally invalidates the failed v5 idempotency result that
+      // contained the unsupported extended-authorization request.
+      idempotencyKey: `rental_direct_checkout:v6:${session.id}:${pricingHash}`,
     });
 
     const expiresIso = new Date(expiresAt * 1000).toISOString();
@@ -290,6 +294,7 @@ Deno.serve(async (req) => {
         pricing_snapshot_hash: pricingHash,
         qr_target: "stripe_checkout",
         card_capture: "manual",
+        extended_authorization: "not_requested_account_ineligible",
         other_methods: "automatic_capture",
         correlation_id: correlationId,
       },
@@ -307,10 +312,12 @@ Deno.serve(async (req) => {
   } catch (error) {
     const raw = error as any;
     const errorCode = typeof raw?.code === "string" ? raw.code : (error instanceof Error ? error.message : "UNKNOWN");
+    const errorMessage = typeof raw?.message === "string" ? raw.message : (error instanceof Error ? error.message : "");
     console.error("create-stripe-checkout direct", {
       name: error instanceof Error ? error.name : "error",
       code: raw?.code ?? null,
       param: raw?.param ?? null,
+      message: errorMessage.slice(0, 500),
       correlationId,
     });
     if (db && rentalSessionId) {
@@ -319,6 +326,7 @@ Deno.serve(async (req) => {
         target: rentalSessionId,
         data: {
           code: String(errorCode).slice(0, 120),
+          message: errorMessage.slice(0, 500),
           stripe_param: typeof raw?.param === "string" ? raw.param.slice(0, 120) : null,
           error_type: typeof raw?.type === "string" ? raw.type.slice(0, 80) : null,
           correlation_id: correlationId,
