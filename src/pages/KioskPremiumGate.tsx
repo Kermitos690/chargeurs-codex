@@ -11,7 +11,6 @@ import {
   KIOSK_JOURNEY_STORAGE_KEY,
   KIOSK_PAIRING_STORAGE_KEY,
 } from "@/lib/kioskEdgeProxy";
-import cinematicArtwork from "./chargeurs-cinematic-home.b64?raw";
 import "./kiosk-premium-gate.css";
 import "./kiosk-da-master.css";
 import "./kiosk-cinematic-home.css";
@@ -56,20 +55,7 @@ type Stage = "hero" | "member" | "connected" | "guest";
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
 
-const createCinematicArtworkUrl = () => {
-  try {
-    const clean = cinematicArtwork.replace(/\s+/g, "");
-    const binary = window.atob(clean);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    return URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-  } catch (error) {
-    console.error("CINEMATIC_ARTWORK_DECODE_FAILED", error);
-    return "";
-  }
-};
-
-const cinematicArtworkSrc = createCinematicArtworkUrl();
+const cinematicArtworkSrc = "/api/kiosk/cinematic-artwork?v=20260810-2";
 
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
@@ -279,11 +265,14 @@ export default function KioskPremiumGate() {
 
   return (
     <main className="cinematic-home" data-kiosk-cinematic-home="true">
-      {cinematicArtworkSrc ? (
-        <img className="cinematic-home__art" src={cinematicArtworkSrc} alt="" aria-hidden="true" />
-      ) : (
-        <div className="cinematic-home__art cinematic-home__art--fallback" aria-hidden="true" />
-      )}
+      <img
+        className="cinematic-home__art"
+        src={cinematicArtworkSrc}
+        alt=""
+        aria-hidden="true"
+        decoding="sync"
+        fetchPriority="high"
+      />
 
       <div className="cinematic-home__price-mask" aria-label={`Tarif ${guestHourly} par heure, plafond journalier ${guestCap}`}>
         <div className="cinematic-home__price">
