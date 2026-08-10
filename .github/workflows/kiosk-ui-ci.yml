@@ -1,0 +1,48 @@
+name: Kiosk UI CI
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/KioskPremiumGate.tsx"
+      - "src/pages/Kiosk.tsx"
+      - "src/pages/kiosk-cinematic-home.css"
+      - "src/pages/kiosk-da-master.css"
+      - "src/components/LanguageSwitcher.tsx"
+      - "src/i18n/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/kiosk-ui-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/pages/KioskPremiumGate.tsx"
+      - "src/pages/Kiosk.tsx"
+      - "src/pages/kiosk-cinematic-home.css"
+      - "src/pages/kiosk-da-master.css"
+      - "src/components/LanguageSwitcher.tsx"
+      - "src/i18n/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kiosk-ui-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Production build
+        run: npm run build
