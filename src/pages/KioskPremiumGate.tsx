@@ -55,8 +55,6 @@ type Stage = "hero" | "member" | "connected" | "guest";
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
 
-const CINEMATIC_ARTWORK_SRC = "/cinematic-home.jpg?v=20260810-4";
-
 const KIOSK_RESUMABLE_STATES = new Set([
   "created",
   "checkout_created",
@@ -72,7 +70,6 @@ export default function KioskPremiumGate() {
   const [pairing, setPairing] = useState<PairingCreate | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
-  const [artworkFailed, setArtworkFailed] = useState(false);
   const pairingSeenPending = useRef(false);
 
   const loadOptions = useCallback(async () => {
@@ -272,49 +269,97 @@ export default function KioskPremiumGate() {
   const guestCap = money(options?.guest?.daily_cap_cents, guestCurrency);
 
   return (
-    <main className="cinematic-home" data-kiosk-cinematic-home="true">
-      <img
-        className="cinematic-home__art"
-        src={CINEMATIC_ARTWORK_SRC}
-        alt=""
-        aria-hidden="true"
-        decoding="sync"
-        fetchPriority="high"
-        onLoad={() => setArtworkFailed(false)}
-        onError={() => setArtworkFailed(true)}
-      />
-      {artworkFailed ? <div className="cinematic-home__asset-error">VISUAL_ASSET_LOAD_FAILED</div> : null}
+    <main className="cinematic-home" data-kiosk-cinematic-home="native-v1">
+      <div className="cinematic-home__bg" aria-hidden="true" />
+      <div className="cinematic-home__aurora cinematic-home__aurora--a" aria-hidden="true" />
+      <div className="cinematic-home__aurora cinematic-home__aurora--b" aria-hidden="true" />
+      <div className="cinematic-home__aurora cinematic-home__aurora--c" aria-hidden="true" />
+      <div className="cinematic-home__smoke cinematic-home__smoke--a" aria-hidden="true" />
+      <div className="cinematic-home__smoke cinematic-home__smoke--b" aria-hidden="true" />
+      <div className="cinematic-home__floor" aria-hidden="true" />
 
-      <div className="cinematic-home__price-mask" aria-label={`Tarif ${guestHourly} par heure, plafond journalier ${guestCap}`}>
+      <header className="cinematic-home__topbar">
+        <div className="cinematic-home__brand"><BrandLogo size="md" /></div>
+        <nav className="cinematic-home__nav">
+          <button type="button" onClick={() => window.location.reload()}>↻ Actualiser</button>
+          <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>? Aide</button>
+          <div className="cinematic-home__language"><LanguageSwitcher /></div>
+        </nav>
+      </header>
+
+      <section className="cinematic-home__content">
+        <div className="cinematic-home__eyebrow">POWER WHEN YOU NEED IT</div>
+        <h1 className="cinematic-home__headline">
+          <span>PLUS DE</span>
+          <span>BATTERIE ?</span>
+          <strong>RÉGLÉ.</strong>
+        </h1>
+
         <div className="cinematic-home__price">
-          <span className="cinematic-home__bolt-icon">⚡</span>
+          <span className="cinematic-home__price-bolt">⚡</span>
           <strong>{guestHourly}</strong>
-          <span>/ heure</span>
-          <span className="cinematic-home__sep">•</span>
-          <span className="cinematic-home__cap-label">Plafond journalier</span>
+          <span className="muted">/ heure</span>
+          <span className="sep">•</span>
+          <span className="muted">Plafond journalier</span>
           <strong>{guestCap}</strong>
         </div>
-      </div>
 
-      <button type="button" className="cinematic-home__hit cinematic-home__refresh" aria-label="Actualiser" onClick={() => window.location.reload()}>
-        <span className="cinematic-home__sr">Actualiser</span>
-      </button>
+        <div className="cinematic-home__choices">
+          <button className="cinematic-home__choice cinematic-home__choice--express" onClick={chooseGuest} disabled={!options?.guest}>
+            <span className="cinematic-home__choice-icon">⚡</span>
+            <span className="cinematic-home__choice-kicker">LOCATION</span>
+            <strong>EXPRESS</strong>
+            <small>Sans compte.<br/>Payez sur votre téléphone et partez.</small>
+            <span className="cinematic-home__choice-arrow">→</span>
+          </button>
 
-      <button type="button" className="cinematic-home__hit cinematic-home__help" aria-label="Aide" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>
-        <span className="cinematic-home__sr">Aide</span>
-      </button>
+          <button className="cinematic-home__choice cinematic-home__choice--client" onClick={() => void startMember()} disabled={!options?.memberAvailable}>
+            <span className="cinematic-home__choice-icon">◉</span>
+            <span className="cinematic-home__choice-kicker">CLIENT</span>
+            <strong>CHARGEURS</strong>
+            <small>Connectez-vous par QR.<br/>Profitez de vos avantages.</small>
+            <span className="cinematic-home__choice-arrow">→</span>
+          </button>
+        </div>
+      </section>
 
-      <div className="cinematic-home__language" aria-label="Langues">
-        <LanguageSwitcher />
-      </div>
+      <section className="cinematic-home__scene" aria-label="Borne Chargeurs.ch">
+        <div className="cinematic-home__bolt" aria-hidden="true">
+          <svg viewBox="0 0 180 420" role="presentation">
+            <defs>
+              <linearGradient id="boltFill" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#f9fcff" />
+                <stop offset="32%" stopColor="#83c9ff" />
+                <stop offset="66%" stopColor="#646cff" />
+                <stop offset="100%" stopColor="#9a5cff" />
+              </linearGradient>
+            </defs>
+            <path className="cinematic-home__bolt-core" d="M106 4 26 206h63L61 416l94-247H92z" />
+            <path className="cinematic-home__bolt-glint" d="M104 25 50 189h47M87 215 69 350" />
+          </svg>
+        </div>
 
-      <button type="button" className="cinematic-home__hit cinematic-home__express" aria-label="Location Express" disabled={!options?.guest} onClick={chooseGuest}>
-        <span className="cinematic-home__sr">Location Express</span>
-      </button>
+        <div className="cinematic-home__cabinet-wrap">
+          <div className="cinematic-home__cabinet">
+            <div className="cinematic-home__cabinet-screen">
+              <BrandLogo size="sm" />
+              <strong>Bienvenue</strong>
+              <span>Choisissez votre option</span>
+            </div>
+            <div className="cinematic-home__cabinet-logo"><BrandLogo size="sm" /></div>
+            <div className="cinematic-home__slots">
+              {[1, 2, 3, 4].map((slot) => <div className="cinematic-home__slot" key={slot}><i>{slot}</i></div>)}
+            </div>
+          </div>
+          <div className="cinematic-home__cabinet-reflection" aria-hidden="true" />
+        </div>
 
-      <button type="button" className="cinematic-home__hit cinematic-home__client" aria-label="Client Chargeurs" disabled={!options?.memberAvailable} onClick={() => void startMember()}>
-        <span className="cinematic-home__sr">Client Chargeurs</span>
-      </button>
+        <div className="cinematic-home__plants" aria-hidden="true">
+          {[1, 2, 3, 4, 5].map((leaf) => <span className="cinematic-home__leaf" key={leaf} />)}
+        </div>
+      </section>
+
+      <div className="cinematic-home__vignette" aria-hidden="true" />
     </main>
   );
 }
