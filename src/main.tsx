@@ -7,8 +7,10 @@ import "./kiosk-v2.css";
 import "./kiosk-v2-gate.css";
 import "./kiosk-v2-overlays.css";
 import "./kiosk-final-overrides.css";
+import "./kiosk-production-premium.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
+import { initKioskHelpController } from "./kioskHelpController";
 
 // The service worker and runtime recovery guards belong to the kiosk surface
 // only. Public, account and administration pages keep their normal behavior.
@@ -23,6 +25,8 @@ const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
 // service worker inside that wrapper can retain an obsolete app shell after an
 // APK update, so it is deliberately not used there.
 const isNativeKioskWrapper = "ChargeursNative" in window;
+
+if (isKioskSurface) initKioskHelpController();
 
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
@@ -46,9 +50,10 @@ function armNativeKioskUiReadyHandshake() {
     if (notified) return true;
 
     const quarantine = document.querySelector(".kiosk-quarantine");
+    const premium = document.querySelector(".premium-kiosk, .cinematic-home");
     const kioskRoot = document.querySelector(".kiosk-root");
     const main = document.querySelector("main");
-    const renderedRoot = quarantine ?? kioskRoot ?? main;
+    const renderedRoot = quarantine ?? premium ?? kioskRoot ?? main;
     const text = renderedRoot?.textContent?.replace(/\s+/g, "").trim() ?? "";
     if (!renderedRoot || text.length < 5) return false;
 
