@@ -2,13 +2,15 @@ import { useEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
+import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
 import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
+import "./kiosk-production-scenes.css";
 
 /**
  * Production kiosk entry.
  * Business orchestration remains in the proven V2 gate/Kiosk state machine;
- * the route owns a consolidated physical 16:9 presentation system.
+ * the route owns the physical 16:9 presentation system from the validated PDF.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
@@ -16,6 +18,7 @@ export default function KioskPremiumGateV3() {
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
+      delete document.documentElement.dataset.kioskScene;
       document.documentElement.classList.remove("kiosk-v3");
     };
   }, []);
@@ -27,6 +30,7 @@ export default function KioskPremiumGateV3() {
         <KioskPremiumGateV2 />
       </div>
       <KioskV3HomeChrome />
+      <KioskV3JourneyChrome />
     </div>
   );
 }
