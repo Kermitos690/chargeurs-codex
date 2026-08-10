@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: field-rc-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   web-and-edge-contracts:
