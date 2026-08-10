@@ -200,7 +200,7 @@ function isResumeSupport(state: string) {
 }
 
 function isResumeCheckout(session: ResumeSession) {
-  return ["created", "payment_pending"].includes(session.state) && Boolean(session.checkoutUrl);
+  return ["created", "checkout_created", "payment_pending"].includes(session.state) && Boolean(session.checkoutUrl);
 }
 
 export default function KioskJourneyGate() {
@@ -247,9 +247,6 @@ export default function KioskJourneyGate() {
       { "X-Kiosk-Token": token },
     );
     if (transportError || !data?.ok) {
-      // On first boot fail closed visually: the normal kiosk can still show its
-      // network state, but we never erase a previously recovered paid session
-      // merely because one refresh failed.
       if (initial) setResumeChecked(true);
       return;
     }
@@ -261,15 +258,11 @@ export default function KioskJourneyGate() {
     setResumeChecked(true);
   }, [stationId]);
 
-  // Recovery is checked before any new rental choice is offered. sessionStorage
-  // may disappear on Android/WebView restart; the server remains authoritative.
   useEffect(() => {
     setResumeChecked(false);
     void refreshResumeState(true);
   }, [refreshResumeState]);
 
-  // Keep a recovered rental alive on screen and reconcile only through the
-  // read-only physical-delta endpoint. No path here can issue an ejection.
   useEffect(() => {
     if (!resumeSession) return;
     let cancelled = false;
@@ -293,8 +286,6 @@ export default function KioskJourneyGate() {
     };
   }, [refreshResumeState, resumeSession, stationId]);
 
-  // After a recovered successful release, return to the public choice screen.
-  // This only changes UI state; it does not mutate the server rental.
   useEffect(() => {
     if (!resumeSession || !isResumeSuccess(resumeSession.state)) return;
     const timer = window.setTimeout(() => {
@@ -559,7 +550,7 @@ export default function KioskJourneyGate() {
           )}
 
           {view === "connected" && (
-            <motion.section key="connected" initial={{ opacity: 0, scale: .9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} className="text-center">
+            <motion.section key="connected" initial={{ opacity: 0, scale: .9 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 1.04 }} className="text-center">
               <motion.div initial={{ scale: .4, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} className="mx-auto grid h-32 w-32 place-items-center rounded-full bg-emerald-400/15 shadow-[0_0_100px_rgba(52,211,153,.45)]">
                 <CheckCircle2 className="h-20 w-20 text-emerald-300" />
               </motion.div>
