@@ -6,31 +6,37 @@ Deno.test("rental-session browser preflight permits the kiosk credential and ide
   assertMatch(source, /OPTIONS[\s\S]{0,160}rentalCorsHeaders/);
 });
 
-Deno.test("kiosk launches a localized Chargeurs phone portal and Stripe is created only after the phone payment choice", async () => {
+Deno.test("kiosk creates the real hosted Stripe Checkout and preserves the customer locale", async () => {
   const launcher = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
-  const portal = await Deno.readTextFile("supabase/functions/payment-portal/index.ts");
-  const stripe = await Deno.readTextFile("supabase/functions/public-stripe-checkout/index.ts");
 
-  // The kiosk returns a Chargeurs-hosted phone URL; it does not instantiate
-  // Stripe or collect payment credentials itself.
-  assertMatch(launcher, /\/functions\/v1\/payment-portal/);
-  assertMatch(launcher, /customer_language/);
-  assertMatch(launcher, /&lang=\$\{lang\}/);
-  if (/new Stripe\s*\(/.test(launcher)) {
-    throw new Error("The kiosk payment launcher must not instantiate Stripe directly");
+  // The authenticated kiosk creates one real Stripe Checkout Session and puts
+  // checkout.url directly into the QR. There is no Supabase/Vercel payment
+  // portal between the customer and Stripe.
+  assertMatch(launcher, /new Stripe\s*\(/);
+  assertMatch(launcher, /stripe\.checkout\.sessions\.create/);
+  assertMatch(launcher, /checkout_url:\s*checkout\.url/);
+  assertMatch(launcher, /locale:\s*lang/);
+  assertMatch(launcher, /X-Kiosk-Token/);
+  assertMatch(launcher, /KIOSK_DEVICE_MISMATCH/);
+
+  // Card-capable wallets use a bank authorisation/manual capture. Other
+  // Dashboard-enabled methods (including eligible TWINT) remain dynamic and
+  // therefore retain their normal automatic-capture semantics.
+  assertMatch(launcher, /capture_method:\s*"manual"/);
+  assertMatch(launcher, /setup_future_usage:\s*"off_session"/);
+  assertMatch(launcher, /request_extended_authorization:\s*"if_available"/);
+  if (/payment_method_types\s*:/.test(launcher)) {
+    throw new Error("Direct kiosk Checkout must keep Stripe Dashboard dynamic payment methods enabled");
   }
 
-  // The phone portal carries the locale into the server-side payment choice.
-  assertMatch(portal, /langOf\(/);
-  assertMatch(portal, /\/functions\/v1\/public-stripe-checkout/);
-  assertMatch(portal, /language:lang/);
+  // Safety: staging can never silently use a live secret and financial amounts
+  // must come from the frozen server-side pricing snapshot.
+  assertMatch(launcher, /STRIPE_TEST_KEY_REQUIRED/);
+  assertMatch(launcher, /pricing_snapshot/);
+  assertMatch(launcher, /pricing_snapshot_hash/);
+  assertMatch(launcher, /SNAPSHOT_INVALID/);
 
-  // Stripe Checkout is hosted on the phone and preserves the customer locale.
-  // Payment methods are intentionally mode-specific because the guarantee
-  // mechanics differ: card uses manual capture, TWINT uses prepaid+refund.
-  assertMatch(stripe, /locale:lang/);
-  assertMatch(stripe, /payment_method_types:mode==="card_hold"\?\["card"\]:\["twint"\]/);
-  assertMatch(stripe, /capture_method="manual"/);
-  assertMatch(stripe, /setup_future_usage="off_session"/);
-  assertMatch(stripe, /STRIPE_TEST_KEY_REQUIRED/);
+  // Stripe redirects back to Chargeurs only after the hosted payment step.
+  assertMatch(launcher, /\/pay\/\$\{encodeURIComponent\(String\(session\.id\)\)\}\/progress/);
+  assertMatch(launcher, /\/pay\/\$\{encodeURIComponent\(String\(session\.id\)\)\}\/cancel/);
 });
