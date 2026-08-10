@@ -1,0 +1,379 @@
+/* Chargeurs.ch — physical kiosk production layout
+   One consistent 16:9 composition for every screen after the cinematic entry.
+   This file intentionally loads last from main.tsx so it can neutralize the
+   accumulated staging/preview rules without changing rental/payment logic. */
+
+html.kiosk-mode,
+html.kiosk-mode body,
+html.kiosk-mode #root {
+  width: 100%;
+  min-width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #02060d;
+}
+
+html.kiosk-mode .kiosk-root {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  padding: 2.2vh 3.2vw 2.4vh !important;
+  overflow: hidden !important;
+  color: #f7fbff;
+  background:
+    radial-gradient(ellipse at 72% 22%, rgba(31, 92, 255, .15), transparent 40%),
+    radial-gradient(ellipse at 20% 92%, rgba(0, 225, 171, .06), transparent 32%),
+    linear-gradient(145deg, #02050a 0%, #05101f 55%, #02060d 100%) !important;
+}
+
+html.kiosk-mode .kiosk-root > header {
+  height: 7.2vh !important;
+  min-height: 54px !important;
+  max-height: 74px !important;
+  position: relative !important;
+  z-index: 30 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+html.kiosk-mode .kiosk-root > header > div {
+  gap: .65vw !important;
+}
+
+html.kiosk-mode .kiosk-root > header button {
+  min-height: 44px !important;
+  height: 5.4vh !important;
+  max-height: 52px !important;
+  padding-block: 0 !important;
+  border-color: rgba(132, 177, 240, .18) !important;
+  background: rgba(4, 13, 28, .58) !important;
+  backdrop-filter: blur(16px) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.04), 0 10px 26px rgba(0,0,0,.13) !important;
+}
+
+html.kiosk-mode .kiosk-root > main {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  height: calc(100vh - 11.8vh) !important;
+  margin: 1.1vh auto 0 !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+
+/* ---------------- Selection / inventory ---------------- */
+html.kiosk-mode .kiosk-idle-stage {
+  width: min(92vw, 1420px) !important;
+  height: 81vh !important;
+  max-height: 81vh !important;
+  gap: 1.35vh !important;
+  padding: 1.35vh 1.25vw 1.4vh !important;
+  border: 1px solid rgba(120, 168, 236, .13) !important;
+  border-radius: 26px !important;
+  background: linear-gradient(160deg, rgba(8,18,35,.72), rgba(3,9,20,.62)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.035), 0 26px 70px rgba(0,0,0,.22) !important;
+  backdrop-filter: blur(18px) !important;
+}
+
+html.kiosk-mode .kiosk-idle-stage .kiosk-idle-hero {
+  gap: .35vh !important;
+  flex: 0 0 auto !important;
+}
+
+html.kiosk-mode .kiosk-idle-stage .kiosk-idle-hero h1 {
+  font-size: clamp(34px, 3.45vw, 58px) !important;
+  line-height: .94 !important;
+  letter-spacing: -.045em !important;
+  margin: 0 !important;
+}
+
+html.kiosk-mode .kiosk-idle-stage .kiosk-idle-hero p {
+  margin: 0 !important;
+  font-size: clamp(14px, 1.18vw, 20px) !important;
+  line-height: 1.15 !important;
+}
+
+html.kiosk-mode .kiosk-idle-stage .kiosk-idle-hero > div {
+  margin-top: .25vh !important;
+  font-size: clamp(18px, 1.65vw, 27px) !important;
+  line-height: 1 !important;
+}
+
+html.kiosk-mode .kiosk-slot-grid {
+  width: min(86vw, 1320px) !important;
+  max-width: none !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+  gap: 1.25vh 1.15vw !important;
+}
+
+html.kiosk-mode .kiosk-slot-card {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 1.35vh 1.25vw !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(117, 164, 230, .18) !important;
+  background:
+    radial-gradient(circle at 90% 20%, rgba(46,125,255,.06), transparent 38%),
+    linear-gradient(145deg, rgba(10,23,43,.84), rgba(3,10,21,.9)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.035), 0 14px 32px rgba(0,0,0,.18) !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-mode .kiosk-slot-card[disabled] {
+  opacity: .48 !important;
+  filter: saturate(.62) !important;
+}
+
+html.kiosk-mode .kiosk-slot-card.ring-4 {
+  border-color: rgba(88, 239, 172, .72) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.05), 0 0 0 2px rgba(84,226,166,.22), 0 0 34px rgba(46,224,170,.14) !important;
+}
+
+html.kiosk-mode .kiosk-slot-card > .text-xl {
+  font-size: clamp(16px, 1.1vw, 20px) !important;
+}
+
+html.kiosk-mode .kiosk-slot-card .text-5xl {
+  font-size: clamp(31px, 3vw, 48px) !important;
+  line-height: .95 !important;
+}
+
+html.kiosk-mode .kiosk-slot-card .mt-3,
+html.kiosk-mode .kiosk-slot-card .mt-2,
+html.kiosk-mode .kiosk-slot-card .mt-4 {
+  margin-top: .55vh !important;
+}
+
+html.kiosk-mode .kiosk-slot-card .h-3 {
+  height: 7px !important;
+}
+
+html.kiosk-mode .kiosk-idle-cta {
+  flex: 0 0 6.7vh !important;
+  min-height: 54px !important;
+  flex-direction: row !important;
+  gap: 1.2vw !important;
+}
+
+html.kiosk-mode .kiosk-idle-cta button {
+  min-height: 52px !important;
+  height: 6.2vh !important;
+  padding: 0 2.7vw !important;
+  font-size: clamp(17px, 1.35vw, 22px) !important;
+  border: 1px solid rgba(72,179,255,.4) !important;
+  background: linear-gradient(135deg, #1169f4, #29a6ff) !important;
+  box-shadow: 0 10px 32px rgba(29,111,255,.21), inset 0 1px rgba(255,255,255,.16) !important;
+}
+
+html.kiosk-mode .kiosk-idle-cta span {
+  font-size: clamp(14px, 1.05vw, 18px) !important;
+}
+
+/* ---------------- Confirmation / pricing ---------------- */
+html.kiosk-mode .kiosk-pricing-stage {
+  width: min(84vw, 1280px) !important;
+  max-width: none !important;
+  height: 74vh !important;
+  gap: 2.2vh !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+
+html.kiosk-mode .kiosk-pricing-stage > h2 {
+  font-size: clamp(36px, 4vw, 64px) !important;
+  line-height: .95 !important;
+  letter-spacing: -.045em !important;
+  margin: 0 !important;
+}
+
+html.kiosk-mode .kiosk-pricing-card {
+  width: min(76vw, 1120px) !important;
+  max-width: none !important;
+  min-height: 37vh !important;
+  grid-template-columns: .62fr 1.38fr !important;
+  gap: 2.8vw !important;
+  padding: 3.2vh 3vw !important;
+  border-radius: 25px !important;
+  border: 1px solid rgba(113,170,244,.2) !important;
+  background: linear-gradient(145deg, rgba(8,20,39,.9), rgba(3,10,21,.91)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.045), 0 26px 70px rgba(0,0,0,.23) !important;
+}
+
+html.kiosk-mode .kiosk-pricing-card > div:first-child {
+  padding-right: 2.8vw !important;
+}
+
+html.kiosk-mode .kiosk-pricing-card .h-28.w-28 {
+  width: clamp(92px, 9vw, 138px) !important;
+  height: clamp(92px, 9vw, 138px) !important;
+  border-radius: 24px !important;
+}
+
+html.kiosk-mode .kiosk-pricing-card .text-7xl {
+  font-size: clamp(58px, 6vw, 92px) !important;
+}
+
+html.kiosk-mode .kiosk-pricing-card .text-6xl,
+html.kiosk-mode .kiosk-pricing-card .sm\:text-7xl {
+  font-size: clamp(38px, 4vw, 66px) !important;
+}
+
+html.kiosk-mode .kiosk-pricing-stage > .flex.gap-5 {
+  gap: 1.1vw !important;
+}
+
+html.kiosk-mode .kiosk-pricing-stage > .flex.gap-5 button {
+  height: 6.4vh !important;
+  min-height: 52px !important;
+  font-size: clamp(17px, 1.4vw, 22px) !important;
+}
+
+/* ---------------- QR / payment ---------------- */
+html.kiosk-mode .kiosk-qr-stage {
+  width: min(86vw, 1320px) !important;
+  max-width: none !important;
+  height: 75vh !important;
+  grid-template-columns: .92fr 1.08fr !important;
+  gap: 4vw !important;
+  padding: 1vh 2vw !important;
+}
+
+html.kiosk-mode .kiosk-qr-stage h2 {
+  font-size: clamp(38px, 4vw, 64px) !important;
+  line-height: .95 !important;
+  letter-spacing: -.04em !important;
+  margin-top: 1.6vh !important;
+}
+
+html.kiosk-mode .kiosk-qr-stage .text-5xl,
+html.kiosk-mode .kiosk-qr-stage .sm\:text-6xl {
+  font-size: clamp(32px, 3.15vw, 52px) !important;
+}
+
+html.kiosk-mode .kiosk-qr-stage .text-2xl {
+  font-size: clamp(17px, 1.45vw, 23px) !important;
+  margin-top: 1vh !important;
+}
+
+html.kiosk-mode .kiosk-qr-stage svg[viewBox="0 0 256 256"] {
+  width: min(35vh, 330px) !important;
+  height: min(35vh, 330px) !important;
+}
+
+html.kiosk-mode .kiosk-qr-stage .rounded-\[2\.5rem\] {
+  padding: 2.1vh !important;
+  border-radius: 24px !important;
+}
+
+/* ---------------- Generic journey states ---------------- */
+html.kiosk-mode .kiosk-root main > div:not(.kiosk-pricing-stage):not(.kiosk-qr-stage):not(.kiosk-idle-stage) {
+  max-height: 76vh;
+}
+
+/* Help shown by the global kiosk help controller. */
+#chargeurs-kiosk-help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  padding: 5vh 6vw;
+  background: rgba(1, 5, 12, .76);
+  backdrop-filter: blur(18px);
+}
+
+#chargeurs-kiosk-help-overlay .ckh-shell {
+  width: min(86vw, 1320px);
+  max-height: 82vh;
+  overflow: hidden;
+  border: 1px solid rgba(105, 173, 255, .24);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 72% 24%, rgba(31,115,255,.1), transparent 38%),
+    linear-gradient(145deg, rgba(7,20,39,.97), rgba(2,8,18,.98));
+  box-shadow: inset 0 1px rgba(255,255,255,.05), 0 34px 100px rgba(0,0,0,.52);
+  color: #f7fbff;
+}
+
+#chargeurs-kiosk-help-overlay .ckh-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2vw;
+  padding: 3.2vh 3vw 2.2vh;
+  border-bottom: 1px solid rgba(112,159,225,.15);
+}
+
+#chargeurs-kiosk-help-overlay .ckh-kicker {
+  color: #53cfff;
+  font-size: clamp(11px, .8vw, 14px);
+  font-weight: 850;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+#chargeurs-kiosk-help-overlay h2 {
+  margin: .5vh 0 0;
+  font-size: clamp(34px, 3.4vw, 56px);
+  line-height: .95;
+  letter-spacing: -.045em;
+}
+
+#chargeurs-kiosk-help-overlay .ckh-close {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  border: 1px solid rgba(142,180,232,.25);
+  border-radius: 999px;
+  background: rgba(6,16,31,.72);
+  color: #fff;
+  font-size: 27px;
+}
+
+#chargeurs-kiosk-help-overlay .ckh-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.3vh 1.1vw;
+  padding: 2.2vh 3vw 3vh;
+}
+
+#chargeurs-kiosk-help-overlay .ckh-item {
+  min-height: 12.6vh;
+  padding: 1.8vh 1.5vw;
+  border: 1px solid rgba(112,164,234,.16);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(12,28,51,.74), rgba(3,11,24,.76));
+}
+
+#chargeurs-kiosk-help-overlay .ckh-item strong {
+  display: block;
+  margin-bottom: .65vh;
+  font-size: clamp(16px, 1.25vw, 21px);
+}
+
+#chargeurs-kiosk-help-overlay .ckh-item p {
+  margin: 0;
+  color: rgba(214,229,247,.68);
+  font-size: clamp(13px, .98vw, 17px);
+  line-height: 1.35;
+}
+
+#chargeurs-kiosk-help-overlay .ckh-foot {
+  padding: 0 3vw 2.5vh;
+  color: rgba(207,224,245,.62);
+  font-size: clamp(12px, .9vw, 15px);
+}
+
+@media (max-height: 720px) {
+  html.kiosk-mode .kiosk-idle-stage { height: 80vh !important; }
+  html.kiosk-mode .kiosk-slot-card { padding: 1vh 1vw !important; }
+  html.kiosk-mode .kiosk-slot-card .text-5xl { font-size: clamp(28px, 2.6vw, 42px) !important; }
+  html.kiosk-mode .kiosk-pricing-stage { height: 72vh !important; }
+  #chargeurs-kiosk-help-overlay { padding-block: 3vh; }
+  #chargeurs-kiosk-help-overlay .ckh-item { min-height: 11vh; }
+}
