@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Wifi, WifiOff, RefreshCw, ChevronRight, Loader2 } from "lucide-react";
@@ -28,6 +29,7 @@ function syncFailureMessage(data: SyncResult | null, invocationError?: string) {
 }
 
 export default function AdminStations() {
+  const { canWrite } = useAuth();
   const [stations, setStations] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
 
@@ -35,9 +37,10 @@ export default function AdminStations() {
     const { data } = await supabase.from("stations").select("*").order("station_id");
     setStations(data ?? []);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []);
 
   const syncAll = async () => {
+    if (!canWrite) return;
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke("sync-cabinet-status", { body: {} });
@@ -61,9 +64,11 @@ export default function AdminStations() {
           <h1 className="font-display text-3xl font-bold">Bornes</h1>
           <p className="text-muted-foreground">Stations physiques Chargeurs.ch</p>
         </div>
-        <Button onClick={syncAll} disabled={syncing} className="gap-2 rounded-full bg-gradient-primary">
-          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Synchroniser
-        </Button>
+        {canWrite && (
+          <Button onClick={syncAll} disabled={syncing} className="gap-2 rounded-full bg-gradient-primary">
+            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Synchroniser
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
