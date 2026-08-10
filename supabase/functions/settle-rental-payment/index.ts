@@ -1,4 +1,4 @@
 // Internal Edge Function entrypoint for final Chargeurs.ch payment settlement.
-import { handleSettlementRequestV2 } from "../_shared/settlementRuntimeV2.ts";
+import { handleSettlementRequestV3 } from "../_shared/settlementRuntimeV3.ts";
 
-Deno.serve(handleSettlementRequestV2);
+Deno.serve(handleSettlementRequestV3);
