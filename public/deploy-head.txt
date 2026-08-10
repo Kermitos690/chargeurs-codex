@@ -1,0 +1,2 @@
+Chargeurs.ch deployment head marker
+Canonical kiosk DA source of truth active.
