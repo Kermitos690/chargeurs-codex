@@ -5,7 +5,6 @@ import { Loader2, UserRound } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import Kiosk from "./Kiosk";
-import KioskJourneyGate from "./KioskJourneyGate";
 import { readKioskToken } from "@/lib/kioskFetch";
 import {
   invokeKioskEdgeProxy,
@@ -46,12 +45,22 @@ type PairingStatus = {
 type ResumeResponse = {
   ok?: boolean;
   active?: boolean;
+  state?: string | null;
+  kioskActionRequired?: boolean;
 };
 
-type Stage = "hero" | "member" | "connected" | "guest" | "legacy";
+type Stage = "hero" | "member" | "connected" | "guest";
 
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(cents / 100).toFixed(2)} ${currency}`;
+
+const KIOSK_RESUMABLE_STATES = new Set([
+  "created",
+  "checkout_created",
+  "payment_pending",
+  "payment_succeeded",
+  "ejecting",
+]);
 
 export default function KioskPremiumGate() {
   const { stationId = "" } = useParams();
@@ -93,19 +102,45 @@ export default function KioskPremiumGate() {
         setChecking(false);
         return;
       }
+
       const { data } = await invokeKioskEdgeProxy<ResumeResponse>(
         "/api/kiosk/resume-state",
         { stationId },
         { "X-Kiosk-Token": token },
       );
       if (cancelled) return;
-      if (data?.ok && data.active) {
-        setStage("legacy");
+
+      const state = data?.state ?? null;
+      const mustResumeOnKiosk = Boolean(
+        data?.ok &&
+        data.active &&
+        (data.kioskActionRequired === true || (state && KIOSK_RESUMABLE_STATES.has(state)))
+      );
+
+      // The kiosk must not resurrect a completed/active-rental/support screen on
+      // app relaunch. Once the battery has left the cabinet, tracking belongs on
+      // the phone and the public tablet returns to the premium home screen.
+      if (mustResumeOnKiosk) {
+        try {
+          const journey = sessionStorage.getItem(KIOSK_JOURNEY_STORAGE_KEY);
+          if (journey === "member") document.documentElement.dataset.kioskJourney = "client";
+          if (journey === "guest") document.documentElement.dataset.kioskJourney = "express";
+        } catch { /* noop */ }
+        setStage("guest");
         setChecking(false);
         return;
       }
+
+      try {
+        sessionStorage.removeItem(KIOSK_JOURNEY_STORAGE_KEY);
+        sessionStorage.removeItem(KIOSK_PAIRING_STORAGE_KEY);
+      } catch { /* noop */ }
+      delete document.documentElement.dataset.kioskJourney;
       await loadOptions();
-      if (!cancelled) setChecking(false);
+      if (!cancelled) {
+        setStage("hero");
+        setChecking(false);
+      }
     };
     void boot();
     return () => { cancelled = true; };
@@ -178,7 +213,6 @@ export default function KioskPremiumGate() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [pairing?.pairingId, stage, stationId]);
 
-  if (stage === "legacy") return <KioskJourneyGate />;
   if (stage === "guest") return <Kiosk />;
 
   if (checking) {
@@ -200,7 +234,7 @@ export default function KioskPremiumGate() {
     return (
       <div className="premium-kiosk da-master-screen da-client-screen">
         <header className="da-topbar">
-          <BrandLogo size="md" />
+          <div className="da-brand"><BrandLogo size="md" /></div>
           <button className="da-top-action" onClick={() => { setPairing(null); setStage("hero"); }}>← Annuler</button>
         </header>
         <div className="da-member-layout">
@@ -232,11 +266,11 @@ export default function KioskPremiumGate() {
       <div className="da-smoke da-smoke-a" aria-hidden="true" />
       <div className="da-smoke da-smoke-b" aria-hidden="true" />
       <header className="da-topbar">
-        <BrandLogo size="md" />
+        <div className="da-brand"><BrandLogo size="md" /></div>
         <nav className="da-nav">
           <button type="button" onClick={() => window.location.reload()}>↻ Actualiser</button>
           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>? FAQ / Aide</button>
-          <LanguageSwitcher />
+          <LanguageSwitcher className="da-language-switcher" />
         </nav>
       </header>
 
@@ -274,7 +308,6 @@ export default function KioskPremiumGate() {
         </section>
 
         <section className="da-scene" aria-label="Borne Chargeurs.ch">
-          <div className="da-lightning" aria-hidden="true">ϟ</div>
           <div className="da-cabinet">
             <div className="da-cabinet-screen">
               <BrandLogo size="sm" />
