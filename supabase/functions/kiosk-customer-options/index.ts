@@ -1,5 +1,4 @@
-// Return the two kiosk customer journeys with server-owned pricing.
-// Blue = guest/express. Green = verified Chargeurs account.
+// Return kiosk journeys with server-owned pricing and active membership offer.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 
@@ -65,14 +64,40 @@ Deno.serve(async (req) => {
       };
     };
 
-    const [guest, member] = await Promise.all([quote("guest"), quote("member")]);
+    const [guest, member, planResult] = await Promise.all([
+      quote("guest"),
+      quote("member"),
+      db.from("customer_membership_plans")
+        .select("id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,valid_from,valid_to")
+        .eq("active", true)
+        .lte("valid_from", now)
+        .or(`valid_to.is.null,valid_to.gte.${now}`)
+        .order("valid_from", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
     if (!guest) return reply({ ok: false, error: "GUEST_PRICING_NOT_CONFIGURED" }, 409);
+    if (planResult.error) throw planResult.error;
+
+    const plan = planResult.data ? {
+      id: planResult.data.id,
+      code: planResult.data.code,
+      name: planResult.data.name,
+      currency: planResult.data.currency,
+      annual_fee_cents: Number(planResult.data.annual_fee_cents ?? 0),
+      renewal_credit_cents: Number(planResult.data.renewal_credit_cents ?? 0),
+      hourly_cents: Number(planResult.data.hourly_cents ?? member?.hourly_cents ?? 0),
+      daily_cap_cents: Number(planResult.data.daily_cap_cents ?? member?.daily_cap_cents ?? 0),
+      valid_from: planResult.data.valid_from,
+      valid_to: planResult.data.valid_to,
+    } : null;
 
     return reply({
       ok: true,
       guest,
       member,
       memberAvailable: Boolean(member),
+      membershipPlan: plan,
     });
   } catch (error) {
     console.error("kiosk-customer-options", error instanceof Error ? error.message : "UNKNOWN_ERROR");
