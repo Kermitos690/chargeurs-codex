@@ -19,6 +19,18 @@ type AdminUser = {
   roles: string[];
 };
 
+function userActionError(code?: string, message?: string) {
+  if (code === "LAST_ADMIN_PROTECTED") return "Impossible de retirer le dernier administrateur.";
+  if (code === "USER_ALREADY_EXISTS") return "Ce compte existe déjà. Utilisez « Mot de passe oublié » sur la page de connexion si nécessaire.";
+  if (code === "INVALID_EMAIL") return "Adresse e-mail invalide.";
+  if (code === "INVALID_ROLE") return "Ce rôle n’est pas attribuable.";
+  if (code === "ROLE_GRANT_FAILED") return "Le rôle n’a pas pu être attribué.";
+  if (code === "ROLE_REVOKE_FAILED") return "Le rôle n’a pas pu être retiré.";
+  if (code === "FORBIDDEN") return "Cette action nécessite le rôle Super Admin.";
+  if (code === "INVITE_FAILED") return "L’invitation n’a pas pu être envoyée.";
+  return message || code || "L’action a échoué.";
+}
+
 export default function AdminUsers() {
   const { isSuperAdmin: canWrite } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -30,26 +42,29 @@ export default function AdminUsers() {
     setLoading(true);
     const { data, error } = await supabase.functions.invoke("admin-users", { body: { action: "list" } });
     if (error || !data?.ok) {
-      toast.error(data?.error ?? error?.message ?? "Erreur de chargement");
+      toast.error(userActionError(data?.error, data?.message ?? error?.message));
     } else {
       setUsers(data.users as AdminUser[]);
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const mutate = async (action: string, body: Record<string, unknown>, key: string) => {
+  const mutate = async (action: string, body: Record<string, unknown>, key: string): Promise<boolean> => {
     setBusy(key);
-    const { data, error } = await supabase.functions.invoke("admin-users", { body: { action, ...body } });
-    setBusy(null);
-    if (error || !data?.ok) {
-      const code = data?.error ?? error?.message;
-      toast.error(code === "LAST_ADMIN_PROTECTED" ? "Impossible de retirer le dernier administrateur." : (code ?? "Erreur"));
-      return;
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", { body: { action, ...body } });
+      if (error || !data?.ok) {
+        toast.error(userActionError(data?.error, data?.message ?? error?.message));
+        return false;
+      }
+      toast.success(action === "invite" ? "Invitation envoyée" : "Mis à jour");
+      await load();
+      return true;
+    } finally {
+      setBusy(null);
     }
-    toast.success("Mis à jour");
-    await load();
   };
 
   return (
@@ -70,8 +85,11 @@ export default function AdminUsers() {
               onChange={(e) => setInviteEmail(e.target.value)} className="max-w-xs"
             />
             <Button
-              disabled={busy === "invite" || !inviteEmail}
-              onClick={async () => { await mutate("invite", { email: inviteEmail }, "invite"); setInviteEmail(""); }}
+              disabled={busy === "invite" || !inviteEmail.trim()}
+              onClick={async () => {
+                const sent = await mutate("invite", { email: inviteEmail }, "invite");
+                if (sent) setInviteEmail("");
+              }}
             >
               {busy === "invite" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Envoyer l'invitation"}
             </Button>
@@ -101,8 +119,9 @@ export default function AdminUsers() {
                       <ShieldCheck className="h-3 w-3" />{roleLabel(r)}
                       {canWrite && (
                         <button
-                          onClick={() => mutate("remove_role", { userId: u.id, role: r }, `${u.id}:${r}:rm`)}
-                          className="ml-0.5 rounded-full hover:text-destructive" aria-label={`Retirer ${r}`}
+                          disabled={busy === `${u.id}:${r}:rm`}
+                          onClick={() => void mutate("remove_role", { userId: u.id, role: r }, `${u.id}:${r}:rm`)}
+                          className="ml-0.5 rounded-full hover:text-destructive disabled:opacity-50" aria-label={`Retirer ${r}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -118,7 +137,7 @@ export default function AdminUsers() {
                     <Button
                       key={r} size="sm" variant="outline" className="h-7 text-xs"
                       disabled={busy === `${u.id}:${r}:add`}
-                      onClick={() => mutate("set_role", { userId: u.id, role: r }, `${u.id}:${r}:add`)}
+                      onClick={() => void mutate("set_role", { userId: u.id, role: r }, `${u.id}:${r}:add`)}
                     >
                       + {roleLabel(r)}
                     </Button>
