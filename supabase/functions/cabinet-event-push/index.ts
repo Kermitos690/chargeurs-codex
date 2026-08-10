@@ -1,14 +1,15 @@
 // cabinet-event-push — receiver for ChargeNow hardware events.
 // Stores raw events and classifies severity. Online/offline events update the
-// station directly. BATTERY_IN is never assigned heuristically: a complete
-// trade/battery/station/slot identity is delegated to the canonical, inbox-
-// backed ChargeNow rental callback and Rental Orchestrator.
+// station directly. BATTERY_IN and BATTERY_BORROW_OUT are never assigned
+// heuristically: both require an exact immutable order/battery/station/slot
+// identity before they are delegated to the canonical rental state machine.
 //
 // SECURITY: this endpoint MUTATES business state (station status, rental
-// returns), so it is FAIL-CLOSED by default. Without CHARGENOW_EVENT_SECRET it
-// rejects every request (503) unless ALLOW_UNSIGNED_CHARGENOW_EVENTS=true is
-// explicitly set (dev only). With the secret set, the request must present a
-// matching token (constant-time compare). Replay/oversize requests are dropped.
+// returns/releases), so it is FAIL-CLOSED by default. Without
+// CHARGENOW_EVENT_SECRET it rejects every request (503) unless
+// ALLOW_UNSIGNED_CHARGENOW_EVENTS=true is explicitly set (dev only). With the
+// secret set, the request must present a matching token (constant-time compare).
+// Replay/oversize requests are dropped.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient } from "../_shared/db.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
@@ -84,19 +85,240 @@ function firstInteger(source: Record<string, unknown>, keys: string[]): number |
   return null;
 }
 
-async function returnIncident(
+async function hardwareIncident(
   db: SupabaseClient,
+  type: "uncorrelated_battery_return" | "uncorrelated_battery_release",
   code: string,
+  message: string,
   details: Record<string, unknown>,
 ) {
   const { error } = await db.from("system_incidents").insert({
-    type: "uncorrelated_battery_return",
+    type,
     severity: "high",
-    message: "Un événement BATTERY_IN n'a pas pu être corrélé de façon exacte; aucun état de location n'a été modifié.",
+    message,
     data: { code, ...details },
     resolved: false,
   });
   if (error) throw error;
+}
+
+async function returnIncident(db: SupabaseClient, code: string, details: Record<string, unknown>) {
+  return hardwareIncident(
+    db,
+    "uncorrelated_battery_return",
+    code,
+    "Un événement BATTERY_IN n'a pas pu être corrélé de façon exacte; aucun état de location n'a été modifié.",
+    details,
+  );
+}
+
+async function releaseIncident(db: SupabaseClient, code: string, details: Record<string, unknown>) {
+  return hardwareIncident(
+    db,
+    "uncorrelated_battery_release",
+    code,
+    "Un événement BATTERY_BORROW_OUT n'a pas pu être corrélé de façon exacte; aucune location n'a été activée.",
+    details,
+  );
+}
+
+async function appendExactRentalEvent(
+  db: SupabaseClient,
+  args: {
+    rentalId: string;
+    eventType: "battery_released" | "rental_activated";
+    idempotencyKey: string;
+    occurredAt: string;
+    metadata: Record<string, unknown>;
+    resultingState: "released" | "active";
+    paymentIntentId: string | null;
+    stationId: string;
+    batteryId: string;
+  },
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: existing, error: existingError } = await db.from("rental_orchestrator_events")
+      .select("event_type")
+      .eq("rental_id", args.rentalId)
+      .eq("idempotency_key", args.idempotencyKey)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) return;
+
+    const { data: snapshot, error: snapshotError } = await db.from("rental_orchestrator_snapshots")
+      .select("state,version")
+      .eq("rental_id", args.rentalId)
+      .maybeSingle();
+    if (snapshotError) throw snapshotError;
+    if (!snapshot) throw new Error("ORCHESTRATOR_SNAPSHOT_MISSING");
+
+    const { error } = await db.rpc("append_rental_orchestrator_event", {
+      p_rental_id: args.rentalId,
+      p_expected_version: Number(snapshot.version ?? 0),
+      p_event_type: args.eventType,
+      p_idempotency_key: args.idempotencyKey,
+      p_occurred_at: args.occurredAt,
+      p_metadata: args.metadata,
+      p_resulting_state: args.resultingState,
+      p_payment_intent_id: args.paymentIntentId,
+      p_station_id: args.stationId,
+      p_battery_id: args.batteryId,
+      p_final_amount_chf: null,
+      p_failure_reason: null,
+    });
+    if (!error) return;
+    const message = String(error.message ?? "");
+    if (error.code === "40001" || message.includes("VERSION_CONFLICT")) continue;
+    if (error.code === "23505" || message.includes("IDEMPOTENCY_KEY_CONFLICT")) return;
+    throw error;
+  }
+  throw new Error("ORCHESTRATOR_VERSION_CONFLICT");
+}
+
+async function delegateBatteryBorrowOut(
+  db: SupabaseClient,
+  payload: EventPayload,
+  eventId: string | null,
+  rawDuplicate: boolean,
+): Promise<Response> {
+  const merged = mergedPayload(payload);
+  const stationId = firstString(merged, ["deviceId", "cabinetid", "cabinetId", "stationId", "cabinetSn"]);
+  const tradeNo = firstString(merged, ["tradeNo", "trade_no", "orderNo", "orderId", "rentOrderId"]);
+  const batteryId = firstString(merged, [
+    "batteryId", "outBatteryId", "pBatteryid", "batterySN", "batterySn", "batteryCode", "sn", "bid",
+  ]);
+  const slotNum = firstInteger(merged, ["slotNum", "outSlot", "slot", "slotId", "position"]);
+
+  if (!eventId || !stationId || !tradeNo || !batteryId || slotNum == null || slotNum < 1) {
+    if (!rawDuplicate) {
+      await releaseIncident(db, "RELEASE_IDENTITY_INCOMPLETE", {
+        external_event_id: eventId,
+        station_id: stationId,
+        trade_no_fingerprint: tradeNo?.slice(-8) ?? null,
+        battery_id: batteryId,
+        slot_num: slotNum,
+      });
+    }
+    return j({ received: true, release_confirmed: false, requires_reconciliation: true, reason: "RELEASE_IDENTITY_INCOMPLETE" }, 202);
+  }
+
+  const { data: matches, error: matchError } = await db.from("rental_sessions")
+    .select("id,state,chargenow_status,selected_slot_num,battery_id,stripe_payment_intent_id,apifox_trade_no")
+    .eq("station_id", stationId)
+    .eq("apifox_trade_no", tradeNo)
+    .eq("battery_id", batteryId)
+    .limit(2);
+  if (matchError) throw matchError;
+
+  if (!matches || matches.length !== 1) {
+    const code = matches && matches.length > 1 ? "RELEASE_IDENTITY_AMBIGUOUS" : "RELEASE_RENTAL_NOT_FOUND";
+    if (!rawDuplicate) {
+      await releaseIncident(db, code, {
+        external_event_id: eventId,
+        station_id: stationId,
+        trade_no_fingerprint: tradeNo.slice(-8),
+        battery_id: batteryId,
+        slot_num: slotNum,
+        match_count: matches?.length ?? 0,
+      });
+    }
+    return j({ received: true, release_confirmed: false, requires_reconciliation: true, reason: code }, 202);
+  }
+
+  const session = matches[0] as Record<string, unknown>;
+  const expectedSlot = Number(session.selected_slot_num);
+  if (!Number.isInteger(expectedSlot) || expectedSlot !== slotNum) {
+    await releaseIncident(db, "RELEASE_SLOT_MISMATCH", {
+      external_event_id: eventId,
+      rental_session_id: session.id,
+      station_id: stationId,
+      expected_slot_num: Number.isInteger(expectedSlot) ? expectedSlot : null,
+      observed_slot_num: slotNum,
+      battery_id: batteryId,
+      trade_no_fingerprint: tradeNo.slice(-8),
+    });
+    return j({ received: true, release_confirmed: false, requires_reconciliation: true, reason: "RELEASE_SLOT_MISMATCH" }, 202);
+  }
+
+  if (["ejected", "active_rental", "battery_taken", "battery_returned", "completed"].includes(String(session.state))) {
+    return j({ received: true, release_confirmed: true, already_reconciled: true, state: session.state, slotNum }, 200);
+  }
+  if (session.state !== "ejecting" || session.chargenow_status !== "release_provider_confirmation_pending") {
+    return j({ received: true, release_confirmed: false, reconcilable: false, state: session.state }, 202);
+  }
+
+  const occurredAt = new Date().toISOString();
+  const { data: attempt, error: attemptError } = await db.from("hardware_release_attempts")
+    .select("id,result")
+    .eq("rental_session_id", session.id)
+    .maybeSingle();
+  if (attemptError) throw attemptError;
+  if (!attempt) {
+    await releaseIncident(db, "RELEASE_ATTEMPT_MISSING", {
+      external_event_id: eventId,
+      rental_session_id: session.id,
+      station_id: stationId,
+      slot_num: slotNum,
+      battery_id: batteryId,
+    });
+    return j({ received: true, release_confirmed: false, requires_reconciliation: true, reason: "RELEASE_ATTEMPT_MISSING" }, 202);
+  }
+
+  const { error: attemptUpdateError } = await db.from("hardware_release_attempts").update({
+    result: "single_release",
+    released_slot_nums: [slotNum],
+    released_battery_ids: [batteryId],
+    reconciled_at: occurredAt,
+    updated_at: occurredAt,
+  }).eq("id", attempt.id);
+  if (attemptUpdateError) throw attemptUpdateError;
+
+  const metadata = {
+    source: "chargenow_event_push",
+    stationId,
+    slotNum,
+    batteryId,
+    tradeNo,
+    externalEventId: eventId,
+  };
+  const paymentIntentId = typeof session.stripe_payment_intent_id === "string" && session.stripe_payment_intent_id
+    ? session.stripe_payment_intent_id
+    : null;
+
+  await appendExactRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "battery_released",
+    idempotencyKey: `battery_released:chargenow_event:${eventId}`,
+    occurredAt,
+    metadata,
+    resultingState: "released",
+    paymentIntentId,
+    stationId,
+    batteryId,
+  });
+  await appendExactRentalEvent(db, {
+    rentalId: String(session.id),
+    eventType: "rental_activated",
+    idempotencyKey: `rental_activated:chargenow_event:${eventId}`,
+    occurredAt,
+    metadata,
+    resultingState: "active",
+    paymentIntentId,
+    stationId,
+    batteryId,
+  });
+
+  const { error: projectionError } = await db.from("rental_sessions").update({
+    state: "ejected",
+    ejected_at: occurredAt,
+    started_at: occurredAt,
+    chargenow_status: "ejected",
+    failure_code: null,
+    failure_message: null,
+  }).eq("id", session.id).eq("state", "ejecting");
+  if (projectionError) throw projectionError;
+
+  return j({ received: true, release_confirmed: true, state: "ejected", slotNum, batteryId }, 200);
 }
 
 async function delegateBatteryReturn(
@@ -226,7 +448,9 @@ export async function handleEvent(
     if (insErr && !duplicate) return j({ ok: false, error: "INSERT_FAILED", detail: insErr.message }, 500);
 
     // Even a duplicate raw event may need to be delegated again if a previous
-    // canonical attempt failed. The callback inbox is itself idempotent.
+    // canonical attempt failed. Both downstream paths are independently
+    // idempotent.
+    if (eventType === "BATTERY_BORROW_OUT") return await delegateBatteryBorrowOut(db, payload, eventId, duplicate);
     if (eventType === "BATTERY_IN") return await delegateBatteryReturn(db, payload, eventId, env, duplicate);
     if (duplicate) return j({ received: true, deduplicated: true }, 200);
 
