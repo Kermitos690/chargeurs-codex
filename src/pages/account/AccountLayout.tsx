@@ -14,7 +14,7 @@ function AccountNavigation({ mobile = false }: { mobile?: boolean }) {
     <nav
       aria-label="Navigation du compte"
       className={mobile
-        ? "fixed inset-x-3 bottom-3 z-30 grid grid-cols-5 rounded-2xl border border-border bg-background/95 p-1.5 shadow-2xl backdrop-blur-xl md:hidden"
+        ? "fixed inset-x-3 bottom-3 z-30 grid grid-cols-6 rounded-2xl border border-border bg-background/95 p-1.5 shadow-2xl backdrop-blur-xl md:hidden"
         : "glass mx-auto hidden w-full max-w-5xl items-center gap-1 rounded-2xl p-1.5 md:flex"}
       style={mobile ? { paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" } : undefined}
     >
@@ -24,7 +24,7 @@ function AccountNavigation({ mobile = false }: { mobile?: boolean }) {
           to={to}
           end={end}
           className={({ isActive }) => `${mobile
-            ? "flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold"
+            ? "flex min-w-0 flex-col items-center gap-1 rounded-xl px-0.5 py-2 text-[9px] font-semibold"
             : "flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold"} ${isActive
             ? "bg-gradient-primary text-primary-foreground shadow-glow"
             : "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"}`}
