@@ -24,7 +24,9 @@ Deno.test("kiosk creates the real hosted Stripe Checkout and preserves the custo
   // therefore retain their normal automatic-capture semantics.
   assertMatch(launcher, /capture_method:\s*"manual"/);
   assertMatch(launcher, /setup_future_usage:\s*"off_session"/);
-  assertMatch(launcher, /request_extended_authorization:\s*"if_available"/);
+  if (/request_extended_authorization\s*:/.test(launcher)) {
+    throw new Error("This Stripe account is not eligible for extended authorization; the kiosk Checkout must not request it");
+  }
   if (/payment_method_types\s*:/.test(launcher)) {
     throw new Error("Direct kiosk Checkout must keep Stripe Dashboard dynamic payment methods enabled");
   }
