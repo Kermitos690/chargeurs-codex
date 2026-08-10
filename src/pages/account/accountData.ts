@@ -64,7 +64,7 @@ export type CustomerMembershipPlan = {
   renewal_credit_cents: number;
   hourly_cents: number;
   daily_cap_cents: number;
-  billing_interval: "month" | "year";
+  billing_interval: "day" | "week" | "month" | "year";
   billing_interval_count: number;
   included_minutes: number | null;
   discount_percent: number | null;
@@ -77,6 +77,9 @@ export type CustomerMembership = {
   renews_at: string | null;
   ends_at: string | null;
   plan_id: string;
+  cancel_at_period_end: boolean;
+  stripe_current_period_start: string | null;
+  stripe_current_period_end: string | null;
   customer_membership_plans: CustomerMembershipPlan | CustomerMembershipPlan[] | null;
 };
 
