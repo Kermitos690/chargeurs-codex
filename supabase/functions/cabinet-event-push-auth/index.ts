@@ -7,6 +7,9 @@
 // a stable external event id (provider id when available, otherwise a SHA-256
 // fingerprint of the original body). The canonical receiver's UNIQUE event-id
 // constraint therefore owns replay protection without trusting provider time.
+// ChargeNow currently nests cabinet payload fields under `eventData`; the
+// gateway copies those fields to the canonical top level while preserving the
+// original nested object for audit.
 
 const encoder = new TextEncoder();
 const MAX_BODY_BYTES = 64 * 1024;
@@ -58,9 +61,18 @@ async function normalizedProviderBody(rawBody: string, contentType: string): Pro
     const nested = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
       ? { ...(payload.data as Record<string, unknown>) }
       : null;
+    const eventData = payload.eventData && typeof payload.eventData === "object" && !Array.isArray(payload.eventData)
+      ? { ...(payload.eventData as Record<string, unknown>) }
+      : null;
+
+    // Normalize the supplier's observed eventData envelope into the canonical
+    // top-level aliases without overwriting any explicit top-level field.
+    for (const [key, value] of Object.entries(eventData ?? {})) {
+      if (payload[key] === undefined || payload[key] === null || payload[key] === "") payload[key] = value;
+    }
 
     const existingEventId = ["messageId", "eventId", "msgId", "id"]
-      .map((key) => payload[key] ?? nested?.[key])
+      .map((key) => payload[key] ?? nested?.[key] ?? eventData?.[key])
       .find((value) => (typeof value === "string" && value.trim()) || (typeof value === "number" && Number.isFinite(value)));
     if (existingEventId == null) {
       payload.eventId = `gw_${(await sha256Hex(rawBody)).slice(0, 40)}`;
@@ -68,15 +80,17 @@ async function normalizedProviderBody(rawBody: string, contentType: string): Pro
 
     const timestampKeys = ["timestamp", "ts", "eventTime", "time"] as const;
     const providerTimestamp = timestampKeys
-      .map((key) => payload[key] ?? nested?.[key])
+      .map((key) => payload[key] ?? nested?.[key] ?? eventData?.[key])
       .find((value) => value !== undefined && value !== null);
     if (providerTimestamp != null && payload.providerTimestamp == null) payload.providerTimestamp = providerTimestamp;
 
     for (const key of timestampKeys) {
       delete payload[key];
       if (nested) delete nested[key];
+      if (eventData) delete eventData[key];
     }
     if (nested) payload.data = nested;
+    if (eventData) payload.eventData = eventData;
     return JSON.stringify(payload);
   } catch {
     return rawBody;
