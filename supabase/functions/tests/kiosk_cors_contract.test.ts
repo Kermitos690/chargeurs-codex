@@ -6,12 +6,9 @@ Deno.test("rental-session browser preflight permits the kiosk credential and ide
   assertMatch(source, /OPTIONS[\s\S]{0,160}rentalCorsHeaders/);
 });
 
-Deno.test("kiosk creates the real hosted Stripe Checkout and preserves the customer locale", async () => {
+Deno.test("kiosk creates direct hosted Stripe Checkout with Swiss hybrid settlement", async () => {
   const launcher = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
 
-  // The authenticated kiosk creates one real Stripe Checkout Session and puts
-  // checkout.url directly into the QR. There is no Supabase/Vercel payment
-  // portal between the customer and Stripe.
   assertMatch(launcher, /new Stripe\s*\(/);
   assertMatch(launcher, /stripe\.checkout\.sessions\.create/);
   assertMatch(launcher, /checkout_url:\s*checkout\.url/);
@@ -19,26 +16,25 @@ Deno.test("kiosk creates the real hosted Stripe Checkout and preserves the custo
   assertMatch(launcher, /X-Kiosk-Token/);
   assertMatch(launcher, /KIOSK_DEVICE_MISMATCH/);
 
-  // Card-capable wallets use a bank authorisation/manual capture. Other
-  // Dashboard-enabled methods (including eligible TWINT) remain dynamic and
-  // therefore retain their normal automatic-capture semantics.
-  assertMatch(launcher, /capture_method:\s*"manual"/);
+  // Clover added per-payment-method capture control for Checkout. Cards and
+  // card wallets are authorized for later capture while TWINT remains a native
+  // automatically captured/refundable payment method.
+  assertMatch(launcher, /2025-09-30\.clover/);
+  assertMatch(launcher, /payment_method_types:\s*\["card",\s*"twint"\]/);
+  assertMatch(launcher, /card:\s*\{\s*capture_method:\s*"manual"/);
   assertMatch(launcher, /setup_future_usage:\s*"off_session"/);
   if (/request_extended_authorization\s*:/.test(launcher)) {
-    throw new Error("This Stripe account is not eligible for extended authorization; the kiosk Checkout must not request it");
-  }
-  if (/payment_method_types\s*:/.test(launcher)) {
-    throw new Error("Direct kiosk Checkout must keep Stripe Dashboard dynamic payment methods enabled");
+    throw new Error("Extended authorization is not enabled on this Stripe account");
   }
 
-  // Safety: staging can never silently use a live secret and financial amounts
-  // must come from the frozen server-side pricing snapshot.
   assertMatch(launcher, /STRIPE_TEST_KEY_REQUIRED/);
   assertMatch(launcher, /pricing_snapshot/);
   assertMatch(launcher, /pricing_snapshot_hash/);
   assertMatch(launcher, /SNAPSHOT_INVALID/);
 
-  // Stripe redirects back to Chargeurs only after the hosted payment step.
-  assertMatch(launcher, /\/pay\/\$\{encodeURIComponent\(String\(session\.id\)\)\}\/progress/);
+  // /success and /cancel exist in both the currently served legacy frontend and
+  // the merged replacement build, so Stripe can never redirect to a missing
+  // /progress route while Vercel is serving the older bundle.
+  assertMatch(launcher, /\/pay\/\$\{encodeURIComponent\(String\(session\.id\)\)\}\/success/);
   assertMatch(launcher, /\/pay\/\$\{encodeURIComponent\(String\(session\.id\)\)\}\/cancel/);
 });
