@@ -11,6 +11,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 const TERMS_VERSION = "terms-2026-08-10-v1";
 const PRIVACY_VERSION = "privacy-2026-08-10-v1";
 
+const PROGRESS_STATES = new Set([
+  "payment_succeeded", "ejecting", "ejected", "active_rental", "battery_taken", "battery_returned", "completed",
+]);
+const TERMINAL_STATUS_STATES = new Set([
+  "refunded", "eject_failed", "chargenow_failed", "needs_support", "manual_review",
+  "payment_failed", "payment_expired", "payment_cancelled", "cancelled",
+]);
+
 type Lang = "fr" | "de" | "en";
 type Status = {
   state?: string;
@@ -113,8 +121,13 @@ export default function PaymentChoice() {
       const next = data as Status | null;
       if (cancelled) return;
       if (!next?.state) { setError(c.invalid); return; }
-      if (["payment_succeeded", "ejecting", "ejected", "active_rental", "battery_taken", "battery_returned", "completed"].includes(next.state)) {
-        window.location.replace(`/pay/${rentalSessionId}/progress?c=${encodeURIComponent(publicCode)}&lang=${lang}`);
+      const suffix = `?c=${encodeURIComponent(publicCode)}&lang=${lang}`;
+      if (PROGRESS_STATES.has(next.state)) {
+        window.location.replace(`/pay/${rentalSessionId}/progress${suffix}`);
+        return;
+      }
+      if (TERMINAL_STATUS_STATES.has(next.state)) {
+        window.location.replace(`/pay/${rentalSessionId}${suffix}`);
         return;
       }
       setStatus(next);
