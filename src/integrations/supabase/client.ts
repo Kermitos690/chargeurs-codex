@@ -3,8 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { kioskAwareFetch } from '@/lib/kioskFetch';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Vercel previously served a blank page when the reused frontend project did
+// not expose the Chargeurs.ch VITE_* variables to a deployment. These are
+// public browser credentials (never service-role secrets) for the staging
+// project, so the staging build has a fail-safe public fallback while the
+// Vercel project is being repurposed for Chargeurs.ch.
+const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
+const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY;
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
 // Import the supabase client like this:
