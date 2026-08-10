@@ -1,4 +1,4 @@
 Chargeurs.ch kiosk deployment marker
-Requested production refresh: 2026-08-10 16:05 Europe/Zurich
-Includes kiosk polish merged from f8aba3dc2f27cb74cdeccf309cd588720f5abecd
-Purpose: verify that the production host and physical kiosk are serving the latest build.
+Requested production refresh: 2026-08-10 16:43 Europe/Zurich
+Includes kiosk artwork guard and native fallback from c626dfff5eb10b8b1e7d2ce1eb238424680b14df
+Purpose: trigger exactly one fresh production deployment now that Vercel preview builds are Ready, and verify the physical kiosk serves the latest build.
