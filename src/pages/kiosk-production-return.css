@@ -1,0 +1,66 @@
+/* 07–08 — automatic return detection and confirmed summary. */
+html[data-kiosk-scene="return"] .kv3-progress-rail { z-index: 145; }
+
+.kiosk-v3 .kv3-return-overlay {
+  padding: 10vh 24vw 5vh 19vw !important;
+  background: rgba(1, 4, 9, .78) !important;
+  backdrop-filter: blur(11px) !important;
+  -webkit-backdrop-filter: blur(11px) !important;
+}
+.kiosk-v3 .kv3-return-overlay > .pointer-events-none {
+  opacity: .5 !important;
+  background:
+    radial-gradient(circle at 52% 24%, rgba(36,157,255,.22), transparent 34%),
+    radial-gradient(circle at 48% 86%, rgba(59,255,112,.11), transparent 36%) !important;
+}
+.kiosk-v3 .kv3-return-overlay section {
+  max-width: 920px !important;
+  max-height: 80vh !important;
+  overflow: hidden !important;
+  border-radius: 30px !important;
+  border: 1px solid rgba(61,157,255,.30) !important;
+  background: linear-gradient(145deg, rgba(5,15,30,.96), rgba(2,7,14,.97)) !important;
+  box-shadow:
+    0 0 70px rgba(17,104,255,.13),
+    0 34px 70px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.045) !important;
+}
+.kiosk-v3 .kv3-return-overlay section h1 {
+  letter-spacing: -.045em !important;
+  line-height: .96 !important;
+  text-shadow: 0 0 26px rgba(48,165,255,.18);
+}
+.kiosk-v3 .kv3-return-overlay section .text-gradient-cyan {
+  background: linear-gradient(90deg,#7bd9ff,#258bff) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+}
+.kiosk-v3 .kv3-return-overlay section .grid {
+  gap: 10px !important;
+}
+.kiosk-v3 .kv3-return-overlay section [class*="rounded-2xl"] {
+  border-color: rgba(88,158,230,.16) !important;
+  background: rgba(5,12,23,.72) !important;
+}
+.kiosk-v3 .kv3-return-overlay section button {
+  min-height: 54px !important;
+  border-radius: 17px !important;
+  font-size: 16px !important;
+}
+.kiosk-v3 .kv3-return-overlay section .bg-gradient-success {
+  background: radial-gradient(circle at 32% 24%,#b8ffa1,#59ee3b 48%,#209e19) !important;
+  box-shadow: 0 0 18px rgba(102,255,77,.65), 0 0 48px rgba(78,228,54,.24) !important;
+}
+
+/* Keep the physical station and lightning sculpture readable behind the summary. */
+html[data-kiosk-scene="return"] .kv3-station-hero { opacity: .72; filter: drop-shadow(0 34px 30px rgba(0,0,0,.72)) saturate(.92); }
+html[data-kiosk-scene="return"] .kv3-lightning-stage { opacity: .74; }
+html[data-kiosk-scene="return"] .kv3-neon-beam { opacity: .28 !important; }
+
+@media (max-width:1200px), (max-height:720px) {
+  .kiosk-v3 .kv3-return-overlay { padding: 9vh 22vw 3vh 17vw !important; }
+  .kiosk-v3 .kv3-return-overlay section { max-height: 84vh !important; padding: 22px !important; }
+  .kiosk-v3 .kv3-return-overlay section h1 { font-size: 38px !important; }
+  .kiosk-v3 .kv3-return-overlay section .text-gradient-cyan { font-size: 52px !important; }
+}
