@@ -3,6 +3,9 @@ import App from "./App.tsx";
 import "./index.css";
 import "./kiosk-field.css";
 import "./kiosk-customer-polish.css";
+import "./kiosk-v2.css";
+import "./kiosk-v2-gate.css";
+import "./kiosk-v2-overlays.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
 

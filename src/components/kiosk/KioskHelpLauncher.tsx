@@ -14,11 +14,15 @@ function helpLabel(lang: string) {
   return lang === "de" ? "Hilfe" : lang === "en" ? "Help" : "Aide";
 }
 
-/** Full FAQ launcher shared by every station kiosk sub-flow. */
+/**
+ * FAQ is available on every kiosk sub-flow. The full Kiosk screen owns its
+ * header Help button; entry/recovery screens receive this floating trigger.
+ */
 export function KioskHelpLauncher() {
   const location = useLocation();
   const { lang } = useI18n();
   const [open, setOpen] = useState(false);
+  const [mainKioskMounted, setMainKioskMounted] = useState(false);
   const stationId = stationFromPath(location.pathname);
 
   useEffect(() => {
@@ -29,11 +33,23 @@ export function KioskHelpLauncher() {
 
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
+  useEffect(() => {
+    if (!stationId) {
+      setMainKioskMounted(false);
+      return;
+    }
+    const detect = () => setMainKioskMounted(Boolean(document.querySelector(".kiosk-root > header")));
+    detect();
+    const observer = new MutationObserver(detect);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [stationId]);
+
   if (!stationId) return null;
 
   return (
     <>
-      {!open && (
+      {!open && !mainKioskMounted && (
         <button
           type="button"
           onClick={() => setOpen(true)}

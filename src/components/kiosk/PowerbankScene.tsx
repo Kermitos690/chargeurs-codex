@@ -9,11 +9,6 @@ type Props = {
   returnAvailable?: boolean;
 };
 
-/**
- * Deliberately restrained inside a slot card: the large cinematic 3D scene is
- * rendered once behind the chooser. Repeating tiny faux-3D batteries in four
- * cards made the actual charge level hard to read on the DTA display.
- */
 export function PowerbankScene({ charge, selected, recommended, rentable, returnAvailable = false }: Props) {
   const level = charge == null ? 0 : Math.max(0, Math.min(100, charge));
   const iconClass = rentable
@@ -43,67 +38,68 @@ export function PowerbankScene({ charge, selected, recommended, rentable, return
 }
 
 /**
- * A dedicated 16:9 cabinet render is kept behind the interactive content,
- * never cropped into a small card. The dark vignette preserves contrast for
- * the four real slot controls while giving the landscape kiosk a physical,
- * premium context instead of a dashboard-like flat background.
+ * Ambient kiosk floor made from native gradients rather than a raster cabinet
+ * photo. It fills the available display at any aspect ratio without soft edges,
+ * mismatched margins or a low-resolution image competing with the controls.
  */
 export function KioskHolographicFloor() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <motion.img
-        src="/kiosk/attract-scene-v1.png"
-        alt=""
-        className="absolute inset-0 h-full w-full object-cover object-center opacity-45 mix-blend-screen"
-        initial={{ opacity: 0.18, scale: 1.015 }}
-        animate={{ opacity: [0.33, 0.5, 0.38], scale: [1.015, 1.035, 1.02] }}
-        transition={{ duration: 11, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,14,43,.5)_0%,rgba(6,21,63,.22)_35%,rgba(4,12,38,.62)_100%),radial-gradient(ellipse_at_50%_108%,rgba(14,165,233,.28),transparent_46%),radial-gradient(ellipse_at_8%_12%,rgba(99,102,241,.18),transparent_40%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_102%,rgba(34,211,238,.18),transparent_48%),radial-gradient(ellipse_at_8%_8%,rgba(37,99,235,.2),transparent_40%),radial-gradient(ellipse_at_92%_84%,rgba(139,92,246,.18),transparent_40%)]" />
       <motion.div
-        className="absolute inset-x-[-20%] top-[-45%] h-[85%] rotate-[18deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.07),transparent)] blur-2xl"
-        animate={{ x: ["-24%", "78%"] }}
-        transition={{ duration: 8, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+        className="absolute inset-x-[-25%] top-[-44%] h-[82%] rotate-[16deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.075),transparent)] blur-2xl"
+        animate={{ x: ["-26%", "82%"] }}
+        transition={{ duration: 9, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
       />
-      <div className="absolute inset-x-[8%] bottom-[4%] h-32 rounded-[50%] border border-cyan-200/15 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.15),transparent_70%)] blur-[1px]" />
+      <motion.div
+        className="absolute left-1/2 top-[52%] h-[52%] w-[68%] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.11),rgba(37,99,235,.03)_48%,transparent_70%)]"
+        animate={{ scale: [1, 1.025, 1], opacity: [.62, .9, .62] }}
+        transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
+      />
     </div>
   );
 }
 
+function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
+  return (
+    <motion.div
+      className={`relative grid min-h-0 place-items-center overflow-hidden rounded-[1.6rem] border ${active ? "border-cyan-200/75 bg-cyan-300/15" : "border-white/12 bg-white/[.035]"}`}
+      animate={active ? { boxShadow: ["0 0 0 rgba(34,211,238,0)", "0 0 44px rgba(34,211,238,.48)", "0 0 0 rgba(34,211,238,0)"] } : undefined}
+      transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: "easeInOut" }}
+    >
+      <div className={`absolute inset-x-[16%] bottom-[-34%] h-[78%] rounded-[45%] blur-2xl ${active ? "bg-cyan-400/25" : "bg-blue-500/8"}`} />
+      <div className={`relative grid h-[68%] w-[56%] place-items-center rounded-[1.15rem] border ${active ? "border-cyan-100/80 bg-gradient-to-b from-cyan-200/30 to-blue-500/20" : "border-white/16 bg-gradient-to-b from-white/10 to-blue-500/6"}`}>
+        <div className="absolute inset-x-[18%] top-[12%] h-[5px] rounded-full bg-white/25" />
+        <div className="flex flex-col gap-1.5">
+          {[0, 1, 2, 3].map((n) => <span key={n} className={`h-1.5 w-1.5 rounded-full ${active ? "bg-cyan-100 shadow-[0_0_10px_rgba(103,232,249,.95)]" : "bg-white/30"}`} />)}
+        </div>
+      </div>
+      <span className={`absolute bottom-3 right-4 grid h-10 w-10 place-items-center rounded-full text-lg font-black ${active ? "bg-white text-blue-950" : "border border-white/12 bg-slate-950/55 text-white/55"}`}>{slot}</span>
+    </motion.div>
+  );
+}
+
 /**
- * Visual-only feedback while the server reports that a compartment is opening.
- * Physical DTA21269 layout, seen from the front:
+ * Visual-only release scene. Physical DTA21269 mapping from the front:
  *   1 | 3
  *   2 | 4
- * The animation must mirror this exact wiring so the highlighted compartment
- * never points the customer to a different physical slot.
  */
 export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
-  const position = {
-    1: "left-[25%] top-[58%]",
-    2: "left-[25%] top-[80%]",
-    3: "left-[73%] top-[58%]",
-    4: "left-[73%] top-[80%]",
-  }[slotNum ?? 0] ?? "left-1/2 top-2/3";
-
   return (
-    <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-cyan-100/25 bg-slate-950/50 shadow-[0_0_70px_rgba(34,211,238,.2)]">
-      <img src="/kiosk/attract-scene-v1.png" alt="" className="h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,12,34,.08),rgba(3,12,34,.58))]" />
+    <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-cyan-100/20 bg-[linear-gradient(145deg,rgba(5,25,68,.94),rgba(3,12,36,.98))] p-[clamp(16px,2vw,28px)] shadow-[0_30px_90px_rgba(0,0,0,.34),0_0_70px_rgba(34,211,238,.12)]">
+      <div aria-hidden className="absolute -left-[15%] -top-[40%] h-[80%] w-[80%] rounded-full bg-blue-600/18 blur-[90px]" />
+      <div aria-hidden className="absolute -bottom-[46%] right-[-10%] h-[86%] w-[86%] rounded-full bg-violet-600/18 blur-[100px]" />
+      <div className="relative grid h-full grid-cols-2 grid-rows-2 gap-[clamp(10px,1.4vw,18px)] rounded-[2rem] border border-white/8 bg-white/[.025] p-[clamp(12px,1.5vw,20px)]">
+        <CabinetCell slot={1} active={slotNum === 1} />
+        <CabinetCell slot={3} active={slotNum === 3} />
+        <CabinetCell slot={2} active={slotNum === 2} />
+        <CabinetCell slot={4} active={slotNum === 4} />
+      </div>
       <motion.div
-        className={`absolute ${position} z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center`}
-        animate={{ scale: [1, 1.15, 1], opacity: [0.75, 1, 0.75] }}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <span className="absolute h-24 w-24 rounded-full border-4 border-cyan-200 bg-cyan-300/20 shadow-[0_0_44px_rgba(34,211,238,.95)]" />
-        <span className="relative grid h-16 w-16 place-items-center rounded-full bg-gradient-primary text-2xl font-black text-primary-foreground shadow-glow">
-          {slotNum ?? "?"}
-        </span>
-      </motion.div>
-      <motion.div
-        className="absolute inset-x-[-15%] bottom-0 h-1/3 bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.38),transparent)] blur-xl"
-        animate={{ x: ["-25%", "35%", "-25%"] }}
-        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        aria-hidden
+        className="absolute inset-x-[-18%] bottom-0 h-[28%] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.18),transparent)] blur-2xl"
+        animate={{ x: ["-28%", "38%", "-28%"] }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
       />
     </div>
   );

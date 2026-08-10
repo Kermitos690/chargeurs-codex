@@ -13,6 +13,7 @@ import PaymentChoice from "./pages/PaymentChoice.tsx";
 import RentalProgress from "./pages/RentalProgress.tsx";
 import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
+import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -65,6 +66,7 @@ const App = () => (
         <Router>
           <KioskReturnOverlay />
           <KioskHelpLauncher />
+          <KioskOperationalGuard />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
