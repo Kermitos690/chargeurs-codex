@@ -12,6 +12,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import {
   CustomerChargePoints,
   CustomerMembership,
@@ -40,6 +41,9 @@ const initial: State = {
 
 export default function AccountPass() {
   const [state, setState] = useState<State>(initial);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
+  const membershipReturn = useMemo(() => new URLSearchParams(window.location.search).get("membership"), []);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
@@ -81,6 +85,29 @@ export default function AccountPass() {
             ? "Révoqué"
             : "Émission Wallet non activée";
 
+  const subscribe = async () => {
+    if (subscribing) return;
+    setSubscribing(true);
+    setSubscribeError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-membership-checkout", { body: {} });
+      if (error || !data?.ok) throw new Error(String(data?.error ?? "MEMBERSHIP_CHECKOUT_UNAVAILABLE"));
+      if (data.checkoutUrl) {
+        window.location.assign(String(data.checkoutUrl));
+        return;
+      }
+      if (data.redirectUrl) {
+        window.location.assign(String(data.redirectUrl));
+        return;
+      }
+      await load();
+    } catch {
+      setSubscribeError("Le démarrage de l’adhésion est momentanément indisponible. Aucun paiement n’a été confirmé depuis cette page.");
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   if (state.loading) {
     return <div className="glass mt-6 grid min-h-[50vh] place-items-center rounded-3xl"><Loader2 className="h-9 w-9 animate-spin text-primary" /></div>;
   }
@@ -97,6 +124,17 @@ export default function AccountPass() {
 
   return (
     <div className="space-y-6 pt-6">
+      {membershipReturn === "success" && (
+        <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm text-success">
+          Paiement d’adhésion reçu par Stripe. Le statut ci-dessous est mis à jour uniquement après confirmation du webhook signé.
+        </div>
+      )}
+      {membershipReturn === "cancelled" && (
+        <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+          Souscription interrompue. Aucune adhésion n’est affichée comme active sans confirmation Stripe.
+        </div>
+      )}
+
       <section className="overflow-hidden rounded-[2rem] border border-violet-300/20 bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,.22),transparent_35%),linear-gradient(145deg,rgba(9,6,20,.98),rgba(3,7,16,.98))] p-6 shadow-[0_30px_80px_rgba(0,0,0,.45)] sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
@@ -107,8 +145,17 @@ export default function AccountPass() {
             <p className="mt-2 max-w-2xl text-muted-foreground">
               {membershipActive
                 ? "Votre adhésion est liée à ce compte. Les avantages affichés ci-dessous proviennent du backend Chargeurs.ch."
-                : "Aucune adhésion active n’est actuellement liée à ce compte."}
+                : "Aucune adhésion active n’est actuellement liée à ce compte. Le Checkout utilise automatiquement le plan actif configuré côté serveur."}
             </p>
+            {!membershipActive && (
+              <div className="mt-5">
+                <Button onClick={() => void subscribe()} disabled={subscribing} className="rounded-full bg-violet-500 px-6 font-bold text-white hover:bg-violet-400">
+                  {subscribing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WalletCards className="mr-2 h-4 w-4" />}
+                  {state.membership?.status === "pending" ? "Reprendre la souscription" : "Devenir Client Chargeurs"}
+                </Button>
+                {subscribeError && <p className="mt-3 max-w-xl text-sm text-destructive">{subscribeError}</p>}
+              </div>
+            )}
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Actualiser</Button>
         </div>
