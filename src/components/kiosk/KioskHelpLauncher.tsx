@@ -16,13 +16,15 @@ function helpLabel(lang: string) {
 
 /**
  * FAQ is available on every kiosk sub-flow. The full Kiosk screen owns its
- * header Help button; entry/recovery screens receive this floating trigger.
+ * header Help button. The premium V3 home also owns a Help control in its
+ * dedicated top bar, so the global floating trigger must stay hidden there.
  */
 export function KioskHelpLauncher() {
   const location = useLocation();
   const { lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [mainKioskMounted, setMainKioskMounted] = useState(false);
+  const [premiumHomeOwnsHelp, setPremiumHomeOwnsHelp] = useState(false);
   const stationId = stationFromPath(location.pathname);
 
   useEffect(() => {
@@ -36,9 +38,13 @@ export function KioskHelpLauncher() {
   useEffect(() => {
     if (!stationId) {
       setMainKioskMounted(false);
+      setPremiumHomeOwnsHelp(false);
       return;
     }
-    const detect = () => setMainKioskMounted(Boolean(document.querySelector(".kiosk-root > header")));
+    const detect = () => {
+      setMainKioskMounted(Boolean(document.querySelector(".kiosk-root > header")));
+      setPremiumHomeOwnsHelp(Boolean(document.querySelector(".ck2-home")));
+    };
     detect();
     const observer = new MutationObserver(detect);
     observer.observe(document.body, { childList: true, subtree: true });
@@ -49,7 +55,7 @@ export function KioskHelpLauncher() {
 
   return (
     <>
-      {!open && !mainKioskMounted && (
+      {!open && !mainKioskMounted && !premiumHomeOwnsHelp && (
         <button
           type="button"
           onClick={() => setOpen(true)}
