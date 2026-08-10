@@ -1,0 +1,56 @@
+/* 09 — Help / FAQ. Transverse utility: never a numbered journey step. */
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] {
+  z-index: 190 !important;
+  padding: 6vh 7vw !important;
+  background: rgba(1, 4, 9, .91) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] > div {
+  max-width: 1320px !important;
+  border-radius: 32px !important;
+  border: 1px solid rgba(60, 158, 255, .28) !important;
+  background:
+    radial-gradient(circle at 16% 10%, rgba(24,125,255,.12), transparent 30%),
+    linear-gradient(145deg, rgba(5,15,29,.98), rgba(2,7,14,.985)) !important;
+  box-shadow: 0 38px 90px rgba(0,0,0,.55), 0 0 65px rgba(26,113,255,.10), inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] header {
+  padding: 22px 30px !important;
+  border-color: rgba(71,148,226,.14) !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] header h2 {
+  font-size: clamp(34px, 3vw, 54px) !important;
+  line-height: .96 !important;
+  letter-spacing: -.045em !important;
+  color: #f5fbff !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] header p { color: #8fa3be !important; }
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] .text-cyan-300 { color:#50bdff !important; }
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="border-r"] { border-color:rgba(71,148,226,.14) !important; }
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="overflow-y-auto"] { scrollbar-width: thin; scrollbar-color: rgba(61,158,255,.5) transparent; }
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] button {
+  min-height: 58px;
+  border-radius: 17px !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="bg-white/5"],
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="bg-muted"] {
+  background: rgba(6,16,30,.72) !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="border-white/10"],
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] [class*="border-white/15"] {
+  border-color: rgba(71,148,226,.18) !important;
+}
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] button:hover,
+html.kiosk-v3 div[role="dialog"][aria-modal="true"] button:focus-visible {
+  border-color: rgba(70,177,255,.48) !important;
+  box-shadow: 0 0 24px rgba(30,134,255,.12);
+}
+
+@media(max-width:1200px),(max-height:720px){
+  html.kiosk-v3 div[role="dialog"][aria-modal="true"] { padding:4vh 4vw !important; }
+  html.kiosk-v3 div[role="dialog"][aria-modal="true"] > div { max-width:1180px !important; }
+  html.kiosk-v3 div[role="dialog"][aria-modal="true"] header { padding:16px 22px !important; }
+  html.kiosk-v3 div[role="dialog"][aria-modal="true"] header h2 { font-size:34px !important; }
+  html.kiosk-v3 div[role="dialog"][aria-modal="true"] button { min-height:50px; }
+}
