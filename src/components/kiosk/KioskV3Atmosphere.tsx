@@ -3,48 +3,69 @@ import { motion } from "framer-motion";
 
 /**
  * Visual-only V3 atmosphere. No rental or payment state is stored here.
- * The scene is built from native DOM/CSS so it stays crisp on the physical
- * 16:9 display and does not depend on remote image assets.
+ * Native DOM/CSS keeps the physical 16:9 kiosk crisp and deterministic.
  */
 export function KioskV3Atmosphere() {
   return (
     <div className="kv3-atmosphere" aria-hidden="true">
       <div className="kv3-vignette" />
       <div className="kv3-grid-floor" />
+      <div className="kv3-horizon-glow" />
+
       <motion.div
         className="kv3-neon-beam kv3-neon-beam-a"
-        animate={{ x: ["-18vw", "18vw", "-18vw"], opacity: [.22, .52, .22] }}
-        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        animate={{ x: ["-20vw", "18vw", "-20vw"], opacity: [.24, .62, .24] }}
+        transition={{ duration: 9.5, repeat: Infinity, ease: "easeInOut" }}
       />
       <motion.div
         className="kv3-neon-beam kv3-neon-beam-b"
-        animate={{ x: ["12vw", "-12vw", "12vw"], opacity: [.16, .38, .16] }}
-        transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }}
+        animate={{ x: ["14vw", "-14vw", "14vw"], opacity: [.2, .52, .2] }}
+        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
       />
+
       <div className="kv3-smoke kv3-smoke-a" />
       <div className="kv3-smoke kv3-smoke-b" />
       <div className="kv3-smoke kv3-smoke-c" />
+      <div className="kv3-smoke kv3-smoke-d" />
+
+      <div className="kv3-neon-orbit kv3-neon-orbit-a" />
+      <div className="kv3-neon-orbit kv3-neon-orbit-b" />
 
       <motion.div
-        className="kv3-powerbank-hero"
-        animate={{ y: [0, -10, 0], rotateY: [-14, -8, -14], rotateX: [7, 4, 7] }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
+        className="kv3-station-hero"
+        animate={{ y: [0, -7, 0], rotateY: [-10, -6, -10], rotateX: [3, 1.5, 3] }}
+        transition={{ duration: 7.2, repeat: Infinity, ease: "easeInOut" }}
       >
-        <div className="kv3-powerbank-shadow" />
-        <div className="kv3-powerbank-body">
-          <div className="kv3-powerbank-edge" />
-          <div className="kv3-powerbank-face">
-            <span className="kv3-powerbank-brand">Chargeurs.ch</span>
-            <span className="kv3-powerbank-bolt">↯</span>
-            <div className="kv3-powerbank-leds"><i /><i /><i /><i /></div>
+        <div className="kv3-station-floor-light" />
+        <div className="kv3-station-shadow" />
+        <div className="kv3-station-body">
+          <div className="kv3-station-top" />
+          <div className="kv3-station-side">
+            <span className="kv3-side-mark">⚡</span>
           </div>
-          <div className="kv3-powerbank-side" />
-          <div className="kv3-powerbank-top" />
+          <div className="kv3-station-face">
+            <div className="kv3-station-screen">
+              <strong>Chargeurs.ch</strong>
+              <span>Bienvenue</span>
+              <small>Choisissez votre option</small>
+            </div>
+            <div className="kv3-station-brand">⚡ <strong>Chargeurs.ch</strong></div>
+            <div className="kv3-station-slots">
+              {[1, 2, 3, 4].map((slot) => (
+                <div className="kv3-station-slot" key={slot}>
+                  <span className="kv3-station-slot-led" />
+                  <i>{slot}</i>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="kv3-station-base" />
+          <div className="kv3-station-rim" />
         </div>
       </motion.div>
 
       <div className="kv3-particles">
-        {Array.from({ length: 12 }).map((_, i) => (
+        {Array.from({ length: 20 }).map((_, i) => (
           <i key={i} style={{ "--i": i } as CSSProperties} />
         ))}
       </div>
