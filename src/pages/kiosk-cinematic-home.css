@@ -1,9 +1,9 @@
-/* Chargeurs.ch — cinematic kiosk home, photographic master edition.
-   The validated artwork is the visual source of truth. Synthetic cabinet/bolt
-   drawing stays disabled; the existing DOM only provides real touch targets. */
+/* Chargeurs.ch — photographic cinematic kiosk home.
+   The artwork is the visual source of truth. Existing React markup is retained
+   only for real touch targets and low-cost motion overlays. */
 .cinematic-home {
-  --art-w: min(100vw, 150vh);
-  --art-h: min(100vh, 66.6666667vw);
+  --art-w: min(100vw, 177.7777778vh);
+  --art-h: min(100vh, 56.25vw);
   position: fixed !important;
   inset: 0 !important;
   z-index: 2147482000 !important;
@@ -13,8 +13,8 @@
   isolation: isolate;
   background-color: #02050b !important;
   background-image:
-    url('/cinematic-home.jpg?v=20260810-photo-master-2'),
-    url('/api/kiosk/cinematic-artwork?v=20260810-photo-master-2') !important;
+    url('/cinematic-home.jpg?v=20260810-photo-master-3'),
+    url('/api/kiosk/cinematic-artwork?v=20260810-photo-master-3') !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
   background-size: contain !important;
@@ -24,7 +24,7 @@
 }
 .cinematic-home * { box-sizing: border-box; }
 
-/* Never redraw the scene over the photo. */
+/* Never redraw the station, bolt, plants or typography over the photo. */
 .cinematic-home__bg,
 .cinematic-home__aurora,
 .cinematic-home__smoke,
@@ -37,8 +37,8 @@
 .cinematic-home__cabinet-wrap,
 .cinematic-home__plants { display: none !important; }
 
-/* Interaction planes use the exact 3:2 artwork box, so contain/letterboxing never
-   moves the tap zones away from what the customer sees. */
+/* Coordinate system locked to the exact visible 16:9 artwork, including
+   letterboxing on non-16:9 tablets. */
 .cinematic-home__topbar,
 .cinematic-home__content,
 .cinematic-home__scene {
@@ -55,7 +55,7 @@
 .cinematic-home__content { z-index: 20 !important; }
 .cinematic-home__scene { z-index: 4 !important; pointer-events: none !important; }
 
-/* Premium boot reveal: the photograph itself is revealed; no object is recreated. */
+/* Boot reveal: reveal the real artwork itself, never a synthetic replacement. */
 .cinematic-home__vignette {
   position: fixed !important;
   inset: 0 !important;
@@ -65,14 +65,14 @@
   animation: cinematicPhotoReveal 1.15s cubic-bezier(.2,.72,.2,1) forwards;
 }
 
-/* Subtle electric breathing around the photographed central bolt. */
+/* Restrained energy motion placed over the photographed bolt. */
 .cinematic-home__scene::before {
   content: "";
   position: absolute;
   left: 34%;
-  top: 7%;
+  top: 8%;
   width: 27%;
-  height: 50%;
+  height: 53%;
   border-radius: 50%;
   background: radial-gradient(ellipse at center,
     rgba(235,247,255,.18) 0%,
@@ -84,8 +84,6 @@
   opacity: .18;
   animation: cinematicBoltBreath 4.4s ease-in-out infinite;
 }
-
-/* A restrained reflected-light pass across the wet floor. */
 .cinematic-home__scene::after {
   content: "";
   position: absolute;
@@ -103,23 +101,19 @@
 }
 .cinematic-home__scene > * { display: none !important; }
 
-/* Header: preserve the photo exactly; make its visible controls truly tactile. */
+/* Transparent interaction layer over the navigation already printed in the art. */
 .cinematic-home__topbar { display: block !important; pointer-events: none !important; }
 .cinematic-home__nav {
   position: absolute !important;
-  left: 60.0% !important;
-  top: 2.4% !important;
-  width: 37.2% !important;
-  height: 8.9% !important;
-  display: grid !important;
-  grid-template-columns: 33% 25% 42% !important;
-  gap: 0 !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: block !important;
   pointer-events: none !important;
 }
 .cinematic-home__nav > button,
 .cinematic-home__language {
-  width: 100% !important;
-  height: 100% !important;
+  position: absolute !important;
   min-height: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -128,15 +122,22 @@
   background: transparent !important;
   box-shadow: none !important;
   color: transparent !important;
-  opacity: 1 !important;
   cursor: pointer !important;
   pointer-events: auto !important;
   -webkit-tap-highlight-color: transparent;
 }
+.cinematic-home__nav > button:nth-of-type(1) {
+  left: 60.1% !important; top: 2.5% !important; width: 12.1% !important; height: 8.8% !important;
+}
+.cinematic-home__nav > button:nth-of-type(2) {
+  left: 72.4% !important; top: 2.5% !important; width: 8.7% !important; height: 8.8% !important;
+}
 .cinematic-home__language {
+  left: 82.1% !important; top: 2.4% !important; width: 14.6% !important; height: 8.9% !important;
   display: flex !important;
   align-items: stretch !important;
   overflow: hidden !important;
+  opacity: 1 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -147,32 +148,29 @@
   pointer-events: auto !important;
 }
 
-/* Cards: current markup becomes invisible hit targets over the photographed UI. */
+/* The content container is only an invisible 16:9 interaction plane. */
+.cinematic-home__content { display: block !important; pointer-events: none !important; }
 .cinematic-home__choices {
   position: absolute !important;
-  left: 6.8% !important;
-  top: 50.6% !important;
-  width: 52.2% !important;
-  height: 37.2% !important;
-  display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
-  gap: 1.0% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  pointer-events: auto !important;
-}
-.cinematic-home__choice {
+  inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+.cinematic-home__choice {
+  position: absolute !important;
   min-height: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 1px solid transparent !important;
-  border-radius: 8% !important;
   background: transparent !important;
   color: transparent !important;
-  overflow: visible !important;
   cursor: pointer !important;
+  overflow: hidden !important;
+  pointer-events: auto !important;
   -webkit-tap-highlight-color: transparent;
   transition: transform .16s ease, box-shadow .25s ease !important;
 }
@@ -180,10 +178,14 @@
 .cinematic-home__choice:disabled { opacity: 1 !important; cursor: default !important; }
 .cinematic-home__choice:not(:disabled):active { transform: scale(.985) !important; }
 .cinematic-home__choice--express {
+  left: 6.8% !important; top: 50.8% !important; width: 25.4% !important; height: 36.9% !important;
+  border-radius: 32px !important;
   box-shadow: 0 0 22px rgba(194,255,49,.055), inset 0 0 18px rgba(194,255,49,.018) !important;
   animation: cinematicExpressBreath 5.4s ease-in-out infinite;
 }
 .cinematic-home__choice--client {
+  left: 33.2% !important; top: 50.8% !important; width: 25.8% !important; height: 36.9% !important;
+  border-radius: 32px !important;
   box-shadow: 0 0 22px rgba(45,126,255,.06), inset 0 0 18px rgba(45,126,255,.02) !important;
   animation: cinematicClientBreath 5.4s ease-in-out 1.1s infinite;
 }
@@ -199,7 +201,6 @@
   padding: 0 !important; margin: -1px !important; overflow: hidden !important;
   clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important;
 }
-
 html:has(.cinematic-home), body:has(.cinematic-home), #root:has(.cinematic-home) {
   overflow: hidden !important;
   background: #02050b !important;
