@@ -1,67 +1,68 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
-type Health = { stripe: boolean; chargenow: boolean; webhook: boolean; eventPush: boolean };
+type Health = {
+  stripe: boolean;
+  chargenow: boolean;
+  stripeWebhookConfigured: boolean;
+  stripeWebhookReceived: boolean;
+  stripeWebhookEvents: number;
+  eventPushConfigured: boolean;
+  eventPushReceived: boolean;
+  cabinetEvents: number;
+};
 
 export default function AdminApiHealth() {
   const [health, setHealth] = useState<Health | null>(null);
   const [testing, setTesting] = useState(false);
 
-  const check = async () => {
+  const check = useCallback(async () => {
     setTesting(true);
-    // Real backend probe — returns booleans only, never the secret values.
-    const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
-      body: { actionType: "health_check" },
-    });
-    const h = (data as any)?.health;
-    if (error || !h) {
-      setHealth({ chargenow: false, stripe: false, webhook: false, eventPush: false });
-    } else {
-      const { count: eventCount } = await supabase.from("cabinet_events").select("id", { count: "exact", head: true });
-      setHealth({
-        chargenow: Boolean(h.chargenow),
-        stripe: Boolean(h.stripe),
-        webhook: Boolean(h.webhook),
-        eventPush: (eventCount ?? 0) > 0,
-      });
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-health-read", { body: {} });
+      if (error || !data?.ok || !data?.health) {
+        toast.error(data?.error ?? error?.message ?? "La sonde de santé est indisponible.");
+        setHealth(null);
+        return;
+      }
+      setHealth(data.health as Health);
+    } finally {
+      setTesting(false);
     }
-    setTesting(false);
-  };
-  useEffect(() => { check(); }, []);
+  }, []);
+  useEffect(() => { void check(); }, [check]);
 
   const items = [
-    { label: "API ChargeNow / Apifox", ok: health?.chargenow, hint: "Identifiants Basic configurés côté backend" },
-    { label: "Stripe", ok: health?.stripe, hint: "Clé secrète Stripe configurée (vérifiée au paiement)" },
-    { label: "Webhook Stripe", ok: health?.webhook, hint: "STRIPE_WEBHOOK_SECRET configuré" },
-    { label: "Event Push reçu", ok: health?.eventPush, hint: "Au moins un événement reçu d'une borne" },
+    { label: "API ChargeNow / Apifox", ok: health?.chargenow, hint: "Identifiants fournisseur configurés côté backend" },
+    { label: "Stripe Test", ok: health?.stripe, hint: "Mode Test actif et clés Live désactivées" },
+    { label: "Webhook Stripe configuré", ok: health?.stripeWebhookConfigured, hint: health ? `${health.stripeWebhookEvents} événement(s) Stripe vérifié(s) enregistrés` : "Secret webhook signé" },
+    { label: "Webhook Stripe déjà reçu", ok: health?.stripeWebhookReceived, hint: "Au moins un événement signé traité" },
+    { label: "Event Push ChargeNow configuré", ok: health?.eventPushConfigured, hint: "E1 + E2 vérifiés sur le projet Supabase actuel" },
+    { label: "Event Push borne déjà reçu", ok: health?.eventPushReceived, hint: health ? `${health.cabinetEvents} événement(s) matériel(s) enregistrés` : "Au moins un événement matériel reçu" },
   ];
 
   return (
     <div className="animate-fade-in max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-3xl font-bold">Santé API</h1>
-        <Button onClick={check} disabled={testing} variant="ghost" className="border border-border">
+        <Button onClick={() => void check()} disabled={testing} variant="ghost" className="border border-border">
           {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tester"}
         </Button>
       </div>
       <div className="space-y-3">
         {items.map((it) => (
           <div key={it.label} className="glass liquid-border flex items-center justify-between rounded-2xl p-5">
-            <div>
-              <div className="font-semibold">{it.label}</div>
-              <div className="text-sm text-muted-foreground">{it.hint}</div>
-            </div>
+            <div><div className="font-semibold">{it.label}</div><div className="text-sm text-muted-foreground">{it.hint}</div></div>
             {it.ok == null ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               : it.ok ? <CheckCircle2 className="h-6 w-6 text-success" />
               : <XCircle className="h-6 w-6 text-destructive" />}
           </div>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground">
-        Les clés secrètes ne sont jamais exposées au frontend. Renseignez-les via les secrets backend pour activer les données réelles.
-      </p>
+      <p className="text-sm text-muted-foreground">Les valeurs secrètes ne sont jamais exposées au navigateur. Un webhook peut être correctement configuré sans qu’un événement matériel ait encore été émis depuis son activation.</p>
     </div>
   );
 }
