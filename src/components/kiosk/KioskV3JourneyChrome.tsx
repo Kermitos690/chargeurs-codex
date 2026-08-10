@@ -2,9 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
 
-type Scene = "home" | "member" | "connected" | "selection" | "pricing" | "payment" | "release" | "active" | "other";
+type Scene = "home" | "member" | "connected" | "selection" | "pricing" | "payment" | "release" | "active" | "return" | "other";
+
+function returnOverlay(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('div[class*="z-[120]"][class*="fixed"][class*="inset-0"]');
+}
 
 function detectScene(): Scene {
+  const overlay = returnOverlay();
+  if (overlay) {
+    overlay.classList.add("kv3-return-overlay");
+    return "return";
+  }
   if (document.querySelector(".ck2-home")) return "home";
   if (document.querySelector(".ck2-member")) return "member";
   if (document.querySelector(".ck2-connected")) return "connected";
@@ -53,7 +62,8 @@ export function KioskV3JourneyChrome() {
           : ["CHOOSE", "PAYMENT", "RELEASE", "RENTAL", "RETURN"];
 
     let active = 1;
-    if (client) {
+    if (scene === "return") active = 5;
+    else if (client) {
       if (scene === "selection" || scene === "pricing") active = 2;
       else if (scene === "payment") active = 3;
       else if (scene === "release" || scene === "active") active = 4;
