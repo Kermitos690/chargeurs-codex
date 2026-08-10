@@ -3,6 +3,13 @@ import { auditLog } from "./db.ts";
 
 type DB = SupabaseClient;
 type StripeClientLike = { subscriptions: { retrieve: (id: string) => Promise<any> } };
+type MembershipEmailTemplate =
+  | "membership_activated"
+  | "membership_renewed"
+  | "membership_payment_failed"
+  | "membership_cancellation_scheduled"
+  | "membership_renewal_resumed"
+  | "membership_cancelled";
 
 type MembershipRow = {
   id: string;
@@ -12,7 +19,12 @@ type MembershipRow = {
   starts_at: string | null;
   ends_at: string | null;
   stripe_subscription_id: string | null;
+  cancel_at_period_end: boolean;
+  stripe_current_period_start: string | null;
+  stripe_current_period_end: string | null;
 };
+
+const MEMBERSHIP_SELECT = "id,user_id,plan_id,status,starts_at,ends_at,stripe_subscription_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end";
 
 function isoFromUnix(value: unknown): string | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -34,26 +46,17 @@ async function findMembership(
   input: { membershipId?: string | null; subscriptionId?: string | null; checkoutId?: string | null },
 ): Promise<MembershipRow | null> {
   if (input.membershipId) {
-    const { data, error } = await db.from("customer_memberships")
-      .select("id,user_id,plan_id,status,starts_at,ends_at,stripe_subscription_id")
-      .eq("id", input.membershipId)
-      .maybeSingle();
+    const { data, error } = await db.from("customer_memberships").select(MEMBERSHIP_SELECT).eq("id", input.membershipId).maybeSingle();
     if (error) throw error;
     if (data) return data as MembershipRow;
   }
   if (input.subscriptionId) {
-    const { data, error } = await db.from("customer_memberships")
-      .select("id,user_id,plan_id,status,starts_at,ends_at,stripe_subscription_id")
-      .eq("stripe_subscription_id", input.subscriptionId)
-      .maybeSingle();
+    const { data, error } = await db.from("customer_memberships").select(MEMBERSHIP_SELECT).eq("stripe_subscription_id", input.subscriptionId).maybeSingle();
     if (error) throw error;
     if (data) return data as MembershipRow;
   }
   if (input.checkoutId) {
-    const { data, error } = await db.from("customer_memberships")
-      .select("id,user_id,plan_id,status,starts_at,ends_at,stripe_subscription_id")
-      .eq("stripe_checkout_session_id", input.checkoutId)
-      .maybeSingle();
+    const { data, error } = await db.from("customer_memberships").select(MEMBERSHIP_SELECT).eq("stripe_checkout_session_id", input.checkoutId).maybeSingle();
     if (error) throw error;
     if (data) return data as MembershipRow;
   }
@@ -84,6 +87,51 @@ async function ensureWalletPass(db: DB, membership: MembershipRow) {
   if (error) throw error;
 }
 
+async function queueMembershipEmail(
+  db: DB,
+  membership: MembershipRow,
+  templateKey: MembershipEmailTemplate,
+  subscriptionId: string,
+  periodEnd: string | null,
+  extra: Record<string, unknown> = {},
+) {
+  const [{ data: userResult }, { data: profile }, { data: plan }] = await Promise.all([
+    db.auth.admin.getUserById(membership.user_id),
+    db.from("profiles").select("preferred_language").eq("id", membership.user_id).maybeSingle(),
+    db.from("customer_membership_plans")
+      .select("code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count")
+      .eq("id", membership.plan_id)
+      .maybeSingle(),
+  ]);
+  const email = userResult.user?.email?.trim();
+  if (!email) return;
+  const preferred = String(profile?.preferred_language ?? "fr");
+  const locale = preferred === "de" || preferred === "en" ? preferred : "fr";
+  const periodKey = periodEnd ?? membership.stripe_current_period_end ?? "none";
+  const idempotencyKey = `${templateKey}:${subscriptionId}:${periodKey}`;
+  const { error } = await db.from("membership_email_outbox").insert({
+    membership_id: membership.id,
+    template_key: templateKey,
+    idempotency_key: idempotencyKey,
+    to_email: email,
+    locale,
+    payload: {
+      planCode: plan?.code ?? null,
+      planName: plan?.name ?? "Chargeurs+",
+      currency: plan?.currency ?? "CHF",
+      annualFeeCents: Number(plan?.annual_fee_cents ?? 0),
+      renewalCreditCents: Number(plan?.renewal_credit_cents ?? 0),
+      hourlyCents: Number(plan?.hourly_cents ?? 0),
+      dailyCapCents: Number(plan?.daily_cap_cents ?? 0),
+      billingInterval: plan?.billing_interval ?? null,
+      billingIntervalCount: Number(plan?.billing_interval_count ?? 1),
+      periodEnd,
+      ...extra,
+    },
+  });
+  if (error && !String(error.message ?? "").toLowerCase().includes("duplicate")) throw error;
+}
+
 export async function syncMembershipSubscription(
   db: DB,
   subscription: any,
@@ -96,12 +144,12 @@ export async function syncMembershipSubscription(
   const subscriptionId = typeof subscription?.id === "string" ? subscription.id : null;
   if (!subscriptionId) return false;
 
-  const membership = await findMembership(db, {
-    membershipId: metadataMembershipId,
-    subscriptionId,
-  });
+  const membership = await findMembership(db, { membershipId: metadataMembershipId, subscriptionId });
   if (!membership) return false;
 
+  const previousStatus = membership.status;
+  const previousCancel = Boolean(membership.cancel_at_period_end);
+  const previousPeriodStart = membership.stripe_current_period_start;
   const status = subscriptionStatus(subscription?.status, deleted);
   const currentStart = isoFromUnix(subscription?.current_period_start);
   const currentEnd = isoFromUnix(subscription?.current_period_end);
@@ -139,6 +187,27 @@ export async function syncMembershipSubscription(
       .then(() => {}, () => {});
   }
 
+  let emailTemplate: MembershipEmailTemplate | null = null;
+  if (status === "active") {
+    if (cancelAtPeriodEnd && !previousCancel) emailTemplate = "membership_cancellation_scheduled";
+    else if (!cancelAtPeriodEnd && previousCancel) emailTemplate = "membership_renewal_resumed";
+    else if (previousStatus !== "active") emailTemplate = "membership_activated";
+    else if (currentStart && previousPeriodStart && currentStart !== previousPeriodStart) emailTemplate = "membership_renewed";
+  } else if (status === "past_due" && previousStatus !== "past_due") {
+    emailTemplate = "membership_payment_failed";
+  } else if (terminal && previousStatus !== "cancelled" && previousStatus !== "expired") {
+    emailTemplate = "membership_cancelled";
+  }
+
+  if (emailTemplate) {
+    await queueMembershipEmail(db, membership, emailTemplate, subscriptionId, currentEnd, {
+      status,
+      cancelAtPeriodEnd,
+    }).catch((emailError) => {
+      console.error("membership email queue", emailError instanceof Error ? emailError.message : "UNKNOWN_ERROR");
+    });
+  }
+
   await auditLog(db, {
     action: `membership.stripe_${status}`,
     target: membership.id,
@@ -147,6 +216,7 @@ export async function syncMembershipSubscription(
       stripe_subscription_id: subscriptionId,
       current_period_end: currentEnd,
       cancel_at_period_end: cancelAtPeriodEnd,
+      lifecycle_email: emailTemplate,
     },
   });
   return true;
