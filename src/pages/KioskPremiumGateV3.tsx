@@ -2,17 +2,16 @@ import { useEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
-import "./kiosk-premium-v3.css";
-import "./kiosk-premium-v3-final.css";
+import "./kiosk-production-cinematic.css";
 
 /**
- * Kiosk V3 intentionally reuses the proven V2 orchestration/pairing/rental
- * logic while replacing the presentation layer. This keeps payment and
- * hardware behavior stable and makes the V3 rollout reversible.
+ * Production kiosk entry.
+ * Business orchestration remains in the proven V2 gate/Kiosk state machine;
+ * this route owns one consolidated physical 16:9 presentation layer.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
-    document.documentElement.dataset.kioskVersion = "v3";
+    document.documentElement.dataset.kioskVersion = "v3-production";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
