@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
 
 /**
@@ -43,7 +44,9 @@ export function KioskV3Atmosphere() {
       </motion.div>
 
       <div className="kv3-particles">
-        {Array.from({ length: 12 }).map((_, i) => <i key={i} style={{ "--i": i } as React.CSSProperties} />)}
+        {Array.from({ length: 12 }).map((_, i) => (
+          <i key={i} style={{ "--i": i } as CSSProperties} />
+        ))}
       </div>
     </div>
   );
