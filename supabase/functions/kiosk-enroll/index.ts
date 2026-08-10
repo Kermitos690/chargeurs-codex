@@ -3,10 +3,7 @@ import { adminClient } from "../_shared/db.ts";
 import { normalizeKioskBaseUrl, randomOpaque, sha256Hex, validEnrollmentRequest } from "../_shared/kioskEnrollment.ts";
 
 const STAGING_SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
-// The existing Vercel project historically named `esim-telegram-bot` is now
-// the Chargeurs.ch staging frontend. New kiosk enrollments must be pinned to
-// that active project rather than the retired chargeurs-ch-staging alias.
-const STAGING_KIOSK_ORIGIN = "https://esim-telegram-bot.vercel.app";
+const STAGING_KIOSK_ORIGIN = "https://chargeurs-ch-staging.vercel.app";
 
 type EnrollmentResult = {
   ok?: boolean;
@@ -24,9 +21,6 @@ function json(body: unknown, status = 200) {
 }
 
 function publicBaseUrl(): string | null {
-  // This project is the dedicated staging backend. Pin its kiosk origin so an
-  // outdated/mistyped secret cannot consume a pairing code and then make the
-  // APK reject the returned configuration with KIOSK_ORIGIN_MISMATCH.
   const projectOrigin = normalizeKioskBaseUrl(Deno.env.get("SUPABASE_URL") ?? "");
   if (projectOrigin === STAGING_SUPABASE_ORIGIN) return STAGING_KIOSK_ORIGIN;
   return normalizeKioskBaseUrl(Deno.env.get("KIOSK_PUBLIC_BASE_URL") ?? "");
@@ -36,8 +30,6 @@ async function enrollmentSourceHash(req: Request, devicePublicId: string): Promi
   const salt = Deno.env.get("KIOSK_ENROLLMENT_RATE_LIMIT_SALT")
     ?? Deno.env.get("INTERNAL_FUNCTION_SECRET");
   if (!salt || salt.length < 32) return null;
-  // Reverse proxies vary; only a one-way, keyed digest is stored. When an IP
-  // header is absent, device identity still provides a safe rate-limit key.
   const forwarded = req.headers.get("cf-connecting-ip")
     ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     ?? req.headers.get("x-real-ip")
@@ -78,8 +70,6 @@ async function recoverInterruptedEnrollment(
     return { ok: false, error: "DEVICE_BOUND_TO_ANOTHER_STATION" };
   }
 
-  // Claim the fresh pairing code before rotating the token. The conditional
-  // update prevents two concurrent requests from consuming the same code.
   const { data: claimed, error: claimError } = await db
     .from("kiosk_pairing_codes")
     .update({ used_at: now, used_by_device_id: device.id })
@@ -110,7 +100,6 @@ async function recoverInterruptedEnrollment(
 
   if (updateError || !updated) return { ok: false, error: "ENROLLMENT_UNAVAILABLE" };
 
-  // Best-effort audit only; never log the pairing code or kiosk token.
   await db.from("audit_logs").insert({
     action: "kiosk.enrollment.recovered",
     target: updated.id,
@@ -185,7 +174,6 @@ Deno.serve(async (req) => {
       if (result?.error === "ENROLLMENT_UNAVAILABLE") {
         return json({ ok: false, error: "ENROLLMENT_UNAVAILABLE" }, 503);
       }
-      // Keep invalid, expired and already consumed pairing codes indistinguishable.
       return json({ ok: false, error: "PAIRING_CODE_INVALID_OR_EXPIRED" }, 401);
     }
 
