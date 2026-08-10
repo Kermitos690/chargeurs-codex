@@ -2,10 +2,14 @@
 // supplier snapshot. It deliberately never returns supplier credentials or
 // opaque raw payloads to a browser.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { adminClient, requireAdmin } from "../_shared/db.ts";
+import { adminClient, requireRoles } from "../_shared/db.ts";
 import { isChargeNowConfigured } from "../_shared/chargenow.ts";
 import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
 
+const READ_ROLES = [
+  "super_admin", "admin", "operations_admin", "support_agent",
+  "maintenance_technician", "staff", "operator", "viewer",
+] as const;
 const headers = { ...corsHeaders, "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...headers, "Content-Type": "application/json" } });
 
@@ -20,8 +24,8 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   const db = adminClient();
   try {
-    const adminId = await requireAdmin(req, db);
-    if (!adminId) return json({ ok: false, error: "FORBIDDEN" }, 403);
+    const readerId = await requireRoles(req, db, READ_ROLES);
+    if (!readerId) return json({ ok: false, error: "FORBIDDEN" }, 403);
     const body = await req.json().catch(() => ({}));
     const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) return json({ ok: false, error: "INVALID_STATION" }, 400);
