@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 export default function AdminShops() {
   const [shops, setShops] = useState<any>(null);
@@ -10,9 +11,19 @@ export default function AdminShops() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.functions.invoke("chargenow-admin", { body: { action: "invoke", code: "S1" } });
-    setLoading(false);
-    setShops(data);
+    try {
+      const { data, error } = await supabase.functions.invoke("chargenow-admin", { body: { action: "invoke", code: "S1" } });
+      if (error || !data?.ok) {
+        const code = data?.error ?? error?.message ?? "CHARGENOW_SHOPS_READ_FAILED";
+        toast.error(code === "FORBIDDEN" ? "Vous n’avez pas accès à la lecture fournisseur." : `ChargeNow S1 : ${code}`);
+        setShops(null);
+        return;
+      }
+      setShops(data);
+      toast.success("Boutiques ChargeNow actualisées");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const records = (shops?.data?.data ?? shops?.data ?? []) as any[];
@@ -21,7 +32,7 @@ export default function AdminShops() {
     <div className="animate-fade-in space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-3xl font-bold">Boutiques</h1>
-        <Button variant="ghost" onClick={load} className="gap-2">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Charger (S1)</Button>
+        <Button variant="ghost" onClick={load} disabled={loading} className="gap-2">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Charger (S1)</Button>
       </div>
       {Array.isArray(records) && records.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
