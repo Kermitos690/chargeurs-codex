@@ -1,0 +1,82 @@
+/* Non-happy-path layout hardening. Presentation only. */
+
+/* Selection with no currently rentable battery. */
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage > div.relative.z-10.glass.rounded-2xl {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 24px !important;
+  border: 1px solid rgba(255,197,109,.20) !important;
+  border-radius: 24px !important;
+  background:
+    radial-gradient(circle at 50% 0,rgba(255,197,109,.08),transparent 44%),
+    rgba(4,11,21,.86) !important;
+  color: #ffdca5 !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+}
+
+/* Pairing creation/expiry error stays inside the QR card and gives retry focus. */
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-error {
+  width: 100% !important;
+  min-height: 300px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+  padding: 30px !important;
+  border: 1px solid rgba(255,197,109,.22) !important;
+  border-radius: 24px !important;
+  background: rgba(255,197,109,.045) !important;
+  text-align: center !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-error p {
+  max-width: 26ch !important;
+  color: #ffdea8 !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  line-height: 1.3 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-error button {
+  min-width: 230px !important;
+  min-height: 60px !important;
+  border: 1px solid rgba(88,187,255,.32) !important;
+  border-radius: 19px !important;
+  background: linear-gradient(135deg,#50c7ff,#1873ff) !important;
+  color: white !important;
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  box-shadow: 0 16px 36px rgba(38,132,255,.20) !important;
+}
+
+/* Payment cancellation error: visible but it must not compete with the QR. */
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage span.text-warning {
+  max-width: 360px !important;
+  margin-top: 4px !important;
+  padding: 8px 11px !important;
+  border: 1px solid rgba(255,197,109,.14) !important;
+  border-radius: 12px !important;
+  background: rgba(255,197,109,.045) !important;
+  color: #ffd99d !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+}
+
+/* Disabled buttons should visually read as unavailable, not merely dimmed active CTAs. */
+html.kiosk-v3 .kiosk-root button:disabled,
+html.kiosk-v3 .ck2-shell button:disabled {
+  box-shadow: none !important;
+  opacity: .42 !important;
+  transform: none !important;
+}
