@@ -1,0 +1,306 @@
+/*
+ * Chargeurs.ch — cinematic director.
+ * Decorative only. It never owns interaction or transaction state.
+ */
+
+.kv3-cinema {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+  opacity: 1;
+}
+
+.kv3-cinema::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 48% 24%, rgba(var(--kc-accent), calc(.035 * var(--kc-intensity))), transparent 38%),
+    radial-gradient(circle at 50% 108%, rgba(var(--kc-accent-soft), calc(.18 * var(--kc-intensity))), transparent 46%),
+    linear-gradient(180deg, transparent 60%, rgba(0,0,0,.22));
+  mix-blend-mode: screen;
+}
+
+.kv3-cinema-depth {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  top: 7vh;
+  bottom: 5vh;
+  border-radius: 48%;
+  background:
+    radial-gradient(ellipse at center, rgba(var(--kc-accent), calc(.065 * var(--kc-intensity))), transparent 58%),
+    radial-gradient(ellipse at 58% 64%, rgba(var(--kc-secondary), calc(.028 * var(--kc-intensity))), transparent 48%);
+  filter: blur(10px);
+  transform-origin: 50% 54%;
+}
+
+.kv3-cinema-horizon {
+  position: absolute;
+  left: 13vw;
+  right: 13vw;
+  bottom: 5.2vh;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--kc-accent), calc(.18 * var(--kc-intensity))) 18%,
+    rgba(var(--kc-accent), calc(.72 * var(--kc-intensity))) 50%,
+    rgba(var(--kc-secondary), calc(.22 * var(--kc-intensity))) 82%,
+    transparent
+  );
+  box-shadow:
+    0 0 18px rgba(var(--kc-accent), calc(.5 * var(--kc-intensity))),
+    0 0 62px rgba(var(--kc-accent-soft), calc(.18 * var(--kc-intensity)));
+  transform-origin: center;
+}
+
+.kv3-cinema-horizon::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: -18px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(var(--kc-accent), calc(.12 * var(--kc-intensity))), transparent 68%);
+  filter: blur(12px);
+}
+
+.kv3-cinema-energy-path {
+  position: absolute;
+  left: 10vw;
+  top: 50%;
+  width: 44vw;
+  height: 1px;
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--kc-accent), .12),
+    rgba(var(--kc-accent), .68),
+    rgba(var(--kc-secondary), .24),
+    transparent
+  );
+  box-shadow: 0 0 22px rgba(var(--kc-accent), .3);
+  opacity: .3;
+}
+
+.kv3-cinema-energy-path::before,
+.kv3-cinema-energy-path::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(var(--kc-accent), .92);
+  box-shadow: 0 0 12px rgba(var(--kc-accent), .9), 0 0 30px rgba(var(--kc-accent), .44);
+  transform: translate(-50%,-50%);
+}
+
+.kv3-cinema-energy-path::before { left: 39%; }
+.kv3-cinema-energy-path::after { left: 76%; width: 6px; height: 6px; opacity: .72; }
+
+.kv3-cinema.is-focus-wide .kv3-cinema-energy-path {
+  left: 17vw;
+  top: 63%;
+  width: 36vw;
+  opacity: .18;
+}
+
+.kv3-cinema.is-focus-right .kv3-cinema-energy-path {
+  left: 38vw;
+  top: 50%;
+  width: 34vw;
+}
+
+.kv3-cinema.is-focus-center .kv3-cinema-energy-path {
+  left: 28vw;
+  top: 56%;
+  width: 42vw;
+}
+
+.kv3-cinema.is-focus-slot .kv3-cinema-energy-path {
+  left: 34vw;
+  top: 52%;
+  width: 43vw;
+  height: 2px;
+  opacity: .74;
+}
+
+.kv3-cinema-transition-sweep {
+  position: absolute;
+  left: -16vw;
+  top: -20vh;
+  width: 26vw;
+  height: 142vh;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--kc-accent), .025),
+    rgba(var(--kc-accent), .24),
+    rgba(255,255,255,.13),
+    rgba(var(--kc-secondary), .09),
+    transparent
+  );
+  filter: blur(9px);
+  mix-blend-mode: screen;
+}
+
+.kv3-cinema-transition-sweep::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(255,255,255,.62);
+  box-shadow: 0 0 22px rgba(var(--kc-accent), .74), 0 0 58px rgba(var(--kc-accent), .26);
+}
+
+.kv3-cinema-slot-ring {
+  position: absolute;
+  left: 40.5vw;
+  top: 50%;
+  width: 26vw;
+  height: 26vw;
+  max-width: 430px;
+  max-height: 430px;
+  min-width: 240px;
+  min-height: 240px;
+  transform: translate(-50%,-50%);
+  border-radius: 50%;
+  border: 1px solid rgba(var(--kc-accent), .34);
+  box-shadow: inset 0 0 38px rgba(var(--kc-accent), .03);
+}
+
+.kv3-cinema-slot-ring-b {
+  border-color: rgba(var(--kc-secondary), .22);
+  filter: blur(.2px);
+}
+
+.kv3-cinema-release::after {
+  content: "";
+  position: absolute;
+  left: 7vw;
+  top: 15vh;
+  width: 64vw;
+  height: 66vh;
+  border-radius: 48%;
+  background: radial-gradient(ellipse at 55% 50%, rgba(var(--kc-accent), .09), rgba(var(--kc-accent-soft), .025) 47%, transparent 72%);
+  filter: blur(18px);
+}
+
+.kv3-cinema-active::after {
+  content: "";
+  position: absolute;
+  left: 10vw;
+  top: 14vh;
+  width: 62vw;
+  height: 68vh;
+  border-radius: 48%;
+  background: radial-gradient(ellipse at 53% 48%, rgba(110,231,183,.12), rgba(var(--kc-secondary), .025) 48%, transparent 72%);
+  filter: blur(16px);
+}
+
+.kv3-cinema-success-bloom {
+  position: absolute;
+  left: 40.5vw;
+  top: 50%;
+  width: 25vw;
+  height: 25vw;
+  max-width: 420px;
+  max-height: 420px;
+  transform: translate(-50%,-50%);
+  border-radius: 50%;
+  border: 2px solid rgba(181,255,220,.82);
+  box-shadow:
+    0 0 36px rgba(110,231,183,.7),
+    0 0 110px rgba(110,231,183,.26),
+    inset 0 0 54px rgba(110,231,183,.08);
+}
+
+.kv3-cinema-return-close {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62vw;
+  height: 62vw;
+  max-width: 900px;
+  max-height: 900px;
+  transform: translate(-50%,-50%);
+  border-radius: 50%;
+  border: 1px solid rgba(var(--kc-accent), .08);
+  background: radial-gradient(circle, rgba(var(--kc-accent), .028), transparent 66%);
+  box-shadow: inset 0 0 110px rgba(var(--kc-accent), .025);
+}
+
+/* Payment: keep the QR itself visually still and high-contrast. */
+.kv3-cinema-payment .kv3-cinema-energy-path {
+  top: 57%;
+  opacity: .28;
+}
+
+.kv3-cinema-payment::after,
+.kv3-cinema-member::after {
+  content: "";
+  position: absolute;
+  right: 7vw;
+  top: 18vh;
+  width: 39vw;
+  height: 58vh;
+  border-radius: 44%;
+  background: radial-gradient(ellipse at center, rgba(var(--kc-accent), .065), transparent 64%);
+  filter: blur(12px);
+}
+
+/* Errors intentionally reduce spectacle. */
+.kv3-cinema-error,
+.kv3-cinema-support,
+.kv3-cinema-expired {
+  opacity: .68;
+}
+
+.kv3-cinema-error .kv3-cinema-energy-path,
+.kv3-cinema-support .kv3-cinema-energy-path,
+.kv3-cinema-expired .kv3-cinema-energy-path {
+  display: none;
+}
+
+@media (max-width:1400px), (max-height:820px) {
+  .kv3-cinema-slot-ring,
+  .kv3-cinema-success-bloom {
+    left: 39vw;
+  }
+
+  .kv3-cinema.is-focus-slot .kv3-cinema-energy-path {
+    left: 28vw;
+    width: 48vw;
+  }
+}
+
+@media (orientation:portrait) {
+  .kv3-cinema-energy-path,
+  .kv3-cinema-slot-ring,
+  .kv3-cinema-success-bloom {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .kv3-cinema-transition-sweep,
+  .kv3-cinema-slot-ring,
+  .kv3-cinema-success-bloom,
+  .kv3-cinema-energy-path::before,
+  .kv3-cinema-energy-path::after {
+    display: none !important;
+  }
+
+  .kv3-cinema {
+    opacity: .62;
+  }
+}
