@@ -1,0 +1,16 @@
+/*
+ * Presentation i18n guard.
+ * Functional copy must come from React/i18n, never CSS pseudo-elements.
+ */
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta::before,
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > div:last-child::before,
+html.kiosk-v3[data-kiosk-scene="starting"] .kiosk-root main > div::before,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child::after {
+  content: none !important;
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child > div::after,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child > div::after {
+  content: "CHARGEURS.CH" !important;
+}
