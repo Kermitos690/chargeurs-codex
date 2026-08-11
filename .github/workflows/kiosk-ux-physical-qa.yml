@@ -9,7 +9,7 @@ on:
       - "src/components/kiosk/KioskV3JourneyChrome.tsx"
       - "src/components/kiosk/KioskV3CinematicDirector.tsx"
       - "src/test/kioskUxRecovery.test.ts"
-      - "docs/kiosk-ux-p1-recovery-audit.md"
+      - "docs/kiosk-ux-p1-recovery-*.md"
       - "docs/chargeurs-cinematic-kiosk-direction.md"
       - ".github/workflows/kiosk-ux-physical-qa.yml"
 
