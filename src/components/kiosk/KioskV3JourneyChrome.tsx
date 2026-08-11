@@ -110,6 +110,12 @@ export function buildKioskProgressConfig(
   return { labels, active, client };
 }
 
+export function shouldShowKioskProgress(scene: KioskScene, lastTransactionalScene: KioskScene | null): boolean {
+  if (scene === "home" || scene === "loading") return false;
+  if (TRANSIENT_SCENES.has(scene) && !lastTransactionalScene) return false;
+  return true;
+}
+
 const TRACKABLE_SCENES = new Set<KioskScene>([
   "member",
   "connected",
@@ -166,8 +172,7 @@ export function KioskV3JourneyChrome() {
     [journey, lang, scene, lastTransactionalScene],
   );
 
-  const orphanTransient = TRANSIENT_SCENES.has(scene) && !lastTransactionalScene;
-  if (scene === "home" || scene === "loading" || orphanTransient) return null;
+  if (!shouldShowKioskProgress(scene, lastTransactionalScene)) return null;
 
   const progressLabel = lang === "de" ? "Fortschritt" : lang === "en" ? "Progress" : "Progression";
 
