@@ -47,6 +47,7 @@ export function detectKioskScene(root: ParentNode = document): KioskScene {
     overlay.classList.add("kv3-return-overlay");
     return "return";
   }
+  if (root.querySelector(".ck2-loading")) return "loading";
   if (root.querySelector(".ck2-home")) return "home";
   if (root.querySelector(".ck2-member")) return "member";
   if (root.querySelector(".ck2-connected")) return "connected";
