@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, ShieldCheck } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
+
+const PERSISTENCE_MS = 900;
 
 function pricingUnavailable() {
   return Boolean(document.querySelector(".kiosk-pricing-stage > p.text-warning"));
@@ -17,26 +19,50 @@ function clickExistingKioskRefresh() {
 }
 
 /**
- * Presentation-only recovery control for a failed/missing pricing quote.
- * It never supplies a tariff. Retry delegates to the existing Kiosk refresh
+ * Presentation-only recovery control for a persistent failed/missing pricing
+ * quote. A brief quote-loading state is intentionally ignored so the recovery
+ * chrome does not flash during normal asynchronous loading.
+ *
+ * Retry never supplies a tariff: it delegates to the existing Kiosk refresh
  * action, which remains the only owner of quote/station/slot reloading.
  */
 export function KioskV3PricingRecovery() {
   const { lang } = useI18n();
-  const [visible, setVisible] = useState(() => pricingUnavailable());
+  const [visible, setVisible] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const persistenceTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    const detect = () => setVisible(pricingUnavailable());
+    const clearPersistence = () => {
+      if (persistenceTimer.current !== null) {
+        window.clearTimeout(persistenceTimer.current);
+        persistenceTimer.current = null;
+      }
+    };
+
+    const detect = () => {
+      if (!pricingUnavailable()) {
+        clearPersistence();
+        setVisible(false);
+        return;
+      }
+      if (visible || persistenceTimer.current !== null) return;
+      persistenceTimer.current = window.setTimeout(() => {
+        persistenceTimer.current = null;
+        if (pricingUnavailable()) setVisible(true);
+      }, PERSISTENCE_MS);
+    };
+
     detect();
     const observer = new MutationObserver(detect);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
-    const timer = window.setInterval(detect, 600);
+    const timer = window.setInterval(detect, 500);
     return () => {
+      clearPersistence();
       observer.disconnect();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [visible]);
 
   const retry = useCallback(() => {
     if (retrying) return;
