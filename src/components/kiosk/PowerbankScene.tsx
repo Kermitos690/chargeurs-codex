@@ -63,68 +63,75 @@ export function KioskHolographicFloor() {
 function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
   return (
     <motion.div
-      className={`relative grid min-h-0 place-items-center overflow-visible rounded-[1.7rem] border ${active ? "border-cyan-100/80 bg-cyan-300/[.09]" : "border-white/10 bg-white/[.025]"}`}
+      className={`relative grid min-h-0 place-items-center overflow-visible rounded-[2rem] border ${active ? "border-cyan-100/90 bg-cyan-300/[.11]" : "border-white/10 bg-white/[.025]"}`}
       animate={active ? {
+        scale: [1, 1.018, 1],
         boxShadow: [
           "0 0 0 rgba(34,211,238,0), inset 0 0 0 rgba(34,211,238,0)",
-          "0 0 52px rgba(34,211,238,.42), inset 0 0 30px rgba(34,211,238,.12)",
-          "0 0 18px rgba(34,211,238,.2), inset 0 0 10px rgba(34,211,238,.04)",
+          "0 0 78px rgba(34,211,238,.52), inset 0 0 42px rgba(34,211,238,.16)",
+          "0 0 24px rgba(34,211,238,.22), inset 0 0 14px rgba(34,211,238,.05)",
         ],
       } : undefined}
-      transition={{ duration: 1.45, repeat: active ? Infinity : 0, ease: "easeInOut" }}
+      transition={{ duration: 1.35, repeat: active ? Infinity : 0, ease: "easeInOut" }}
     >
-      <div className={`absolute inset-[4%] rounded-[1.45rem] border ${active ? "border-cyan-300/20" : "border-white/[.035]"}`} />
-      <div className={`absolute inset-x-[8%] bottom-[-24%] h-[72%] rounded-[50%] blur-3xl ${active ? "bg-cyan-400/28" : "bg-blue-500/6"}`} />
+      <div className={`absolute inset-[4%] rounded-[1.7rem] border ${active ? "border-cyan-300/25" : "border-white/[.035]"}`} />
+      <div className={`absolute inset-x-[5%] bottom-[-32%] h-[86%] rounded-[50%] blur-3xl ${active ? "bg-cyan-400/34" : "bg-blue-500/6"}`} />
 
       {active && (
         <>
           <motion.div
             aria-hidden
-            className="absolute h-[145%] w-[145%] rounded-full border border-cyan-200/20"
-            animate={{ scale: [.58, .92, 1.16], opacity: [.75, .24, 0] }}
-            transition={{ duration: 1.55, repeat: Infinity, ease: "easeOut" }}
+            className="absolute h-[152%] w-[152%] rounded-full border border-cyan-100/25"
+            animate={{ scale: [.52, .94, 1.2], opacity: [.78, .28, 0] }}
+            transition={{ duration: 1.3, repeat: Infinity, ease: "easeOut" }}
           />
           <motion.div
             aria-hidden
-            className="absolute h-[110%] w-[110%] rounded-full border border-blue-300/20"
-            animate={{ scale: [.66, 1.05], opacity: [.55, 0] }}
-            transition={{ duration: 1.2, repeat: Infinity, delay: .25, ease: "easeOut" }}
+            className="absolute h-[122%] w-[122%] rounded-full border border-blue-200/25"
+            animate={{ scale: [.62, 1.1], opacity: [.62, 0] }}
+            transition={{ duration: 1.05, repeat: Infinity, delay: .18, ease: "easeOut" }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute inset-x-[7%] top-[8%] h-[2px] rounded-full bg-cyan-100 shadow-[0_0_24px_rgba(103,232,249,1)]"
+            animate={{ y: [0, 78, 0], opacity: [.2, 1, .2] }}
+            transition={{ duration: 1.15, repeat: Infinity, ease: "easeInOut" }}
           />
         </>
       )}
 
       <motion.div
-        className={`relative grid h-[68%] w-[54%] place-items-center rounded-[1.15rem] border ${active ? "border-cyan-50/90 bg-[linear-gradient(180deg,rgba(164,244,255,.33),rgba(15,90,184,.25)_42%,rgba(3,18,56,.82))]" : "border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,.075),rgba(37,99,235,.04))]"}`}
+        className={`relative grid h-[72%] w-[58%] place-items-center rounded-[1.35rem] border ${active ? "border-cyan-50 bg-[linear-gradient(180deg,rgba(207,250,254,.42),rgba(14,116,200,.3)_40%,rgba(3,18,56,.9))]" : "border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,.075),rgba(37,99,235,.04))]"}`}
         animate={active ? {
-          y: [0, -5, -11, -7],
-          scale: [1, 1.025, 1.07, 1.045],
-          rotateX: [0, -2, -5, -3],
+          y: [0, -8, -18, -12, -18],
+          scale: [1, 1.035, 1.11, 1.08, 1.11],
+          rotateX: [0, -3, -7, -4, -7],
         } : undefined}
-        transition={{ duration: 1.55, repeat: Infinity, ease: "easeInOut" }}
-        style={{ transformPerspective: 900 }}
+        transition={{ duration: 1.45, repeat: Infinity, ease: "easeInOut" }}
+        style={{ transformPerspective: 1000 }}
       >
-        <div className={`absolute inset-x-[16%] top-[10%] h-[5px] rounded-full ${active ? "bg-cyan-50 shadow-[0_0_13px_rgba(165,243,252,.9)]" : "bg-white/20"}`} />
-        <div className="flex flex-col gap-1.5">
+        <div className={`absolute inset-x-[14%] top-[10%] h-[6px] rounded-full ${active ? "bg-cyan-50 shadow-[0_0_18px_rgba(165,243,252,1)]" : "bg-white/20"}`} />
+        <div className="flex flex-col gap-2">
           {[0, 1, 2, 3].map((n) => (
             <motion.span
               key={n}
-              className={`h-1.5 w-1.5 rounded-full ${active ? "bg-cyan-50 shadow-[0_0_10px_rgba(103,232,249,.95)]" : "bg-white/25"}`}
-              animate={active ? { opacity: [.45, 1, .45], scale: [.85, 1.3, .85] } : undefined}
-              transition={{ duration: .8, repeat: Infinity, delay: n * .1 }}
+              className={`h-2 w-2 rounded-full ${active ? "bg-cyan-50 shadow-[0_0_13px_rgba(103,232,249,1)]" : "bg-white/25"}`}
+              animate={active ? { opacity: [.4, 1, .4], scale: [.8, 1.42, .8] } : undefined}
+              transition={{ duration: .72, repeat: Infinity, delay: n * .09 }}
             />
           ))}
         </div>
         {active && (
           <motion.div
             aria-hidden
-            className="absolute inset-x-[10%] bottom-[8%] h-[2px] rounded-full bg-cyan-100 shadow-[0_0_14px_rgba(103,232,249,1)]"
-            animate={{ opacity: [.35, 1, .35] }}
-            transition={{ duration: .7, repeat: Infinity }}
+            className="absolute inset-x-[9%] bottom-[8%] h-[3px] rounded-full bg-cyan-50 shadow-[0_0_18px_rgba(103,232,249,1)]"
+            animate={{ opacity: [.3, 1, .3] }}
+            transition={{ duration: .58, repeat: Infinity }}
           />
         )}
       </motion.div>
 
-      <span className={`absolute bottom-3 right-4 grid h-10 w-10 place-items-center rounded-full text-lg font-black ${active ? "bg-white text-blue-950 shadow-[0_0_24px_rgba(255,255,255,.55)]" : "border border-white/12 bg-slate-950/55 text-white/55"}`}>{slot}</span>
+      <span className={`absolute bottom-4 right-5 grid h-12 w-12 place-items-center rounded-full text-xl font-black ${active ? "bg-white text-blue-950 shadow-[0_0_32px_rgba(255,255,255,.68)]" : "border border-white/12 bg-slate-950/55 text-white/55"}`}>{slot}</span>
     </motion.div>
   );
 }
@@ -133,26 +140,42 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
  * Visual-only release scene. Physical DTA21269 mapping from the front:
  *   1 | 3
  *   2 | 4
+ *
+ * The scene deliberately remains presentation-only. It never infers a rental
+ * state from animation timing and never sends a hardware command.
  */
 export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
   return (
-    <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-[2.6rem] border border-cyan-100/20 bg-[linear-gradient(145deg,rgba(2,11,31,.98),rgba(4,22,60,.96)_54%,rgba(13,8,45,.98))] p-[clamp(16px,2vw,28px)] shadow-[0_34px_100px_rgba(0,0,0,.45),0_0_90px_rgba(34,211,238,.14)]">
-      <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(56,189,248,.12),transparent_34%),radial-gradient(circle_at_18%_10%,rgba(37,99,235,.22),transparent_34%),radial-gradient(circle_at_90%_82%,rgba(139,92,246,.2),transparent_36%)]" />
-      <motion.div
-        aria-hidden
-        className="absolute -left-[18%] top-[12%] h-[75%] w-[55%] rotate-[17deg] bg-[linear-gradient(90deg,transparent,rgba(125,211,252,.11),transparent)] blur-2xl"
-        animate={{ x: ["-15%", "185%"] }}
-        transition={{ duration: 2.7, repeat: Infinity, repeatDelay: .5, ease: "easeInOut" }}
-      />
-      <motion.div
-        aria-hidden
-        className="absolute left-1/2 top-1/2 h-[62%] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-cyan-300/10"
-        animate={{ scale: [1, 1.035, 1], opacity: [.35, .7, .35] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-      />
-      <div aria-hidden className="absolute bottom-[-18%] left-1/2 h-[42%] w-[74%] -translate-x-1/2 rounded-[50%] bg-cyan-500/13 blur-[55px]" />
+    <motion.div
+      initial={{ opacity: 0, scale: .985 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: .42, ease: "easeOut" }}
+      className="relative aspect-[16/10] w-full max-w-none overflow-hidden rounded-[3rem] border border-cyan-100/25 bg-[linear-gradient(145deg,rgba(2,8,24,.99),rgba(3,24,66,.98)_52%,rgba(17,8,54,.99))] p-[clamp(18px,2.4vw,36px)] shadow-[0_42px_130px_rgba(0,0,0,.5),0_0_120px_rgba(34,211,238,.2)]"
+    >
+      <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,rgba(56,189,248,.17),transparent_30%),radial-gradient(circle_at_14%_8%,rgba(37,99,235,.28),transparent_36%),radial-gradient(circle_at_92%_84%,rgba(139,92,246,.25),transparent_38%)]" />
+      <div aria-hidden className="absolute inset-x-[8%] top-[5%] h-px bg-[linear-gradient(90deg,transparent,rgba(165,243,252,.55),transparent)]" />
 
-      <div className="relative grid h-full grid-cols-2 grid-rows-2 gap-[clamp(10px,1.4vw,18px)] rounded-[2rem] border border-white/8 bg-black/15 p-[clamp(12px,1.5vw,20px)] shadow-[inset_0_1px_0_rgba(255,255,255,.035)]">
+      <motion.div
+        aria-hidden
+        className="absolute -left-[28%] top-[5%] h-[88%] w-[58%] rotate-[18deg] bg-[linear-gradient(90deg,transparent,rgba(125,211,252,.15),transparent)] blur-2xl"
+        animate={{ x: ["-15%", "218%"] }}
+        transition={{ duration: 2.25, repeat: Infinity, repeatDelay: .35, ease: "easeInOut" }}
+      />
+      <motion.div
+        aria-hidden
+        className="absolute left-1/2 top-1/2 h-[72%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-cyan-300/15"
+        animate={{ scale: [1, 1.045, 1], opacity: [.38, .82, .38] }}
+        transition={{ duration: 2.05, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        aria-hidden
+        className="absolute left-1/2 top-1/2 h-[58%] w-[66%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-blue-300/10"
+        animate={{ scale: [.98, 1.075, .98], opacity: [.18, .52, .18] }}
+        transition={{ duration: 1.65, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <div aria-hidden className="absolute bottom-[-20%] left-1/2 h-[50%] w-[82%] -translate-x-1/2 rounded-[50%] bg-cyan-500/16 blur-[70px]" />
+
+      <div className="relative grid h-full grid-cols-2 grid-rows-2 gap-[clamp(12px,1.6vw,24px)] rounded-[2.35rem] border border-white/10 bg-black/20 p-[clamp(14px,1.8vw,24px)] shadow-[inset_0_1px_0_rgba(255,255,255,.05),inset_0_-40px_80px_rgba(2,6,23,.28)]">
         <CabinetCell slot={1} active={slotNum === 1} />
         <CabinetCell slot={3} active={slotNum === 3} />
         <CabinetCell slot={2} active={slotNum === 2} />
@@ -160,20 +183,28 @@ export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
       </div>
 
       {slotNum != null && (
-        <motion.div
-          aria-hidden
-          className="absolute left-1/2 top-1/2 h-[46%] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-[linear-gradient(180deg,transparent,rgba(103,232,249,.92),transparent)] shadow-[0_0_22px_rgba(103,232,249,.75)]"
-          animate={{ opacity: [0, .85, 0], scaleY: [.4, 1, .4] }}
-          transition={{ duration: 1.05, repeat: Infinity, ease: "easeInOut" }}
-        />
+        <>
+          <motion.div
+            aria-hidden
+            className="absolute left-1/2 top-1/2 h-[58%] w-[3px] -translate-x-1/2 -translate-y-1/2 bg-[linear-gradient(180deg,transparent,rgba(207,250,254,.98),transparent)] shadow-[0_0_30px_rgba(103,232,249,.95)]"
+            animate={{ opacity: [0, 1, 0], scaleY: [.35, 1, .35] }}
+            transition={{ duration: .92, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.div
+            aria-hidden
+            className="absolute left-1/2 top-1/2 h-[86%] w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-cyan-100/10"
+            animate={{ scale: [.84, 1.04, 1.16], opacity: [.45, .18, 0] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
+          />
+        </>
       )}
 
       <motion.div
         aria-hidden
-        className="absolute inset-x-[-18%] bottom-0 h-[30%] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.22),transparent)] blur-2xl"
-        animate={{ x: ["-28%", "38%", "-28%"] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute inset-x-[-22%] bottom-[-2%] h-[34%] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.28),transparent)] blur-2xl"
+        animate={{ x: ["-34%", "44%", "-34%"] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
       />
-    </div>
+    </motion.div>
   );
 }
