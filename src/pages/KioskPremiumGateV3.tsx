@@ -24,6 +24,7 @@ import "./kiosk-production-i18n-guard.css";
 import "./kiosk-production-pricing-recovery.css";
 import "./kiosk-production-touch-feedback.css";
 import "./kiosk-production-edge-states.css";
+import "./kiosk-production-contextual-help.css";
 
 /**
  * Production kiosk entry.
@@ -43,6 +44,7 @@ export default function KioskPremiumGateV3() {
       delete document.documentElement.dataset.kioskLastScene;
       delete document.documentElement.dataset.kioskReturnStage;
       delete document.documentElement.dataset.kioskAdsSplit;
+      delete document.documentElement.dataset.kioskHelpContext;
       document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
       document.documentElement.classList.remove("kiosk-v3");
     };
