@@ -76,6 +76,20 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
+            // Advertising media is the only Supabase cross-origin content allowed
+            // in the kiosk cache. This keeps already-seen campaigns playing during
+            // a temporary venue connection loss without caching any dynamic API.
+            urlPattern: ({ url }) =>
+              url.origin === "https://xqepbqnaenoeyfjkjnzl.supabase.co"
+              && url.pathname.startsWith("/storage/v1/object/public/advertising-media/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "kiosk-advertising-media",
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
             // Same-origin hashed static assets only.
             urlPattern: ({ url, request, sameOrigin }) =>
               sameOrigin && ["style", "script", "worker", "font", "image"].includes(request.destination) && !url.pathname.startsWith("/sw.js"),
@@ -85,9 +99,8 @@ export default defineConfig(({ mode }) => ({
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
-          // NOTE: Supabase / Stripe / ChargeNow requests are cross-origin and have
-          // NO runtime caching entry, so they are always network-only. Payment QR,
-          // rental status, battery status and any dynamic data are never cached.
+          // NOTE: Stripe, ChargeNow and all dynamic Supabase API calls remain
+          // network-only. Payment QR, rental state and battery data are never cached.
         ],
       },
     }),
