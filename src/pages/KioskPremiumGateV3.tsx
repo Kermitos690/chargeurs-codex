@@ -11,6 +11,7 @@ import "./kiosk-production-scenes.css";
 import "./kiosk-production-return.css";
 import "./kiosk-production-help.css";
 import "./kiosk-production-hotfix.css";
+import "./kiosk-production-physical-qa.css";
 
 /**
  * Production kiosk entry.
