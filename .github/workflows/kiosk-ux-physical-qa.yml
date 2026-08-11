@@ -6,6 +6,7 @@ on:
       - "src/pages/KioskPremiumGateV3.tsx"
       - "src/pages/kiosk-production-*.css"
       - "src/components/kiosk/PowerbankScene.tsx"
+      - "src/components/kiosk/KioskV3HomeChrome.tsx"
       - "src/components/kiosk/KioskV3JourneyChrome.tsx"
       - "src/components/kiosk/KioskV3CinematicDirector.tsx"
       - "src/components/kiosk/KioskV3PricingRecovery.tsx"
@@ -43,7 +44,7 @@ jobs:
           typecheck_exit=${PIPESTATUS[0]}
           set -e
 
-          if grep -E 'src/(components/kiosk/(PowerbankScene|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/KioskPremiumGateV3\.tsx|test/kioskUxRecovery\.test\.ts)' /tmp/chargeurs-typecheck.log; then
+          if grep -E 'src/(components/kiosk/(PowerbankScene|KioskV3HomeChrome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/KioskPremiumGateV3\.tsx|test/kioskUxRecovery\.test\.ts)' /tmp/chargeurs-typecheck.log; then
             echo "::error::TypeScript regression detected in Agent 4 kiosk UX files"
             exit 1
           fi
