@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
     } as any, { idempotencyKey: `rental_direct_checkout:v8:${session.id}:${pricingHash}` });
 
     const expiresIso = new Date(expiresAt * 1000).toISOString();
-    const { error: updateError } = await db.from("rental_sessions").update({ stripe_checkout_session_id: checkout.id, checkout_url: checkout.url, checkout_url_expires_at: expiresIso, state: "checkout_created", amount: depositCents / 100, amount_expected: depositCents / 100, deposit_amount_cents: depositCents, settlement_status: "pending", settlement_error: null, updated_at: new Date().toISOString() }).eq("id", session.id);
+    const { error: updateError } = await db.from("rental_sessions").update({ stripe_checkout_session_id: checkout.id, checkout_url: checkout.url, checkout_url_expires_at: expiresIso, expires_at: expiresIso, state: "checkout_created", amount: depositCents / 100, amount_expected: depositCents / 100, deposit_amount_cents: depositCents, settlement_status: "pending", settlement_error: null, updated_at: new Date().toISOString() }).eq("id", session.id);
     if (updateError) throw updateError;
     const { error: paymentError } = await db.from("payments").upsert({ rental_session_id: session.id, stripe_session_id: checkout.id, amount: depositCents / 100, currency: session.currency, status: "pending", amount_authorized_cents: 0, amount_captured_cents: 0, amount_refunded_cents: 0 }, { onConflict: "stripe_session_id" });
     if (paymentError) throw paymentError;
