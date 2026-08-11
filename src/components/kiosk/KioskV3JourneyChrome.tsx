@@ -57,6 +57,7 @@ export function detectKioskScene(root: ParentNode = document): KioskScene {
   if (root.querySelector(".kiosk-qr-stage")) return "payment";
   if (root.querySelector('.kiosk-release-stage:not([data-kiosk-timeout-owner="inner"])')) return "release";
   if (root.querySelector(".kiosk-ready-stage") || root.querySelector(".kiosk-root .bg-gradient-success")) return "active";
+  if (root.querySelector(".kv3-product-layer .lucide-lock")) return "support";
 
   const main = root.querySelector(".kiosk-root main");
   if (!main) return "other";
