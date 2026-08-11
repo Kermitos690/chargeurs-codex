@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { useI18n } from "@/i18n/i18n";
 
@@ -137,7 +137,7 @@ export function KioskV3JourneyChrome() {
     return value && TRACKABLE_SCENES.has(value) ? value : null;
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const detect = () => {
       const nextScene = detectKioskScene();
       const nextJourney = document.documentElement.dataset.kioskJourney ?? "";
