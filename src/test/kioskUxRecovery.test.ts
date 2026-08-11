@@ -18,6 +18,7 @@ beforeEach(() => {
 
 describe("P1 kiosk scene detection", () => {
   it.each([
+    ["loading", '<div class="ck2-shell ck2-loading"><svg class="lucide lucide-loader-circle"></svg></div>'],
     ["home", '<div class="ck2-home"></div>'],
     ["member", '<div class="ck2-member"></div>'],
     ["connected", '<div class="ck2-connected"></div>'],
