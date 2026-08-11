@@ -9,6 +9,20 @@ html.kiosk-v3 .kiosk-release-stage[data-kiosk-timeout-owner="inner"] {
   pointer-events: none !important;
 }
 
+/* Offline/update banners are fixed system UI. Reserve vertical space instead
+   of letting them cover the journey rail and transaction header. */
+html.kiosk-v3:has(.kiosk-root > div.fixed.inset-x-0.top-0) .kiosk-root {
+  padding-top: 52px !important;
+}
+
+html.kiosk-v3:has(.kiosk-root > div.fixed.inset-x-0.top-0) .kv3-progress-rail {
+  top: 45px !important;
+}
+
+html.kiosk-v3:has(.kiosk-root > div.fixed.inset-x-0.top-0) .kiosk-root > main {
+  min-height: calc(100dvh - 112px) !important;
+}
+
 /* Selection with no currently rentable battery. */
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage > div.relative.z-10.glass.rounded-2xl {
   grid-column: 2 !important;
