@@ -15,15 +15,16 @@ import "./kiosk-production-hotfix.css";
 import "./kiosk-production-physical-qa.css";
 import "./kiosk-production-cinematic-director.css";
 import "./kiosk-production-recovery.css";
+import "./kiosk-production-physical-director-v2.css";
 
 /**
  * Production kiosk entry.
  * Business orchestration remains in the proven V2 gate/Kiosk state machine;
  * the route owns the physical 16:9 presentation system.
  *
- * The cinematic director is decorative and pointer-free. The P1 recovery layer
- * remains the final layout contract. Neither layer owns payment, rental, return,
- * inventory or hardware state.
+ * The cinematic director is decorative and pointer-free. Recovery and physical
+ * director layers remain presentation-only. They never own payment, rental,
+ * return, inventory or hardware state.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
