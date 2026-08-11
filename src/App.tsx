@@ -57,6 +57,7 @@ import AdminApiClients from "./pages/admin/AdminApiClients.tsx";
 import AdminBatteryQualification from "./pages/admin/AdminBatteryQualification.tsx";
 import AdminCustomerProgram from "./pages/admin/AdminCustomerProgram.tsx";
 import AdminAdvertising from "./pages/admin/AdminAdvertising.tsx";
+import AdminInventory from "./pages/admin/AdminInventory.tsx";
 import "./pages/admin/admin-advertising.css";
 import LegalPage from "./pages/LegalPage.tsx";
 
@@ -117,6 +118,7 @@ const App = () => (
               <Route path="partners" element={<AdminPartners />} />
               <Route path="shops" element={<AdminShops />} />
               <Route path="advertising" element={<AdminAdvertising />} />
+              <Route path="inventory" element={<AdminInventory />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="test-monitor" element={<AdminTestMonitor />} />
               <Route path="battery-qualification" element={<AdminBatteryQualification />} />
