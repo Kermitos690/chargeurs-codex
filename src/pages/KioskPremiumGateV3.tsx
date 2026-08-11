@@ -33,6 +33,8 @@ import "./kiosk-production-contextual-help.css";
  *
  * Cinematic, recovery and hardware presentation layers are presentation-only.
  * They never infer or own payment, rental, return, inventory or hardware state.
+ *
+ * Production release marker: P1 recovery / 2026-08-11.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
