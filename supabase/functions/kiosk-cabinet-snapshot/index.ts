@@ -260,6 +260,23 @@ Deno.serve(async (req) => {
     const cabinetId = station.cabinet_id || station.station_id;
     const snapshot = await readCabinetSnapshot(cabinetId);
 
+    const snapshotBatteryIds = snapshot.slots
+      .map((slot) => slot.battery_id)
+      .filter((value): value is string => Boolean(value));
+    const quarantinedBatteryIds = new Set<string>();
+    if (snapshotBatteryIds.length > 0) {
+      const { data: locallyBlocked, error: locallyBlockedError } = await db.from("batteries")
+        .select("battery_id,quarantine_reason")
+        .in("battery_id", snapshotBatteryIds)
+        .not("quarantine_reason", "is", null);
+      if (locallyBlockedError) throw locallyBlockedError;
+      for (const row of locallyBlocked ?? []) {
+        const batteryId = String(row.battery_id ?? "").trim();
+        const reason = String(row.quarantine_reason ?? "").trim();
+        if (batteryId && reason) quarantinedBatteryIds.add(batteryId);
+      }
+    }
+
     // Best-effort business reconciliation. Failure never blocks the customer
     // from seeing inventory; it only leaves the return pending for the next
     // poll/operator review.
@@ -278,18 +295,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    const slots = snapshot.slots.map((slot) => ({
-      slot_num: slot.slot_num,
-      charge_percent: slot.customer_status === "return_available" ? null : slot.charge_percent,
-      rentable: slot.rentable,
-      confidence: slot.confidence,
-      status: slot.customer_status,
-      recommended: false,
-    }));
+    const slots = snapshot.slots.map((slot) => {
+      const locallyQuarantined = Boolean(slot.battery_id && quarantinedBatteryIds.has(slot.battery_id));
+      return {
+        slot_num: slot.slot_num,
+        charge_percent: slot.customer_status === "return_available" ? null : slot.charge_percent,
+        rentable: slot.rentable && !locallyQuarantined,
+        confidence: slot.confidence,
+        status: locallyQuarantined ? "technical_issue" : slot.customer_status,
+        recommended: false,
+      };
+    });
 
     const candidates = snapshot.slots
       .filter((slot) =>
         slot.rentable
+        && !(slot.battery_id && quarantinedBatteryIds.has(slot.battery_id))
         && slot.charge_percent != null
         && slot.confidence === "high"
         && slot.self_check !== "fail"

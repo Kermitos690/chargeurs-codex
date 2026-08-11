@@ -1,7 +1,7 @@
 // Short-lived kiosk <-> customer account pairing helpers.
 // Raw pairing tokens are bearer capabilities and are never persisted.
 
-export const CUSTOMER_PAIRING_TTL_SECONDS = 90;
+export const CUSTOMER_PAIRING_TTL_SECONDS = 600;
 
 function base64Url(bytes: Uint8Array): string {
   let binary = "";

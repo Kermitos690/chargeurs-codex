@@ -534,7 +534,7 @@ export default function Kiosk() {
       )}
 
       {inactivitySeconds !== null && (
-        <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} className="fixed left-5 top-[4.7rem] z-50 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-[5.2rem]" aria-live="polite">
+        <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} className="kiosk-inactivity-control fixed left-5 top-[4.7rem] z-50 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-[5.2rem]" aria-live="polite">
           <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
           <span>{t("kiosk.inactivity.return_in", { seconds: inactivitySeconds })}</span>
           <button type="button" onClick={reset} aria-label={t("kiosk.inactivity.close")} title={t("kiosk.inactivity.close")} className="ml-1 grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-95">
