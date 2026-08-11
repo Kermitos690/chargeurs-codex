@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { KioskScene } from "@/components/kiosk/KioskV3JourneyChrome";
 
 type Journey = "express" | "client" | "";
@@ -89,7 +89,7 @@ export function KioskV3CinematicDirector() {
     "--kc-accent-soft": profile.accentSoft,
     "--kc-secondary": profile.secondary,
     "--kc-intensity": String(profile.intensity),
-  } as React.CSSProperties;
+  } as CSSProperties;
 
   if (scene === "other" || scene === "loading") return null;
 
