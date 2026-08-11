@@ -129,8 +129,8 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
     eyebrow: "POWER WHEN YOU NEED IT", line1: "PLUS DE", line2: "BATTERIE ?", accent: "RÉGLÉ.", perHour: "/ heure", dailyCap: "Plafond journalier",
-    expressKicker: "LOCATION", expressTitle: "EXPRESS", expressBody: "Sans compte. Choisissez une batterie, payez sur votre téléphone et partez.",
-    clientKicker: "CLIENT", clientTitle: "CHARGEURS", clientBody: "Scannez le QR. L’adhésion active est vérifiée côté serveur avant d’appliquer le tarif membre.",
+    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Choisissez une batterie, payez sur votre téléphone et partez immédiatement.",
+    clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Connectez votre compte par QR et profitez automatiquement de votre tarif membre.",
     cabinetTitle: "Batteries disponibles", cabinetSub: "Sélection automatique de la meilleure batterie", secure: "Connexion sécurisée",
   },
   en: {
@@ -141,8 +141,8 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
     eyebrow: "POWER WHEN YOU NEED IT", line1: "OUT OF", line2: "BATTERY?", accent: "SOLVED.", perHour: "/ hour", dailyCap: "Daily cap",
-    expressKicker: "RENTAL", expressTitle: "EXPRESS", expressBody: "No account. Choose a powerbank, pay on your phone and go.",
-    clientKicker: "CHARGEURS", clientTitle: "MEMBER", clientBody: "Scan the QR. An active membership is verified server-side before member pricing is applied.",
+    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "Choose a powerbank, pay on your phone and leave immediately.",
+    clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Connect your account by QR and your member rate is applied automatically.",
     cabinetTitle: "Batteries available", cabinetSub: "Best battery selected automatically", secure: "Secure connection",
   },
   de: {
@@ -153,8 +153,8 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
     eyebrow: "POWER WHEN YOU NEED IT", line1: "AKKU", line2: "LEER?", accent: "GELÖST.", perHour: "/ Stunde", dailyCap: "Tageslimit",
-    expressKicker: "MIETE", expressTitle: "EXPRESS", expressBody: "Ohne Konto. Powerbank wählen, am Smartphone bezahlen und los.",
-    clientKicker: "CHARGEURS", clientTitle: "KUNDE", clientBody: "QR scannen. Eine aktive Mitgliedschaft wird serverseitig geprüft, bevor der Kundentarif gilt.",
+    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Powerbank wählen, am Smartphone bezahlen und sofort los.",
+    clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Konto per QR verbinden und den Kundentarif automatisch nutzen.",
     cabinetTitle: "Verfügbare Batterien", cabinetSub: "Beste Batterie wird automatisch gewählt", secure: "Sichere Verbindung",
   },
 };
