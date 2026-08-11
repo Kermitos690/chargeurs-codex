@@ -6,6 +6,7 @@ import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
 import { KioskV3PricingRecovery } from "@/components/kiosk/KioskV3PricingRecovery";
 import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
+import { KioskV3TouchFeedback } from "@/components/kiosk/KioskV3TouchFeedback";
 import { KioskAdvertisingLayer } from "@/components/kiosk/KioskAdvertisingLayer";
 import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
@@ -21,6 +22,7 @@ import "./kiosk-production-screen-director-v3.css";
 import "./kiosk-production-hardware-2p5d.css";
 import "./kiosk-production-i18n-guard.css";
 import "./kiosk-production-pricing-recovery.css";
+import "./kiosk-production-touch-feedback.css";
 
 /**
  * Production kiosk entry.
@@ -56,6 +58,7 @@ export default function KioskPremiumGateV3() {
       <KioskV3HomeChrome />
       <KioskV3JourneyChrome />
       <KioskV3PricingRecovery />
+      <KioskV3TouchFeedback />
       <KioskAdvertisingLayer />
     </div>
   );
