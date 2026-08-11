@@ -4,6 +4,7 @@ import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
 import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
+import { KioskAdvertisingLayer } from "@/components/kiosk/KioskAdvertisingLayer";
 import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
 import "./kiosk-production-scenes.css";
@@ -23,6 +24,8 @@ export default function KioskPremiumGateV3() {
     return () => {
       delete document.documentElement.dataset.kioskVersion;
       delete document.documentElement.dataset.kioskScene;
+      delete document.documentElement.dataset.kioskAdsSplit;
+      document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
       document.documentElement.classList.remove("kiosk-v3");
     };
   }, []);
@@ -36,6 +39,7 @@ export default function KioskPremiumGateV3() {
       <KioskV3TimeoutOwnershipGuard />
       <KioskV3HomeChrome />
       <KioskV3JourneyChrome />
+      <KioskAdvertisingLayer />
     </div>
   );
 }

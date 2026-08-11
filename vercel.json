@@ -62,6 +62,10 @@
       "source": "/api/kiosk/customer-pairing-status",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/customer-pairing-status"
     },
+    {
+      "source": "/api/kiosk/ads-playlist",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-ads-playlist"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
