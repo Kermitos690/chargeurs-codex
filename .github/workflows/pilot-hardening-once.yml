@@ -1,0 +1,256 @@
+name: Pilot hardening patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .deploy/pilot-hardening-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply targeted pilot kiosk fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          gate = "src/pages/KioskPremiumGateV2.tsx"
+          replace_once(
+              gate,
+              '  const timerActive = !checking && stage !== "hero" && !journeyProtected;',
+              '  // The inner Kiosk owns timeout/cancel semantics once selection starts.\n  // Keeping a second outer timer on the guest/member rental flow could reset a live Stripe QR.\n  const timerActive = !checking && (stage === "member" || stage === "connected") && !journeyProtected;',
+          )
+          replace_once(
+              gate,
+              '''  const journeyControl = timerActive ? (\n    <div className="ck2-journey-control" role="status" aria-live="polite">\n      <Clock3 aria-hidden="true" /><span>{copy.returnHome}</span><strong>{seconds}s</strong>\n      <button type="button" onClick={returnHome} aria-label={copy.cancel}><X aria-hidden="true" /> {copy.cancel}</button>\n    </div>\n  ) : null;\n\n''',
+              '',
+          )
+          replace_once(gate, '  if (stage === "guest") return <><Kiosk />{journeyControl}</>;', '  if (stage === "guest") return <Kiosk />;')
+          text = Path(gate).read_text()
+          if text.count('        {journeyControl}\n') != 2:
+              raise SystemExit(f"{gate}: expected 2 journeyControl render sites, found {text.count('        {journeyControl}')} ")
+          Path(gate).write_text(text.replace('        {journeyControl}\n', ''))
+          replace_once(
+              gate,
+              '<button type="button" className="ck2-pill" onClick={returnHome}><X /> {copy.returnHome}</button>',
+              '<button type="button" className="ck2-pill ck2-context-exit" onClick={returnHome}><Clock3 /> {copy.returnHome} <strong>{seconds}s</strong></button>',
+          )
+          replace_once(
+              gate,
+              '<div className="ck2-top-actions"><LanguageSwitcher /><button type="button" className="ck2-pill" onClick={returnHome}><X /> {copy.cancel}</button></div>',
+              '<div className="ck2-top-actions"><LanguageSwitcher /><button type="button" className="ck2-pill ck2-context-exit" onClick={returnHome}><Clock3 /> {copy.cancel} <strong>{seconds}s</strong></button></div>',
+          )
+
+          kiosk = "src/pages/Kiosk.tsx"
+          replace_once(
+              kiosk,
+              'className="fixed left-5 top-[4.7rem] z-50 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-[5.2rem]"',
+              'className="kiosk-inactivity-control fixed left-5 top-[4.7rem] z-50 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-2 text-sm font-bold shadow-lg backdrop-blur-xl sm:left-8 sm:top-[5.2rem]"',
+          )
+
+          hotfix = Path("src/pages/kiosk-production-hotfix.css")
+          css = hotfix.read_text()
+          marker = "/* PILOT HARDENING 2026-08-11 */"
+          if marker not in css:
+              css += r'''
+
+/* PILOT HARDENING 2026-08-11 */
+/* One navigation owner per scene. The old outer floating countdown caused the
+   duplicate Home/Cancel control seen on the physical cabinet. */
+html.kiosk-v3 .ck2-journey-control { display: none !important; }
+
+/* Decorative cinema layers must never steal touch events on Android WebView. */
+html.kiosk-v3 .kv3-atmosphere,
+html.kiosk-v3 .kv3-atmosphere *,
+html.kiosk-v3 .kv3-lightning-stage,
+html.kiosk-v3 .kv3-lightning-stage *,
+html.kiosk-v3 .kv3-station-hero,
+html.kiosk-v3 .kv3-station-hero * { pointer-events: none !important; }
+
+/* Reserve a real chrome lane: logo/actions live at the edges, journey rail in
+   the centre, content begins below it. */
+html.kiosk-v3 .kv3-progress-rail {
+  top: 14px !important;
+  width: min(520px, 38vw) !important;
+  height: 58px !important;
+}
+html.kiosk-v3 .kiosk-root > main {
+  min-height: 100vh !important;
+  box-sizing: border-box !important;
+  padding-top: 78px !important;
+  padding-bottom: 18px !important;
+}
+html.kiosk-v3 .kiosk-inactivity-control {
+  top: 82px !important;
+  left: var(--kp-safe-x) !important;
+  z-index: 64 !important;
+  min-height: 48px !important;
+}
+html.kiosk-v3 .ck2-member > .ck2-topbar,
+html.kiosk-v3 .ck2-connected-topbar {
+  top: 14px !important;
+  left: var(--kp-safe-x) !important;
+  right: var(--kp-safe-x) !important;
+  z-index: 68 !important;
+  min-height: 58px !important;
+  pointer-events: none;
+}
+html.kiosk-v3 .ck2-member > .ck2-topbar > *,
+html.kiosk-v3 .ck2-connected-topbar > * { pointer-events: auto; }
+html.kiosk-v3 .ck2-context-exit {
+  min-height: 52px !important;
+  padding: 0 18px !important;
+  gap: 9px !important;
+  font-size: 16px !important;
+}
+html.kiosk-v3 .ck2-context-exit strong {
+  min-width: 32px;
+  color: #79d6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pixel-stable centring for every customer scene. */
+html.kiosk-v3 .kiosk-idle-stage,
+html.kiosk-v3 .kiosk-pricing-stage,
+html.kiosk-v3 .kiosk-qr-stage {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html.kiosk-v3 .kiosk-pricing-stage { max-width: 1080px !important; }
+html.kiosk-v3 .kiosk-qr-stage { max-width: 1180px !important; }
+
+/* Home: restore hierarchy instead of allowing the accent line to collide with
+   the headline on the real 1366x768 panel. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0 !important;
+  line-height: .88 !important;
+  letter-spacing: -.052em !important;
+  margin: 10px 0 0 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > span,
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong {
+  display: block !important;
+  position: static !important;
+  transform: none !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong {
+  margin-top: .13em !important;
+  line-height: .9 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+  width: 39vw !important;
+  gap: 14px !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+  min-height: 202px !important;
+  padding: 22px 20px !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-kicker,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-kicker {
+  font-size: 13px !important;
+  letter-spacing: .13em !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > strong,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card > strong {
+  font-size: clamp(25px, 2vw, 33px) !important;
+  line-height: 1 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > small,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card > small {
+  font-size: clamp(14px, .95vw, 17px) !important;
+  line-height: 1.32 !important;
+}
+
+/* Payment marks are one integrated reassurance strip, not six unrelated white
+   cards. Individual marks keep their own official artwork only. */
+html.kiosk-v3 .kv3-payment-dock {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+}
+html.kiosk-v3 .kiosk-payment-marks {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: nowrap !important;
+  gap: 18px !important;
+}
+html.kiosk-v3 .kiosk-payment-mark {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* The Client Chargeurs scenes keep the layout the user already liked, with a
+   controlled atmospheric lift only. */
+html.kiosk-v3[data-kiosk-scene="member"] .kv3-smoke,
+html.kiosk-v3[data-kiosk-scene="connected"] .kv3-smoke { opacity: .88 !important; }
+
+@media (max-width: 1366px), (max-height: 800px) {
+  html.kiosk-v3 .kv3-progress-rail { width: min(470px, 36vw) !important; }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
+    top: 13.2vh !important;
+    width: 54vw !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+    font-size: clamp(43px, 4.65vw, 64px) !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+    width: 39vw !important;
+    bottom: 15.8vh !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+    min-height: 190px !important;
+  }
+}
+'''
+              hotfix.write_text(css)
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Commit validated patch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "chargeurs-pilot-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/pages/KioskPremiumGateV2.tsx src/pages/Kiosk.tsx src/pages/kiosk-production-hotfix.css
+          git commit -m "fix(kiosk): harden pilot navigation touch and layout"
+          git push origin HEAD:main
