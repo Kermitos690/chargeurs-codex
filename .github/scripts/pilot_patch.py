@@ -119,3 +119,18 @@ if old_pricing_error in kiosk_src:
 elif 'quoteError === "PRICING_NOT_CONFIGURED"' not in kiosk_src:
     raise SystemExit(f"{kiosk}: pricing error anchor mismatch")
 kiosk.write_text(kiosk_src)
+
+
+# Keep local resumability and Stripe's real payment window identical. Before
+# this patch the local rental expired at 20 min while the Checkout URL remained
+# payable for 30 min, which could create a dangerous stale-QR window after a
+# tablet reboot.
+checkout = Path("supabase/functions/create-stripe-checkout/index.ts")
+checkout_src = checkout.read_text()
+old_checkout_update = 'stripe_checkout_session_id: checkout.id, checkout_url: checkout.url, checkout_url_expires_at: expiresIso, state: "checkout_created"'
+new_checkout_update = 'stripe_checkout_session_id: checkout.id, checkout_url: checkout.url, checkout_url_expires_at: expiresIso, expires_at: expiresIso, state: "checkout_created"'
+if old_checkout_update in checkout_src:
+    checkout_src = checkout_src.replace(old_checkout_update, new_checkout_update, 1)
+elif 'checkout_url_expires_at: expiresIso, expires_at: expiresIso' not in checkout_src:
+    raise SystemExit(f"{checkout}: expiry alignment anchor mismatch")
+checkout.write_text(checkout_src)
