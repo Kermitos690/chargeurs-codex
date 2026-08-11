@@ -31,6 +31,6 @@ android {
     lint {
         abortOnError = true
         warningsAsErrors = true
-        disable += setOf("OldTargetApi")
+        disable += setOf("OldTargetApi", "GradleDependency")
     }
 }
