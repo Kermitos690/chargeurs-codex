@@ -179,6 +179,22 @@ html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage .bg-gradient-success
   height: clamp(88px, 6.2vw, 118px) !important;
 }
 
+/* The battery body is intentionally static while the state is `release`.
+   Only the verified `active` scene receives a one-shot physical extraction
+   cue. This prevents the UI from visually claiming an ejection before the
+   rental state machine confirms it. */
+@keyframes kv3-confirmed-powerbank-release {
+  0% { transform: translateY(0) scale(1) rotateX(0deg); }
+  58% { transform: translateY(-17%) scale(1.08) rotateX(-4deg); }
+  78% { transform: translateY(-13%) scale(1.06) rotateX(-3deg); }
+  100% { transform: translateY(-15%) scale(1.07) rotateX(-3deg); }
+}
+
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank {
+  transform-origin: 50% 78% !important;
+  animation: kv3-confirmed-powerbank-release 920ms cubic-bezier(.16,.84,.24,1) both !important;
+}
+
 /* --------------------------------------------------------------------------
    4. Transaction chrome
    -------------------------------------------------------------------------- */
@@ -224,6 +240,13 @@ html.kiosk-v3[data-kiosk-scene="active"] .kiosk-root > header button {
   html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:last-child,
   html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:last-child {
     padding: 24px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank {
+    animation: none !important;
+    transform: translateY(-15%) scale(1.07) rotateX(-3deg) !important;
   }
 }
 
