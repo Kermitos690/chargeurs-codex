@@ -8,7 +8,7 @@ on:
       - .deploy/direct-vercel-kiosk-release
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy-production:
@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -64,3 +67,15 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+      - name: Record deployment result
+        if: always()
+        run: |
+          mkdir -p .deploy
+          printf 'status=%s\nsource_commit=%s\ncompleted_at=%s\n' "${{ job.status }}" "${{ github.sha }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .deploy/direct-vercel-kiosk-release-status
+          git config user.name "chargeurs-deploy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .deploy/direct-vercel-kiosk-release-status
+          git commit -m "chore(deploy): record direct Vercel release ${{ job.status }}" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
