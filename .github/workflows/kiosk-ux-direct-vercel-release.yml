@@ -35,6 +35,9 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
+          if [ -n "$VERCEL_TOKEN" ]; then echo "token_present=true" >> "$GITHUB_OUTPUT"; else echo "token_present=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$VERCEL_ORG_ID" ]; then echo "org_present=true" >> "$GITHUB_OUTPUT"; else echo "org_present=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$VERCEL_PROJECT_ID" ]; then echo "project_present=true" >> "$GITHUB_OUTPUT"; else echo "project_present=false" >> "$GITHUB_OUTPUT"; fi
           test -n "$VERCEL_TOKEN" || { echo "VERCEL_TOKEN is not configured"; exit 21; }
           test -n "$VERCEL_ORG_ID" || { echo "VERCEL_ORG_ID is not configured"; exit 22; }
           test -n "$VERCEL_PROJECT_ID" || { echo "VERCEL_PROJECT_ID is not configured"; exit 23; }
@@ -89,6 +92,9 @@ jobs:
       - name: Record Agent 4 release diagnostics
         if: always()
         env:
+          TOKEN_PRESENT: ${{ steps.credentials.outputs.token_present }}
+          ORG_PRESENT: ${{ steps.credentials.outputs.org_present }}
+          PROJECT_PRESENT: ${{ steps.credentials.outputs.project_present }}
           CREDENTIALS: ${{ steps.credentials.outcome }}
           INSTALL: ${{ steps.install.outcome }}
           APP_BUILD: ${{ steps.app_build.outcome }}
@@ -119,8 +125,8 @@ jobs:
           fi
 
           mkdir -p .deploy
-          printf 'status=%s\nfailure_stage=%s\ncredentials=%s\ninstall=%s\napp_build=%s\nlink=%s\nvercel_pull=%s\nvercel_build=%s\ndeploy=%s\nsource_commit=%s\ncompleted_at=%s\n' \
-            "$status" "$failure_stage" "$CREDENTIALS" "$INSTALL" "$APP_BUILD" "$LINK" "$VERCEL_PULL" "$VERCEL_BUILD" "$DEPLOY" "${{ github.sha }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          printf 'status=%s\nfailure_stage=%s\nvercel_token_present=%s\nvercel_org_id_present=%s\nvercel_project_id_present=%s\ncredentials=%s\ninstall=%s\napp_build=%s\nlink=%s\nvercel_pull=%s\nvercel_build=%s\ndeploy=%s\nsource_commit=%s\ncompleted_at=%s\n' \
+            "$status" "$failure_stage" "$TOKEN_PRESENT" "$ORG_PRESENT" "$PROJECT_PRESENT" "$CREDENTIALS" "$INSTALL" "$APP_BUILD" "$LINK" "$VERCEL_PULL" "$VERCEL_BUILD" "$DEPLOY" "${{ github.sha }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             > .deploy/kiosk-ux-release-status
 
           git config user.name "chargeurs-kiosk-ux-bot"
