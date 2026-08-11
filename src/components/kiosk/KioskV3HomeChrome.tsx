@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
-import { BadgePercent, HelpCircle, RefreshCw, Sparkles } from "lucide-react";
+import { HelpCircle, RefreshCw } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { useI18n } from "@/i18n/i18n";
 
+/**
+ * Home-only utility chrome.
+ *
+ * Primary journey decisions remain exclusively in KioskPremiumGateV2
+ * (Express / Client). Passes and member benefits belong to the Client journey,
+ * so this chrome deliberately does not add a third competing home action.
+ */
 export function KioskV3HomeChrome() {
   const { lang } = useI18n();
   const [visible, setVisible] = useState(false);
@@ -20,14 +27,6 @@ export function KioskV3HomeChrome() {
 
   if (!visible) return null;
 
-  const offers = lang === "de" ? "Pässe & Angebote" : lang === "en" ? "Passes & offers" : "Pass & offres";
-  const offersKicker = lang === "de" ? "VORTEILE" : lang === "en" ? "BENEFITS" : "AVANTAGES";
-  const offersBody = lang === "de"
-    ? "Entdecke Kundentarife, Guthaben und exklusive Vorteile."
-    : lang === "en"
-      ? "Discover member rates, credit and exclusive benefits."
-      : "Découvrez les tarifs membres, le crédit et les avantages exclusifs.";
-  const offersCta = lang === "de" ? "ANGEBOTE ANSEHEN" : lang === "en" ? "VIEW OFFERS" : "VOIR LES OFFRES";
   const refresh = lang === "de" ? "Aktualisieren" : lang === "en" ? "Refresh" : "Actualiser";
   const help = lang === "de" ? "Hilfe" : lang === "en" ? "Help" : "Aide";
   const payments = lang === "de" ? "Sicher bezahlen" : lang === "en" ? "Secure payment" : "Paiement sécurisé";
@@ -45,23 +44,15 @@ export function KioskV3HomeChrome() {
       <header className="kv3-home-topbar">
         <div className="kv3-home-brand"><BrandLogo size="md" /></div>
         <div className="kv3-home-actions">
-          <button type="button" className="kv3-home-control" onClick={refreshReadOnly} disabled={refreshing}>
+          <button type="button" className="kv3-home-control" onClick={refreshReadOnly} disabled={refreshing} aria-label={refresh} title={refresh}>
             <RefreshCw className={refreshing ? "kv3-spin" : ""} /> <span>{refresh}</span>
           </button>
-          <button type="button" className="kv3-home-control" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>
+          <button type="button" className="kv3-home-control" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))} aria-label={help} title={help}>
             <HelpCircle /> <span>{help}</span>
           </button>
           <div className="kv3-home-language"><LanguageSwitcher /></div>
         </div>
       </header>
-
-      <button type="button" className="kv3-offer-card" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-offers"))}>
-        <span className="kv3-offer-icon"><BadgePercent /></span>
-        <span className="kv3-offer-kicker">{offersKicker}</span>
-        <strong>{offers}</strong>
-        <small>{offersBody}</small>
-        <span className="kv3-offer-cta"><Sparkles /> {offersCta} <b>→</b></span>
-      </button>
 
       <div className="kv3-payment-dock" aria-label={payments}>
         <span className="kv3-payment-label">{payments}</span>
