@@ -1,0 +1,349 @@
+/*
+ * Chargeurs.ch — HOME DECISION UX V3
+ * Physical kiosk: two primary journeys, one glance, one decision.
+ * Presentation-only. No pricing, payment, rental, hardware or ad state changes.
+ */
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-home {
+  background: transparent !important;
+}
+
+/* Top chrome: available, but visually secondary. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-topbar {
+  top: 10px !important;
+  left: 4.6vw !important;
+  right: 4.6vw !important;
+  height: 54px !important;
+  border-bottom-color: rgba(116,176,255,.09) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-brand {
+  transform: scale(.96) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-control {
+  width: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  border-radius: 15px !important;
+  color: rgba(231,244,255,.78) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-control span {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-control svg {
+  width: 19px !important;
+  height: 19px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-language,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-language button {
+  min-height: 46px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-home-language button {
+  min-width: 42px !important;
+  font-size: 13px !important;
+}
+
+/* Hero: context, not destination. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
+  left: 5.2vw !important;
+  top: 11.8vh !important;
+  width: 55vw !important;
+  max-width: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy .ck2-eyebrow {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+  display: block !important;
+  max-width: 690px !important;
+  margin: 0 !important;
+  font-size: clamp(42px, 4.2vw, 66px) !important;
+  line-height: .92 !important;
+  letter-spacing: -.052em !important;
+  text-wrap: balance !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > span,
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong {
+  display: inline !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > span + span::before,
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong::before {
+  content: " " !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-price-row {
+  margin-top: 12px !important;
+  min-height: 42px !important;
+  width: max-content !important;
+  padding: 0 12px !important;
+  gap: 9px !important;
+  border-radius: 13px !important;
+  background: rgba(3,8,15,.54) !important;
+  border-color: rgba(93,164,231,.16) !important;
+  color: rgba(200,218,238,.66) !important;
+  font-size: clamp(11px,.82vw,14px) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-price-row strong {
+  font-size: clamp(15px,1.15vw,19px) !important;
+}
+
+/* The two journeys ARE the homepage. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+  position: absolute !important;
+  left: 5.2vw !important;
+  top: 35vh !important;
+  bottom: auto !important;
+  width: 57vw !important;
+  height: 34vh !important;
+  max-width: none !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 18px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: clamp(22px,2vw,32px) !important;
+  border-radius: 28px !important;
+  justify-content: flex-start !important;
+  cursor: pointer !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-icon {
+  width: 54px !important;
+  height: 54px !important;
+  margin-bottom: 16px !important;
+  border-radius: 17px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-icon svg {
+  width: 25px !important;
+  height: 25px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-kicker {
+  font-size: clamp(10px,.78vw,12px) !important;
+  letter-spacing: .16em !important;
+  opacity: .74 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > strong {
+  margin-top: 4px !important;
+  font-size: clamp(29px,2.5vw,41px) !important;
+  line-height: .94 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > small {
+  display: -webkit-box !important;
+  max-width: 90% !important;
+  margin-top: 12px !important;
+  overflow: hidden !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+  font-size: clamp(13px,1vw,17px) !important;
+  line-height: 1.28 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-arrow {
+  right: 22px !important;
+  bottom: 20px !important;
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 28px !important;
+  border-width: 1.5px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-express {
+  border: 1.5px solid rgba(144,255,75,.72) !important;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(138,255,66,.15), transparent 48%),
+    linear-gradient(150deg, rgba(7,23,14,.95), rgba(2,9,9,.98)) !important;
+  box-shadow: 0 28px 58px rgba(0,0,0,.34), 0 0 42px rgba(126,255,55,.09), inset 0 1px rgba(255,255,255,.045) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-member {
+  border: 1.5px solid rgba(64,157,255,.70) !important;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(38,130,255,.17), transparent 50%),
+    linear-gradient(150deg, rgba(7,20,44,.96), rgba(2,8,18,.98)) !important;
+  box-shadow: 0 28px 58px rgba(0,0,0,.34), 0 0 42px rgba(35,126,255,.09), inset 0 1px rgba(255,255,255,.045) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice:active {
+  transform: scale(.982) !important;
+}
+
+/* Offers are secondary utility, never a third journey. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+  left: 5.2vw !important;
+  bottom: 3vh !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  padding: 0 14px !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 9px !important;
+  border-radius: 15px !important;
+  border-color: rgba(178,91,255,.27) !important;
+  background: rgba(12,6,22,.58) !important;
+  box-shadow: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-icon {
+  width: 30px !important;
+  height: 30px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-icon svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-kicker,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card small,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-cta svg {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card strong {
+  margin: 0 !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+  letter-spacing: .02em !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-cta {
+  margin: 0 !important;
+  width: auto !important;
+  min-height: 0 !important;
+  font-size: 0 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-cta b {
+  margin: 0 0 0 2px !important;
+  font-size: 19px !important;
+}
+
+/* Payment marks reassure; they do not compete. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
+  left: 22vw !important;
+  bottom: 3vh !important;
+  width: 35vw !important;
+  min-height: 48px !important;
+  height: 48px !important;
+  padding: 5px 12px !important;
+  gap: 10px !important;
+  border-radius: 15px !important;
+  background: rgba(2,7,14,.50) !important;
+  border-color: rgba(101,164,230,.12) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-label {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock img,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock svg {
+  max-height: 21px !important;
+}
+
+/* Station: proof of product, not competing CTA. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-station-hero {
+  right: 4.7vw !important;
+  top: 15vh !important;
+  width: clamp(300px, 28vw, 455px) !important;
+  height: clamp(430px, 67vh, 690px) !important;
+  opacity: .94 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-station-floor-light {
+  opacity: .7 !important;
+}
+
+/* Physical 1366x768 hardening. */
+@media (max-width: 1400px), (max-height: 820px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
+    top: 10.8vh !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+    font-size: clamp(40px,4vw,56px) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-price-row {
+    margin-top: 9px !important;
+    min-height: 38px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+    top: 31.5vh !important;
+    width: 58vw !important;
+    height: 36vh !important;
+    gap: 14px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice {
+    padding: 18px !important;
+    border-radius: 24px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-icon {
+    width: 46px !important;
+    height: 46px !important;
+    margin-bottom: 10px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > strong {
+    font-size: clamp(27px,2.35vw,34px) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > small {
+    margin-top: 8px !important;
+    font-size: 12px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-station-hero {
+    right: 3.8vw !important;
+    top: 14vh !important;
+    width: 27vw !important;
+    height: 64vh !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
+    bottom: 2vh !important;
+  }
+}
+
+@media (orientation: portrait) {
+  html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: min(92vw,720px) !important;
+    height: auto !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card,
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
+    display: none !important;
+  }
+}
