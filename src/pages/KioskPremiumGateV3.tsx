@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3CinematicDirector } from "@/components/kiosk/KioskV3CinematicDirector";
@@ -35,10 +35,14 @@ import "./kiosk-production-webview-landscape-failsafe.css";
  * Cinematic, recovery and hardware presentation layers are presentation-only.
  * They never infer or own payment, rental, return, inventory or hardware state.
  *
+ * `kiosk-v3` must exist before the browser paints the first frame. Using a
+ * passive effect here caused the legacy V2 presentation to flash briefly on
+ * physical Android WebViews before the V3 selectors became active.
+ *
  * Production release marker: P1 recovery / 2026-08-11.
  */
 export default function KioskPremiumGateV3() {
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.kioskVersion = "v3-production";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
