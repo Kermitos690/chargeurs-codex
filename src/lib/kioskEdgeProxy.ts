@@ -13,6 +13,7 @@ const PUBLIC_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STA
 
 export const KIOSK_PAIRING_STORAGE_KEY = "chargeurs:kiosk:customer-pairing-id";
 export const KIOSK_JOURNEY_STORAGE_KEY = "chargeurs:kiosk:customer-journey";
+export const KIOSK_AUTH_REQUIRED_EVENT = "chargeurs:kiosk-auth-required";
 
 export type KioskProxyResult<T> = {
   data: T | null;
@@ -56,6 +57,13 @@ function notifyKioskFlowComplete(path: KioskProxyPath, data: unknown) {
   }
 }
 
+function notifyKioskAuthenticationRejected(path: KioskProxyPath, status: number) {
+  if (status !== 401 && status !== 403) return;
+  window.dispatchEvent(new CustomEvent(KIOSK_AUTH_REQUIRED_EVENT, {
+    detail: { path, status },
+  }));
+}
+
 export async function invokeKioskEdgeProxy<T>(
   path: KioskProxyPath,
   body: Record<string, unknown>,
@@ -81,6 +89,8 @@ export async function invokeKioskEdgeProxy<T>(
     } catch {
       // A non-JSON gateway error is treated as a safe request failure below.
     }
+
+    notifyKioskAuthenticationRejected(path, response.status);
     return {
       data,
       transportError: !response.ok && data === null,
