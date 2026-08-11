@@ -29,6 +29,12 @@ type OfferData = { ok?: boolean; guest?: Segment; member?: Segment | null; membe
 const money = (cents: number | null | undefined, currency = "CHF") =>
   cents == null ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
 
+function premiumJourneyIsMounted() {
+  return Boolean(document.querySelector(
+    ".kiosk-root > header, .ck2-loading, .ck2-home, .ck2-member, .ck2-connected, .kiosk-quarantine",
+  ));
+}
+
 export function KioskOffersLauncher() {
   const location = useLocation();
   const { lang } = useI18n();
@@ -43,7 +49,7 @@ export function KioskOffersLauncher() {
     if (!stationId) return;
     const detect = () => {
       setMainJourneyMounted(Boolean(document.querySelector(".kiosk-root > header")));
-      setPremiumJourneyMounted(Boolean(document.querySelector(".ck2-loading, .ck2-home, .ck2-member, .ck2-connected")));
+      setPremiumJourneyMounted(Boolean(document.querySelector(".ck2-loading, .ck2-home, .ck2-member, .ck2-connected, .kiosk-quarantine")));
     };
     detect();
     const observer = new MutationObserver(detect);
@@ -52,7 +58,10 @@ export function KioskOffersLauncher() {
   }, [stationId]);
 
   useEffect(() => {
-    const openOffers = () => setOpen(true);
+    const openOffers = () => {
+      if (premiumJourneyIsMounted()) return;
+      setOpen(true);
+    };
     window.addEventListener("chargeurs:open-kiosk-offers", openOffers);
     return () => window.removeEventListener("chargeurs:open-kiosk-offers", openOffers);
   }, []);
@@ -90,6 +99,8 @@ export function KioskOffersLauncher() {
   const label = de ? "Angebote" : fr ? "Offres" : "Offers";
   const title = de ? "Mehr Freiheit. Weniger bezahlen." : fr ? "Plus de liberté. Moins cher." : "More freedom. Pay less.";
   const scan = de ? "Scannen, um beizutreten" : fr ? "Scannez pour adhérer" : "Scan to join";
+  const close = de ? "Schließen" : fr ? "Fermer" : "Close";
+  const loadingLabel = de ? "Angebot wird geladen…" : fr ? "Chargement de l’offre…" : "Loading offer…";
   const plan = offer?.membershipPlan ?? null;
   const currency = plan?.currency ?? offer?.member?.currency ?? offer?.guest?.currency ?? "CHF";
   const annual = plan?.annual_fee_cents ?? null;
@@ -119,7 +130,7 @@ export function KioskOffersLauncher() {
         <div className="kiosk-offers-modal fixed inset-0 z-[180] grid place-items-center overflow-hidden bg-[#010207]/95 p-8 text-white backdrop-blur-2xl">
           <div className="pointer-events-none absolute -left-[10vw] bottom-[-8vh] h-[48vh] w-[48vw] rounded-full bg-violet-700/20 blur-[80px]" />
           <div className="pointer-events-none absolute right-[-12vw] top-[8vh] h-[46vh] w-[42vw] rounded-full bg-blue-700/15 blur-[90px]" />
-          <button onClick={() => setOpen(false)} className="absolute right-8 top-7 z-10 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/5" aria-label="Close"><X className="h-8 w-8" /></button>
+          <button onClick={() => setOpen(false)} className="absolute right-8 top-7 z-10 grid h-16 w-16 place-items-center rounded-2xl border border-white/15 bg-white/5" aria-label={close}><X className="h-8 w-8" /></button>
 
           <div className="relative grid w-full max-w-[1320px] grid-cols-[1.15fr_.85fr] gap-10 rounded-[2.2rem] border border-violet-300/20 bg-[#050711]/90 p-10 shadow-[0_40px_100px_rgba(0,0,0,.58),0_0_70px_rgba(139,92,246,.12)]">
             <section>
@@ -128,7 +139,7 @@ export function KioskOffersLauncher() {
               <p className="mt-5 text-3xl font-black text-violet-300">{subtitle}</p>
 
               {loading && !plan ? (
-                <div className="mt-10 flex items-center gap-3 text-xl text-white/60"><Loader2 className="h-7 w-7 animate-spin" /> Chargement de l’offre…</div>
+                <div className="mt-10 flex items-center gap-3 text-xl text-white/60"><Loader2 className="h-7 w-7 animate-spin" /> {loadingLabel}</div>
               ) : (
                 <>
                   <div className="mt-8 flex items-end gap-3">
