@@ -1,0 +1,45 @@
+.kiosk-ad-local-brand {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.9rem;
+  padding: 2rem;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(34, 211, 238, .22), transparent 34%),
+    linear-gradient(145deg, #020817, #07152f 52%, #0b1f3f);
+  color: #fff;
+  text-align: center;
+}
+
+.kiosk-ad-local-brand-mark {
+  display: grid;
+  width: clamp(4.5rem, 8vw, 7rem);
+  height: clamp(4.5rem, 8vw, 7rem);
+  place-items: center;
+  border: 1px solid rgba(165, 243, 252, .35);
+  border-radius: 2rem;
+  background: rgba(8, 47, 73, .72);
+  box-shadow: 0 0 60px rgba(34, 211, 238, .18);
+}
+
+.kiosk-ad-local-brand-mark svg {
+  width: 48%;
+  height: 48%;
+  color: #67e8f9;
+}
+
+.kiosk-ad-local-brand strong {
+  font-size: clamp(2rem, 5vw, 4.8rem);
+  font-weight: 950;
+  letter-spacing: -.055em;
+}
+
+.kiosk-ad-local-brand span {
+  color: rgba(207, 250, 254, .8);
+  font-size: clamp(.95rem, 1.8vw, 1.4rem);
+  font-weight: 750;
+  letter-spacing: .04em;
+}
