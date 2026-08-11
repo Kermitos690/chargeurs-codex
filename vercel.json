@@ -35,6 +35,10 @@
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-stripe-checkout"
     },
     {
+      "source": "/api/kiosk/cancel-checkout",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/cancel-kiosk-checkout"
+    },
+    {
       "source": "/api/kiosk/cabinet-snapshot",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-cabinet-snapshot"
     },
