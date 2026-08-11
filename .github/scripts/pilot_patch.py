@@ -45,3 +45,49 @@ if old_slots in src:
 elif 'locallyQuarantined ? "technical_issue"' not in src:
     raise SystemExit(f"{snap}: slots anchor mismatch")
 snap.write_text(src)
+
+
+# The timeout-owner marker protects Stripe/release phases from the legacy outer
+# timer, but it must not masquerade as a real physical release when Home is
+# explicitly requested after a successful pre-payment cancellation.
+gate = Path("src/pages/KioskPremiumGateV2.tsx")
+gate_src = gate.read_text()
+old_guard = '    if (document.querySelector(".kiosk-release-stage")) return;'
+new_guard = '    if (document.querySelector(\'.kiosk-release-stage:not([data-kiosk-timeout-owner="inner"])\')) return;'
+if old_guard in gate_src:
+    gate_src = gate_src.replace(old_guard, new_guard, 1)
+
+listener_anchor = """  }, [loadOptions]);\n\n  useEffect(() => {\n    document.documentElement.classList.add(\"kiosk-mode\");\n"""
+listener_insert = """  }, [loadOptions]);\n\n  useEffect(() => {\n    const handleReturnHome = () => returnHome();\n    window.addEventListener(\"chargeurs:kiosk-return-home\", handleReturnHome);\n    return () => window.removeEventListener(\"chargeurs:kiosk-return-home\", handleReturnHome);\n  }, [returnHome]);\n\n  useEffect(() => {\n    document.documentElement.classList.add(\"kiosk-mode\");\n"""
+if "chargeurs:kiosk-return-home" not in gate_src:
+    if gate_src.count(listener_anchor) != 1:
+        raise SystemExit(f"{gate}: return-home listener anchor mismatch")
+    gate_src = gate_src.replace(listener_anchor, listener_insert, 1)
+gate.write_text(gate_src)
+
+
+# QR cancellation is server-confirmed: expire the real Stripe Checkout first,
+# then ask the outer V3 gate to return to the three-choice home. No auto-home is
+# reintroduced while a QR/payment/release phase is active.
+kiosk_src = kiosk.read_text()
+state_anchor = '  const [inactivitySeconds, setInactivitySeconds] = useState<number | null>(null);\n'
+state_insert = state_anchor + '  const [cancellingCheckout, setCancellingCheckout] = useState(false);\n  const [cancelCheckoutError, setCancelCheckoutError] = useState<string | null>(null);\n'
+if "const [cancellingCheckout" not in kiosk_src:
+    if kiosk_src.count(state_anchor) != 1:
+        raise SystemExit(f"{kiosk}: cancel state anchor mismatch")
+    kiosk_src = kiosk_src.replace(state_anchor, state_insert, 1)
+
+reset_anchor = """  const reset = useCallback(() => {\n    idemRef.current = null;\n    seenStateVersionRef.current = -1;\n    releaseFallbackAtRef.current = 0;\n    setPhase(\"idle\"); setCheckoutUrl(null); setSessionId(null);\n    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);\n    void refreshKioskData();\n  }, [refreshKioskData]);\n\n"""
+cancel_callback = reset_anchor + """  const cancelCheckout = useCallback(async () => {\n    if (phase !== \"qr\" || !sessionId || !stationId || cancellingCheckout) return;\n    const token = readKioskToken();\n    if (!token) {\n      setCancelCheckoutError(\"KIOSK_AUTH_REQUIRED\");\n      return;\n    }\n    setCancellingCheckout(true);\n    setCancelCheckoutError(null);\n    const { data, transportError } = await invokeKioskEdgeProxy<KioskFunctionResponse>(\n      \"/api/kiosk/cancel-checkout\",\n      { rentalSessionId: sessionId },\n      { \"X-Kiosk-Token\": token },\n    );\n    if (transportError || !data?.ok) {\n      setCancelCheckoutError(data?.error ?? \"CHECKOUT_CANCEL_FAILED\");\n      setCancellingCheckout(false);\n      return;\n    }\n    setCancellingCheckout(false);\n    window.dispatchEvent(new CustomEvent(\"chargeurs:kiosk-return-home\"));\n  }, [phase, sessionId, stationId, cancellingCheckout]);\n\n"""
+if "const cancelCheckout = useCallback" not in kiosk_src:
+    if kiosk_src.count(reset_anchor) != 1:
+        raise SystemExit(f"{kiosk}: cancel callback anchor mismatch")
+    kiosk_src = kiosk_src.replace(reset_anchor, cancel_callback, 1)
+
+old_button = """                <div className=\"mt-4 flex items-center gap-4\">{publicCode && <span className=\"font-mono text-xs text-muted-foreground\">{publicCode}</span>}<Button variant=\"ghost\" onClick={reset} className=\"h-12 gap-2 rounded-full px-6 text-lg\"><X className=\"h-5 w-5\" />{t(\"kiosk.cancel\")}</Button></div>\n"""
+new_button = """                <div className=\"mt-4 flex flex-col items-center gap-2\">\n                  <div className=\"flex items-center gap-4\">{publicCode && <span className=\"font-mono text-xs text-muted-foreground\">{publicCode}</span>}<Button variant=\"ghost\" onClick={() => void cancelCheckout()} disabled={cancellingCheckout} className=\"h-12 gap-2 rounded-full px-6 text-lg\">{cancellingCheckout ? <Loader2 className=\"h-5 w-5 animate-spin\" /> : <X className=\"h-5 w-5\" />}{cancellingCheckout ? (lang === \"fr\" ? \"Annulation…\" : lang === \"de\" ? \"Abbruch…\" : \"Cancelling…\") : t(\"kiosk.cancel\")}</Button></div>\n                  {cancelCheckoutError && <span className=\"text-sm font-semibold text-warning\">{lang === \"fr\" ? \"Annulation impossible pour le moment. Réessayez.\" : lang === \"de\" ? \"Abbruch derzeit nicht möglich. Bitte erneut versuchen.\" : \"Unable to cancel right now. Please try again.\"}</span>}\n                </div>\n"""
+if old_button in kiosk_src:
+    kiosk_src = kiosk_src.replace(old_button, new_button, 1)
+elif "void cancelCheckout()" not in kiosk_src:
+    raise SystemExit(f"{kiosk}: QR cancel button anchor mismatch")
+kiosk.write_text(kiosk_src)
