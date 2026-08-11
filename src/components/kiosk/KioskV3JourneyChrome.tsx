@@ -29,6 +29,8 @@ type ProgressConfig = {
   client: boolean;
 };
 
+const TRANSIENT_SCENES = new Set<KioskScene>(["expired", "error", "support", "loading", "other"]);
+
 function returnOverlay(root: ParentNode = document): HTMLElement | null {
   return root.querySelector<HTMLElement>('div[class*="z-[120]"][class*="fixed"][class*="inset-0"]');
 }
@@ -81,8 +83,7 @@ export function buildKioskProgressConfig(
   lang: ProgressLanguage,
   lastTransactionalScene: KioskScene | null = null,
 ): ProgressConfig {
-  const transient = new Set<KioskScene>(["expired", "error", "support", "loading", "other"]);
-  const effectiveScene = transient.has(scene) && lastTransactionalScene ? lastTransactionalScene : scene;
+  const effectiveScene = TRANSIENT_SCENES.has(scene) && lastTransactionalScene ? lastTransactionalScene : scene;
   const client = journey === "client" || effectiveScene === "member" || effectiveScene === "connected";
   const fr = lang === "fr";
   const de = lang === "de";
@@ -165,13 +166,16 @@ export function KioskV3JourneyChrome() {
     [journey, lang, scene, lastTransactionalScene],
   );
 
-  if (scene === "home" || scene === "loading" || (scene === "other" && !lastTransactionalScene)) return null;
+  const orphanTransient = TRANSIENT_SCENES.has(scene) && !lastTransactionalScene;
+  if (scene === "home" || scene === "loading" || orphanTransient) return null;
+
+  const progressLabel = lang === "de" ? "Fortschritt" : lang === "en" ? "Progress" : "Progression";
 
   return (
     <div
       className={`kv3-progress-rail ${config.client ? "is-client" : "is-express"}`}
       data-scene={scene}
-      aria-label="Progression"
+      aria-label={progressLabel}
     >
       {config.labels.map((label, index) => {
         const step = index + 1;
