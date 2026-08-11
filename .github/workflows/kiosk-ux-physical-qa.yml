@@ -3,14 +3,18 @@ name: Kiosk UX physical QA
 on:
   pull_request:
     paths:
+      - "src/main.tsx"
+      - "src/pwa/nativeKioskBootstrap.ts"
       - "src/pages/KioskHome.tsx"
       - "src/pages/KioskPremiumGateV3.tsx"
       - "src/pages/kiosk-production-*.css"
+      - "src/pages/kiosk-v3-owned-home.css"
       - "src/components/kiosk/PowerbankScene.tsx"
       - "src/components/kiosk/KioskDiagnostics.tsx"
       - "src/components/kiosk/KioskHelpLauncher.tsx"
       - "src/components/kiosk/KioskOffersLauncher.tsx"
       - "src/components/kiosk/KioskV3HomeChrome.tsx"
+      - "src/components/kiosk/KioskV3OwnedHome.tsx"
       - "src/components/kiosk/KioskV3JourneyChrome.tsx"
       - "src/components/kiosk/KioskV3CinematicDirector.tsx"
       - "src/components/kiosk/KioskV3PricingRecovery.tsx"
@@ -48,7 +52,7 @@ jobs:
           typecheck_exit=${PIPESTATUS[0]}
           set -e
 
-          if grep -E 'src/(components/kiosk/(PowerbankScene|KioskDiagnostics|KioskHelpLauncher|KioskOffersLauncher|KioskV3HomeChrome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/kioskUxRecovery\.test\.ts)' /tmp/chargeurs-typecheck.log; then
+          if grep -E 'src/(main\.tsx|pwa/nativeKioskBootstrap\.ts|components/kiosk/(PowerbankScene|KioskDiagnostics|KioskHelpLauncher|KioskOffersLauncher|KioskV3HomeChrome|KioskV3OwnedHome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/kioskUxRecovery\.test\.ts)' /tmp/chargeurs-typecheck.log; then
             echo "::error::TypeScript regression detected in Agent 4 kiosk UX files"
             exit 1
           fi

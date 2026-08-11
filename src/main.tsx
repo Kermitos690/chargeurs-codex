@@ -10,6 +10,7 @@ import "./kiosk-final-overrides.css";
 import "./kiosk-production-premium.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
+import { prepareNativeKioskBootstrap } from "./pwa/nativeKioskBootstrap";
 import { initKioskHelpController } from "./kioskHelpController";
 
 // The service worker and runtime recovery guards belong to the kiosk surface
@@ -26,22 +27,22 @@ const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
 // APK update, so it is deliberately not used there.
 const isNativeKioskWrapper = "ChargeursNative" in window;
 
-if (isKioskSurface) initKioskHelpController();
-
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
 };
 
+function showNativePreboot() {
+  if (!isKioskSurface || !isNativeKioskWrapper) return;
+  const root = document.getElementById("root");
+  if (!root) return;
+  root.innerHTML = `
+    <div aria-label="Chargeurs.ch" style="position:fixed;inset:0;display:grid;place-items:center;background:#020713;color:#eef7ff;font:800 20px/1 system-ui,-apple-system,sans-serif;letter-spacing:-.02em">
+      <div style="display:flex;align-items:center;gap:10px"><span style="display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:linear-gradient(135deg,#2c8cff,#59e9ff);color:#04101d">⚡</span><span>Chargeurs.ch</span></div>
+    </div>`;
+}
+
 // APK 1.0.15 starts a 20-second native watchdog and expects the web app to call
 // ChargeursNative.kioskUiReady() once React has actually painted kiosk UI.
-// Historically Kiosk.tsx did this itself, but the newer journey gate and the
-// quarantine/safety overlays can be the first (and sometimes only) rendered
-// screen. In that case Kiosk.tsx never mounts, so the native host used to
-// replace a perfectly visible page with KIOSK_UI_NOT_RENDERED after 20 seconds.
-//
-// Keep the handshake at the application boundary instead of coupling it to one
-// business screen. It carries no credential and does not mutate rental or
-// hardware state; it only tells the existing APK that the web runtime rendered.
 function armNativeKioskUiReadyHandshake() {
   if (!isKioskSurface || !isNativeKioskWrapper) return;
 
@@ -50,7 +51,7 @@ function armNativeKioskUiReadyHandshake() {
     if (notified) return true;
 
     const quarantine = document.querySelector(".kiosk-quarantine");
-    const premium = document.querySelector(".premium-kiosk, .cinematic-home");
+    const premium = document.querySelector(".kv3-owned-home, .premium-kiosk, .cinematic-home");
     const kioskRoot = document.querySelector(".kiosk-root");
     const main = document.querySelector("main");
     const renderedRoot = quarantine ?? premium ?? kioskRoot ?? main;
@@ -66,9 +67,6 @@ function armNativeKioskUiReadyHandshake() {
     }
   };
 
-  // Catch both an immediately rendered gate and a later async transition from
-  // the recovery/loading state. The observer disconnects permanently after the
-  // first successful handshake, so it has no steady-state kiosk cost.
   if (notifyIfRendered()) return;
   const observer = new MutationObserver(() => {
     if (notifyIfRendered()) observer.disconnect();
@@ -79,8 +77,6 @@ function armNativeKioskUiReadyHandshake() {
     characterData: true,
   });
 
-  // Safety retry for old WebViews where MutationObserver delivery can lag while
-  // the main thread is busy with first paint. Still well inside the APK's 20s.
   const retry = window.setInterval(() => {
     if (notifyIfRendered()) {
       window.clearInterval(retry);
@@ -93,36 +89,46 @@ function armNativeKioskUiReadyHandshake() {
   }, 15_000);
 }
 
-createRoot(document.getElementById("root")!).render(
-  isKioskSurface ? (
-    <KioskErrorBoundary>
+async function startApplication() {
+  // Never let a native Android kiosk paint a potentially stale React shell
+  // while old browser SW/cache state is being retired. The neutral preboot is
+  // intentionally independent from the rental/payment state machine.
+  showNativePreboot();
+  const bootstrap = await prepareNativeKioskBootstrap(isKioskSurface, isNativeKioskWrapper);
+  if (bootstrap === "reloading") return;
+
+  if (isKioskSurface) initKioskHelpController();
+
+  createRoot(document.getElementById("root")!).render(
+    isKioskSurface ? (
+      <KioskErrorBoundary>
+        <App />
+        <KioskBlankScreenGuard />
+      </KioskErrorBoundary>
+    ) : (
       <App />
-      <KioskBlankScreenGuard />
-    </KioskErrorBoundary>
-  ) : (
-    <App />
-  ),
-);
+    ),
+  );
 
-armNativeKioskUiReadyHandshake();
+  armNativeKioskUiReadyHandshake();
 
-// Register the PWA only on kiosk routes. Registering it from the public website,
-// customer account or administration can leave those pages on an obsolete app
-// shell after a new publication.
-if (isKioskSurface && !isStaticHashPreview && !isNativeKioskWrapper) {
-  initKioskPwa();
-} else if ("serviceWorker" in navigator) {
-  // Remove kiosk service workers from non-kiosk pages, static previews and
-  // the native Android wrapper. This is intentionally best-effort and does
-  // not block rendering when the browser denies access.
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((registrations) =>
-      Promise.all(
-        registrations
-          .filter((registration) => registration.active?.scriptURL.endsWith("/sw.js"))
-          .map((registration) => registration.unregister()),
-      ),
-    )
-    .catch(() => {});
+  // Browser/PWA kiosk routes keep controlled prompt updates because an
+  // automatic reload during payment/rental would be unsafe. Native Android
+  // kiosks never register this SW; their shell was cleaned before React above.
+  if (isKioskSurface && !isStaticHashPreview && !isNativeKioskWrapper) {
+    initKioskPwa();
+  } else if (!isNativeKioskWrapper && "serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) =>
+        Promise.all(
+          registrations
+            .filter((registration) => registration.active?.scriptURL.endsWith("/sw.js"))
+            .map((registration) => registration.unregister()),
+        ),
+      )
+      .catch(() => {});
+  }
 }
+
+void startApplication();
