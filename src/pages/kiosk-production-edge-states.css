@@ -1,5 +1,14 @@
 /* Non-happy-path layout hardening. Presentation only. */
 
+/* Internal timeout ownership marker reuses the release-stage class for DOM
+   observation only. It must remain non-visual even when release CSS forces a
+   grid display on real release scenes. */
+html.kiosk-v3 .kiosk-release-stage[data-kiosk-timeout-owner="inner"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Selection with no currently rentable battery. */
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage > div.relative.z-10.glass.rounded-2xl {
   grid-column: 2 !important;
