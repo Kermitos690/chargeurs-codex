@@ -55,6 +55,12 @@ function sceneNow(): string {
   return document.documentElement.dataset.kioskScene ?? (document.querySelector(".ck2-home") ? "home" : "other");
 }
 
+function interactionOverlayOpen(): boolean {
+  return Boolean(document.querySelector(
+    '[role="dialog"][aria-modal="true"], .kiosk-offers-modal, .fixed.inset-0[class*="z-[120]"], .fixed.inset-0[class*="z-[250]"]',
+  ));
+}
+
 function flattenCampaigns(campaigns: AdCampaign[], mode: DisplayMode): AdEntry[] {
   return campaigns.flatMap((campaign) => {
     if (!campaign.modes.includes(mode)) return [];
@@ -160,7 +166,7 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
   return { current, advance };
 }
 
-function AdMedia({ entry, mode, onEnded }: { entry: AdEntry; mode: DisplayMode; onEnded: () => void }) {
+function AdMedia({ entry, onEnded }: { entry: AdEntry; onEnded: () => void }) {
   if (entry.item.mediaType === "video") {
     return (
       <video
@@ -186,6 +192,7 @@ export function KioskAdvertisingLayer() {
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
   const [scene, setScene] = useState(() => sceneNow());
+  const [overlayOpen, setOverlayOpen] = useState(() => interactionOverlayOpen());
   const [screensaver, setScreensaver] = useState(false);
   const lastActivityRef = useRef(Date.now());
 
@@ -225,12 +232,15 @@ export function KioskAdvertisingLayer() {
   }, [load, stationId]);
 
   useEffect(() => {
-    const detect = () => setScene(sceneNow());
+    const detect = () => {
+      setScene(sceneNow());
+      setOverlayOpen(interactionOverlayOpen());
+    };
     detect();
     const htmlObserver = new MutationObserver(detect);
     htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-kiosk-scene"] });
     const bodyObserver = new MutationObserver(detect);
-    bodyObserver.observe(document.body, { childList: true, subtree: true });
+    bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "role", "aria-modal"] });
     const timer = window.setInterval(detect, 750);
     return () => {
       htmlObserver.disconnect();
@@ -256,7 +266,7 @@ export function KioskAdvertisingLayer() {
   }, [markActivity]);
 
   useEffect(() => {
-    if (scene !== "home" || saverEntries.length === 0) {
+    if (scene !== "home" || overlayOpen || saverEntries.length === 0) {
       setScreensaver(false);
       lastActivityRef.current = Date.now();
       return;
@@ -265,10 +275,11 @@ export function KioskAdvertisingLayer() {
       if (Date.now() - lastActivityRef.current >= idleAfterSeconds * 1000) setScreensaver(true);
     }, 500);
     return () => window.clearInterval(timer);
-  }, [idleAfterSeconds, saverEntries.length, scene]);
+  }, [idleAfterSeconds, overlayOpen, saverEntries.length, scene]);
 
-  const splitActive = scene === "home" && !screensaver && splitEntries.length > 0;
-  const saverActive = scene === "home" && screensaver && saverEntries.length > 0;
+  const safeHome = scene === "home" && !overlayOpen;
+  const splitActive = safeHome && !screensaver && splitEntries.length > 0;
+  const saverActive = safeHome && screensaver && saverEntries.length > 0;
   const split = useAdRotation(splitEntries, splitActive, "split", stationId);
   const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId);
 
@@ -292,7 +303,7 @@ export function KioskAdvertisingLayer() {
     <>
       {splitActive && split.current && (
         <aside className="kiosk-ad-split" aria-label={`${copy.sponsored}: ${split.current.campaignName}`}>
-          <AdMedia entry={split.current} mode="split" onEnded={split.advance} />
+          <AdMedia entry={split.current} onEnded={split.advance} />
           <div className="kiosk-ad-split-badge"><Megaphone /> {copy.sponsored}</div>
           {split.current.item.mediaType === "video" && <div className="kiosk-ad-muted"><VolumeX /> {copy.muted}</div>}
         </aside>
@@ -300,7 +311,7 @@ export function KioskAdvertisingLayer() {
 
       {saverActive && saver.current && (
         <div className="kiosk-ad-screensaver" role="button" tabIndex={0} aria-label={copy.touch} onClick={markActivity} onKeyDown={markActivity}>
-          <AdMedia entry={saver.current} mode="screensaver" onEnded={saver.advance} />
+          <AdMedia entry={saver.current} onEnded={saver.advance} />
           <div className="kiosk-ad-screensaver-shade" aria-hidden />
           <div className="kiosk-ad-screensaver-brand"><Zap /> Chargeurs.ch</div>
           <div className="kiosk-ad-screensaver-cta"><span>{copy.touch}</span><b>→</b></div>
