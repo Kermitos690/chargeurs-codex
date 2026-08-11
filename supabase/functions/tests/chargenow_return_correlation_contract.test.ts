@@ -26,6 +26,38 @@ Deno.test("same contractual battery returned to a different slot is accepted", (
   assert(callbackSource.includes("returned_slot_num: returnedSlotNum"));
 });
 
+Deno.test("real DTA21269 incident: contractual battery return wins over extra battery in departure slot", () => {
+  const contractualReturn = selectPhysicalReturnEvidence([
+    {
+      receivedAt: "2026-08-11T06:44:33.459652Z",
+      externalEventId: "gw_66bede4b234bfee57ec30bee5828daf6a71ff114",
+      batteryId: "F0F000503E",
+      slotNum: 1,
+    },
+    {
+      receivedAt: "2026-08-11T09:13:25.162817Z",
+      externalEventId: "gw_e54c13a95260f6dd78d45726462dee9d588a692d",
+      batteryId: "F0F0004944",
+      slotNum: 2,
+    },
+  ], "F0F000503E");
+
+  assert(contractualReturn);
+  assertEquals(contractualReturn.returnedSlotNum, 1);
+  assertEquals(contractualReturn.externalEventId, "gw_66bede4b234bfee57ec30bee5828daf6a71ff114");
+
+  const extraBatteryOnly = selectPhysicalReturnEvidence([
+    {
+      receivedAt: "2026-08-11T09:13:25.162817Z",
+      externalEventId: "gw_e54c13a95260f6dd78d45726462dee9d588a692d",
+      batteryId: "F0F0004944",
+      slotNum: 2,
+    },
+  ], "F0F000503E");
+
+  assertEquals(extraBatteryOnly, null, "the extra battery returning to selected slot 2 must never close F0F000503E rental");
+});
+
 Deno.test("wrong physical battery is refused", () => {
   const evidence = selectPhysicalReturnEvidence([
     {
