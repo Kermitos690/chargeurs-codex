@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
-  Building2, Users, TabletSmartphone, KeyRound, Gauge, Crown,
+  Building2, Users, TabletSmartphone, KeyRound, Gauge, Crown, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +26,7 @@ const OPERATIONS_READ = [...OPERATIONS, "support_agent", "maintenance_technician
 const FINANCE = ["super_admin", "admin", "finance_admin"] as const;
 const FINANCE_READ = [...FINANCE, "support_agent", "operations_admin", "staff", "viewer"] as const;
 const SUPPORT = ["super_admin", "admin", "operations_admin", "support_agent", "maintenance_technician", "operator"] as const;
+const ADVERTISING = ["super_admin", "admin", "operations_admin", "advertising_manager"] as const;
 const SUPER_ONLY = ["super_admin"] as const;
 
 export const ADMIN_NAV: AdminNavGroup[] = [
@@ -57,6 +58,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { to: "/admin/partners", icon: Building2, label: "Partenaires", roles: OPERATIONS },
       { to: "/admin/shops", icon: Store, label: "Établissements", roles: OPERATIONS },
+      { to: "/admin/advertising", icon: Megaphone, label: "Publicités", roles: ADVERTISING },
     ],
   },
   {
