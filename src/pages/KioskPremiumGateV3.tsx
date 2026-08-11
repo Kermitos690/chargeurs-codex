@@ -25,6 +25,7 @@ import "./kiosk-production-pricing-recovery.css";
 import "./kiosk-production-touch-feedback.css";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-production-contextual-help.css";
+import "./kiosk-production-webview-landscape-failsafe.css";
 
 /**
  * Production kiosk entry.
