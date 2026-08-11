@@ -1,7 +1,8 @@
 // ChargeNow rental callback — provider-confirmed release + battery-first return reconciliation.
 // A verified status=1 callback uniquely matched by trade number can close the kiosk release phase
 // when the exact paid slot/battery was reserved before payment and exactly one C3 command was sent.
-// This avoids indefinite "release in progress" when the supplier omits battery/slot identity.
+// Provider return evidence may correlate identity, but financial return/settlement remains gated by
+// a correlated physical BATTERY_IN event.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const encoder = new TextEncoder();
@@ -345,14 +346,39 @@ Deno.serve(async (req) => {
     if (session.returned_at) return json({ received: true, duplicate: true, state: session.state, settlement_status: session.settlement_status ?? null });
 
     const physical = await physicalReturnTime(client, session, stationId, batteryId, slotNum);
-    const returnedAt = physical?.receivedAt ?? new Date().toISOString();
-    await appendReturnDetected(client, session, { eventId, occurredAt: returnedAt, stationId, batteryId, slotNum, providerTradeNo: parsed.tradeNo || null, physicalEventId: physical?.externalEventId ?? null });
+    if (!physical) {
+      await incident(client, session, "RETURN_PHYSICAL_EVIDENCE_MISSING", "ChargeNow a confirmé le retour, mais aucune preuve physique BATTERY_IN corrélée n'est disponible; le règlement financier reste bloqué.", {
+        provider_event_id: eventId,
+        provider_trade_no: parsed.tradeNo || null,
+        battery_id: batteryId,
+        return_station_id: stationId,
+        returned_slot_num: slotNum,
+        settlement_triggered: false,
+      });
+      await audit(client, "rental.return.provider_evidence_waiting_for_physical_confirmation", String(session.id), {
+        battery_id: batteryId,
+        return_station_id: stationId,
+        returned_slot_num: slotNum,
+        provider_event_id: eventId,
+        provider_trade_no: parsed.tradeNo || null,
+      });
+      return json({
+        received: true,
+        provider_return_confirmed: true,
+        physical_reconciliation_required: true,
+        settlement_triggered: false,
+        state: session.state,
+      }, 202);
+    }
+
+    const returnedAt = physical.receivedAt;
+    await appendReturnDetected(client, session, { eventId, occurredAt: returnedAt, stationId, batteryId, slotNum, providerTradeNo: parsed.tradeNo || null, physicalEventId: physical.externalEventId });
     const { error: updateError } = await client.from("rental_sessions").update({
       state: "battery_returned",
       returned_at: returnedAt,
       return_station_id: stationId,
       returned_slot_num: slotNum,
-      return_external_event_id: physical?.externalEventId ? `battery-in:${physical.externalEventId}` : `provider-return:${eventId}`,
+      return_external_event_id: physical.externalEventId ? `battery-in:${physical.externalEventId}` : `battery-in:correlated:${eventId}`,
       chargenow_order_id: canonicalTradeNo || parsed.tradeNo || null,
     }).eq("id", session.id).is("returned_at", null);
     if (updateError) throw updateError;
@@ -365,7 +391,7 @@ Deno.serve(async (req) => {
       returned_slot_num: slotNum,
       started_at: session.started_at ?? session.ejected_at ?? null,
       returned_at: returnedAt,
-      physical_event_id: physical?.externalEventId ?? null,
+      physical_event_id: physical.externalEventId,
       provider_trade_no: parsed.tradeNo || null,
       canonical_trade_no: canonicalTradeNo || null,
       provider_identity_fallback: !parsed.batteryId || !parsed.stationId || parsed.slotNum == null,
