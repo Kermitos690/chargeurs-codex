@@ -1,9 +1,5 @@
 import type { ReactNode } from "react";
 
-// Official TWINT-hosted brand artwork. A text fallback remains underneath so
-// an old/offline WebView never leaves an empty payment mark.
-const TWINT_LOGO_URL = "https://www.twint.ch/content/uploads/2017/03/twint-logo-open-graph.png";
-
 function BrandMark({ children, label, wide = false }: { children: ReactNode; label: string; wide?: boolean }) {
   return (
     <span
@@ -20,16 +16,7 @@ function BrandMark({ children, label, wide = false }: { children: ReactNode; lab
 function TwintMark() {
   return (
     <BrandMark label="TWINT" wide>
-      <span className="relative flex h-full w-full items-center justify-center">
-        <strong className="text-lg font-black tracking-[.05em] text-white">TWINT</strong>
-        <img
-          src={TWINT_LOGO_URL}
-          alt=""
-          className="absolute inset-0 h-full w-full scale-[1.28] object-contain"
-          referrerPolicy="no-referrer"
-          onError={(event) => { event.currentTarget.style.display = "none"; }}
-        />
-      </span>
+      <strong className="text-lg font-black tracking-[.05em] text-white">TWINT</strong>
     </BrandMark>
   );
 }
