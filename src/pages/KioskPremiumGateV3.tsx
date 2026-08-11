@@ -23,6 +23,7 @@ import "./kiosk-production-hardware-2p5d.css";
 import "./kiosk-production-i18n-guard.css";
 import "./kiosk-production-pricing-recovery.css";
 import "./kiosk-production-touch-feedback.css";
+import "./kiosk-production-edge-states.css";
 
 /**
  * Production kiosk entry.
