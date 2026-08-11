@@ -34,7 +34,14 @@ jobs:
       - name: Build read-only diagnostic APK
         run: |
           chmod +x android-kiosk/gradlew
-          android-kiosk/gradlew -p tools/wisepad-usb-diagnostic :app:lintDebug :app:assembleDebug
+          if ! android-kiosk/gradlew -p tools/wisepad-usb-diagnostic :app:lintDebug :app:assembleDebug; then
+            report="tools/wisepad-usb-diagnostic/app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt"
+            if [ -f "$report" ]; then
+              echo "----- FULL LINT REPORT -----"
+              cat "$report"
+            fi
+            exit 1
+          fi
 
       - name: SHA-256
         run: sha256sum tools/wisepad-usb-diagnostic/app/build/outputs/apk/debug/app-debug.apk | tee wisepad-usb-diagnostic.sha256
