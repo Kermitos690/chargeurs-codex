@@ -1,4 +1,4 @@
-release=automation-vercel-retry
-source_commit=0bbdde42f26ce4a48d3580e09c43391847457c99
-triggered_at=2026-08-11T04:37:40+02:00
-attempt=3
+release=kiosk-physical-qa-16x9
+source_commit=902eeddfad253dbda744d50b43edc66589502902
+triggered_at=2026-08-11T04:50:00+02:00
+attempt=1
