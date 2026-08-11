@@ -100,6 +100,8 @@ export default function Kiosk() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastDataRefresh, setLastDataRefresh] = useState<number | null>(null);
   const [inactivitySeconds, setInactivitySeconds] = useState<number | null>(null);
+  const [cancellingCheckout, setCancellingCheckout] = useState(false);
+  const [cancelCheckoutError, setCancelCheckoutError] = useState<string | null>(null);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
   const idemRef = useRef<string | null>(null);
   const seenStateVersionRef = useRef<number>(-1);
@@ -219,6 +221,29 @@ export default function Kiosk() {
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void refreshKioskData();
   }, [refreshKioskData]);
+
+  const cancelCheckout = useCallback(async () => {
+    if (phase !== "qr" || !sessionId || !stationId || cancellingCheckout) return;
+    const token = readKioskToken();
+    if (!token) {
+      setCancelCheckoutError("KIOSK_AUTH_REQUIRED");
+      return;
+    }
+    setCancellingCheckout(true);
+    setCancelCheckoutError(null);
+    const { data, transportError } = await invokeKioskEdgeProxy<KioskFunctionResponse>(
+      "/api/kiosk/cancel-checkout",
+      { rentalSessionId: sessionId },
+      { "X-Kiosk-Token": token },
+    );
+    if (transportError || !data?.ok) {
+      setCancelCheckoutError(data?.error ?? "CHECKOUT_CANCEL_FAILED");
+      setCancellingCheckout(false);
+      return;
+    }
+    setCancellingCheckout(false);
+    window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
+  }, [phase, sessionId, stationId, cancellingCheckout]);
 
   useEffect(() => {
     if (phase !== "idle") return;
@@ -661,7 +686,10 @@ export default function Kiosk() {
                 <div className="relative"><span className="absolute -inset-7 rounded-[3rem] bg-primary/35 blur-3xl animate-pulse-ring" /><div className="glass-strong liquid-border relative rounded-[2.5rem] bg-white p-7 shadow-[0_0_55px_rgba(34,211,238,.42)]"><QRCodeSVG value={checkoutUrl} size={380} bgColor={BRAND.colors.qrBackground} fgColor={BRAND.colors.qrForeground} level="M" marginSize={2} /></div></div>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-lg"><span className="inline-flex items-center gap-2 font-semibold text-success"><ShieldCheck className="h-5 w-5" />{t("kiosk.qr.stripe")}</span><span className="inline-flex items-center gap-2 font-semibold text-primary"><Clock className="h-5 w-5" />{t("kiosk.qr.expires", { time: `${mm}:${ss}` })}</span></div>
                 <div className="mt-4 flex items-center gap-2 text-lg text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" />{t("kiosk.qr.waiting")}</div>
-                <div className="mt-4 flex items-center gap-4">{publicCode && <span className="font-mono text-xs text-muted-foreground">{publicCode}</span>}<Button variant="ghost" onClick={reset} className="h-12 gap-2 rounded-full px-6 text-lg"><X className="h-5 w-5" />{t("kiosk.cancel")}</Button></div>
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-4">{publicCode && <span className="font-mono text-xs text-muted-foreground">{publicCode}</span>}<Button variant="ghost" onClick={() => void cancelCheckout()} disabled={cancellingCheckout} className="h-12 gap-2 rounded-full px-6 text-lg">{cancellingCheckout ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}{cancellingCheckout ? (lang === "fr" ? "Annulation…" : lang === "de" ? "Abbruch…" : "Cancelling…") : t("kiosk.cancel")}</Button></div>
+                  {cancelCheckoutError && <span className="text-sm font-semibold text-warning">{lang === "fr" ? "Annulation impossible pour le moment. Réessayez." : lang === "de" ? "Abbruch derzeit nicht möglich. Bitte erneut versuchen." : "Unable to cancel right now. Please try again."}</span>}
+                </div>
               </div>
             </motion.div>
           )}

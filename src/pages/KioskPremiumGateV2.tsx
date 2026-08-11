@@ -189,7 +189,7 @@ export default function KioskPremiumGateV2() {
   }, [loadOptions]);
 
   const returnHome = useCallback(() => {
-    if (document.querySelector(".kiosk-release-stage")) return;
+    if (document.querySelector('.kiosk-release-stage:not([data-kiosk-timeout-owner="inner"])')) return;
     try {
       sessionStorage.removeItem(KIOSK_JOURNEY_STORAGE_KEY);
       sessionStorage.removeItem(KIOSK_PAIRING_STORAGE_KEY);
@@ -202,6 +202,12 @@ export default function KioskPremiumGateV2() {
     setStage("hero");
     void loadOptions();
   }, [loadOptions]);
+
+  useEffect(() => {
+    const handleReturnHome = () => returnHome();
+    window.addEventListener("chargeurs:kiosk-return-home", handleReturnHome);
+    return () => window.removeEventListener("chargeurs:kiosk-return-home", handleReturnHome);
+  }, [returnHome]);
 
   useEffect(() => {
     document.documentElement.classList.add("kiosk-mode");
