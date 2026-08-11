@@ -1,0 +1,182 @@
+.kiosk-ad-split {
+  position: fixed;
+  top: 11.5vh;
+  right: 2.4vw;
+  bottom: 14.5vh;
+  z-index: 27;
+  width: clamp(260px, calc(var(--kiosk-ad-split-ratio, .35) * 100vw), 46vw);
+  overflow: hidden;
+  border: 1px solid rgba(165, 243, 252, .22);
+  border-radius: 2rem;
+  background: rgba(2, 8, 23, .78);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .38), 0 0 50px rgba(34, 211, 238, .08);
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.kiosk-ad-split::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(2, 8, 23, .04), transparent 50%, rgba(2, 8, 23, .38));
+}
+
+.kiosk-ad-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  background: #020817;
+}
+
+.kiosk-ad-split-badge,
+.kiosk-ad-muted,
+.kiosk-ad-screensaver-brand,
+.kiosk-ad-screensaver-partner {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: rgba(2, 8, 23, .68);
+  color: rgba(255, 255, 255, .92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.kiosk-ad-split-badge {
+  top: 1rem;
+  left: 1rem;
+  border-radius: 999px;
+  padding: .55rem .85rem;
+  font-size: .75rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.kiosk-ad-split-badge svg,
+.kiosk-ad-muted svg,
+.kiosk-ad-screensaver-brand svg,
+.kiosk-ad-screensaver-partner svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.kiosk-ad-muted {
+  right: 1rem;
+  bottom: 1rem;
+  border-radius: 999px;
+  padding: .48rem .75rem;
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.kiosk-ad-screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  overflow: hidden;
+  cursor: pointer;
+  background: #020817;
+  outline: none;
+  touch-action: manipulation;
+}
+
+.kiosk-ad-screensaver-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(2, 8, 23, .30), transparent 28%, transparent 62%, rgba(2, 8, 23, .66)),
+    radial-gradient(circle at 50% 62%, transparent 0, rgba(2, 8, 23, .08) 48%, rgba(2, 8, 23, .32) 100%);
+}
+
+.kiosk-ad-screensaver-brand {
+  top: clamp(1.25rem, 3vh, 2.5rem);
+  left: clamp(1.25rem, 3vw, 3rem);
+  border-radius: 999px;
+  padding: .75rem 1rem;
+  font-size: clamp(.95rem, 1.3vw, 1.25rem);
+  font-weight: 950;
+  letter-spacing: -.02em;
+}
+
+.kiosk-ad-screensaver-brand svg {
+  color: #67e8f9;
+}
+
+.kiosk-ad-screensaver-cta {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(2.3rem, 6vh, 5rem);
+  z-index: 4;
+  display: flex;
+  min-width: min(86vw, 48rem);
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border: 1px solid rgba(207, 250, 254, .3);
+  border-radius: 999px;
+  background: rgba(2, 8, 23, .76);
+  padding: clamp(1rem, 2vh, 1.5rem) clamp(1.4rem, 2.5vw, 2.4rem);
+  color: #fff;
+  font-size: clamp(1.1rem, 2vw, 1.75rem);
+  font-weight: 950;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .42), 0 0 44px rgba(34, 211, 238, .13);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: kiosk-ad-cta-pulse 2.4s ease-in-out infinite;
+}
+
+.kiosk-ad-screensaver-cta b {
+  display: grid;
+  width: clamp(2.8rem, 5vw, 4rem);
+  height: clamp(2.8rem, 5vw, 4rem);
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #67e8f9, #2563eb 58%, #7c3aed);
+  color: #fff;
+  font-size: 1.45em;
+  line-height: 1;
+  box-shadow: 0 0 28px rgba(34, 211, 238, .28);
+}
+
+.kiosk-ad-screensaver-partner {
+  top: clamp(1.25rem, 3vh, 2.5rem);
+  right: clamp(1.25rem, 3vw, 3rem);
+  border-radius: 999px;
+  padding: .65rem .9rem;
+  font-size: .78rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+@keyframes kiosk-ad-cta-pulse {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.018); }
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  .kiosk-ad-split {
+    top: 12.5vh;
+    right: 1.8vw;
+    bottom: 15.5vh;
+    width: clamp(230px, calc(var(--kiosk-ad-split-ratio, .35) * 100vw), 43vw);
+    border-radius: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-ad-screensaver-cta { animation: none; }
+}
