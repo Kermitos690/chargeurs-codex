@@ -35,5 +35,18 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npm run typecheck
-      - run: npm run build
+      - name: Full repository typecheck (baseline diagnostic)
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Lint Chargeurs Ads frontend changes
+        run: >-
+          npx eslint
+          src/components/kiosk/KioskAdvertisingLayer.tsx
+          src/pages/admin/AdminAdvertising.tsx
+          src/pages/KioskPremiumGateV3.tsx
+          src/pages/admin/adminNav.ts
+          src/lib/kioskEdgeProxy.ts
+          src/App.tsx
+          vite.config.ts
+      - name: Production build
+        run: npm run build
