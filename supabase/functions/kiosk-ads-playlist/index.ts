@@ -2,6 +2,8 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 
 const BUCKET = "advertising-media";
+const IMPRESSION_THRESHOLD_MS = 1_000;
+const PLAYBACK_STATUSES = new Set(["completed", "failed", "interrupted"]);
 const headers = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
@@ -32,11 +34,40 @@ Deno.serve(async (req) => {
       const assetId = typeof body.assetId === "string" ? body.assetId : "";
       const displayMode = body.displayMode === "screensaver" ? "screensaver" : body.displayMode === "split" ? "split" : "";
       const durationMs = Math.min(24 * 3600_000, Math.max(0, Math.round(Number(body.durationMs ?? 0))));
-      const completed = body.completed === true;
-      if (!campaignId || !assetId || !displayMode) return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
-      const { data: item, error: itemError } = await db.from("advertising_campaign_items").select("id").eq("campaign_id", campaignId).eq("asset_id", assetId).eq("enabled", true).maybeSingle();
+      const explicitPlaybackStatus = typeof body.playbackStatus === "string" && PLAYBACK_STATUSES.has(body.playbackStatus)
+        ? body.playbackStatus
+        : null;
+      // Backward compatibility for already-deployed kiosk clients during rollout:
+      // legacy clients have no started/playbackStatus fields. Treat them conservatively
+      // as interrupted displays, never as completed playback.
+      const playbackStatus = explicitPlaybackStatus ?? "interrupted";
+      const started = body.started === true || (body.started === undefined && durationMs >= IMPRESSION_THRESHOLD_MS);
+      if (!campaignId || !assetId || !displayMode) {
+        return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
+      }
+
+      const { data: item, error: itemError } = await db.from("advertising_campaign_items")
+        .select("id")
+        .eq("campaign_id", campaignId)
+        .eq("asset_id", assetId)
+        .eq("enabled", true)
+        .maybeSingle();
       if (itemError) throw itemError;
       if (!item) return reply({ ok: false, error: "CAMPAIGN_ASSET_MISMATCH" }, 409);
+
+      // Billing-grade definition: a media impression exists only after the browser
+      // confirmed playback/rendering started and the media remained visible >= 1s.
+      // Failed loads, scheduled items and zero-duration attempts are never impressions.
+      if (!started || durationMs < IMPRESSION_THRESHOLD_MS) {
+        return reply({
+          ok: true,
+          recorded: false,
+          reason: !started ? "MEDIA_NOT_STARTED" : "BELOW_IMPRESSION_THRESHOLD",
+          thresholdMs: IMPRESSION_THRESHOLD_MS,
+        });
+      }
+
+      const completed = playbackStatus === "completed";
       const startedAt = new Date(Date.now() - durationMs).toISOString();
       const { error } = await db.from("advertising_impressions").insert({
         campaign_id: campaignId,
@@ -50,7 +81,7 @@ Deno.serve(async (req) => {
         completed,
       });
       if (error) throw error;
-      return reply({ ok: true });
+      return reply({ ok: true, recorded: true, thresholdMs: IMPRESSION_THRESHOLD_MS });
     }
 
     if (action !== "playlist") return reply({ ok: false, error: "UNKNOWN_ACTION" }, 400);
@@ -76,7 +107,11 @@ Deno.serve(async (req) => {
     const campaignIds = candidates.map((campaign) => campaign.id);
     const [targetResult, itemResult] = await Promise.all([
       db.from("advertising_campaign_stations").select("campaign_id,station_id").in("campaign_id", campaignIds),
-      db.from("advertising_campaign_items").select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,duration_seconds,poster_storage_path,active,updated_at)").in("campaign_id", campaignIds).eq("enabled", true).order("sort_order", { ascending: true }),
+      db.from("advertising_campaign_items")
+        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,duration_seconds,poster_storage_path,active,updated_at)")
+        .in("campaign_id", campaignIds)
+        .eq("enabled", true)
+        .order("sort_order", { ascending: true }),
     ]);
     if (targetResult.error || itemResult.error) throw targetResult.error ?? itemResult.error;
 
@@ -85,6 +120,7 @@ Deno.serve(async (req) => {
       if (!targets.has(target.campaign_id)) targets.set(target.campaign_id, new Set());
       targets.get(target.campaign_id)?.add(target.station_id);
     }
+
     const itemsByCampaign = new Map<string, Array<Record<string, unknown>>>();
     for (const row of itemResult.data ?? []) {
       const asset = Array.isArray(row.asset) ? row.asset[0] : row.asset;
@@ -121,9 +157,15 @@ Deno.serve(async (req) => {
       }))
       .filter((campaign) => campaign.items.length > 0);
 
-    const versionSeed = payload.map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`).join("|");
+    const versionSeed = payload
+      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`)
+      .join("|");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionSeed || "empty"));
-    const version = Array.from(new Uint8Array(digest)).slice(0, 8).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const version = Array.from(new Uint8Array(digest))
+      .slice(0, 8)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+
     return reply({ ok: true, stationId, version, campaigns: payload });
   } catch (error) {
     console.error("kiosk-ads-playlist", error instanceof Error ? error.message : "UNKNOWN_ERROR");

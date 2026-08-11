@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { useI18n } from "@/i18n/i18n";
 import "./kiosk-advertising.css";
+import "./kiosk-advertising-failsafe.css";
 
 type AdItem = {
   id: string;
@@ -47,6 +48,7 @@ type AdEntry = {
 };
 
 type DisplayMode = "split" | "screensaver";
+type PlaybackStatus = "completed" | "failed" | "interrupted";
 
 const REFRESH_MS = 60_000;
 const CACHE_PREFIX = "chargeurs:ads:playlist:";
@@ -89,67 +91,141 @@ function cachePlaylist(stationId: string, payload: PlaylistResponse) {
   try {
     localStorage.setItem(`${CACHE_PREFIX}${stationId}`, JSON.stringify(payload));
   } catch {
-    // Cache is opportunistic. A full browser storage area must never break rent.
+    // Advertising cache is opportunistic. Storage pressure must never impact rentals.
   }
 }
 
-async function reportImpression(stationId: string, entry: AdEntry, mode: DisplayMode, durationMs: number, completed: boolean) {
+async function reportPlayback(
+  stationId: string,
+  entry: AdEntry,
+  mode: DisplayMode,
+  durationMs: number,
+  started: boolean,
+  playbackStatus: PlaybackStatus,
+  playlistVersion?: string,
+  errorCode?: string | null,
+) {
   const token = readKioskToken();
-  if (!token || durationMs < 250) return;
-  await invokeKioskEdgeProxy<PlaylistResponse>(
-    "/api/kiosk/ads-playlist",
-    {
-      action: "impression",
-      stationId,
-      campaignId: entry.campaignId,
-      assetId: entry.item.assetId,
-      displayMode: mode,
-      durationMs: Math.round(durationMs),
-      completed,
-    },
-    { "X-Kiosk-Token": token },
-  );
+  if (!token || !stationId) return;
+  try {
+    await invokeKioskEdgeProxy<PlaylistResponse>(
+      "/api/kiosk/ads-playlist",
+      {
+        action: "impression",
+        stationId,
+        campaignId: entry.campaignId,
+        assetId: entry.item.assetId,
+        displayMode: mode,
+        durationMs: Math.max(0, Math.round(durationMs)),
+        started,
+        playbackStatus,
+        playlistVersion: playlistVersion ?? null,
+        errorCode: errorCode ?? null,
+      },
+      { "X-Kiosk-Token": token },
+    );
+  } catch {
+    // Analytics are best-effort. A telemetry outage must never affect kiosk UX.
+  }
 }
 
-function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string) {
+function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string, playlistVersion?: string) {
   const [index, setIndex] = useState(0);
-  const completedRef = useRef(false);
+  const [epoch, setEpoch] = useState(0);
+  const [blockedKeys, setBlockedKeys] = useState<Set<string>>(() => new Set());
+  const startedRef = useRef(false);
   const startedAtRef = useRef(0);
+  const statusRef = useRef<PlaybackStatus>("interrupted");
+  const errorCodeRef = useRef<string | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  const entriesSignature = useMemo(() => entries.map((entry) => entry.key).join("|"), [entries]);
+  useEffect(() => {
+    setBlockedKeys(new Set());
+    setIndex(0);
+    setEpoch(0);
+  }, [entriesSignature, playlistVersion]);
+
+  const availableEntries = useMemo(
+    () => entries.filter((entry) => !blockedKeys.has(entry.key)),
+    [blockedKeys, entries],
+  );
 
   useEffect(() => {
-    if (index < entries.length) return;
+    if (index < availableEntries.length) return;
     setIndex(0);
-  }, [entries.length, index]);
+  }, [availableEntries.length, index]);
 
-  const current = entries.length ? entries[index % entries.length] : null;
+  const current = availableEntries.length ? availableEntries[index % availableEntries.length] : null;
 
-  const advance = useCallback(() => {
-    if (!entries.length) return;
-    completedRef.current = true;
-    setIndex((value) => (value + 1) % entries.length);
-  }, [entries.length]);
+  const clearTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const finish = useCallback((status: PlaybackStatus, errorCode?: string) => {
+    if (!current) return;
+    statusRef.current = status;
+    errorCodeRef.current = errorCode ?? null;
+    clearTimer();
+
+    if (status === "failed") {
+      setBlockedKeys((previous) => {
+        const next = new Set(previous);
+        next.add(current.key);
+        return next;
+      });
+      return;
+    }
+
+    setIndex((value) => availableEntries.length ? (value + 1) % availableEntries.length : 0);
+    // Forces a fresh media element even for a one-item playlist.
+    setEpoch((value) => value + 1);
+  }, [availableEntries.length, clearTimer, current]);
+
+  const complete = useCallback(() => finish("completed"), [finish]);
+  const fail = useCallback((errorCode: string) => finish("failed", errorCode), [finish]);
+
+  const markStarted = useCallback(() => {
+    if (!active || !current || startedRef.current) return;
+    startedRef.current = true;
+    startedAtRef.current = Date.now();
+
+    if (current.item.mediaType === "image") {
+      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
+      timerRef.current = window.setTimeout(complete, seconds * 1000);
+    }
+  }, [active, complete, current]);
 
   useEffect(() => {
     if (!active || !current) return;
-    completedRef.current = false;
-    startedAtRef.current = Date.now();
-
-    let timer: number | null = null;
-    if (current.item.mediaType === "image") {
-      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
-      timer = window.setTimeout(() => advance(), seconds * 1000);
-    }
+    clearTimer();
+    startedRef.current = false;
+    startedAtRef.current = 0;
+    statusRef.current = "interrupted";
+    errorCodeRef.current = null;
 
     return () => {
-      if (timer !== null) window.clearTimeout(timer);
-      const duration = Math.max(0, Date.now() - startedAtRef.current);
-      void reportImpression(stationId, current, mode, duration, completedRef.current);
+      clearTimer();
+      const duration = startedRef.current ? Math.max(0, Date.now() - startedAtRef.current) : 0;
+      void reportPlayback(
+        stationId,
+        current,
+        mode,
+        duration,
+        startedRef.current,
+        statusRef.current,
+        playlistVersion,
+        errorCodeRef.current,
+      );
     };
-  }, [active, advance, current, mode, stationId]);
+  }, [active, clearTimer, current, epoch, mode, playlistVersion, stationId]);
 
   useEffect(() => {
-    if (!active || entries.length < 2) return;
-    const next = entries[(index + 1) % entries.length];
+    if (!active || availableEntries.length < 2) return;
+    const next = availableEntries[(index + 1) % availableEntries.length];
     if (!next?.item.url) return;
     if (next.item.mediaType === "image") {
       const img = new Image();
@@ -161,16 +237,28 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     video.preload = "metadata";
     video.muted = true;
     video.src = next.item.url;
-  }, [active, entries, index]);
+  }, [active, availableEntries, index]);
 
-  return { current, advance };
+  return { current, epoch, complete, fail, markStarted };
 }
 
-function AdMedia({ entry, onEnded }: { entry: AdEntry; onEnded: () => void }) {
+function AdMedia({
+  entry,
+  epoch,
+  onStarted,
+  onCompleted,
+  onFailed,
+}: {
+  entry: AdEntry;
+  epoch: number;
+  onStarted: () => void;
+  onCompleted: () => void;
+  onFailed: (errorCode: string) => void;
+}) {
   if (entry.item.mediaType === "video") {
     return (
       <video
-        key={entry.key}
+        key={`${entry.key}:${epoch}`}
         className="kiosk-ad-media"
         src={entry.item.url}
         poster={entry.item.posterUrl ?? undefined}
@@ -179,15 +267,55 @@ function AdMedia({ entry, onEnded }: { entry: AdEntry; onEnded: () => void }) {
         playsInline
         preload="auto"
         aria-label={entry.item.title}
-        onEnded={onEnded}
-        onError={onEnded}
+        onPlaying={onStarted}
+        onEnded={onCompleted}
+        onError={() => onFailed("VIDEO_PLAYBACK_ERROR")}
       />
     );
   }
-  return <img key={entry.key} className="kiosk-ad-media" src={entry.item.url} alt={entry.item.title} draggable={false} />;
+  return (
+    <img
+      key={`${entry.key}:${epoch}`}
+      className="kiosk-ad-media"
+      src={entry.item.url}
+      alt={entry.item.title}
+      draggable={false}
+      onLoad={onStarted}
+      onError={() => onFailed("IMAGE_LOAD_ERROR")}
+    />
+  );
 }
 
-export function KioskAdvertisingLayer() {
+function LocalBrandFallback() {
+  return (
+    <div className="kiosk-ad-local-brand" aria-label="Chargeurs.ch">
+      <div className="kiosk-ad-local-brand-mark"><Zap /></div>
+      <strong>Chargeurs.ch</strong>
+      <span>Power when you need it.</span>
+    </div>
+  );
+}
+
+type BoundaryState = { failed: boolean };
+
+class AdvertisingErrorBoundary extends Component<{ children: ReactNode }, BoundaryState> {
+  state: BoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): BoundaryState {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Chargeurs Ads disabled after isolated runtime error", error.message, info.componentStack);
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
+
+function KioskAdvertisingRuntime() {
   const { stationId = "" } = useParams();
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
@@ -209,15 +337,19 @@ export function KioskAdvertisingLayer() {
     if (!stationId) return;
     const token = readKioskToken();
     if (!token) return;
-    const { data, transportError } = await invokeKioskEdgeProxy<PlaylistResponse>(
-      "/api/kiosk/ads-playlist",
-      { action: "playlist", stationId },
-      { "X-Kiosk-Token": token },
-    );
-    if (!transportError && data?.ok && Array.isArray(data.campaigns)) {
-      setPlaylist(data);
-      cachePlaylist(stationId, data);
-      return;
+    try {
+      const { data, transportError } = await invokeKioskEdgeProxy<PlaylistResponse>(
+        "/api/kiosk/ads-playlist",
+        { action: "playlist", stationId },
+        { "X-Kiosk-Token": token },
+      );
+      if (!transportError && data?.ok && Array.isArray(data.campaigns)) {
+        setPlaylist(data);
+        cachePlaylist(stationId, data);
+        return;
+      }
+    } catch {
+      // Network/backend Ads failure is isolated; retain the last valid local playlist.
     }
     const cached = loadCached(stationId);
     if (cached) setPlaylist(cached);
@@ -280,8 +412,8 @@ export function KioskAdvertisingLayer() {
   const safeHome = scene === "home" && !overlayOpen;
   const splitActive = safeHome && !screensaver && splitEntries.length > 0;
   const saverActive = safeHome && screensaver && saverEntries.length > 0;
-  const split = useAdRotation(splitEntries, splitActive, "split", stationId);
-  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId);
+  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version);
+  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version);
 
   useEffect(() => {
     if (!splitActive || !split.current) return;
@@ -303,21 +435,45 @@ export function KioskAdvertisingLayer() {
     <>
       {splitActive && split.current && (
         <aside className="kiosk-ad-split" aria-label={`${copy.sponsored}: ${split.current.campaignName}`}>
-          <AdMedia entry={split.current} onEnded={split.advance} />
+          <AdMedia
+            entry={split.current}
+            epoch={split.epoch}
+            onStarted={split.markStarted}
+            onCompleted={split.complete}
+            onFailed={split.fail}
+          />
           <div className="kiosk-ad-split-badge"><Megaphone /> {copy.sponsored}</div>
           {split.current.item.mediaType === "video" && <div className="kiosk-ad-muted"><VolumeX /> {copy.muted}</div>}
         </aside>
       )}
 
-      {saverActive && saver.current && (
+      {saverActive && (
         <div className="kiosk-ad-screensaver" role="button" tabIndex={0} aria-label={copy.touch} onClick={markActivity} onKeyDown={markActivity}>
-          <AdMedia entry={saver.current} onEnded={saver.advance} />
+          {saver.current ? (
+            <AdMedia
+              entry={saver.current}
+              epoch={saver.epoch}
+              onStarted={saver.markStarted}
+              onCompleted={saver.complete}
+              onFailed={saver.fail}
+            />
+          ) : (
+            <LocalBrandFallback />
+          )}
           <div className="kiosk-ad-screensaver-shade" aria-hidden />
           <div className="kiosk-ad-screensaver-brand"><Zap /> Chargeurs.ch</div>
           <div className="kiosk-ad-screensaver-cta"><span>{copy.touch}</span><b>→</b></div>
-          <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>
+          {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
         </div>
       )}
     </>
+  );
+}
+
+export function KioskAdvertisingLayer() {
+  return (
+    <AdvertisingErrorBoundary>
+      <KioskAdvertisingRuntime />
+    </AdvertisingErrorBoundary>
   );
 }
