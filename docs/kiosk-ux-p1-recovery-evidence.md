@@ -23,37 +23,43 @@ The screen-by-screen baseline was committed before implementation in `docs/kiosk
 
 ## Complete screen coverage
 
-The recovery now covers the complete public kiosk presentation surface:
+The recovery now covers the complete kiosk presentation surface, including public, safety and hidden operator states:
 
 1. `/kiosk` PWA boot / fallback route;
 2. V2/V3 boot/loading;
 3. home;
 4. Client pairing QR;
-5. Client connected;
-6. battery selection;
-7. pricing confirmation;
-8. persistent pricing-unavailable recovery;
-9. starting / payment preparation;
-10. payment QR;
-11. payment confirmed / hardware wait;
-12. release / physical slot guidance;
-13. canonical battery-ready / active rental;
-14. payment expiry;
-15. generic error;
-16. support-required state;
-17. unknown/invalid station;
-18. station-lock mismatch;
-19. operational quarantine / maintenance guard;
-20. offline/update banners;
-21. inactivity timeout;
-22. contextual help;
-23. offers launcher isolation from the premium journey;
-24. return detected;
-25. return price calculation;
-26. return settlement in progress;
-27. return completed;
-28. return financial-support state;
-29. standby/advertising transition boundary.
+5. Client pairing error/retry;
+6. Client connected;
+7. battery selection;
+8. no-rentable-battery state;
+9. pricing confirmation;
+10. persistent pricing-unavailable recovery;
+11. starting / payment preparation;
+12. payment QR;
+13. payment cancellation error;
+14. payment confirmed / hardware wait;
+15. release / physical slot guidance;
+16. canonical battery-ready / active rental;
+17. payment expiry;
+18. generic error;
+19. support-required state;
+20. unknown/invalid station;
+21. station-lock mismatch;
+22. operational quarantine / maintenance guard;
+23. offline/update banners;
+24. inactivity timeout;
+25. contextual help;
+26. offers-launcher isolation from the premium journey;
+27. return detected;
+28. return price calculation;
+29. return settlement in progress;
+30. return completed;
+31. return financial-support state;
+32. standby/advertising transition boundary;
+33. hidden operator diagnostics console;
+34. FR/EN/DE presentation guard;
+35. reduced-motion / touch-feedback behavior.
 
 ## Field-driven recovery
 
@@ -67,7 +73,7 @@ The recovery now covers the complete public kiosk presentation surface:
 - payment marks become quiet reassurance;
 - the station becomes a product cue rather than a competing action.
 
-`KioskOffersLauncher.tsx` is also suppressed during V3 boot/home/member/connected and during the inner transaction, so a global purple offer control cannot reappear and compete with the premium journey.
+`KioskOffersLauncher.tsx` is suppressed during V3 boot/home/member/connected and during the inner transaction, so a global purple offer control cannot reappear and compete with the premium journey.
 
 ### Battery selection
 
@@ -89,14 +95,15 @@ The recovery now covers the complete public kiosk presentation surface:
 
 ### Client QR / connected
 
-`kiosk-production-screen-director-v3.css` makes pairing scan-first, reduces competing copy and turns the connected state into one confirmation plus one dominant action.
+`kiosk-production-screen-director-v3.css` makes pairing scan-first, reduces competing copy and turns the connected state into one confirmation plus one dominant action. Pairing failure/retry receives its own deliberate recovery state.
 
 ### Starting / payment
 
 - `starting` becomes an explicit handoff instead of a dead spinner gap;
 - payment QR is the dominant object;
 - methods/reassurance are secondary;
-- progress remains coherent through handoff, expiry and recoverable failures.
+- progress remains coherent through handoff, expiry and recoverable failures;
+- payment cancellation failure is visible but cannot compete with the QR.
 
 ### Payment-confirmed / hardware wait
 
@@ -112,7 +119,8 @@ The recovery now covers the complete public kiosk presentation surface:
 - cabinet faceplate depth / side profile / light cues;
 - canonical `release` keeps the battery visually seated;
 - only canonical `active` advances the battery outward;
-- visual extraction therefore cannot precede server-confirmed readiness.
+- visual extraction therefore cannot precede server-confirmed readiness;
+- physical map remains `1 | 3 / 2 | 4`.
 
 ### Battery ready
 
@@ -127,6 +135,7 @@ The recovery now covers the complete public kiosk presentation surface:
 - technical references are demoted;
 - cinematic intensity is reduced;
 - standalone quarantine/mismatch support screens do not show a fake transaction stepper;
+- support/error occurring during a transaction preserves the real last transactional step;
 - operational quarantine is classified as `support`, which also prevents Ads/screensaver from running behind it;
 - station mismatch is styled as a full support state without changing station-lock semantics;
 - fixed network/update banners reserve their own vertical space rather than covering the transaction rail.
@@ -142,11 +151,20 @@ The recovery now covers the complete public kiosk presentation surface:
 
 ### Help / timeout / touch feedback
 
-- help remains content-owned by `KioskHelpCenter`, but `KioskHelpLauncher` now derives a presentation context from the current scene;
+- help remains content-owned by `KioskHelpCenter`, while `KioskHelpLauncher` derives a presentation context from the current scene;
 - the relevant FAQ topic is promoted for rent, price, payment, release or return;
 - inactivity controls are compact and non-destructive;
 - `KioskV3TouchFeedback.tsx` paints a pointer-free green/blue/neutral pulse on enabled kiosk buttons, including global Help/OperationalGuard overlays;
 - reduced-motion disables decorative feedback.
+
+### Hidden operator diagnostics
+
+`KioskDiagnostics.tsx` is now a true 16:9 maintenance console rather than a narrow mobile card:
+
+- system/connectivity evidence and local tools are separated into two columns;
+- existing credential masking and security rules are preserved;
+- no new hardware, payment or rental action is introduced;
+- existing relock/update/fullscreen actions retain their original semantics.
 
 ### Return
 
@@ -188,16 +206,16 @@ Functional copy remains React/i18n-owned; `kiosk-production-i18n-guard.css` prev
 
 ## Automated evidence
 
-Current validated head: `ffcf92e76c64ed39db77794bc486cd636fb134ee`.
+Current validated head before this evidence update: `5c910a102d241ad648fc56e9944ee9e18c22ca1a`.
 
-GitHub Actions run `31483039376` — **Kiosk UX physical QA: SUCCESS**
+GitHub Actions run `31483263735` — **Kiosk UX physical QA: SUCCESS**
 
 - dependencies: success;
 - Agent 4 surface typecheck: success;
 - `src/test/kioskUxRecovery.test.ts`: success;
 - production build: success.
 
-GitHub Actions run `31483039014` — **Chargeurs Ads checks: SUCCESS**.
+GitHub Actions run `31483263797` — **Chargeurs Ads checks: SUCCESS**.
 
 Changed surface remains UX/docs/tests/CI only; no pricing engine, Stripe semantics, rental state machine, return business logic, inventory or hardware command code is modified by #80.
 
@@ -210,52 +228,49 @@ Latest observed READY PR preview:
 - state `READY`;
 - branch `agent/kiosk-ux/p1-recovery`.
 
-A direct compare from this READY preview commit to validated head `ffcf92e...` shows the head is 7 commits ahead and changes only:
+The READY preview contains the major physical layouts, complete screen director, pricing recovery, contextual help, fallback route, station mismatch styling, edge-state styling and hardware 2.5D. The current head adds later control hardening, diagnostics layout, launcher isolation, tests and CI coverage.
 
-- `KioskOffersLauncher.tsx` journey isolation/i18n cleanup;
-- `KioskV3JourneyChrome.tsx` orphan-support/scene hardening;
-- `KioskV3TouchFeedback.tsx` global-overlay pulse extension;
-- scene tests;
-- CI coverage.
-
-The major field layouts, complete screen director, pricing recovery, contextual help, fallback route, station mismatch styling, edge-state styling and hardware 2.5D are already contained in the READY preview ancestor.
-
-Vercel currently rejects a build for head `ffcf92e...` with `build-rate-limit`; this is a preview freshness issue, not a code/build failure. GitHub production build for the head is green.
-
-The Vercel preview is protected by SSO; the available connector receives the SSO redirect, so AGENT 4 does not claim a connector-generated after-screenshot.
+Vercel freshness remains separate from code validity; GitHub production build for the current validated head is green. The preview is protected by SSO, so AGENT 4 does not claim a connector-generated after-screenshot.
 
 ## Required physical after-proof
 
 AGENT 8 / integration QA should validate on a 1366×768-class kiosk panel and capture at minimum:
 
 1. `/kiosk` boot/fallback;
-2. home;
-3. Client pairing QR;
-4. Client connected;
-5. Express selection;
-6. Client selection;
-7. no-battery state;
-8. pricing confirmation with valid quote;
-9. pricing-unavailable recovery + retry;
-10. starting;
-11. payment QR;
-12. payment cancellation error;
-13. payment confirmed / hardware wait;
-14. canonical battery-ready state;
-15. expired;
-16. error/support;
-17. operational quarantine;
-18. station mismatch;
-19. offline/update banner layout;
-20. contextual help from pricing/payment/release/return;
-21. inactivity timeout;
-22. return detected;
-23. return calculated/settling;
-24. return completed;
-25. return financial-support state;
-26. screensaver wake transition;
-27. FR/EN/DE spot-checks;
-28. reduced-motion spot-check.
+2. V3 boot;
+3. home;
+4. Express tap/identity;
+5. Client tap/identity;
+6. Client pairing QR;
+7. pairing error/retry;
+8. Client connected;
+9. Express selection;
+10. Client selection;
+11. no-battery state;
+12. pricing confirmation with valid quote;
+13. pricing-unavailable recovery + retry;
+14. starting;
+15. payment QR;
+16. payment cancellation error;
+17. payment confirmed / hardware wait;
+18. canonical battery-ready state;
+19. expired;
+20. generic error/support;
+21. invalid/unknown station;
+22. operational quarantine;
+23. station mismatch;
+24. offline/update banner layout;
+25. contextual help from pricing/payment/release/return;
+26. inactivity timeout;
+27. return detected;
+28. return calculated/settling;
+29. return completed;
+30. return financial-support state;
+31. screensaver wake transition;
+32. FR/EN/DE spot-checks;
+33. reduced-motion spot-check;
+34. hidden operator diagnostics at 1366×768;
+35. standalone safety screen with no bogus journey rail.
 
 Acceptance observation distance: approximately 1.5–2 metres for primary action comprehension.
 
@@ -273,4 +288,4 @@ PR #80 therefore remains intentionally unmerged until upstream gates and physica
 
 ## Supporting motion handoff
 
-AGENT 6 support task: issue #82. No implementation handoff had been posted when this evidence was finalized; Agent 4 therefore delivered the lightweight 2.5D baseline without waiting, while keeping Agent 6 available for richer future product assets/motion studies.
+AGENT 6 support task: issue #82. Agent 4 delivered the lightweight 2.5D baseline without waiting, while keeping Agent 6 available for richer future product assets/motion studies.
