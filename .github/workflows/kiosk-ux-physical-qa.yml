@@ -5,6 +5,7 @@ on:
     paths:
       - "src/main.tsx"
       - "src/pwa/nativeKioskBootstrap.ts"
+      - "src/lib/kioskEdgeProxy.ts"
       - "src/pages/KioskHome.tsx"
       - "src/pages/KioskPremiumGateV3.tsx"
       - "src/pages/kiosk-production-*.css"
@@ -13,6 +14,7 @@ on:
       - "src/components/kiosk/KioskDiagnostics.tsx"
       - "src/components/kiosk/KioskHelpLauncher.tsx"
       - "src/components/kiosk/KioskOffersLauncher.tsx"
+      - "src/components/kiosk/KioskV3AuthGuard.tsx"
       - "src/components/kiosk/KioskV3HomeChrome.tsx"
       - "src/components/kiosk/KioskV3OwnedHome.tsx"
       - "src/components/kiosk/KioskV3JourneyChrome.tsx"
@@ -20,8 +22,10 @@ on:
       - "src/components/kiosk/KioskV3PricingRecovery.tsx"
       - "src/components/kiosk/KioskV3TouchFeedback.tsx"
       - "src/test/kioskUxRecovery.test.ts"
+      - "src/test/kioskAuthGuard.test.ts"
       - "docs/kiosk-ux-p1-recovery-*.md"
       - "docs/chargeurs-cinematic-kiosk-direction.md"
+      - "docs/agent4-kiosk-auth-failsafe-plan.md"
       - ".github/workflows/kiosk-ux-physical-qa.yml"
 
 permissions:
@@ -52,7 +56,7 @@ jobs:
           typecheck_exit=${PIPESTATUS[0]}
           set -e
 
-          if grep -E 'src/(main\.tsx|pwa/nativeKioskBootstrap\.ts|components/kiosk/(PowerbankScene|KioskDiagnostics|KioskHelpLauncher|KioskOffersLauncher|KioskV3HomeChrome|KioskV3OwnedHome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/kioskUxRecovery\.test\.ts)' /tmp/chargeurs-typecheck.log; then
+          if grep -E 'src/(main\.tsx|pwa/nativeKioskBootstrap\.ts|lib/kioskEdgeProxy\.ts|components/kiosk/(PowerbankScene|KioskDiagnostics|KioskHelpLauncher|KioskOffersLauncher|KioskV3AuthGuard|KioskV3HomeChrome|KioskV3OwnedHome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/(kioskUxRecovery|kioskAuthGuard)\.test\.ts)' /tmp/chargeurs-typecheck.log; then
             echo "::error::TypeScript regression detected in Agent 4 kiosk UX files"
             exit 1
           fi
@@ -62,7 +66,7 @@ jobs:
           fi
 
       - name: Kiosk recovery contract tests
-        run: npx vitest run src/test/kioskUxRecovery.test.ts
+        run: npx vitest run src/test/kioskUxRecovery.test.ts src/test/kioskAuthGuard.test.ts
 
       - name: Production build
         run: npm run build
