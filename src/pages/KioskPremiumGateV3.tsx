@@ -14,6 +14,7 @@ import "./kiosk-production-hotfix.css";
 import "./kiosk-production-physical-qa.css";
 import "./kiosk-production-physical-qa-pass2.css";
 import "./kiosk-production-home-decision-v3.css";
+import "./kiosk-production-premium-journey-v4.css";
 
 /**
  * Production kiosk entry.
