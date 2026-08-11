@@ -1,3 +1,4 @@
 release=pilot-kiosk-ux-release-v2
 source_commit=efa69b9b43f1fb7ad7af53ea91eb00bca680cada
-triggered_at=2026-08-11T04:31:00+02:00
+triggered_at=2026-08-11T04:33:00+02:00
+attempt=2
