@@ -3,6 +3,7 @@ import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
+import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
 import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
 import "./kiosk-production-scenes.css";
@@ -32,6 +33,7 @@ export default function KioskPremiumGateV3() {
       <div className="kv3-product-layer">
         <KioskPremiumGateV2 />
       </div>
+      <KioskV3TimeoutOwnershipGuard />
       <KioskV3HomeChrome />
       <KioskV3JourneyChrome />
     </div>
