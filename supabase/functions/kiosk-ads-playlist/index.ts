@@ -34,9 +34,15 @@ Deno.serve(async (req) => {
       const assetId = typeof body.assetId === "string" ? body.assetId : "";
       const displayMode = body.displayMode === "screensaver" ? "screensaver" : body.displayMode === "split" ? "split" : "";
       const durationMs = Math.min(24 * 3600_000, Math.max(0, Math.round(Number(body.durationMs ?? 0))));
-      const started = body.started === true;
-      const playbackStatus = typeof body.playbackStatus === "string" ? body.playbackStatus : "";
-      if (!campaignId || !assetId || !displayMode || !PLAYBACK_STATUSES.has(playbackStatus)) {
+      const explicitPlaybackStatus = typeof body.playbackStatus === "string" && PLAYBACK_STATUSES.has(body.playbackStatus)
+        ? body.playbackStatus
+        : null;
+      // Backward compatibility for already-deployed kiosk clients during rollout:
+      // legacy clients have no started/playbackStatus fields. Treat them conservatively
+      // as interrupted displays, never as completed playback.
+      const playbackStatus = explicitPlaybackStatus ?? "interrupted";
+      const started = body.started === true || (body.started === undefined && durationMs >= IMPRESSION_THRESHOLD_MS);
+      if (!campaignId || !assetId || !displayMode) {
         return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
       }
 
