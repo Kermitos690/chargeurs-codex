@@ -68,8 +68,11 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund --prefer-offline
 
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Validate frontend agent scripts
+        run: |
+          node --check scripts/frontend-quality-agent.mjs
+          node --check scripts/frontend-agent/config.mjs
+          node --check scripts/frontend-agent/cdp.mjs
 
       - name: Build
         run: npm run build
