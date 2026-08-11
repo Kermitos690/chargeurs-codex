@@ -27,10 +27,11 @@ html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
   right: auto !important;
   bottom: 17vh !important;
   left: 6vw !important;
-  width: 35.5vw !important;
+  width: 39vw !important;
   margin: 0 !important;
   transform: none !important;
   z-index: 32 !important;
+  gap: 14px !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
@@ -43,24 +44,163 @@ html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
   z-index: 36 !important;
 }
 
+/* PILOT HARDENING — one chrome owner, safe touch layers and pixel-stable 16:9. */
+html.kiosk-v3 .ck2-journey-control { display: none !important; }
+
+html.kiosk-v3 .kv3-atmosphere,
+html.kiosk-v3 .kv3-atmosphere *,
+html.kiosk-v3 .kv3-lightning-stage,
+html.kiosk-v3 .kv3-lightning-stage *,
+html.kiosk-v3 .kv3-station-hero,
+html.kiosk-v3 .kv3-station-hero * {
+  pointer-events: none !important;
+}
+
+html.kiosk-v3 .kv3-progress-rail {
+  top: 14px !important;
+  width: min(520px, 38vw) !important;
+  height: 58px !important;
+}
+
+html.kiosk-v3 .kiosk-root > main {
+  min-height: 100vh !important;
+  box-sizing: border-box !important;
+  padding-top: 78px !important;
+  padding-bottom: 18px !important;
+}
+
+html.kiosk-v3 .kiosk-inactivity-control {
+  top: 82px !important;
+  left: var(--kp-safe-x) !important;
+  z-index: 64 !important;
+  min-height: 48px !important;
+}
+
+html.kiosk-v3 .ck2-member > .ck2-topbar,
+html.kiosk-v3 .ck2-connected-topbar {
+  top: 14px !important;
+  left: var(--kp-safe-x) !important;
+  right: var(--kp-safe-x) !important;
+  z-index: 68 !important;
+  min-height: 58px !important;
+  pointer-events: none;
+}
+html.kiosk-v3 .ck2-member > .ck2-topbar > *,
+html.kiosk-v3 .ck2-connected-topbar > * { pointer-events: auto; }
+
+html.kiosk-v3 .ck2-context-exit {
+  min-height: 52px !important;
+  padding: 0 18px !important;
+  gap: 9px !important;
+  font-size: 16px !important;
+}
+html.kiosk-v3 .ck2-context-exit strong {
+  min-width: 32px;
+  color: #79d6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+html.kiosk-v3 .kiosk-idle-stage,
+html.kiosk-v3 .kiosk-pricing-stage,
+html.kiosk-v3 .kiosk-qr-stage {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+html.kiosk-v3 .kiosk-pricing-stage { max-width: 1080px !important; }
+html.kiosk-v3 .kiosk-qr-stage { max-width: 1180px !important; }
+
+/* Home headline: three deliberate lines with breathing room. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 0 !important;
+  line-height: .88 !important;
+  letter-spacing: -.052em !important;
+  margin: 10px 0 0 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > span,
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong {
+  display: block !important;
+  position: static !important;
+  transform: none !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 > strong {
+  margin-top: .13em !important;
+  line-height: .9 !important;
+}
+
+/* Make the three entry choices readable from standing distance. */
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
+  min-height: 202px !important;
+  padding: 22px 20px !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-kicker,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-kicker {
+  font-size: 13px !important;
+  letter-spacing: .13em !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > strong,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card > strong {
+  font-size: clamp(25px, 2vw, 33px) !important;
+  line-height: 1 !important;
+}
+html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice > small,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card > small {
+  font-size: clamp(14px, .95vw, 17px) !important;
+  line-height: 1.32 !important;
+}
+
+/* One integrated payment reassurance strip instead of six floating rectangles. */
+html.kiosk-v3 .kv3-payment-dock {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+}
+html.kiosk-v3 .kiosk-payment-marks {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: nowrap !important;
+  gap: 18px !important;
+}
+html.kiosk-v3 .kiosk-payment-mark {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Keep the member composition the user liked and strengthen only atmosphere. */
+html.kiosk-v3[data-kiosk-scene="member"] .kv3-smoke,
+html.kiosk-v3[data-kiosk-scene="connected"] .kv3-smoke {
+  opacity: .88 !important;
+}
+
 @media (max-width: 1366px), (max-height: 800px) {
+  html.kiosk-v3 .kv3-progress-rail {
+    top: 12px !important;
+    width: min(470px, 36vw) !important;
+  }
   html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy {
-    top: 14.5vh !important;
-    width: 57vw !important;
+    top: 13.2vh !important;
+    width: 54vw !important;
   }
   html.kiosk-v3[data-kiosk-scene="home"] .ck2-hero-copy h1 {
-    font-size: clamp(46px, 5.05vw, 72px) !important;
+    font-size: clamp(43px, 4.65vw, 64px) !important;
   }
   html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice-grid {
-    bottom: 15.5vh !important;
-    width: 36vw !important;
+    bottom: 15.8vh !important;
+    width: 39vw !important;
   }
   html.kiosk-v3[data-kiosk-scene="home"] .ck2-choice,
   html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
-    min-height: 186px !important;
+    min-height: 190px !important;
   }
   html.kiosk-v3[data-kiosk-scene="home"] .kv3-offer-card {
-    bottom: 15.5vh !important;
+    bottom: 15.8vh !important;
   }
   html.kiosk-v3[data-kiosk-scene="home"] .kv3-payment-dock {
     bottom: 2.8vh !important;
