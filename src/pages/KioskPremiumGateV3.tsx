@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
+import { KioskV3CinematicDirector } from "@/components/kiosk/KioskV3CinematicDirector";
 import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
 import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
@@ -12,6 +13,7 @@ import "./kiosk-production-return.css";
 import "./kiosk-production-help.css";
 import "./kiosk-production-hotfix.css";
 import "./kiosk-production-physical-qa.css";
+import "./kiosk-production-cinematic-director.css";
 import "./kiosk-production-recovery.css";
 
 /**
@@ -19,9 +21,9 @@ import "./kiosk-production-recovery.css";
  * Business orchestration remains in the proven V2 gate/Kiosk state machine;
  * the route owns the physical 16:9 presentation system.
  *
- * The P1 recovery layer is intentionally loaded last and replaces the previous
- * additive pass2/home overrides. It remains presentation-only: no payment,
- * rental, return, inventory or hardware state is inferred here.
+ * The cinematic director is decorative and pointer-free. The P1 recovery layer
+ * remains the final layout contract. Neither layer owns payment, rental, return,
+ * inventory or hardware state.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
@@ -41,6 +43,7 @@ export default function KioskPremiumGateV3() {
   return (
     <div className="kv3-runtime">
       <KioskV3Atmosphere />
+      <KioskV3CinematicDirector />
       <div className="kv3-product-layer">
         <KioskPremiumGateV2 />
       </div>
