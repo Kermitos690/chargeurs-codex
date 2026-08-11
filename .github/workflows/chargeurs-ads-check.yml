@@ -1,0 +1,39 @@
+name: Chargeurs Ads checks
+
+on:
+  push:
+    branches:
+      - agent/chargeurs-ads-engine
+  pull_request:
+    paths:
+      - "src/components/kiosk/KioskAdvertisingLayer.tsx"
+      - "src/components/kiosk/kiosk-advertising.css"
+      - "src/pages/admin/AdminAdvertising.tsx"
+      - "src/pages/admin/admin-advertising.css"
+      - "src/pages/KioskPremiumGateV3.tsx"
+      - "src/pages/admin/adminNav.ts"
+      - "src/lib/kioskEdgeProxy.ts"
+      - "src/App.tsx"
+      - "vite.config.ts"
+      - "vercel.json"
+      - "supabase/functions/ads-admin/**"
+      - "supabase/functions/kiosk-ads-playlist/**"
+      - "supabase/migrations/*ads*"
+      - ".github/workflows/chargeurs-ads-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build
