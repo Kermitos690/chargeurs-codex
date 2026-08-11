@@ -20,7 +20,7 @@ function detectScene(): Scene {
   if (document.querySelector(".kiosk-idle-stage")) return "selection";
   if (document.querySelector(".kiosk-pricing-stage")) return "pricing";
   if (document.querySelector(".kiosk-qr-stage")) return "payment";
-  if (document.querySelector(".kiosk-release-stage")) return "release";
+  if (document.querySelector('.kiosk-release-stage:not([data-kiosk-timeout-owner="inner"])')) return "release";
   if (document.querySelector(".kiosk-root .bg-gradient-success")) return "active";
   return "other";
 }
