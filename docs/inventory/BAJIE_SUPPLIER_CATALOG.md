@@ -65,6 +65,12 @@ Existing `stations`, `slots` and `batteries` tables remain runtime/provider proj
 
 No supplier catalog row creates an owned asset. Asset ownership, serial-number mapping, stock ledger, purchase orders, receipts, RMA and maintenance lifecycle are later Agent 7 workstreams.
 
+## Staging proof
+
+The full supplier-catalog migration chain has been applied successfully to `chargeurs-ch-staging`. The database contains 1 supplier, 1 source document, 7 contact targets, 9 generic product families, 55 variants, 55 supplier products and 116 explicit offers/configurations. The SQL invariant suite passed.
+
+Exact execution and advisor evidence is documented in `SUPPLIER_CATALOG_STAGING_VALIDATION.md`. Production has not been touched by this workstream.
+
 ## Next supplier questions
 
 Before declaring BOM or spare-part compatibility, request from Bajie:
