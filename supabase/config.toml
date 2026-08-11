@@ -76,3 +76,7 @@ verify_jwt = false
 verify_jwt = true
 [functions.dta-pilot-callback]
 verify_jwt = false
+[functions.ads-admin]
+verify_jwt = true
+[functions.kiosk-ads-playlist]
+verify_jwt = false
