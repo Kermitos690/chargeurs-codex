@@ -28,6 +28,7 @@ import "./kiosk-production-edge-states.css";
 import "./kiosk-production-contextual-help.css";
 import "./kiosk-production-webview-landscape-failsafe.css";
 import "./kiosk-v3-owned-home.css";
+import "./kiosk-production-field-selection-v4.css";
 
 /**
  * Production kiosk entry.
