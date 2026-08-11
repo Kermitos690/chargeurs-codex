@@ -1,6 +1,7 @@
 import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
+import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
 import { KioskV3CinematicDirector } from "@/components/kiosk/KioskV3CinematicDirector";
 import { KioskV3OwnedHome } from "@/components/kiosk/KioskV3OwnedHome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
@@ -49,6 +50,7 @@ export default function KioskPremiumGateV3() {
       delete document.documentElement.dataset.kioskReturnStage;
       delete document.documentElement.dataset.kioskAdsSplit;
       delete document.documentElement.dataset.kioskHelpContext;
+      delete document.documentElement.dataset.kioskAuth;
       document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
       document.documentElement.classList.remove("kiosk-v3");
     };
@@ -67,6 +69,7 @@ export default function KioskPremiumGateV3() {
       <KioskV3PricingRecovery />
       <KioskV3TouchFeedback />
       <KioskAdvertisingLayer />
+      <KioskV3AuthGuard />
     </div>
   );
 }
