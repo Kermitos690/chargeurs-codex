@@ -28,6 +28,12 @@ function passTypeIdentifier(): string {
   return Deno.env.get("APPLE_PASS_TYPE_IDENTIFIER")?.trim() ?? "";
 }
 
+function walletUpdateTag(metadata: unknown): number {
+  if (!metadata || typeof metadata !== "object") return 0;
+  const value = (metadata as Record<string, unknown>).wallet_update_tag_ms;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
 async function findPassBySerial(db: ReturnType<typeof adminClient>, serialNumber: string) {
   const result = await db.from("customer_wallet_passes")
     .select("id,user_id,membership_id,public_pass_id,apple_serial_number,status,token_version,access_token_hash,pass_revision,provider_status,last_generated_at,last_synced_at,revoked_at,provider_metadata,updated_at")
@@ -112,7 +118,7 @@ Deno.serve(async (req) => {
 
     const ids = [...new Set(registrations.data.map((row) => String(row.wallet_pass_id)))];
     const passes = await db.from("customer_wallet_passes")
-      .select("id,apple_serial_number,updated_at,status")
+      .select("id,apple_serial_number,provider_metadata,status")
       .in("id", ids)
       .eq("status", "active")
       .not("apple_serial_number", "is", null);
@@ -120,15 +126,13 @@ Deno.serve(async (req) => {
 
     const previousRaw = url.searchParams.get("passesUpdatedSince");
     const previous = previousRaw && /^\d+$/.test(previousRaw) ? Number(previousRaw) : null;
-    const eligible = passes.data.filter((pass) => {
-      if (previous === null) return true;
-      return new Date(String(pass.updated_at)).getTime() > previous;
-    });
+    const tagged = passes.data.map((pass) => ({ pass, tag: walletUpdateTag(pass.provider_metadata) }));
+    const eligible = tagged.filter(({ tag }) => previous === null || tag > previous);
     if (!eligible.length) return noContent(204);
 
-    const lastUpdated = Math.max(...passes.data.map((pass) => new Date(String(pass.updated_at)).getTime()));
+    const lastUpdated = Math.max(...tagged.map(({ tag }) => tag));
     return json({
-      serialNumbers: eligible.map((pass) => String(pass.apple_serial_number)),
+      serialNumbers: eligible.map(({ pass }) => String(pass.apple_serial_number)),
       lastUpdated: String(lastUpdated),
     });
   }
