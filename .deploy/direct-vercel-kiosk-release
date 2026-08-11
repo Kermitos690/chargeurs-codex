@@ -1,4 +1,6 @@
-release=kiosk-physical-qa-16x9
-source_commit=902eeddfad253dbda744d50b43edc66589502902
-triggered_at=2026-08-11T04:50:00+02:00
-attempt=1
+release=inventory-staging-promotion
+source_commit=5d3774721277e24eeea99716f85240e137832855
+triggered_at=2026-08-12T01:21:00+02:00
+attempt=2
+requested_by=agent0
+reason=promote-current-main-with-inventory-admin-to-canonical-staging
