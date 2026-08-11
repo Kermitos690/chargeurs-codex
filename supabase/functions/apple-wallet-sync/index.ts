@@ -33,24 +33,43 @@ Deno.serve(async (req) => {
   try {
     const snapshot = await prepareWalletSnapshot(db, user.id);
     const shouldNotify = snapshot.changed || testTransport;
-    const notification = shouldNotify
-      ? await notifyRegisteredDevices(db, snapshot.row.id)
-      : { devices: 0, sent: 0, failed: 0 };
+    let notification = { devices: 0, sent: 0, failed: 0 };
 
     if (shouldNotify) {
       const metadata = snapshot.row.provider_metadata && typeof snapshot.row.provider_metadata === "object"
         ? snapshot.row.provider_metadata
         : {};
-      await db.from("customer_wallet_passes").update({
+      const now = new Date();
+      const updateTagMs = now.getTime();
+
+      // Publish the Wallet update tag BEFORE APNs. This prevents a fast iPhone
+      // from receiving the push and querying the update list before the server
+      // has made the new revision/transport refresh discoverable.
+      const queued = await db.from("customer_wallet_passes").update({
         provider_status: snapshot.row.provider_status === "issued" && snapshot.changed ? "update_pending" : snapshot.row.provider_status,
         provider_metadata: {
           ...metadata,
-          last_notification_at: new Date().toISOString(),
+          wallet_update_tag_ms: updateTagMs,
+          last_notification_at: now.toISOString(),
+          last_notification_mode: snapshot.changed ? "data_changed" : "transport_test",
+        },
+        updated_at: now.toISOString(),
+      }).eq("id", snapshot.row.id);
+      if (queued.error) throw queued.error;
+
+      notification = await notifyRegisteredDevices(db, snapshot.row.id);
+
+      const completed = await db.from("customer_wallet_passes").update({
+        provider_metadata: {
+          ...metadata,
+          wallet_update_tag_ms: updateTagMs,
+          last_notification_at: now.toISOString(),
           last_notification_mode: snapshot.changed ? "data_changed" : "transport_test",
           last_notification_result: notification,
         },
         updated_at: new Date().toISOString(),
       }).eq("id", snapshot.row.id);
+      if (completed.error) throw completed.error;
     }
 
     await auditLog(db, {
