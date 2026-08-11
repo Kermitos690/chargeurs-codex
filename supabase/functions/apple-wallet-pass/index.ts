@@ -29,12 +29,24 @@ async function sendPkpass(db: ReturnType<typeof adminClient>, row: CustomerWalle
   const snapshot = await prepareWalletSnapshot(db, row.user_id);
   if (snapshot.row.id !== row.id) throw new Error("WALLET_PASS_MISMATCH");
   const bytes = await buildSignedPass(snapshot.row, snapshot.data, snapshot.authenticationToken);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const metadata = snapshot.row.provider_metadata && typeof snapshot.row.provider_metadata === "object"
+    ? snapshot.row.provider_metadata
+    : {};
+  const existingTag = typeof metadata.wallet_update_tag_ms === "number" && Number.isFinite(metadata.wallet_update_tag_ms)
+    ? metadata.wallet_update_tag_ms
+    : null;
+  const firstIssue = snapshot.row.provider_status !== "issued" || existingTag === null;
+
   await db.from("customer_wallet_passes").update({
     provider_status: "issued",
-    last_generated_at: now,
-    last_synced_at: now,
-    updated_at: now,
+    last_generated_at: now.toISOString(),
+    last_synced_at: now.toISOString(),
+    provider_metadata: {
+      ...metadata,
+      wallet_update_tag_ms: firstIssue ? now.getTime() : existingTag,
+    },
+    updated_at: now.toISOString(),
   }).eq("id", snapshot.row.id);
 
   return new Response(bytes, {
