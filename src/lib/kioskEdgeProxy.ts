@@ -17,6 +17,8 @@ export const KIOSK_JOURNEY_STORAGE_KEY = "chargeurs:kiosk:customer-journey";
 export type KioskProxyResult<T> = {
   data: T | null;
   transportError: boolean;
+  status: number | null;
+  authError: boolean;
 };
 
 type KioskProxyPath =
@@ -79,8 +81,13 @@ export async function invokeKioskEdgeProxy<T>(
     } catch {
       // A non-JSON gateway error is treated as a safe request failure below.
     }
-    return { data, transportError: !response.ok && data === null };
+    return {
+      data,
+      transportError: !response.ok && data === null,
+      status: response.status,
+      authError: response.status === 401 || response.status === 403,
+    };
   } catch {
-    return { data: null, transportError: true };
+    return { data: null, transportError: true, status: null, authError: false };
   }
 }
