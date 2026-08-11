@@ -100,7 +100,7 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
         </>
       )}
 
-      <div
+      <motion.div
         className={`kiosk-cabinet-powerbank relative grid h-[72%] w-[58%] place-items-center rounded-[1.35rem] border ${active ? "border-cyan-50 bg-[linear-gradient(180deg,rgba(207,250,254,.42),rgba(14,116,200,.3)_40%,rgba(3,18,56,.9))]" : "border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,.075),rgba(37,99,235,.04))]"}`}
         style={{ transformPerspective: 1000 }}
       >
@@ -123,7 +123,7 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
             transition={{ duration: .58, repeat: Infinity }}
           />
         )}
-      </div>
+      </motion.div>
 
       <span className={`absolute bottom-4 right-5 grid h-12 w-12 place-items-center rounded-full text-xl font-black ${active ? "bg-white text-blue-950 shadow-[0_0_32px_rgba(255,255,255,.68)]" : "border border-white/12 bg-slate-950/55 text-white/55"}`}>{slot}</span>
     </motion.div>
