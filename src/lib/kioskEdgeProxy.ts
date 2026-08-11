@@ -28,7 +28,8 @@ type KioskProxyPath =
   | "/api/kiosk/resume-state"
   | "/api/kiosk/customer-options"
   | "/api/kiosk/customer-pairing-create"
-  | "/api/kiosk/customer-pairing-status";
+  | "/api/kiosk/customer-pairing-status"
+  | "/api/kiosk/ads-playlist";
 
 function customerPairingPayload(path: KioskProxyPath, body: Record<string, unknown>): Record<string, unknown> {
   if (path !== "/api/kiosk/create-rental-session") return body;
