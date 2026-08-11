@@ -23,6 +23,61 @@ html.kiosk-v3:has(.kiosk-root > div.fixed.inset-x-0.top-0) .kiosk-root > main {
   min-height: calc(100dvh - 112px) !important;
 }
 
+/* Station mismatch is rendered before .kiosk-root. Give the recovery screen a
+   full physical-kiosk treatment without altering lock/navigation semantics. */
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center {
+  min-height: 100dvh !important;
+  padding: 8vh 8vw !important;
+  background:
+    radial-gradient(circle at 50% 20%,rgba(255,197,109,.08),transparent 34%),
+    linear-gradient(145deg,#020817,#07162b 58%,#0a1732) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center > .glass-strong {
+  width: min(860px,82vw) !important;
+  max-width: 860px !important;
+  min-height: 410px !important;
+  justify-content: center !important;
+  padding: 42px !important;
+  border: 1px solid rgba(255,197,109,.22) !important;
+  border-radius: 34px !important;
+  background:
+    radial-gradient(circle at 50% 0,rgba(255,197,109,.09),transparent 40%),
+    rgba(3,10,20,.94) !important;
+  box-shadow: 0 34px 96px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.04) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center > .glass-strong > div:first-of-type {
+  width: 92px !important;
+  height: 92px !important;
+  border: 1px solid rgba(255,197,109,.24) !important;
+  border-radius: 26px !important;
+  background: rgba(255,197,109,.08) !important;
+  box-shadow: 0 0 48px rgba(255,197,109,.10) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center h1 {
+  max-width: 14ch !important;
+  font-size: clamp(39px,4vw,58px) !important;
+  line-height: .94 !important;
+  letter-spacing: -.045em !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center p {
+  max-width: 620px !important;
+  color: rgba(220,234,247,.65) !important;
+  font-size: 17px !important;
+  line-height: 1.42 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kv3-product-layer > div.relative.grid.min-h-screen.place-items-center .glass-strong > button:not(.text-xs) {
+  min-width: 320px !important;
+  min-height: 66px !important;
+  border-radius: 21px !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+}
+
 /* Selection with no currently rentable battery. */
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage > div.relative.z-10.glass.rounded-2xl {
   grid-column: 2 !important;
