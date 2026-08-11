@@ -1,0 +1,35 @@
+name: Kiosk UX physical QA
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/KioskPremiumGateV3.tsx"
+      - "src/pages/kiosk-production-*.css"
+      - "src/components/kiosk/PowerbankScene.tsx"
+      - ".github/workflows/kiosk-ux-physical-qa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
