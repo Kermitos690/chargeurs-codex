@@ -1,0 +1,269 @@
+/*
+ * Chargeurs.ch — PREMIUM JOURNEY UX V4
+ * Agent 4 / presentation-only layer.
+ * Goal: bring every post-home kiosk scene to the same premium visual standard
+ * without changing pricing, rental, payment, credit, stock or hardware logic.
+ */
+
+/* Shared cinematic transaction surface */
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-root {
+  --kv4-glow-blue: rgba(45, 165, 255, .38);
+  --kv4-glow-green: rgba(112, 255, 72, .34);
+  --kv4-panel: rgba(3, 9, 19, .74);
+  --kv4-panel-strong: rgba(3, 8, 17, .91);
+}
+
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-root > main {
+  position: relative;
+  z-index: 12;
+}
+
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-root > main::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 8vh 20vw 6vh 4vw;
+  border-radius: 42px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(72, 171, 255, .14), transparent 34%),
+    radial-gradient(circle at 88% 78%, rgba(106, 255, 72, .07), transparent 34%),
+    linear-gradient(145deg, rgba(5, 16, 31, .68), rgba(1, 5, 12, .44));
+  border: 1px solid rgba(111, 181, 255, .12);
+  box-shadow:
+    0 42px 110px rgba(0, 0, 0, .34),
+    inset 0 1px 0 rgba(255,255,255,.035);
+  backdrop-filter: blur(16px);
+}
+
+/* Premium progress rail: visible, calm, informative. */
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kv3-progress-rail {
+  top: 14px;
+  width: min(650px, 46vw);
+  height: 58px;
+}
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kv3-progress-step {
+  gap: 4px;
+  font-weight: 750;
+}
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kv3-progress-step > span {
+  width: 34px;
+  height: 34px;
+  background: rgba(2, 8, 17, .82);
+  backdrop-filter: blur(10px);
+}
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kv3-progress-step small {
+  opacity: .7;
+  letter-spacing: .06em;
+}
+
+/* Member QR / authentication */
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-grid {
+  inset: 14vh 11vw 7vh 8vw !important;
+  gap: 4.5vw !important;
+  align-items: center !important;
+}
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-copy {
+  position: relative;
+  padding: clamp(22px, 2vw, 34px);
+  border-radius: 30px;
+  border: 1px solid rgba(73, 168, 255, .16);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(51, 151, 255, .13), transparent 42%),
+    rgba(3, 10, 21, .62);
+  box-shadow: 0 30px 80px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.035);
+  backdrop-filter: blur(15px);
+}
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-copy h1 {
+  max-width: 700px;
+  line-height: .94 !important;
+  letter-spacing: -.045em !important;
+}
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-copy p {
+  max-width: 650px;
+  color: rgba(208, 224, 243, .74) !important;
+  line-height: 1.4;
+}
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-qr-card {
+  border-radius: 30px !important;
+  border: 1px solid rgba(70, 176, 255, .36) !important;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(40, 148, 255, .12), transparent 40%),
+    rgba(3, 10, 22, .86) !important;
+  box-shadow:
+    0 0 34px rgba(36, 145, 255, .16),
+    0 34px 90px rgba(0,0,0,.34),
+    inset 0 1px rgba(255,255,255,.05) !important;
+  backdrop-filter: blur(18px);
+}
+html.kiosk-v3[data-kiosk-scene="member"] .ck2-qr-wrap {
+  border-radius: 22px !important;
+  overflow: hidden;
+  box-shadow: 0 0 34px rgba(48, 170, 255, .20);
+}
+
+/* Connected / account recognised */
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-grid {
+  top: 13vh;
+  bottom: 5vh;
+  left: 15vw;
+  right: 21vw;
+  gap: 1.7vh;
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-check {
+  animation: kv4-confirm-pulse 2.2s ease-in-out infinite;
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-benefits {
+  border-color: rgba(78, 177, 255, .24);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(42, 143, 255, .11), transparent 48%),
+    rgba(3, 10, 21, .74);
+  backdrop-filter: blur(14px);
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-benefit-grid article {
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-benefit-grid article:hover {
+  transform: translateY(-2px);
+  border-color: rgba(89, 188, 255, .34);
+  background: rgba(7, 20, 39, .82);
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-cta {
+  min-height: 82px;
+  border-radius: 23px;
+  box-shadow:
+    0 0 20px rgba(34,143,255,.58),
+    0 0 60px rgba(19,100,255,.25),
+    inset 0 1px rgba(255,255,255,.24);
+  transition: transform .16s ease, filter .16s ease;
+}
+html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-cta:active {
+  transform: scale(.975);
+  filter: brightness(1.08);
+}
+
+/* Selection / pricing: make business choices feel like product cards. */
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card,
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-slot-card {
+  border-radius: 24px !important;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(52, 151, 255, .08), transparent 38%),
+    linear-gradient(155deg, rgba(7, 19, 34, .90), rgba(2, 8, 16, .96)) !important;
+  box-shadow: 0 22px 54px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.035);
+  transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card:active,
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-slot-card:active {
+  transform: scale(.982);
+}
+html[data-kiosk-journey="client"] .kiosk-slot-card.ring-4 {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(52, 163, 255, .17), transparent 42%),
+    linear-gradient(155deg, rgba(7, 23, 48, .96), rgba(2, 8, 18, .98)) !important;
+}
+html[data-kiosk-journey="express"] .kiosk-slot-card.ring-4 {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(126, 255, 77, .14), transparent 42%),
+    linear-gradient(155deg, rgba(9, 28, 16, .96), rgba(2, 10, 9, .98)) !important;
+}
+
+/* Payment: visually distinguish account credit from external payment without owning the decision. */
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-root button,
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-root button {
+  border-radius: 20px !important;
+  min-height: 62px;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-root button:active,
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-root button:active {
+  transform: scale(.98);
+  filter: brightness(1.06);
+}
+
+/* Release / preparation */
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+  width: min(970px, 60vw) !important;
+  padding: clamp(22px, 2.4vw, 38px) !important;
+  border: 1px solid rgba(65, 166, 255, .18);
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(31, 132, 255, .15), transparent 44%),
+    rgba(3, 9, 19, .64);
+  box-shadow: 0 34px 90px rgba(0,0,0,.27), 0 0 60px rgba(31, 121, 255, .08);
+  backdrop-filter: blur(15px);
+}
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage h2 {
+  letter-spacing: -.035em;
+}
+
+/* Active / success */
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-root > main > div {
+  border-radius: 34px !important;
+  border-color: rgba(76, 177, 255, .24) !important;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(52, 153, 255, .15), rgba(3,8,16,.62) 62%, rgba(2,7,14,.45)) !important;
+  box-shadow:
+    0 38px 100px rgba(0,0,0,.28),
+    0 0 70px rgba(31, 119, 255, .10) !important;
+  backdrop-filter: blur(14px);
+}
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-root .bg-gradient-success {
+  animation: kv4-success-breathe 1.9s ease-in-out infinite;
+}
+
+/* Error/recovery states: premium but unambiguous. */
+html.kiosk-v3[data-kiosk-scene="error"] .kiosk-root > main > div,
+html.kiosk-v3[data-kiosk-scene="failed"] .kiosk-root > main > div {
+  border-radius: 30px !important;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 82, 105, .10), transparent 40%),
+    rgba(16, 6, 11, .84) !important;
+  border: 1px solid rgba(255, 103, 124, .22) !important;
+  box-shadow: 0 30px 84px rgba(0,0,0,.34) !important;
+}
+
+/* Motion system */
+@keyframes kv4-confirm-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.035); filter: brightness(1.12); }
+}
+@keyframes kv4-success-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 22px rgba(77, 255, 143, .26); }
+  50% { transform: scale(1.04); box-shadow: 0 0 42px rgba(77, 255, 143, .42); }
+}
+
+/* Physical 1366x768 hardening */
+@media (max-width: 1400px), (max-height: 820px) {
+  html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-root > main::before {
+    inset: 9vh 20vw 5vh 3.2vw;
+    border-radius: 32px;
+  }
+  html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-grid {
+    inset: 12.5vh 9vw 5vh 6vw !important;
+    gap: 3.5vw !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="member"] .ck2-member-copy {
+    padding: 19px;
+    border-radius: 24px;
+  }
+  html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-grid {
+    top: 11.5vh;
+    left: 13vw;
+    right: 20vw;
+    bottom: 4vh;
+  }
+  html.kiosk-v3[data-kiosk-scene="connected"] .ck2-connected-cta {
+    min-height: 68px;
+  }
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+    padding: 18px 24px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3 * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
