@@ -1,0 +1,45 @@
+html.kiosk-v3 .kv3-touch-feedback-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+html.kiosk-v3 .kv3-touch-feedback {
+  position: absolute;
+  width: 74px;
+  height: 74px;
+  margin-left: -37px;
+  margin-top: -37px;
+  border-radius: 50%;
+  border: 2px solid rgba(115,216,255,.78);
+  background: radial-gradient(circle,rgba(115,216,255,.18),transparent 62%);
+  box-shadow: 0 0 30px rgba(75,185,255,.22), inset 0 0 20px rgba(255,255,255,.08);
+}
+
+html.kiosk-v3 .kv3-touch-feedback::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: inherit;
+  background: rgba(255,255,255,.72);
+  filter: blur(6px);
+  opacity: .48;
+}
+
+html.kiosk-v3 .kv3-touch-feedback.is-express {
+  border-color: rgba(132,255,88,.88);
+  background: radial-gradient(circle,rgba(125,255,79,.22),transparent 62%);
+  box-shadow: 0 0 34px rgba(91,235,78,.28), inset 0 0 20px rgba(255,255,255,.08);
+}
+
+html.kiosk-v3 .kv3-touch-feedback.is-client {
+  border-color: rgba(78,187,255,.90);
+  background: radial-gradient(circle,rgba(47,157,255,.22),transparent 62%);
+  box-shadow: 0 0 34px rgba(47,145,255,.28), inset 0 0 20px rgba(255,255,255,.08);
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html.kiosk-v3 .kv3-touch-feedback-layer { display: none !important; }
+}
