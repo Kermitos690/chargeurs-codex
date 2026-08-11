@@ -1,6 +1,6 @@
 -- AGENT 7 - Inventory & Supply Chain
 -- Post-migration assertions for the supplier catalog foundation.
--- Run only on a disposable/test database after applying the Agent 7 migrations.
+-- Run only on a disposable/test database or approved staging environment.
 
 begin;
 
@@ -92,7 +92,6 @@ begin
     raise exception 'INVENTORY_TEST: duplicate internal variant code';
   end if;
 
-  -- The quotation intentionally reuses supplier model numbers for distinct configurations.
   select count(*) into v_count
   from public.inventory_supplier_products
   where supplier_id = v_supplier_id and supplier_sku = 'ZBJ-166';
@@ -114,7 +113,6 @@ begin
     raise exception 'INVENTORY_TEST: ZBJ-166-3 touch/non-touch variants were incorrectly merged';
   end if;
 
-  -- ZBJ-SP-M declares 10A support but the quotation does not price that configuration.
   if exists (
     select 1
     from public.inventory_supplier_offers o
@@ -126,7 +124,6 @@ begin
     raise exception 'INVENTORY_TEST: invented ZBJ-SP-M 10A price detected';
   end if;
 
-  -- ZBJ-166-2 is printed in the waterproof section, but its own row does not declare IP54.
   if exists (
     select 1
     from public.inventory_supplier_products sp
