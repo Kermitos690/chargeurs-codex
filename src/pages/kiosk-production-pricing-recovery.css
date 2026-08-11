@@ -1,0 +1,101 @@
+html.kiosk-v3 .kv3-pricing-recovery {
+  position: fixed;
+  right: 6vw;
+  top: 44%;
+  z-index: 96;
+  width: 276px;
+  transform: translateY(-50%);
+  padding: 18px;
+  border: 1px solid rgba(255,197,109,.24);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 0,rgba(255,197,109,.09),transparent 46%),
+    rgba(3,10,20,.94);
+  box-shadow: 0 24px 62px rgba(0,0,0,.34), inset 0 1px rgba(255,255,255,.035);
+  backdrop-filter: blur(20px);
+}
+
+html.kiosk-v3 .kv3-pricing-recovery-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255,211,139,.72);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .13em;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery-kicker svg {
+  width: 15px;
+  height: 15px;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > strong {
+  display: block;
+  margin-top: 10px;
+  color: #fff7e8;
+  font-size: 22px;
+  line-height: 1.03;
+  letter-spacing: -.025em;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > p {
+  margin-top: 10px;
+  color: rgba(225,234,244,.62);
+  font-size: 12px;
+  line-height: 1.38;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > button {
+  width: 100%;
+  min-height: 58px;
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid rgba(255,213,150,.26);
+  border-radius: 17px;
+  background: linear-gradient(135deg,rgba(255,202,113,.18),rgba(255,168,71,.09));
+  color: #ffe5bb;
+  font-size: 15px;
+  font-weight: 900;
+  box-shadow: 0 12px 28px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.04);
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > button:active {
+  transform: scale(.975);
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > button:disabled {
+  opacity: .62;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > button svg {
+  width: 19px;
+  height: 19px;
+}
+
+html.kiosk-v3 .kv3-pricing-recovery > button svg.is-spinning {
+  animation: kv3-pricing-retry-spin .8s linear infinite;
+}
+
+@keyframes kv3-pricing-retry-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width:1400px), (max-height:820px) {
+  html.kiosk-v3 .kv3-pricing-recovery {
+    right: 5.4vw;
+    width: 250px;
+    padding: 15px;
+  }
+
+  html.kiosk-v3 .kv3-pricing-recovery > strong {
+    font-size: 19px;
+  }
+
+  html.kiosk-v3 .kv3-pricing-recovery > p {
+    font-size: 11px;
+  }
+}
