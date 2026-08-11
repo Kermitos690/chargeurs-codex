@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { HelpCircle, RefreshCw } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -11,13 +11,16 @@ import { useI18n } from "@/i18n/i18n";
  * Primary journey decisions remain exclusively in KioskPremiumGateV2
  * (Express / Client). Passes and member benefits belong to the Client journey,
  * so this chrome deliberately does not add a third competing home action.
+ *
+ * Visibility is resolved in a layout effect so the underlying V2 chrome never
+ * gets a painted frame before this V3 chrome is ready on physical WebViews.
  */
 export function KioskV3HomeChrome() {
   const { lang } = useI18n();
   const [visible, setVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const detect = () => setVisible(Boolean(document.querySelector(".ck2-home")));
     detect();
     const observer = new MutationObserver(detect);
