@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
+    "agent:frontend": "node scripts/frontend-quality-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run src/test/roles.test.ts src/test/rentalState.test.ts",
@@ -85,7 +86,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@tailwindcss/typography": "^0.5.16",
+    "@tailwindcss/typography": "^1.0.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.16.5",
