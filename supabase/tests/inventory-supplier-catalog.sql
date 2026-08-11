@@ -24,6 +24,29 @@ begin
     raise exception 'INVENTORY_TEST: expected 7 supplier contact targets, got %', v_count;
   end if;
 
+  select count(*) into v_count
+  from public.inventory_supplier_products
+  where supplier_id = v_supplier_id;
+  if v_count <> 55 then
+    raise exception 'INVENTORY_TEST: expected 55 normalized catalog entries, got %', v_count;
+  end if;
+
+  select count(*) into v_count
+  from public.inventory_supplier_offers o
+  join public.inventory_supplier_products sp on sp.id = o.supplier_product_id
+  where sp.supplier_id = v_supplier_id;
+  if v_count <> 116 then
+    raise exception 'INVENTORY_TEST: expected 116 explicit supplier offers/configurations, got %', v_count;
+  end if;
+
+  select count(*) into v_count
+  from public.inventory_supplier_products
+  where supplier_id = v_supplier_id
+    and procurement_mode = 'local_purchase';
+  if v_count <> 5 then
+    raise exception 'INVENTORY_TEST: expected 5 page-6 local-purchase POS options, got %', v_count;
+  end if;
+
   if exists (
     select 1 from public.inventory_supplier_products
     where supplier_id = v_supplier_id
@@ -67,6 +90,51 @@ begin
     having count(*) > 1
   ) then
     raise exception 'INVENTORY_TEST: duplicate internal variant code';
+  end if;
+
+  -- The quotation intentionally reuses supplier model numbers for distinct configurations.
+  select count(*) into v_count
+  from public.inventory_supplier_products
+  where supplier_id = v_supplier_id and supplier_sku = 'ZBJ-166';
+  if v_count <> 2 then
+    raise exception 'INVENTORY_TEST: ZBJ-166 touch/non-touch variants were incorrectly merged';
+  end if;
+
+  select count(*) into v_count
+  from public.inventory_supplier_products
+  where supplier_id = v_supplier_id and supplier_sku = 'BJD001';
+  if v_count <> 2 then
+    raise exception 'INVENTORY_TEST: BJD001 touch/non-touch variants were incorrectly merged';
+  end if;
+
+  select count(*) into v_count
+  from public.inventory_supplier_products
+  where supplier_id = v_supplier_id and supplier_sku = 'ZBJ-166-3';
+  if v_count <> 2 then
+    raise exception 'INVENTORY_TEST: ZBJ-166-3 touch/non-touch variants were incorrectly merged';
+  end if;
+
+  -- ZBJ-SP-M declares 10A support but the quotation does not price that configuration.
+  if exists (
+    select 1
+    from public.inventory_supplier_offers o
+    join public.inventory_supplier_products sp on sp.id = o.supplier_product_id
+    where sp.supplier_id = v_supplier_id
+      and sp.supplier_sku = 'ZBJ-SP-M'
+      and o.configuration_label = 'DC12V/10A'
+  ) then
+    raise exception 'INVENTORY_TEST: invented ZBJ-SP-M 10A price detected';
+  end if;
+
+  -- ZBJ-166-2 is printed in the waterproof section, but its own row does not declare IP54.
+  if exists (
+    select 1
+    from public.inventory_supplier_products sp
+    where sp.supplier_id = v_supplier_id
+      and sp.supplier_sku = 'ZBJ-166-2'
+      and coalesce(sp.supplier_specifications->>'certification', '') ilike '%IP54%'
+  ) then
+    raise exception 'INVENTORY_TEST: ZBJ-166-2 was incorrectly promoted to IP54';
   end if;
 end;
 $$;
