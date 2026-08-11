@@ -18,6 +18,7 @@ import "./kiosk-production-recovery.css";
 import "./kiosk-production-physical-director-v2.css";
 import "./kiosk-production-screen-director-v3.css";
 import "./kiosk-production-hardware-2p5d.css";
+import "./kiosk-production-i18n-guard.css";
 
 /**
  * Production kiosk entry.
