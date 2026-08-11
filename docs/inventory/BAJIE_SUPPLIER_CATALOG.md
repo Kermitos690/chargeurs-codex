@@ -39,8 +39,8 @@ The normalized ingestion covers **55 catalog entries**:
 - 3 shared powerbanks;
 - 8 desktop charging stations with ADS;
 - 9 desktop charging stations without a quoted ADS screen;
-- 9 floor-standing charging stations with ADS;
-- 3 rows from the waterproof-station section;
+- 9 floor-standing charging stations with ADS in the supplier's floor-standing section;
+- 3 rows printed in the supplier's waterproof-station section;
 - 4 modular charging-station accessories;
 - 3 stands;
 - 10 POS/payment hardware options shown on page 6;
@@ -55,7 +55,7 @@ The source quotation contains **116 explicit priced offers/configurations** afte
 3. Supplier-declared specifications remain JSON supplier specifications until independently verified.
 4. `Stripe BBPOS WisePad 3`, `Stripe M2`, `Dejavoo QD1`, `SumUp Plus` and `myPOS Go 2` are shown as **Local purchase** options. They are catalog options, not asserted Bajie-manufactured products.
 5. `ZBJ-SP-M` declares `DC12V/10A` support but the quotation shows no corresponding price. Price remains `UNKNOWN` and requires supplier confirmation.
-6. The row `ZBJ-166-2` appears inside the waterproof section, but the row itself does not explicitly show `Outdoor waterproof` or `IP54`. Agent 7 therefore does not silently promote it to verified IP54 compatibility.
+6. The row `ZBJ-166-2` appears inside the waterproof section, but the row itself does not explicitly show `Outdoor waterproof` or `IP54`. Its original `catalog_section` is preserved, while the normalized Chargeurs.ch generic family is conservatively `FLOOR_STANDING_SHARED_CHARGING_STATION_ADS` until Bajie explicitly confirms waterproof capability.
 7. Payment-method text in the supplier quotation is stored only as supplier-declared hardware/catalog metadata. It does not change Chargeurs.ch payment architecture.
 8. ADS/display fields are catalog hardware specifications only. Advertising runtime ownership remains with AGENT 5.
 
