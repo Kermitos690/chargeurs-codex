@@ -1,0 +1,20 @@
+/* Context-aware FAQ ordering. Content remains owned by KioskHelpCenter/i18n. */
+
+html.kiosk-v3[data-kiosk-help-context] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button {
+  order: 0;
+}
+
+html.kiosk-v3[data-kiosk-help-context="rent"] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button:nth-child(1),
+html.kiosk-v3[data-kiosk-help-context="payment"] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button:nth-child(2),
+html.kiosk-v3[data-kiosk-help-context="release"] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button:nth-child(3),
+html.kiosk-v3[data-kiosk-help-context="return"] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button:nth-child(4),
+html.kiosk-v3[data-kiosk-help-context="price"] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button:nth-child(6) {
+  order: -1;
+  border-color: rgba(92,211,255,.42) !important;
+  background: linear-gradient(135deg,rgba(46,175,255,.10),rgba(57,112,255,.06)) !important;
+  box-shadow: 0 0 32px rgba(42,173,255,.10), inset 0 1px rgba(255,255,255,.04) !important;
+}
+
+html[data-kiosk-journey="express"].kiosk-v3[data-kiosk-help-context] div[role="dialog"][aria-modal="true"] > div > div.grid > div:first-child > div.grid > button[style] {
+  border-color: rgba(121,255,69,.34) !important;
+}
