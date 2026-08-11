@@ -16,7 +16,10 @@ function currentJourney(): Pulse["journey"] {
 
 /**
  * Decorative pointer feedback only.
- * It observes taps on enabled buttons and paints a short-lived visual pulse.
+ * It observes taps on enabled buttons while the V3 kiosk route is mounted and
+ * paints a short-lived visual pulse. This includes global kiosk overlays such
+ * as Help and Operational Guard, which live outside `.kv3-runtime` in App.tsx.
+ *
  * The layer never intercepts pointer events and never invokes product actions.
  */
 export function KioskV3TouchFeedback() {
@@ -29,7 +32,6 @@ export function KioskV3TouchFeedback() {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target.closest("button") : null;
       if (!(target instanceof HTMLButtonElement) || target.disabled) return;
-      if (!target.closest(".kv3-runtime")) return;
       counter += 1;
       setPulse({ id: counter, x: event.clientX, y: event.clientY, journey: currentJourney() });
     };
