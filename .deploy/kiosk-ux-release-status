@@ -1,3 +1,11 @@
 status=failure
-source_commit=021b555b39459c151c1ab2f60eafac6e6df8bad7
-completed_at=2026-08-11T02:53:13Z
+failure_stage=credentials
+credentials=failure
+install=skipped
+app_build=skipped
+link=skipped
+vercel_pull=skipped
+vercel_build=skipped
+deploy=skipped
+source_commit=cabc02128bb13dcc4e30210c8ce22051892f82d9
+completed_at=2026-08-11T02:56:22Z
