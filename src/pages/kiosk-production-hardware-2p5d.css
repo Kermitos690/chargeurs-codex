@@ -1,0 +1,135 @@
+/*
+ * Chargeurs.ch — Hardware 2.5D presentation
+ * Visual-only cabinet depth and verified-state extraction treatment.
+ * Waiting/release never claims physical extraction. Extraction styling is
+ * enabled only when JourneyChrome reports canonical `active`.
+ */
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child {
+  perspective: 1200px !important;
+  transform-style: preserve-3d !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child > div,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child > div {
+  position: relative !important;
+  transform: rotateX(1.2deg) rotateY(-2.4deg) translateZ(0) !important;
+  transform-style: preserve-3d !important;
+  border-color: rgba(120,218,255,.26) !important;
+  background:
+    linear-gradient(105deg,rgba(255,255,255,.05),transparent 15%,transparent 82%,rgba(111,204,255,.04)),
+    linear-gradient(145deg,rgba(2,8,21,.99),rgba(5,28,64,.98) 54%,rgba(15,8,48,.99)) !important;
+  box-shadow:
+    22px 26px 0 -18px rgba(2,6,16,.88),
+    28px 38px 70px rgba(0,0,0,.48),
+    0 0 82px rgba(44,184,255,.16),
+    inset 0 1px rgba(255,255,255,.055) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child > div::before,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child > div::before {
+  content: "";
+  position: absolute;
+  top: 7%;
+  right: -14px;
+  bottom: 8%;
+  width: 15px;
+  border-radius: 0 10px 10px 0;
+  pointer-events: none;
+  background: linear-gradient(180deg,rgba(102,210,255,.18),rgba(6,18,38,.88) 30%,rgba(3,8,17,.95));
+  box-shadow: inset 1px 0 rgba(255,255,255,.08), 8px 0 20px rgba(0,0,0,.22);
+  transform: translateZ(-16px) skewY(-4deg);
+}
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child > div::after,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child > div::after {
+  content: "CHARGEURS.CH  •  4-SLOT POWER STATION";
+  position: absolute;
+  left: 6%;
+  top: 3.4%;
+  z-index: 8;
+  pointer-events: none;
+  color: rgba(210,240,255,.34);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-cabinet-powerbank,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank {
+  transform-origin: 50% 12% !important;
+  transform-style: preserve-3d !important;
+  transition:
+    transform 640ms cubic-bezier(.16,.82,.22,1),
+    box-shadow 420ms ease,
+    filter 420ms ease !important;
+}
+
+/* Canonical wait: battery remains seated. Light can guide, geometry cannot lie. */
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-cabinet-powerbank {
+  transform: perspective(900px) translateZ(-8px) translateY(0) scale(.98) !important;
+}
+
+/* Canonical active/ready: now the physical extraction cue may be shown. */
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank {
+  transform: perspective(900px) translateZ(42px) translateY(12%) scale(1.045) !important;
+  filter: brightness(1.12) saturate(1.08) !important;
+  box-shadow:
+    0 24px 28px rgba(0,0,0,.42),
+    0 0 34px rgba(89,230,255,.24),
+    inset 0 1px rgba(255,255,255,.10) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank::after {
+  content: "";
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: -14%;
+  height: 18%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center,rgba(106,236,255,.35),transparent 68%);
+  filter: blur(8px);
+}
+
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child::after {
+  content: "RETIREZ LA BATTERIE DU SLOT INDIQUÉ";
+  position: absolute;
+  left: 50%;
+  bottom: 2.5%;
+  z-index: 15;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 82%;
+  padding: 9px 14px;
+  border: 1px solid rgba(118,255,159,.20);
+  border-radius: 999px;
+  background: rgba(2,10,15,.76);
+  color: rgba(216,255,229,.82);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-align: center;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.28);
+}
+
+@media (max-width:1400px), (max-height:820px) {
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > div:first-child > div,
+  html.kiosk-v3[data-kiosk-scene="active"] .kiosk-ready-stage > div:first-child > div {
+    transform: rotateX(.6deg) rotateY(-1.6deg) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="active"] .kiosk-cabinet-powerbank {
+    transform: perspective(900px) translateZ(34px) translateY(10%) scale(1.035) !important;
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html.kiosk-v3 .kiosk-cabinet-powerbank {
+    transition: none !important;
+  }
+}
