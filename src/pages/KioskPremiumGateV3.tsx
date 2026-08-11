@@ -12,13 +12,16 @@ import "./kiosk-production-return.css";
 import "./kiosk-production-help.css";
 import "./kiosk-production-hotfix.css";
 import "./kiosk-production-physical-qa.css";
-import "./kiosk-production-physical-qa-pass2.css";
-import "./kiosk-production-home-decision-v3.css";
+import "./kiosk-production-recovery.css";
 
 /**
  * Production kiosk entry.
  * Business orchestration remains in the proven V2 gate/Kiosk state machine;
- * the route owns the physical 16:9 presentation system from the validated PDF.
+ * the route owns the physical 16:9 presentation system.
+ *
+ * The P1 recovery layer is intentionally loaded last and replaces the previous
+ * additive pass2/home overrides. It remains presentation-only: no payment,
+ * rental, return, inventory or hardware state is inferred here.
  */
 export default function KioskPremiumGateV3() {
   useEffect(() => {
@@ -27,6 +30,8 @@ export default function KioskPremiumGateV3() {
     return () => {
       delete document.documentElement.dataset.kioskVersion;
       delete document.documentElement.dataset.kioskScene;
+      delete document.documentElement.dataset.kioskLastScene;
+      delete document.documentElement.dataset.kioskReturnStage;
       delete document.documentElement.dataset.kioskAdsSplit;
       document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
       document.documentElement.classList.remove("kiosk-v3");
