@@ -1,9 +1,6 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
-import {
-  appleWalletConfigStatus,
-  notifyRegisteredDevices,
-  prepareWalletSnapshot,
-} from "../_shared/appleWallet.ts";
+import { appleWalletConfigStatus, prepareWalletSnapshot } from "../_shared/appleWallet.ts";
+import { notifyRegisteredDevices } from "../_shared/appleWalletPush.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
