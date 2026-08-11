@@ -35,7 +35,7 @@ export function KioskOffersLauncher() {
   const stationId = stationFromPath(location.pathname);
   const [open, setOpen] = useState(false);
   const [mainJourneyMounted, setMainJourneyMounted] = useState(false);
-  const [premiumHomeOwnsButton, setPremiumHomeOwnsButton] = useState(false);
+  const [premiumJourneyMounted, setPremiumJourneyMounted] = useState(false);
   const [offer, setOffer] = useState<OfferData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -43,7 +43,7 @@ export function KioskOffersLauncher() {
     if (!stationId) return;
     const detect = () => {
       setMainJourneyMounted(Boolean(document.querySelector(".kiosk-root > header")));
-      setPremiumHomeOwnsButton(Boolean(document.querySelector(".ck2-home")));
+      setPremiumJourneyMounted(Boolean(document.querySelector(".ck2-loading, .ck2-home, .ck2-member, .ck2-connected")));
     };
     detect();
     const observer = new MutationObserver(detect);
@@ -110,7 +110,7 @@ export function KioskOffersLauncher() {
 
   return (
     <>
-      {!open && !premiumHomeOwnsButton && (
+      {!open && !premiumJourneyMounted && (
         <button type="button" onClick={() => setOpen(true)} className="kiosk-offers-launcher-button fixed right-[27.5rem] top-4 z-[121] inline-flex h-12 items-center gap-2 rounded-full border border-violet-300/45 bg-violet-600/80 px-5 text-lg font-black text-white shadow-[0_0_30px_rgba(139,92,246,.28)] backdrop-blur-xl transition active:scale-95">
           <BadgePercent className="h-6 w-6 text-violet-100" /> {label}
         </button>
