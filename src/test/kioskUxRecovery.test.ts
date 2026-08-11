@@ -33,6 +33,11 @@ describe("P1 kiosk scene detection", () => {
     expect(detectKioskScene()).toBe(scene);
   });
 
+  it("detects station lock mismatch as support even without kiosk-root", () => {
+    body('<div class="kv3-product-layer"><div><svg class="lucide lucide-lock"></svg></div></div>');
+    expect(detectKioskScene()).toBe("support");
+  });
+
   it("does not mistake the hidden timeout ownership marker for release", () => {
     body('<div class="kiosk-release-stage" data-kiosk-timeout-owner="inner" hidden></div>');
     expect(detectKioskScene()).toBe("other");
