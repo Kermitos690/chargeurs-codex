@@ -2,7 +2,7 @@ import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3CinematicDirector } from "@/components/kiosk/KioskV3CinematicDirector";
-import { KioskV3HomeChrome } from "@/components/kiosk/KioskV3HomeChrome";
+import { KioskV3OwnedHome } from "@/components/kiosk/KioskV3OwnedHome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
 import { KioskV3PricingRecovery } from "@/components/kiosk/KioskV3PricingRecovery";
 import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
@@ -26,20 +26,17 @@ import "./kiosk-production-touch-feedback.css";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-production-contextual-help.css";
 import "./kiosk-production-webview-landscape-failsafe.css";
+import "./kiosk-v3-owned-home.css";
 
 /**
  * Production kiosk entry.
- * Business orchestration remains in the proven V2 gate/Kiosk state machine;
- * the route owns the physical 16:9 presentation system.
+ * Business orchestration remains in the proven V2 gate/Kiosk state machine,
+ * but the home screen now has exactly one visible owner: KioskV3OwnedHome.
+ * The V2 hero remains mounted temporarily only as a state/callback adapter and
+ * is explicitly hidden by the V3 home stylesheet.
  *
  * Cinematic, recovery and hardware presentation layers are presentation-only.
  * They never infer or own payment, rental, return, inventory or hardware state.
- *
- * `kiosk-v3` must exist before the browser paints the first frame. Using a
- * passive effect here caused the legacy V2 presentation to flash briefly on
- * physical Android WebViews before the V3 selectors became active.
- *
- * Production release marker: P1 recovery / 2026-08-11.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
@@ -64,8 +61,8 @@ export default function KioskPremiumGateV3() {
       <div className="kv3-product-layer">
         <KioskPremiumGateV2 />
       </div>
+      <KioskV3OwnedHome />
       <KioskV3TimeoutOwnershipGuard />
-      <KioskV3HomeChrome />
       <KioskV3JourneyChrome />
       <KioskV3PricingRecovery />
       <KioskV3TouchFeedback />
