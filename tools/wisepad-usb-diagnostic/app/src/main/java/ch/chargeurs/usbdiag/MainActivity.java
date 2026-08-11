@@ -1,5 +1,6 @@
 package ch.chargeurs.usbdiag;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -26,6 +27,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+@SuppressLint("SetTextI18n")
 public final class MainActivity extends Activity {
     private final Set<String> baselineDeviceKeys = new HashSet<>();
     private TextView output;
