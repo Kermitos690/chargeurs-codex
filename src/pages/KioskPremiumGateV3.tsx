@@ -13,6 +13,7 @@ import "./kiosk-production-help.css";
 import "./kiosk-production-hotfix.css";
 import "./kiosk-production-physical-qa.css";
 import "./kiosk-production-physical-qa-pass2.css";
+import "./kiosk-production-home-decision-v3.css";
 
 /**
  * Production kiosk entry.
