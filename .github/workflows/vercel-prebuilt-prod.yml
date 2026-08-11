@@ -2,6 +2,11 @@ name: Vercel Prebuilt Production
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .deploy/vercel-prebuilt-trigger
 
 permissions:
   contents: read
