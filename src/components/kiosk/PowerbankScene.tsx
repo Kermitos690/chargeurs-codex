@@ -100,14 +100,8 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
         </>
       )}
 
-      <motion.div
-        className={`relative grid h-[72%] w-[58%] place-items-center rounded-[1.35rem] border ${active ? "border-cyan-50 bg-[linear-gradient(180deg,rgba(207,250,254,.42),rgba(14,116,200,.3)_40%,rgba(3,18,56,.9))]" : "border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,.075),rgba(37,99,235,.04))]"}`}
-        animate={active ? {
-          y: [0, -8, -18, -12, -18],
-          scale: [1, 1.035, 1.11, 1.08, 1.11],
-          rotateX: [0, -3, -7, -4, -7],
-        } : undefined}
-        transition={{ duration: 1.45, repeat: Infinity, ease: "easeInOut" }}
+      <div
+        className={`kiosk-cabinet-powerbank relative grid h-[72%] w-[58%] place-items-center rounded-[1.35rem] border ${active ? "border-cyan-50 bg-[linear-gradient(180deg,rgba(207,250,254,.42),rgba(14,116,200,.3)_40%,rgba(3,18,56,.9))]" : "border-white/14 bg-[linear-gradient(180deg,rgba(255,255,255,.075),rgba(37,99,235,.04))]"}`}
         style={{ transformPerspective: 1000 }}
       >
         <div className={`absolute inset-x-[14%] top-[10%] h-[6px] rounded-full ${active ? "bg-cyan-50 shadow-[0_0_18px_rgba(165,243,252,1)]" : "bg-white/20"}`} />
@@ -129,7 +123,7 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
             transition={{ duration: .58, repeat: Infinity }}
           />
         )}
-      </motion.div>
+      </div>
 
       <span className={`absolute bottom-4 right-5 grid h-12 w-12 place-items-center rounded-full text-xl font-black ${active ? "bg-white text-blue-950 shadow-[0_0_32px_rgba(255,255,255,.68)]" : "border border-white/12 bg-slate-950/55 text-white/55"}`}>{slot}</span>
     </motion.div>
