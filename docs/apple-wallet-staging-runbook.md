@@ -20,6 +20,8 @@ Verified against the staging project `xqepbqnaenoeyfjkjnzl`:
 - the Wallet Edge Functions are deployed and active;
 - the public configuration probe responds successfully but reports Apple signing as not configured.
 
+The latest PR head also contains an update-tag hardening that separates real Wallet content changes from technical timestamps. Before the first certificate-backed iPhone test, deploy the three Wallet Edge Functions from the current PR head so staging and GitHub are byte-for-byte aligned on that behavior.
+
 ## Secrets still required
 
 The staging diagnostic currently reports these exact missing Edge Function secrets:
@@ -116,7 +118,9 @@ Store the output as `APPLE_WALLET_AUTH_SECRET`.
 
 Use Supabase Dashboard → Edge Functions → Secrets and add the six values above. Do not store them in the repository or frontend environment.
 
-No code redeploy is required only to make newly stored Edge Function secrets available; after saving them, use the Wallet sandbox configuration probe to verify that `configured` becomes true.
+Newly stored Edge Function secrets themselves become available without a code redeploy. However, for this rollout, deploy the three Wallet Edge Functions from the current PR head before the real iPhone test so the latest update-tag race-condition fix is also active on staging.
+
+After both steps, use the Wallet sandbox configuration probe to verify that `configured` becomes true.
 
 ## Real iPhone validation
 
