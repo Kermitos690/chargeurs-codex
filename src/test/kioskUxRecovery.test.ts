@@ -4,6 +4,7 @@ import {
   buildKioskProgressConfig,
   detectKioskReturnStage,
   detectKioskScene,
+  shouldShowKioskProgress,
   type KioskScene,
 } from "@/components/kiosk/KioskV3JourneyChrome";
 
@@ -119,8 +120,21 @@ describe("journey progress contract", () => {
     (transient) => {
       expect(buildKioskProgressConfig(transient, "express", "fr", "payment").active).toBe(2);
       expect(buildKioskProgressConfig(transient, "client", "fr", "payment").active).toBe(3);
+      expect(shouldShowKioskProgress(transient, "payment")).toBe(true);
     },
   );
+
+  it.each(["expired", "error", "support", "other"] satisfies KioskScene[])(
+    "suppresses orphan transient %s before a journey exists",
+    (transient) => {
+      expect(shouldShowKioskProgress(transient, null)).toBe(false);
+    },
+  );
+
+  it("never shows progress on home or loading", () => {
+    expect(shouldShowKioskProgress("home", null)).toBe(false);
+    expect(shouldShowKioskProgress("loading", null)).toBe(false);
+  });
 
   it("keeps Express and Client color/journey identity independent", () => {
     const express = buildKioskProgressConfig("release", "express", "fr");
