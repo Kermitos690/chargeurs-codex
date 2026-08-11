@@ -63,6 +63,25 @@ if "chargeurs:kiosk-return-home" not in gate_src:
     if gate_src.count(listener_anchor) != 1:
         raise SystemExit(f"{gate}: return-home listener anchor mismatch")
     gate_src = gate_src.replace(listener_anchor, listener_insert, 1)
+
+# Make the three entry choices self-explanatory at standing distance.
+copy_replacements = [
+    ('expressKicker: "LOCATION", expressTitle: "EXPRESS", expressBody: "Sans compte. Choisissez une batterie, payez sur votre téléphone et partez.",',
+     'expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Choisissez une batterie, payez sur votre téléphone et partez immédiatement.",'),
+    ('clientKicker: "CLIENT", clientTitle: "CHARGEURS", clientBody: "Scannez le QR. L’adhésion active est vérifiée côté serveur avant d’appliquer le tarif membre.",',
+     'clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Connectez votre compte par QR et profitez automatiquement de votre tarif membre.",'),
+    ('expressKicker: "RENTAL", expressTitle: "EXPRESS", expressBody: "No account. Choose a powerbank, pay on your phone and go.",',
+     'expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "Choose a powerbank, pay on your phone and leave immediately.",'),
+    ('clientKicker: "CHARGEURS", clientTitle: "MEMBER", clientBody: "Scan the QR. An active membership is verified server-side before member pricing is applied.",',
+     'clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Connect your account by QR and your member rate is applied automatically.",'),
+    ('expressKicker: "MIETE", expressTitle: "EXPRESS", expressBody: "Ohne Konto. Powerbank wählen, am Smartphone bezahlen und los.",',
+     'expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Powerbank wählen, am Smartphone bezahlen und sofort los.",'),
+    ('clientKicker: "CHARGEURS", clientTitle: "KUNDE", clientBody: "QR scannen. Eine aktive Mitgliedschaft wird serverseitig geprüft, bevor der Kundentarif gilt.",',
+     'clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Konto per QR verbinden und den Kundentarif automatisch nutzen.",'),
+]
+for old, new in copy_replacements:
+    if old in gate_src:
+        gate_src = gate_src.replace(old, new, 1)
 gate.write_text(gate_src)
 
 
@@ -90,4 +109,13 @@ if old_button in kiosk_src:
     kiosk_src = kiosk_src.replace(old_button, new_button, 1)
 elif "void cancelCheckout()" not in kiosk_src:
     raise SystemExit(f"{kiosk}: QR cancel button anchor mismatch")
+
+# Do not label every transient pricing problem as a missing tariff. Only the
+# explicit backend code gets that message; other faults show pricing unavailable.
+old_pricing_error = '              ) : <p className="text-warning">{quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID" ? t("kiosk.pricing.auth_error") : quoteError ? t("kiosk.pricing.error") : t("kiosk.pricing.loading")}</p>}\n'
+new_pricing_error = '              ) : <p className="text-warning">{quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID" ? t("kiosk.pricing.auth_error") : quoteError === "PRICING_NOT_CONFIGURED" ? t("kiosk.pricing.error") : quoteError ? t("kiosk.error.pricing.title") : t("kiosk.pricing.loading")}</p>}\n'
+if old_pricing_error in kiosk_src:
+    kiosk_src = kiosk_src.replace(old_pricing_error, new_pricing_error, 1)
+elif 'quoteError === "PRICING_NOT_CONFIGURED"' not in kiosk_src:
+    raise SystemExit(f"{kiosk}: pricing error anchor mismatch")
 kiosk.write_text(kiosk_src)
