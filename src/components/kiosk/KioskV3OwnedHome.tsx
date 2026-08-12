@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { HelpCircle, RefreshCw, UserRound, Zap } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -96,15 +96,23 @@ function readHomeSnapshot(): HomeSnapshot {
   };
 }
 
+function readCanvasScale() {
+  if (typeof window === "undefined") return 1;
+  return Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+}
+
 export function KioskV3OwnedHome() {
   const { lang } = useI18n();
   const copy = COPY[lang];
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(() => readHomeSnapshot());
   const [refreshing, setRefreshing] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(() => readCanvasScale());
 
   useLayoutEffect(() => {
     const detect = () => setSnapshot(readHomeSnapshot());
+    const resize = () => setCanvasScale(readCanvasScale());
     detect();
+    resize();
     const observer = new MutationObserver(detect);
     observer.observe(document.body, {
       childList: true,
@@ -113,7 +121,11 @@ export function KioskV3OwnedHome() {
       attributeFilter: ["disabled", "class"],
       characterData: true,
     });
-    return () => observer.disconnect();
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   if (!snapshot.visible) return null;
@@ -131,8 +143,12 @@ export function KioskV3OwnedHome() {
     window.setTimeout(() => setRefreshing(false), 900);
   };
 
+  const canvasStyle = {
+    "--kv5-scale": String(canvasScale),
+  } as CSSProperties;
+
   return (
-    <section className="kv3-owned-home kv5-reference-home" aria-label="Chargeurs.ch">
+    <section className="kv3-owned-home kv5-reference-home" style={canvasStyle} aria-label="Chargeurs.ch">
       <div className="kv5-home-ambient kv5-home-ambient--green" aria-hidden="true" />
       <div className="kv5-home-ambient kv5-home-ambient--blue" aria-hidden="true" />
 
