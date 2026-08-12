@@ -34,11 +34,10 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Field recovery RC. Changing the native version deliberately triggers
-        // MainActivity.shouldResetWebRuntime() once after installation, clearing
-        // obsolete WebView storage/cache before the current kiosk shell loads.
-        versionCode = 117
-        versionName = "1.0.17-rc1"
+        // WisePad 3 Stripe Terminal USB TEST build. Version bump also forces
+        // the native WebView runtime reset once after installation.
+        versionCode = 118
+        versionName = "1.0.18-wisepad-test"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -47,6 +46,7 @@ android {
         buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
         buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "false")
         buildConfigField("String", "BUILD_ENVIRONMENT", "\"staging\"")
+        buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
     }
@@ -81,6 +81,7 @@ android {
                 quotedBuildConfig(enrollmentUrl.get().ifBlank { stagingEnrollmentUrl }),
             )
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",
@@ -93,8 +94,9 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            // This artifact remains debug-signed and test-only, but exercises
-            // the real dedicated-device lifecycle (HOME alias + boot receiver).
+            // TEST-only artifact: Stripe Terminal USB is enabled here while
+            // production/release remains disabled until the contract gate is closed.
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
@@ -130,5 +132,6 @@ android {
 }
 
 dependencies {
+    implementation("com.stripe:stripeterminal:5.7.0")
     testImplementation("junit:junit:4.13.2")
 }
