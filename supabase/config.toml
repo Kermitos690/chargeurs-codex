@@ -80,3 +80,5 @@ verify_jwt = false
 verify_jwt = true
 [functions.kiosk-ads-playlist]
 verify_jwt = false
+[functions.stripe-terminal-backend]
+verify_jwt = false
