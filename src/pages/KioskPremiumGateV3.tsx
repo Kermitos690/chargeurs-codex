@@ -28,20 +28,21 @@ import "./kiosk-production-edge-states.css";
 import "./kiosk-production-contextual-help.css";
 import "./kiosk-production-webview-landscape-failsafe.css";
 import "./kiosk-v3-owned-home.css";
+import "./kiosk-v4-canonical-1280x720.css";
 
 /**
  * Production kiosk entry.
  * Business orchestration remains in the proven V2 gate/Kiosk state machine,
- * but the home screen now has exactly one visible owner: KioskV3OwnedHome.
+ * while V4 presentation is calibrated against the real 1280x720 kiosk panel.
  * The V2 hero remains mounted temporarily only as a state/callback adapter and
- * is explicitly hidden by the V3 home stylesheet.
+ * is explicitly hidden by the canonical visible Home owner.
  *
  * Cinematic, recovery and hardware presentation layers are presentation-only.
  * They never infer or own payment, rental, return, inventory or hardware state.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "v3-production";
+    document.documentElement.dataset.kioskVersion = "v4-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
