@@ -1,8 +1,10 @@
 import { AlertTriangle, CheckCircle2, ScanLine } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useI18n } from "@/i18n/i18n";
 
 type ReturnEnergyDockMode = "detected" | "pricing" | "support" | "completed";
 type MotionLevel = "full" | "reduced" | "static";
+type DockLanguage = "fr" | "en" | "de";
 
 type ReturnEnergyDockProps = {
   mode: ReturnEnergyDockMode;
@@ -11,11 +13,43 @@ type ReturnEnergyDockProps = {
   compact?: boolean;
 };
 
-const MODE_COPY: Record<ReturnEnergyDockMode, { eyebrow: string; label: string }> = {
-  detected: { eyebrow: "BATTERIE DÉTECTÉE", label: "Vérification physique" },
-  pricing: { eyebrow: "RETOUR RECONNU", label: "Calcul en cours" },
-  support: { eyebrow: "RETOUR ENREGISTRÉ", label: "Vérification serveur" },
-  completed: { eyebrow: "RETOUR CONFIRMÉ", label: "Énergie rendue" },
+type DockCopy = {
+  states: Record<ReturnEnergyDockMode, { eyebrow: string; label: string }>;
+  slot: string;
+  connected: string;
+};
+
+const DOCK_COPY: Record<DockLanguage, DockCopy> = {
+  fr: {
+    states: {
+      detected: { eyebrow: "BATTERIE DÉTECTÉE", label: "Vérification physique" },
+      pricing: { eyebrow: "RETOUR RECONNU", label: "Calcul en cours" },
+      support: { eyebrow: "RETOUR ENREGISTRÉ", label: "Vérification serveur" },
+      completed: { eyebrow: "RETOUR CONFIRMÉ", label: "Énergie rendue" },
+    },
+    slot: "SLOT",
+    connected: "BORNE CONNECTÉE",
+  },
+  en: {
+    states: {
+      detected: { eyebrow: "POWERBANK DETECTED", label: "Physical verification" },
+      pricing: { eyebrow: "RETURN RECOGNISED", label: "Calculating" },
+      support: { eyebrow: "RETURN RECORDED", label: "Server verification" },
+      completed: { eyebrow: "RETURN CONFIRMED", label: "Energy returned" },
+    },
+    slot: "SLOT",
+    connected: "STATION CONNECTED",
+  },
+  de: {
+    states: {
+      detected: { eyebrow: "POWERBANK ERKANNT", label: "Physische Prüfung" },
+      pricing: { eyebrow: "RÜCKGABE ERKANNT", label: "Berechnung läuft" },
+      support: { eyebrow: "RÜCKGABE ERFASST", label: "Serverprüfung" },
+      completed: { eyebrow: "RÜCKGABE BESTÄTIGT", label: "Energie zurückgegeben" },
+    },
+    slot: "FACH",
+    connected: "STATION VERBUNDEN",
+  },
 };
 
 const MODE_ACCENT: Record<ReturnEnergyDockMode, string> = {
@@ -31,6 +65,7 @@ export function ReturnEnergyDock({
   motionLevel = "full",
   compact = false,
 }: ReturnEnergyDockProps) {
+  const { lang } = useI18n();
   const prefersReducedMotion = useReducedMotion();
   const resolvedMotion: MotionLevel = motionLevel === "static"
     ? "static"
@@ -38,14 +73,16 @@ export function ReturnEnergyDock({
   const fullMotion = resolvedMotion === "full";
   const hasMotion = resolvedMotion !== "static";
   const accent = MODE_ACCENT[mode];
-  const copy = MODE_COPY[mode];
+  const language = (lang in DOCK_COPY ? lang : "fr") as DockLanguage;
+  const copy = DOCK_COPY[language];
+  const stateCopy = copy.states[mode];
   const isSupport = mode === "support";
   const isCompleted = mode === "completed";
 
   return (
     <div
-      className={`relative mx-auto overflow-hidden ${compact ? "h-[210px] w-[330px]" : "h-[260px] w-[430px]"}`}
-      aria-label={`${copy.eyebrow}. ${copy.label}${slotNumber ? `. Slot ${slotNumber}` : ""}`}
+      className={`relative mx-auto max-w-full overflow-hidden ${compact ? "h-[210px] w-[330px]" : "h-[260px] w-[430px]"}`}
+      aria-label={`${stateCopy.eyebrow}. ${stateCopy.label}${slotNumber ? `. ${copy.slot} ${slotNumber}` : ""}`}
       data-motion-level={resolvedMotion}
       data-return-visual-state={mode}
     >
@@ -96,7 +133,7 @@ export function ReturnEnergyDock({
           <div className="absolute inset-[7px_4px_6px_10px] rounded-[19px] bg-black/60 blur-md" />
           <div className="absolute inset-0 rounded-[20px] border border-white/45 bg-[linear-gradient(135deg,#e7edf4_0%,#aab7c7_45%,#dbe4ed_100%)] shadow-[inset_0_1px_1px_rgba(255,255,255,.75),0_15px_35px_rgba(0,0,0,.45)]">
             <div className="absolute inset-y-[10px] right-[8px] w-[7px] rounded-full bg-gradient-to-b from-white/70 via-slate-400/50 to-slate-600/70" />
-            <div className="absolute left-[14px] top-[14px] h-[38px] w-[38px] rounded-full border-[7px] border-cyan-400/90 border-r-transparent rotate-[-24deg]" />
+            <div className="absolute left-[14px] top-[14px] h-[38px] w-[38px] rotate-[-24deg] rounded-full border-[7px] border-cyan-400/90 border-r-transparent" />
             <div className="absolute bottom-[13px] left-[17px] flex gap-1">
               {[0, 1, 2, 3].map((item) => (
                 <span key={item} className="h-[4px] w-[10px] rounded-full bg-slate-700/55" />
@@ -132,12 +169,12 @@ export function ReturnEnergyDock({
 
       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 px-4 pb-1">
         <div>
-          <div className="text-[10px] font-black tracking-[0.24em]" style={{ color: accent }}>{copy.eyebrow}</div>
-          <div className="mt-1 text-sm font-semibold text-white/72">{copy.label}</div>
+          <div className="text-[10px] font-black tracking-[0.24em]" style={{ color: accent }}>{stateCopy.eyebrow}</div>
+          <div className="mt-1 text-sm font-semibold text-white/72">{stateCopy.label}</div>
         </div>
         <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-[11px] font-bold text-white/65 backdrop-blur-sm">
           {isCompleted ? <CheckCircle2 className="h-4 w-4" style={{ color: accent }} /> : <ScanLine className="h-4 w-4" style={{ color: accent }} />}
-          {slotNumber ? `SLOT ${slotNumber}` : "BORNE CONNECTÉE"}
+          {slotNumber ? `${copy.slot} ${slotNumber}` : copy.connected}
         </div>
       </div>
     </div>
