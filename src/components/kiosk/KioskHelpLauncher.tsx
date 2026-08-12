@@ -30,6 +30,8 @@ function currentHelpContext() {
  *
  * Opening help stores only a presentation context on <html>; the FAQ content
  * remains unchanged and the CSS layer simply promotes the most relevant topic.
+ * The React FAQ is the single visible help owner; any stale pre-V3 imperative
+ * overlay is removed defensively before opening it.
  */
 export function KioskHelpLauncher() {
   const location = useLocation();
@@ -40,6 +42,7 @@ export function KioskHelpLauncher() {
   const stationId = stationFromPath(location.pathname);
 
   const openContextualHelp = useCallback(() => {
+    document.getElementById("chargeurs-kiosk-help-overlay")?.remove();
     document.documentElement.dataset.kioskHelpContext = currentHelpContext();
     setOpen(true);
   }, []);

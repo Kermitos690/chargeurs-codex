@@ -11,7 +11,6 @@ import "./kiosk-production-premium.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
 import { initKioskPwa } from "./pwa/registerSW";
 import { prepareNativeKioskBootstrap } from "./pwa/nativeKioskBootstrap";
-import { initKioskHelpController } from "./kioskHelpController";
 
 // The service worker and runtime recovery guards belong to the kiosk surface
 // only. Public, account and administration pages keep their normal behavior.
@@ -96,8 +95,6 @@ async function startApplication() {
   showNativePreboot();
   const bootstrap = await prepareNativeKioskBootstrap(isKioskSurface, isNativeKioskWrapper);
   if (bootstrap === "reloading") return;
-
-  if (isKioskSurface) initKioskHelpController();
 
   createRoot(document.getElementById("root")!).render(
     isKioskSurface ? (
