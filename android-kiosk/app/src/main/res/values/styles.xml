@@ -4,6 +4,10 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <!-- Never let Android reuse a stale task/window preview while the kiosk
+             Activity is starting. The native Chargeurs splash becomes the only
+             pre-WebView surface. -->
+        <item name="android:windowDisablePreview">true</item>
         <item name="android:windowBackground">#090B1F</item>
         <item name="android:colorAccent">#338BFF</item>
         <item name="android:navigationBarColor">#081126</item>
