@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type CSSProperties } from "react";
 import { HelpCircle, RefreshCw, UserRound, Zap } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -96,15 +96,23 @@ function readHomeSnapshot(): HomeSnapshot {
   };
 }
 
+function readCanvasScale() {
+  if (typeof window === "undefined") return 1;
+  return Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+}
+
 export function KioskV3OwnedHome() {
   const { lang } = useI18n();
   const copy = COPY[lang];
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(() => readHomeSnapshot());
   const [refreshing, setRefreshing] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(() => readCanvasScale());
 
   useLayoutEffect(() => {
     const detect = () => setSnapshot(readHomeSnapshot());
+    const resize = () => setCanvasScale(readCanvasScale());
     detect();
+    resize();
     const observer = new MutationObserver(detect);
     observer.observe(document.body, {
       childList: true,
@@ -113,7 +121,11 @@ export function KioskV3OwnedHome() {
       attributeFilter: ["disabled", "class"],
       characterData: true,
     });
-    return () => observer.disconnect();
+    window.addEventListener("resize", resize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   if (!snapshot.visible) return null;
@@ -131,32 +143,36 @@ export function KioskV3OwnedHome() {
     window.setTimeout(() => setRefreshing(false), 900);
   };
 
-  return (
-    <section className="kv3-owned-home" aria-label="Chargeurs.ch">
-      <div className="kv3-owned-home__glow kv3-owned-home__glow--green" aria-hidden="true" />
-      <div className="kv3-owned-home__glow kv3-owned-home__glow--blue" aria-hidden="true" />
+  const canvasStyle = {
+    "--kv5-scale": String(canvasScale),
+  } as CSSProperties;
 
-      <header className="kv3-owned-home__topbar">
-        <BrandLogo size="md" />
-        <nav className="kv3-owned-home__utilities" aria-label="Kiosk controls">
+  return (
+    <section className="kv3-owned-home kv5-reference-home" style={canvasStyle} aria-label="Chargeurs.ch">
+      <div className="kv5-home-ambient kv5-home-ambient--green" aria-hidden="true" />
+      <div className="kv5-home-ambient kv5-home-ambient--blue" aria-hidden="true" />
+
+      <header className="kv3-owned-home__topbar kv5-home-topbar">
+        <div className="kv5-home-brand"><BrandLogo size="md" /></div>
+        <nav className="kv3-owned-home__utilities kv5-home-utilities" aria-label="Kiosk controls">
           <button type="button" onClick={refresh} disabled={refreshing} aria-label={copy.refresh} title={copy.refresh}>
             <RefreshCw className={refreshing ? "kv3-spin" : ""} />
           </button>
           <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))} aria-label={copy.help} title={copy.help}>
             <HelpCircle />
           </button>
-          <div className="kv3-owned-home__language"><LanguageSwitcher /></div>
+          <div className="kv3-owned-home__language kv5-home-language"><LanguageSwitcher /></div>
         </nav>
       </header>
 
-      <main className="kv3-owned-home__body">
-        <section className="kv3-owned-home__decision">
-          <div className="kv3-owned-home__heading">
+      <main className="kv3-owned-home__body kv5-home-body">
+        <section className="kv3-owned-home__decision kv5-home-decision">
+          <div className="kv3-owned-home__heading kv5-home-heading">
             <span>{copy.subtitle}</span>
             <h1>{copy.title}</h1>
           </div>
 
-          <div className="kv3-owned-home__price" aria-label={`${snapshot.hourly} ${snapshot.perHour}`}>
+          <div className="kv3-owned-home__price kv5-home-price" aria-label={`${snapshot.hourly} ${snapshot.perHour}`}>
             <span className="kv3-owned-home__price-icon"><Zap /></span>
             <strong>{snapshot.hourly}</strong>
             <span>{snapshot.perHour}</span>
@@ -165,53 +181,63 @@ export function KioskV3OwnedHome() {
             <strong>{snapshot.cap}</strong>
           </div>
 
-          <div className="kv3-owned-home__choices">
+          <div className="kv3-owned-home__choices kv5-home-choices">
             <button
               type="button"
-              className="kv3-owned-home__choice kv3-owned-home__choice--express"
+              className="kv3-owned-home__choice kv3-owned-home__choice--express kv5-home-choice kv5-home-choice--express"
               disabled={snapshot.expressDisabled}
               onClick={() => clickUnderlying(".ck2-choice-express")}
             >
-              <span className="kv3-owned-home__choice-icon"><Zap /></span>
-              <span className="kv3-owned-home__choice-kicker">{copy.expressKicker}</span>
+              <span className="kv5-home-watermark" aria-hidden="true"><Zap /></span>
+              <span className="kv3-owned-home__choice-icon kv5-home-choice-icon"><Zap /></span>
+              <span className="kv3-owned-home__choice-kicker kv5-home-choice-kicker">{copy.expressKicker}</span>
               <strong>{copy.expressTitle}</strong>
               <small>{copy.expressBody}</small>
-              <b aria-hidden="true">→</b>
+              <b className="kv5-home-choice-arrow" aria-hidden="true">→</b>
             </button>
 
             <button
               type="button"
-              className="kv3-owned-home__choice kv3-owned-home__choice--client"
+              className="kv3-owned-home__choice kv3-owned-home__choice--client kv5-home-choice kv5-home-choice--client"
               disabled={snapshot.clientDisabled}
               onClick={() => clickUnderlying(".ck2-choice-member")}
             >
-              <span className="kv3-owned-home__choice-icon"><UserRound /></span>
-              <span className="kv3-owned-home__choice-kicker">{copy.clientKicker}</span>
+              <span className="kv3-owned-home__choice-icon kv5-home-choice-icon"><UserRound /></span>
+              <span className="kv3-owned-home__choice-kicker kv5-home-choice-kicker">{copy.clientKicker}</span>
               <strong>{copy.clientTitle}</strong>
               <small>{copy.clientBody}</small>
-              <b aria-hidden="true">→</b>
+              <b className="kv5-home-choice-arrow" aria-hidden="true">→</b>
             </button>
           </div>
         </section>
 
-        <aside className="kv3-owned-home__station" aria-label={copy.ready}>
-          <div className="kv3-owned-home__station-halo" aria-hidden="true" />
-          <div className="kv3-owned-home__station-body">
-            <div className="kv3-owned-home__station-screen">
-              <BrandLogo size="sm" />
-              <strong>{copy.ready}</strong>
+        <aside className="kv3-owned-home__station kv5-home-station" aria-label={copy.ready}>
+          <div className="kv5-station-aura" aria-hidden="true" />
+          <div className="kv5-station-shell">
+            <div className="kv5-station-top" aria-hidden="true" />
+            <div className="kv5-station-side" aria-hidden="true" />
+            <div className="kv5-station-face">
+              <div className="kv3-owned-home__station-screen kv5-station-screen">
+                <BrandLogo size="sm" />
+                <strong>{copy.ready}</strong>
+              </div>
+              <div className="kv3-owned-home__station-slots kv5-station-slots">
+                {[1, 2, 3, 4].map((slot) => (
+                  <div key={slot} className="kv5-station-slot">
+                    <span>{slot}</span>
+                    <i aria-hidden="true" />
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="kv3-owned-home__station-slots">
-              {[1, 3, 2, 4].map((slot) => (
-                <div key={slot}><span>{slot}</span><i /></div>
-              ))}
-            </div>
+            <div className="kv5-station-base" aria-hidden="true" />
+            <div className="kv5-station-rim" aria-hidden="true" />
           </div>
-          <div className="kv3-owned-home__station-floor" aria-hidden="true" />
+          <div className="kv3-owned-home__station-floor kv5-station-floor" aria-hidden="true" />
         </aside>
       </main>
 
-      <footer className="kv3-owned-home__payments" aria-label={copy.secure}>
+      <footer className="kv3-owned-home__payments kv5-home-payments" aria-label={copy.secure}>
         <span>{copy.secure}</span>
         <KioskPaymentMarks cardLabel="" />
       </footer>
