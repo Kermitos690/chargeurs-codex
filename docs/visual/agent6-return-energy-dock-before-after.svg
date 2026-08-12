@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Chargeurs Agent 6 Return Energy Dock — before / after reference preview</title>
+  <desc id="desc">Static design reference comparing the previous return-detected treatment with the new Chargeurs Energy Dock visual. This is a reference preview, not a WebView screenshot.</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="10%" r="90%">
+      <stop offset="0" stop-color="#12354b"/>
+      <stop offset=".38" stop-color="#07131f"/>
+      <stop offset="1" stop-color="#02060b"/>
+    </radialGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#edf3f8"/>
+      <stop offset=".48" stop-color="#a7b5c5"/>
+      <stop offset="1" stop-color="#d9e2eb"/>
+    </linearGradient>
+    <linearGradient id="dock" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#142033"/>
+      <stop offset=".56" stop-color="#060a11"/>
+      <stop offset="1" stop-color="#111b2b"/>
+    </linearGradient>
+    <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="220%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <circle cx="940" cy="105" r="330" fill="#12d6e8" opacity=".07"/>
+  <circle cx="220" cy="650" r="280" fill="#5865f2" opacity=".05"/>
+
+  <text x="56" y="54" fill="#e9f8ff" font-family="Arial, sans-serif" font-size="25" font-weight="700">AGENT 6 · RETURN EXPERIENCE</text>
+  <text x="56" y="82" fill="#7f9caf" font-family="Arial, sans-serif" font-size="14" letter-spacing="2">REFERENCE PREVIEW · STATIC · NOT A WEBVIEW SCREENSHOT</text>
+
+  <g transform="translate(54 118)">
+    <rect width="544" height="535" rx="38" fill="#0a1320" stroke="#ffffff" stroke-opacity=".10"/>
+    <text x="30" y="42" fill="#738ca0" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2">BEFORE</text>
+    <circle cx="272" cy="180" r="63" fill="#22d3ee" opacity=".10"/>
+    <rect x="241" y="146" width="62" height="72" rx="9" fill="none" stroke="#3dddf2" stroke-width="5"/>
+    <line x1="252" y1="165" x2="291" y2="165" stroke="#3dddf2" stroke-width="4" stroke-linecap="round"/>
+    <line x1="252" y1="180" x2="291" y2="180" stroke="#3dddf2" stroke-width="4" stroke-linecap="round" opacity=".7"/>
+    <line x1="252" y1="195" x2="279" y2="195" stroke="#3dddf2" stroke-width="4" stroke-linecap="round" opacity=".5"/>
+    <text x="272" y="286" text-anchor="middle" fill="#f2fbff" font-family="Arial, sans-serif" font-size="40" font-weight="800">Retour détecté</text>
+    <text x="272" y="328" text-anchor="middle" fill="#91a8b9" font-family="Arial, sans-serif" font-size="18">La batterie est bien revenue.</text>
+    <text x="272" y="354" text-anchor="middle" fill="#91a8b9" font-family="Arial, sans-serif" font-size="18">Calcul du prix exact…</text>
+    <circle cx="272" cy="419" r="19" fill="none" stroke="#22d3ee" stroke-width="5" stroke-dasharray="30 90"/>
+    <text x="272" y="474" text-anchor="middle" fill="#526c80" font-family="Arial, sans-serif" font-size="12" letter-spacing="1.3">GENERIC STATUS ICON + SPINNER</text>
+  </g>
+
+  <g transform="translate(624 118)">
+    <rect width="602" height="535" rx="38" fill="#08111c" stroke="#22d3ee" stroke-opacity=".22"/>
+    <text x="30" y="42" fill="#22d3ee" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2">AFTER · CHARGEURS ENERGY DOCK</text>
+
+    <ellipse cx="301" cy="390" rx="190" ry="70" fill="#22d3ee" opacity=".10" filter="url(#cyanGlow)"/>
+    <g transform="translate(209 92)" filter="url(#shadow)">
+      <rect x="0" y="124" width="184" height="162" rx="34" fill="url(#dock)" stroke="#fff" stroke-opacity=".12"/>
+      <rect x="22" y="147" width="140" height="101" rx="24" fill="#02060b" stroke="#fff" stroke-opacity=".09"/>
+      <rect x="31" y="156" width="122" height="84" rx="19" fill="none" stroke="#22d3ee" stroke-opacity=".48"/>
+      <rect x="41" y="162" width="102" height="70" rx="16" fill="#22d3ee" opacity=".08"/>
+      <rect x="50" y="0" width="92" height="146" rx="21" fill="url(#silver)" stroke="#fff" stroke-opacity=".65"/>
+      <rect x="124" y="12" width="7" height="120" rx="4" fill="#6d7d90" opacity=".55"/>
+      <circle cx="82" cy="42" r="20" fill="none" stroke="#22d3ee" stroke-width="8" stroke-dasharray="78 48" transform="rotate(-30 82 42)"/>
+      <rect x="68" y="112" width="10" height="4" rx="2" fill="#334155"/><rect x="82" y="112" width="10" height="4" rx="2" fill="#334155"/><rect x="96" y="112" width="10" height="4" rx="2" fill="#334155"/>
+      <line x1="20" y1="178" x2="164" y2="178" stroke="#22d3ee" stroke-width="3" opacity=".95" filter="url(#cyanGlow)"/>
+      <text x="92" y="271" text-anchor="middle" fill="#ffffff" fill-opacity=".35" font-family="Arial, sans-serif" font-size="10" font-weight="800" letter-spacing="3">CHARGEURS</text>
+    </g>
+
+    <text x="301" y="424" text-anchor="middle" fill="#22d3ee" font-family="Arial, sans-serif" font-size="12" font-weight="800" letter-spacing="2.4">BATTERIE DÉTECTÉE</text>
+    <text x="301" y="448" text-anchor="middle" fill="#c7d9e5" font-family="Arial, sans-serif" font-size="17" font-weight="600">Vérification physique · SLOT 2</text>
+    <text x="301" y="492" text-anchor="middle" fill="#f3fbff" font-family="Arial, sans-serif" font-size="32" font-weight="800">Retour détecté</text>
+    <text x="301" y="523" text-anchor="middle" fill="#8fa8ba" font-family="Arial, sans-serif" font-size="16">Objet physique + slot + scan = état compris en un regard</text>
+  </g>
+</svg>
