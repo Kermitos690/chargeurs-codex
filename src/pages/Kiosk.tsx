@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, X,
   ShieldCheck, Smartphone, Clock, RefreshCw, Lock, HelpCircle, CreditCard,
-  Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -70,9 +69,11 @@ type KioskFunctionResponse = {
 export default function Kiosk() {
   const { stationId } = useParams();
   const { lang, t } = useI18n();
-  // The physical DTA screen is landscape. This is not an optional web preview:
-  // the layout must consume the whole 16:9 scene without a scroll escape hatch.
-  const splitLayoutPreview = true;
+  // The physical DTA screen is landscape. A second "advertising preview"
+  // previously competed with the rental journey for horizontal space and made
+  // the real cabinet look like a shrunken desktop page. Campaign media is not
+  // part of the transactional scene until it has its own 16:9 composition.
+  const splitLayoutPreview = false;
   const [station, setStation] = useState<Station | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -756,7 +757,6 @@ export default function Kiosk() {
                 </div>
               )}
               </section>
-              {splitLayoutPreview && <KioskAdvertisingPreview t={t} />}
             </motion.div>
           )}
 
@@ -913,33 +913,5 @@ function StatusBadge({ connection, configured, t }: { connection: ReturnType<typ
       {connection === "online" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
       {connection === "online" ? t("kiosk.online") : connection === "unknown" ? t("kiosk.status_unknown") : t("kiosk.offline")}
     </div>
-  );
-}
-
-/**
- * Staging-only visual proof for the future advertising area. It has no remote
- * media URL, analytics or provider-side advertisement mutation: the kiosk can
- * therefore be tested safely before a partner campaign is configured.
- */
-function KioskAdvertisingPreview({ t }: { t: (key: string) => string }) {
-  return (
-    <aside className="relative min-h-[22rem] overflow-hidden rounded-[2rem] glass-strong liquid-border p-7 text-left">
-      <motion.div aria-hidden className="absolute -right-16 -top-12 h-52 w-52 rounded-full bg-primary/40 blur-3xl"
-        animate={{ x: [0, -25, 8, 0], y: [0, 22, -10, 0], scale: [1, 1.18, .92, 1] }} transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }} />
-      <motion.div aria-hidden className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-accent/30 blur-3xl"
-        animate={{ x: [0, 35, 0], y: [0, -20, 0] }} transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }} />
-      <div className="relative flex h-full flex-col justify-between gap-8">
-        <span className="w-fit rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{t("kiosk.ad.preview")}</span>
-        <div>
-          <motion.div className="mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-primary shadow-glow"
-            animate={{ rotate: [0, -4, 4, 0], scale: [1, 1.06, 1] }} transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}>
-            <Zap className="h-8 w-8 text-primary-foreground" />
-          </motion.div>
-          <h2 className="font-display text-4xl font-extrabold leading-tight">{t("kiosk.ad.title")}</h2>
-          <p className="mt-3 text-lg text-muted-foreground">{t("kiosk.ad.subtitle")}</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm font-semibold text-primary"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-success" />{t("kiosk.ad.footer")}</div>
-      </div>
-    </aside>
   );
 }
