@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock, Loader2, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { Clock, Loader2, ShieldCheck, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/i18n";
+import { ReturnEnergyDock } from "@/components/kiosk/ReturnEnergyDock";
 
 const FINAL_SECONDS = 20;
 const SUPPORT_SECONDS = 20;
@@ -307,34 +308,35 @@ export function KioskReturnOverlay() {
           <motion.section
             initial={{ scale: .97, y: 18 }}
             animate={{ scale: 1, y: 0 }}
-            className="glass-strong liquid-border relative flex w-full max-w-3xl flex-col items-center rounded-[2.5rem] p-10 text-center shadow-[0_0_80px_rgba(34,211,238,.2)]"
+            className="glass-strong liquid-border relative flex w-full max-w-4xl flex-col items-center rounded-[2.5rem] p-8 text-center shadow-[0_0_80px_rgba(34,211,238,.2)]"
           >
-            <div className="grid h-28 w-28 place-items-center rounded-full bg-primary/15">
-              <ReceiptText className="h-14 w-14 text-primary" />
+            <ReturnEnergyDock mode="detected" slotNumber={summary.returnedSlotNum} />
+            <h1 className="mt-3 font-display text-5xl font-extrabold">{c.detected}</h1>
+            <p className="mt-3 max-w-2xl text-xl text-muted-foreground">{c.detectedBody}</p>
+            <div className="mt-5 flex items-center gap-3 rounded-full border border-primary/20 bg-primary/5 px-5 py-3 text-base font-bold">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              {c.finalizing}
             </div>
-            <h1 className="mt-7 font-display text-5xl font-extrabold">{c.detected}</h1>
-            <p className="mt-4 max-w-2xl text-2xl text-muted-foreground">{c.detectedBody}</p>
-            <Loader2 className="mt-8 h-12 w-12 animate-spin text-primary" />
           </motion.section>
         ) : result.stage === "settling" ? (
           <motion.section
             initial={{ scale: .96, y: 18 }}
             animate={{ scale: 1, y: 0 }}
-            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-8 shadow-[0_0_90px_rgba(34,211,238,.24)]"
+            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-7 shadow-[0_0_90px_rgba(34,211,238,.24)]"
           >
-            <div className="flex flex-col items-center text-center">
-              <div className="grid h-20 w-20 place-items-center rounded-full bg-primary/15">
-                <ReceiptText className="h-11 w-11 text-primary" />
+            <div className="grid items-center gap-3 md:grid-cols-[350px_minmax(0,1fr)]">
+              <ReturnEnergyDock mode="pricing" slotNumber={summary.returnedSlotNum} compact />
+              <div className="text-center md:text-left">
+                <h1 className="font-display text-4xl font-extrabold">{c.calculated}</h1>
+                <div className="mt-2 font-display text-6xl font-extrabold text-gradient-cyan">
+                  {money(summary.finalAmountCents, currency)}
+                </div>
+                <p className="mt-2 max-w-2xl text-lg text-muted-foreground">{c.calculatedBody}</p>
               </div>
-              <h1 className="mt-4 font-display text-5xl font-extrabold">{c.calculated}</h1>
-              <div className="mt-3 font-display text-7xl font-extrabold text-gradient-cyan">
-                {money(summary.finalAmountCents, currency)}
-              </div>
-              <p className="mt-2 max-w-3xl text-xl text-muted-foreground">{c.calculatedBody}</p>
             </div>
             <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} />
-            <div className="mt-6 flex items-center justify-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-lg font-bold">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <div className="mt-5 flex items-center justify-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-base font-bold">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
               {c.finalizing}
             </div>
           </motion.section>
@@ -342,31 +344,31 @@ export function KioskReturnOverlay() {
           <motion.section
             initial={{ scale: .97, y: 12 }}
             animate={{ scale: 1, y: 0 }}
-            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-8 shadow-[0_0_90px_rgba(245,158,11,.12)]"
+            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-7 shadow-[0_0_90px_rgba(245,158,11,.12)]"
           >
             <button
               onClick={dismissSupport}
-              className="absolute right-5 top-5 grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-white/5"
+              className="absolute right-5 top-5 z-10 grid h-12 w-12 place-items-center rounded-full border border-white/15 bg-white/5"
               aria-label={c.backHome}
             >
               <X className="h-5 w-5" />
             </button>
-            <div className="flex flex-col items-center text-center">
-              <div className="grid h-20 w-20 place-items-center rounded-full bg-warning/15">
-                <ShieldCheck className="h-11 w-11 text-warning" />
+            <div className="grid items-center gap-3 md:grid-cols-[350px_minmax(0,1fr)]">
+              <ReturnEnergyDock mode="support" slotNumber={summary.returnedSlotNum} compact />
+              <div className="text-center md:text-left">
+                <h1 className="font-display text-4xl font-extrabold">{c.support}</h1>
+                {pricingReady && (
+                  <div className="mt-2 font-display text-6xl font-extrabold text-gradient-cyan">
+                    {money(summary.finalAmountCents, currency)}
+                  </div>
+                )}
+                <p className="mt-2 max-w-2xl text-lg text-muted-foreground">{c.supportBody}</p>
               </div>
-              <h1 className="mt-4 font-display text-4xl font-extrabold">{c.support}</h1>
-              {pricingReady && (
-                <div className="mt-3 font-display text-7xl font-extrabold text-gradient-cyan">
-                  {money(summary.finalAmountCents, currency)}
-                </div>
-              )}
-              <p className="mx-auto mt-3 max-w-3xl text-xl text-muted-foreground">{c.supportBody}</p>
             </div>
             {pricingReady && (
               <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} />
             )}
-            <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl border border-warning/20 bg-warning/5 p-4 sm:flex-row">
+            <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border border-warning/20 bg-warning/5 p-3 sm:flex-row">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ShieldCheck className="h-5 w-5 text-warning" />
                 {c.supportSafe}
@@ -386,26 +388,26 @@ export function KioskReturnOverlay() {
           <motion.section
             initial={{ scale: .96, y: 20 }}
             animate={{ scale: 1, y: 0 }}
-            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-7 shadow-[0_0_90px_rgba(34,211,238,.24)] sm:p-10"
+            className="glass-strong liquid-border relative w-full max-w-5xl rounded-[2.5rem] p-7 shadow-[0_0_90px_rgba(34,211,238,.24)]"
           >
             <button
               onClick={() => void finishCompleted()}
-              className="absolute right-5 top-5 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-white/5"
+              className="absolute right-5 top-5 z-10 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-white/5"
               aria-label={c.finish}
             >
               <X className="h-5 w-5" />
             </button>
-            <div className="flex flex-col items-center text-center">
-              <div className="grid h-24 w-24 place-items-center rounded-full bg-success/20 shadow-[0_0_40px_rgba(34,197,94,.2)]">
-                <CheckCircle2 className="h-14 w-14 text-success" />
+            <div className="grid items-center gap-3 md:grid-cols-[350px_minmax(0,1fr)]">
+              <ReturnEnergyDock mode="completed" slotNumber={summary.returnedSlotNum} compact />
+              <div className="text-center md:text-left">
+                <h1 className="font-display text-5xl font-extrabold">{c.done}</h1>
+                <div className="mt-2 font-display text-6xl font-extrabold text-gradient-cyan">
+                  {money(summary.finalAmountCents, currency)}
+                </div>
+                <p className="mt-2 text-lg font-semibold text-muted-foreground">{c.finalPrice}</p>
               </div>
-              <h1 className="mt-4 font-display text-5xl font-extrabold">{c.done}</h1>
-              <div className="mt-4 font-display text-7xl font-extrabold text-gradient-cyan">
-                {money(summary.finalAmountCents, currency)}
-              </div>
-              <p className="mt-2 text-lg font-semibold text-muted-foreground">{c.finalPrice}</p>
             </div>
-            <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Cell label={c.duration} value={duration(summary)} />
               <Cell label={c.periods} value={periods} />
               <Cell label={c.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
@@ -424,7 +426,7 @@ export function KioskReturnOverlay() {
               )}
               <Cell label={c.reference} value={summary.publicCode ?? "—"} />
             </div>
-            <div className="mt-7 flex flex-col items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4 sm:flex-row">
+            <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/10 p-3 sm:flex-row">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ShieldCheck className="h-5 w-5 text-success" />
                 {c.serverConfirmed}
@@ -460,7 +462,7 @@ function PricingGrid({
   periods: string;
 }) {
   return (
-    <div className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Cell label={copy.duration} value={duration(summary)} />
       <Cell label={copy.periods} value={periods} />
       <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
@@ -475,9 +477,9 @@ function PricingGrid({
 
 function Cell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-2 break-words text-lg font-extrabold">{value}</div>
+      <div className="mt-1.5 break-words text-base font-extrabold">{value}</div>
     </div>
   );
 }
