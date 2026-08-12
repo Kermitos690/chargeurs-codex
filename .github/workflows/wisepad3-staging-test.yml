@@ -40,7 +40,9 @@ jobs:
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          probe="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/WisePadUsbProbe.java"
           test -s "$apk"
+          test -s "$probe"
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           "$apksigner_path" verify --verbose "$apk"
@@ -51,9 +53,14 @@ jobs:
           printf '%s\n' "$badging" | grep -F "1.0.18-wisepad-test-staging"
           manifest="$($aapt_path dump xmltree "$apk" AndroidManifest.xml)"
           printf '%s\n' "$manifest" > /tmp/manifest.txt
+          # Stripe's SDK contributes the USB event receiver to the merged APK.
           grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
-          grep -Ei "15a2|5538" /tmp/manifest.txt
-          grep -Ei "0101|257" /tmp/manifest.txt
+          # Chargeurs' native adapter is intentionally pinned to the exact field
+          # reader. Stripe does not expose the BBPOS VID/PID as a manifest literal,
+          # so validate the adapter constants at the same source revision used to
+          # build this APK instead of asserting a false manifest contract.
+          grep -F "TARGET_VENDOR_ID = 0x15A2" "$probe"
+          grep -F "TARGET_PRODUCT_ID = 0x0101" "$probe"
 
       - name: Prepare APK artifact + provenance
         id: artifact
