@@ -15,13 +15,18 @@ import {
   orderCreateWithOneTimeRentalPermit,
 } from "../_shared/chargenow.ts";
 import { buildChargeNowCallbackUrl } from "../_shared/chargenowCallbackAuth.ts";
+import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { resolveRentSlot } from "../_shared/chargenowSafety.ts";
-import { needsSupplierReleaseConfirmation } from "../_shared/ejectionResult.ts";
 
 const MAX_RETRIES = 3;
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
+type HardwareCommand = {
+  id: string;
+  state: string;
+  provider_trade_no: string | null;
+};
 type OneTimePermitRow = {
   id: string;
   rental_session_id: string;
@@ -347,6 +352,86 @@ async function recoverUnexpectedFailure(
   });
 }
 
+/**
+ * Persist the single physical intent before talking to the supplier. A timeout
+ * after this point is deliberately non-retryable: we must reconcile the
+ * cabinet/callback, never ask the cabinet to eject a second time.
+ */
+async function createEjectIntent(
+  db: DB,
+  session: Session,
+  cabinetId: string,
+  slotNum: number,
+  actor: string,
+  preflight: Record<string, unknown>,
+): Promise<{ command: HardwareCommand; created: boolean }> {
+  const idempotencyKey = `eject:${session.id}`;
+  const { data, error } = await db.from("hardware_commands").insert({
+    rental_session_id: session.id,
+    station_id: cabinetId,
+    slot_num: slotNum,
+    command_type: "eject",
+    idempotency_key: idempotencyKey,
+    state: "prepared",
+    request_metadata: { actor, selected_slot_num: slotNum, preflight },
+  }).select("id, state, provider_trade_no").maybeSingle();
+
+  if (!error && data) return { command: data as HardwareCommand, created: true };
+  if (error?.code !== "23505") throw error;
+
+  const { data: existing, error: existingError } = await db.from("hardware_commands")
+    .select("id, state, provider_trade_no")
+    .eq("rental_session_id", session.id)
+    .eq("command_type", "eject")
+    .maybeSingle();
+  if (existingError || !existing) throw existingError ?? error;
+  return { command: existing as HardwareCommand, created: false };
+}
+
+/**
+ * Snapshot immediately before the one allowed supplier write. It is both a
+ * revalidation of the chosen battery and a baseline for detecting an
+ * unexpected second compartment that becomes empty after the command.
+ */
+async function preflightSelectedSlot(
+  cabinetId: string,
+  selectedSlotNum: number,
+  expectedBatteryId: string | null,
+): Promise<Record<string, unknown>> {
+  const snapshot = await readCabinetSnapshot(cabinetId);
+  const selected = snapshot.slots.find((slot) => slot.slot_num === selectedSlotNum);
+  if (!selected || selected.battery_present !== true) {
+    throw new OrchestratorError("PRE_EJECTION_SLOT_NOT_OCCUPIED");
+  }
+  if (expectedBatteryId && selected.battery_id && selected.battery_id !== expectedBatteryId) {
+    throw new OrchestratorError("PRE_EJECTION_BATTERY_MISMATCH");
+  }
+  if (selected.rentable !== true) {
+    throw new OrchestratorError("PRE_EJECTION_SLOT_NOT_RENTABLE");
+  }
+  return {
+    captured_at: new Date().toISOString(),
+    selected_slot_num: selectedSlotNum,
+    expected_battery_id: expectedBatteryId,
+    slots: snapshot.slots.map((slot) => ({
+      slot_num: slot.slot_num,
+      battery_id: slot.battery_id,
+      battery_present: slot.battery_present,
+      confidence: slot.confidence,
+      rentable: slot.rentable,
+    })),
+  };
+}
+
+async function updateEjectIntent(
+  db: DB,
+  commandId: string,
+  values: Record<string, unknown>,
+) {
+  const { error } = await db.from("hardware_commands").update(values).eq("id", commandId);
+  if (error) throw error;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -463,6 +548,11 @@ Deno.serve(async (req) => {
     }
     const resolvedSlotNum = slotDecision.slotNum;
 
+    if (!cabinetId) {
+      const compensation = await compensateBeforeHardwareRequest(db, session, "CABINET_ID_MISSING");
+      return reply({ ok: false, error: "CABINET_ID_MISSING", compensation }, 409);
+    }
+
     const retry = Number(session.retry_count ?? 0);
     if (retry >= MAX_RETRIES) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "MAX_RETRIES");
@@ -479,6 +569,27 @@ Deno.serve(async (req) => {
     if (lockError) throw lockError;
     if (!locked || locked.length === 0) return reply({ ok: true, alreadyInProgress: true }, 202);
 
+    const preflight = await preflightSelectedSlot(
+      cabinetId,
+      resolvedSlotNum,
+      typeof session.battery_id === "string" ? session.battery_id.trim() || null : null,
+    );
+    const intent = await createEjectIntent(db, session, cabinetId, resolvedSlotNum, caller.actor, preflight);
+    if (!intent.created) {
+      await auditLog(db, {
+        actor: caller.actor,
+        action: "rental.release.duplicate_intent_blocked",
+        target: session.id,
+        data: { hardware_command_id: intent.command.id, command_state: intent.command.state },
+      });
+      return reply({
+        ok: true,
+        alreadyInProgress: true,
+        state: "ejecting",
+        commandState: intent.command.state,
+      }, 202);
+    }
+
     let consumedPermit: OneTimeRentalEjectionPermit | null = null;
     if (oneTimeTestResume && permit) {
       // Consume before the supplier call. A network timeout after this point is
@@ -493,6 +604,7 @@ Deno.serve(async (req) => {
         .select("id");
       if (consumeError) throw consumeError;
       if (!consumed || consumed.length !== 1) {
+        await updateEjectIntent(db, intent.command.id, { state: "cancelled" });
         await markSupportRequired(
           db,
           session,
@@ -516,12 +628,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!cabinetId) {
-      const compensation = await compensateBeforeHardwareRequest(db, session, "CABINET_ID_MISSING");
-      return reply({ ok: false, error: "CABINET_ID_MISSING", compensation }, 409);
-    }
-
     let tradeNo: string | null = session.apifox_trade_no ?? null;
+    // This write happens *before* either provider mutation. From now on a
+    // network error is physically ambiguous and must be reconciled.
+    hardwareCommandIssued = true;
+    await updateEjectIntent(db, intent.command.id, {
+      state: "dispatching",
+      dispatch_started_at: new Date().toISOString(),
+      provider_trade_no: tradeNo,
+    });
     if (!tradeNo) {
       const callbackURL = await buildChargeNowCallbackUrl(
         Deno.env.get("SUPABASE_URL") ?? "",
@@ -560,8 +675,18 @@ Deno.serve(async (req) => {
 
       if (!order.ok || !tradeNo) {
         const code = safeCode(order.error, "CHARGENOW_ORDER_FAILED");
-        const compensation = await compensateBeforeHardwareRequest(db, session, code);
-        return reply({ ok: false, error: code, compensation }, 502);
+        await updateEjectIntent(db, intent.command.id, {
+          state: "unknown_provider_result",
+          response_metadata: { order_ok: order.ok, order_id: orderId, error: code },
+        });
+        await markSupportRequired(
+          db,
+          session,
+          "ORDER_RECONCILIATION_REQUIRED",
+          "La création de commande fournisseur est ambiguë. Aucune nouvelle sortie ni compensation automatique n'est autorisée.",
+          { cabinetId, hardware_command_id: intent.command.id, provider_code: code },
+        );
+        return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
       }
       const { error: orderUpdateError } = await db.from("rental_sessions").update({
         apifox_trade_no: tradeNo,
@@ -571,11 +696,13 @@ Deno.serve(async (req) => {
       if (orderUpdateError) throw orderUpdateError;
       session.apifox_trade_no = tradeNo;
       session.chargenow_order_id = orderId;
+      await updateEjectIntent(db, intent.command.id, {
+        provider_trade_no: tradeNo,
+        provider_order_id: orderId,
+        response_metadata: { order_ok: true, order_id: orderId },
+      });
     }
 
-    // From this line onward, any thrown error is physically ambiguous: the HTTP
-    // request may have reached the supplier even when no response is available.
-    hardwareCommandIssued = true;
     const ejection = oneTimeTestResume
       ? await ejectByRentWithOneTimeRentalPermit(
         cabinetId,
@@ -598,12 +725,21 @@ Deno.serve(async (req) => {
       error: ejection.ok ? null : safeCode(ejection.error, "EJECTION_UNCONFIRMED"),
     });
 
-    if (needsSupplierReleaseConfirmation(ejection, released.batteryId)) {
-      // The supplier received the physical request at the HTTP layer but did
-      // not provide a usable battery identity. Do not retry and do not present
-      // this normal asynchronous window as a support failure. This also covers
-      // an otherwise-successful C3 response that omits batteryId.
+    if (ejection.ok) {
+      // A supplier HTTP acknowledgement is deliberately never transformed into
+      // "battery available". The signed callback/reconciliation has to match
+      // this persisted intent and the physical battery/slot identity first.
       const code = "EJECTION_PROVIDER_CONFIRMATION_PENDING";
+      await updateEjectIntent(db, intent.command.id, {
+        state: "provider_acknowledged",
+        provider_trade_no: tradeNo,
+        provider_acknowledged_at: new Date().toISOString(),
+        response_metadata: {
+          eject_ok: true,
+          reported_battery_id: released.batteryId,
+          reported_slot_num: selectedSlotNum,
+        },
+      });
       const { error: pendingUpdateError } = await db.from("rental_sessions").update({
         state: "ejecting",
         chargenow_status: "release_provider_confirmation_pending",
@@ -620,82 +756,30 @@ Deno.serve(async (req) => {
       return reply({ ok: true, state: "ejecting", confirmationPending: true }, 202);
     }
 
-    if (!ejection.ok) {
-      const code = safeCode(ejection.error, "EJECTION_UNCONFIRMED");
-      await db.from("rental_sessions").update({
-        state: "needs_support",
-        chargenow_status: "release_unconfirmed",
-        failure_code: code,
-        failure_message: "La commande a été envoyée mais la sortie de batterie n'est pas confirmée.",
-      }).eq("id", session.id);
-      await openIncident(
-        db,
-        session,
-        code,
-        "Résultat d'éjection incertain — réconciliation ChargeNow obligatoire avant toute compensation.",
-        { cabinetId, tradeNo, requestedSlotNum: resolvedSlotNum },
-      );
-      return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
-    }
-
-    if (!released.batteryId) {
-      await db.from("rental_sessions").update({
-        state: "needs_support",
-        chargenow_status: "released_battery_unknown",
-        failure_code: "BATTERY_ID_MISSING",
-        failure_message: "ChargeNow confirme une sortie sans identifiant de batterie exploitable.",
-      }).eq("id", session.id);
-      await openIncident(
-        db,
-        session,
-        "BATTERY_ID_MISSING",
-        "La batterie sortie ne peut pas être corrélée de manière certaine.",
-        { cabinetId, tradeNo, slotNum: selectedSlotNum },
-      );
-      return reply({ ok: false, error: "BATTERY_CORRELATION_REQUIRED" }, 202);
-    }
-
-    const releasedAt = new Date().toISOString();
-    await appendRentalEvent(db, {
-      rentalId: rentalSessionId,
-      eventType: "battery_released",
-      idempotencyKey: `battery_released:${tradeNo}:${released.batteryId}`,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId: String(session.station_id ?? "") || null,
-      batteryId: released.batteryId,
-      occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum: selectedSlotNum, tradeNo },
+    const code = safeCode(ejection.error, "EJECTION_UNCONFIRMED");
+    await updateEjectIntent(db, intent.command.id, {
+      state: "unknown_provider_result",
+      response_metadata: {
+        eject_ok: false,
+        reported_battery_id: released.batteryId,
+        reported_slot_num: selectedSlotNum,
+        error: code,
+      },
     });
-    await appendRentalEvent(db, {
-      rentalId: rentalSessionId,
-      eventType: "rental_activated",
-      idempotencyKey: `rental_activated:${tradeNo}:${released.batteryId}`,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId: String(session.station_id ?? "") || null,
-      batteryId: released.batteryId,
-      occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum: selectedSlotNum, tradeNo },
-    });
-
-    const { error: releaseUpdateError } = await db.from("rental_sessions").update({
-      state: "ejected",
-      ejected_at: releasedAt,
-      chargenow_status: "ejected",
-      started_at: releasedAt,
-      selected_slot_num: selectedSlotNum,
-      battery_id: released.batteryId,
-      failure_code: null,
-      failure_message: null,
+    await db.from("rental_sessions").update({
+      state: "needs_support",
+      chargenow_status: "release_unconfirmed",
+      failure_code: code,
+      failure_message: "La commande a été envoyée mais la sortie de batterie n'est pas confirmée.",
     }).eq("id", session.id);
-    if (releaseUpdateError) throw releaseUpdateError;
-
-    await auditLog(db, {
-      actor: caller.actor,
-      action: "rental.released",
-      target: session.id,
-      data: { cabinetId, slotNum: selectedSlotNum, tradeNo, battery_id: released.batteryId },
-    });
-    return reply({ ok: true, slotNum: selectedSlotNum, batteryId: released.batteryId });
+    await openIncident(
+      db,
+      session,
+      code,
+      "Résultat d'éjection incertain — réconciliation ChargeNow obligatoire avant toute compensation.",
+      { cabinetId, tradeNo, requestedSlotNum: resolvedSlotNum, hardware_command_id: intent.command.id },
+    );
+    return reply({ ok: false, error: "EJECTION_RECONCILIATION_REQUIRED" }, 202);
   } catch (error) {
     const code = error instanceof OrchestratorError
       ? error.code

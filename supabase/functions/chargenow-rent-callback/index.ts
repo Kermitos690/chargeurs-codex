@@ -168,56 +168,61 @@ async function applyReleaseSuccess(
   if (!state) throw new OrchestratorError("ORCHESTRATOR_SNAPSHOT_MISSING");
   if (state === "active") return { state: "active", idempotent: true };
 
-  let batteryId = String(session.battery_id ?? "").trim() || null;
+  const batteryId = String(session.battery_id ?? "").trim() || null;
   let slotNum = session.selected_slot_num == null ? null : Number(session.selected_slot_num);
   const stationId = identity.stationId ?? (String(session.station_id ?? "").trim() || null);
 
-  if (state === "release_requested") {
-    if (!identity.batteryId || identity.slotNum == null) {
-      await openIncident(
-        db,
-        session,
-        "RELEASE_IDENTITY_INCOMPLETE",
-        "ChargeNow confirme la sortie, mais l'identifiant de batterie ou le slot manque.",
-        { tradeNo: identity.tradeNo, stationId: identity.stationId },
-      );
-      throw new OrchestratorError("RELEASE_IDENTITY_INCOMPLETE");
-    }
-    if (batteryId && batteryId !== identity.batteryId) {
-      await openIncident(
-        db,
-        session,
-        "RELEASE_BATTERY_MISMATCH",
-        "ChargeNow confirme la sortie d'une batterie différente de celle réservée.",
-        { tradeNo: identity.tradeNo, expectedBattery: batteryId, observedBattery: identity.batteryId },
-      );
-      throw new OrchestratorError("RELEASE_BATTERY_MISMATCH");
-    }
-    batteryId = identity.batteryId;
-    slotNum = identity.slotNum;
-    const releasedAt = new Date().toISOString();
-    await appendRentalEvent(db, {
-      rentalId: String(session.id),
-      eventType: "battery_released",
-      idempotencyKey: `battery_released:callback:${identity.tradeNo}:${batteryId}`,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId,
-      batteryId,
-      occurredAt: releasedAt,
-      metadata: { tradeNo: identity.tradeNo, slotNum, source: "chargenow_callback" },
-    });
-    const { error } = await db.from("rental_sessions").update({
-      state: "ejected",
-      ejected_at: session.ejected_at ?? releasedAt,
-      started_at: session.started_at ?? releasedAt,
-      chargenow_status: "ejected",
-      selected_slot_num: slotNum,
-      battery_id: batteryId,
-      failure_code: null,
-      failure_message: null,
-    }).eq("id", session.id);
-    if (error) throw error;
-  } else if (state !== "released") {
+  // The callback is evidence only when it closes a persisted, single physical
+  // command for this rental. It must never activate a rental merely because a
+  // provider request uses the same trade number.
+  const { data: command, error: commandError } = await db.from("hardware_commands")
+    .select("id, state, station_id, slot_num, provider_trade_no")
+    .eq("rental_session_id", session.id)
+    .eq("command_type", "eject")
+    .maybeSingle();
+  if (commandError) throw commandError;
+  if (!command) {
+    await openIncident(
+      db,
+      session,
+      "HARDWARE_COMMAND_INTENT_MISSING",
+      "La confirmation fournisseur ne correspond à aucune intention matérielle persistée.",
+      { tradeNo: identity.tradeNo, stationId: identity.stationId, slotNum: identity.slotNum },
+    );
+    throw new OrchestratorError("HARDWARE_COMMAND_INTENT_MISSING");
+  }
+  if (command.provider_trade_no && command.provider_trade_no !== identity.tradeNo) {
+    await openIncident(
+      db,
+      session,
+      "RELEASE_TRADE_MISMATCH",
+      "La confirmation fournisseur ne correspond pas à la commande matérielle attendue.",
+      { expectedTradeNo: command.provider_trade_no, observedTradeNo: identity.tradeNo },
+    );
+    throw new OrchestratorError("RELEASE_TRADE_MISMATCH");
+  }
+  if (identity.slotNum != null && Number(command.slot_num) !== identity.slotNum) {
+    await openIncident(
+      db,
+      session,
+      "RELEASE_SLOT_MISMATCH",
+      "La confirmation fournisseur concerne un slot différent de la commande préparée.",
+      { expectedSlotNum: command.slot_num, observedSlotNum: identity.slotNum, tradeNo: identity.tradeNo },
+    );
+    throw new OrchestratorError("RELEASE_SLOT_MISMATCH");
+  }
+  if (command.station_id && stationId && command.station_id !== stationId) {
+    await openIncident(
+      db,
+      session,
+      "RELEASE_STATION_MISMATCH",
+      "La confirmation fournisseur concerne une borne différente de la commande préparée.",
+      { expectedStationId: command.station_id, observedStationId: stationId, tradeNo: identity.tradeNo },
+    );
+    throw new OrchestratorError("RELEASE_STATION_MISMATCH");
+  }
+
+  if (state !== "release_requested" && state !== "released") {
     await openIncident(
       db,
       session,
@@ -228,36 +233,43 @@ async function applyReleaseSuccess(
     throw new OrchestratorError("RELEASE_STATE_CONFLICT");
   }
 
-  if (!batteryId) {
+  // A provider callback is useful acknowledgement, but it is not the physical
+  // truth of the cabinet. In particular, a callback cannot prove that exactly
+  // one battery left its compartment. Only the read-only cabinet reconciliation
+  // is allowed to emit battery_released / rental_activated.
+  if (batteryId && identity.batteryId && batteryId !== identity.batteryId) {
     await openIncident(
       db,
       session,
-      "BATTERY_ID_MISSING",
-      "La location ne peut pas devenir active sans identifiant de batterie.",
-      { tradeNo: identity.tradeNo },
+      "RELEASE_BATTERY_MISMATCH",
+      "ChargeNow a accusé réception pour une batterie différente de celle réservée.",
+      { tradeNo: identity.tradeNo, expectedBattery: batteryId, observedBattery: identity.batteryId },
     );
-    throw new OrchestratorError("BATTERY_ID_MISSING");
+    throw new OrchestratorError("RELEASE_BATTERY_MISMATCH");
   }
+  if (identity.slotNum != null) slotNum = identity.slotNum;
 
-  await appendRentalEvent(db, {
-    rentalId: String(session.id),
-    eventType: "rental_activated",
-    idempotencyKey: `rental_activated:callback:${identity.tradeNo}:${batteryId}`,
-    paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-    stationId,
-    batteryId,
-    metadata: { tradeNo: identity.tradeNo, slotNum, source: "chargenow_callback" },
-  });
+  const { error: commandUpdateError } = await db.from("hardware_commands").update({
+    state: "provider_acknowledged",
+    provider_trade_no: identity.tradeNo,
+    provider_acknowledged_at: new Date().toISOString(),
+    response_metadata: {
+      callback_status: identity.status,
+      battery_id: identity.batteryId ?? batteryId,
+      slot_num: slotNum,
+      station_id: stationId,
+    },
+  }).eq("id", command.id);
+  if (commandUpdateError) throw commandUpdateError;
+
   const { error } = await db.from("rental_sessions").update({
-    state: "active_rental",
-    chargenow_status: "active",
-    battery_id: batteryId,
-    selected_slot_num: slotNum,
-    failure_code: null,
-    failure_message: null,
+    state: "ejecting",
+    chargenow_status: "release_provider_callback_received",
+    failure_code: "EJECTION_PHYSICAL_CONFIRMATION_PENDING",
+    failure_message: "Le fournisseur a accusé réception; vérification physique du slot en attente.",
   }).eq("id", session.id);
   if (error) throw error;
-  return { state: "active", batteryId, slotNum };
+  return { state: "ejecting", confirmation_pending: true, slotNum };
 }
 
 Deno.serve(async (req) => {
@@ -293,7 +305,10 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "INVALID_CALLBACK_AUTH" }, 401);
     }
 
-    externalEventId = `rent-callback:${identity.tradeNo}:${identity.status}:${identity.eventId ?? identity.batteryId ?? identity.slotNum ?? "default"}`;
+    // Supplier delivery identifiers may change for a retry of the exact same
+    // physical callback. Deduplicate the business fact, not the envelope, so
+    // a return cannot repeatedly start settlement.
+    externalEventId = `rent-callback:${identity.tradeNo}:${identity.status}:${identity.batteryId ?? "unknown"}:${identity.stationId ?? "unknown"}:${identity.slotNum ?? "unknown"}`;
     const eventType = identity.status === "2" ? "return"
       : identity.status === "1" ? "release_success"
       : identity.status === "0" ? "release_failed"
@@ -324,12 +339,12 @@ Deno.serve(async (req) => {
     if (identity.status === "1") {
       const result = await applyReleaseSuccess(db, session, identity);
       await auditLog(db, {
-        action: "chargenow.rental.active",
+        action: "chargenow.rental.release_provider_acknowledged",
         target: session.id,
-        data: { tradeNo: identity.tradeNo, batteryId: result.batteryId ?? null },
+        data: { tradeNo: identity.tradeNo, slot_num: result.slotNum ?? null },
       });
       await finishExternalEvent(db, externalEventId, true);
-      return json({ received: true, ...result, state: "active_rental" });
+      return json({ received: true, ...result });
     }
 
     if (identity.status === "0") {
@@ -397,6 +412,29 @@ Deno.serve(async (req) => {
       }
 
       const returnedAt = session.returned_at ?? new Date().toISOString();
+      // A supplier can resend the same return from a different envelope or
+      // report a corrected slot. One rental/trade and one battery still form
+      // one physical return business fact, and settlement must start once.
+      const returnDedupKey = `return:${identity.tradeNo}:${identity.batteryId}`;
+      const { data: returnEvent, error: returnEventError } = await db
+        .from("rental_return_events")
+        .upsert({
+          rental_session_id: session.id,
+          dedup_key: returnDedupKey,
+          battery_id: identity.batteryId,
+          station_id: identity.stationId,
+          slot_num: identity.slotNum,
+          provider_trade_no: identity.tradeNo,
+          provider_event_id: identity.eventId,
+          observed_at: returnedAt,
+          provider_payload: sanitizedPayload,
+        }, { onConflict: "dedup_key", ignoreDuplicates: true })
+        .select("id");
+      if (returnEventError) throw returnEventError;
+      if (!returnEvent || returnEvent.length !== 1) {
+        await finishExternalEvent(db, externalEventId, true);
+        return json({ received: true, duplicate: true, settlement_triggered: false });
+      }
       await appendRentalEvent(db, {
         rentalId: String(session.id),
         eventType: "return_detected",
@@ -422,6 +460,10 @@ Deno.serve(async (req) => {
       if (returnUpdateError) throw returnUpdateError;
 
       const settlement = await triggerSettlement(String(session.id), returnedAt);
+      await db.from("rental_return_events").update({
+        settlement_triggered_at: new Date().toISOString(),
+        processed_at: new Date().toISOString(),
+      }).eq("id", returnEvent[0].id);
       await logApi(db, {
         service: "internal",
         endpoint: "settle-rental-payment",

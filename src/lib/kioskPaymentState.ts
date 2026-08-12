@@ -2,6 +2,7 @@ export type KioskPaymentPresentation = {
   phase: "waitpay" | "error" | "support" | "expired";
   titleKey: string;
   subtitleKey: string;
+  visualState?: "payment_confirmed" | "releasing";
 };
 
 const FAILURE_PRESENTATION: Record<string, KioskPaymentPresentation> = {
@@ -14,8 +15,8 @@ const FAILURE_PRESENTATION: Record<string, KioskPaymentPresentation> = {
 };
 
 const STATE_PRESENTATION: Record<string, KioskPaymentPresentation> = {
-  payment_succeeded: { phase: "waitpay", titleKey: "kiosk.state.payment_succeeded.title", subtitleKey: "kiosk.state.payment_succeeded.subtitle" },
-  ejecting: { phase: "waitpay", titleKey: "kiosk.state.ejecting.title", subtitleKey: "kiosk.state.ejecting.subtitle" },
+  payment_succeeded: { phase: "waitpay", visualState: "payment_confirmed", titleKey: "kiosk.state.payment_succeeded.title", subtitleKey: "kiosk.state.payment_succeeded.subtitle" },
+  ejecting: { phase: "waitpay", visualState: "releasing", titleKey: "kiosk.state.ejecting.title", subtitleKey: "kiosk.state.ejecting.subtitle" },
   payment_failed: { phase: "error", titleKey: "kiosk.state.payment_failed.title", subtitleKey: "kiosk.state.payment_failed.subtitle" },
   payment_expired: { phase: "expired", titleKey: "kiosk.state.payment_expired.title", subtitleKey: "kiosk.state.payment_expired.subtitle" },
   chargenow_failed: { phase: "support", titleKey: "kiosk.state.chargenow_failed.title", subtitleKey: "kiosk.state.chargenow_failed.subtitle" },

@@ -117,10 +117,17 @@ async function recordRetryableSettlementFailure(
   message: string,
   details: Record<string, unknown> = {},
 ) {
+  // A kiosk poll or a redelivered provider callback must never become a
+  // five-second financial retry loop. The Stripe idempotency key protects the
+  // provider call; this durable backoff protects the orchestration itself.
+  const attempts = Math.max(1, Number(session.settlement_attempts ?? 1));
+  const delayMinutes = Math.min(24 * 60, 5 * (2 ** Math.min(attempts - 1, 8)));
+  const nextAttemptAt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
   const { error: updateError } = await db.from("rental_sessions").update({
     settlement_status: "failed",
     settlement_error: code,
     settlement_locked_at: null,
+    settlement_next_attempt_at: nextAttemptAt,
     failure_code: code,
     failure_message: message,
   }).eq("id", session.id);
@@ -128,6 +135,7 @@ async function recordRetryableSettlementFailure(
 
   await openIncident(db, session, code, message, {
     retryable: true,
+    next_attempt_at: nextAttemptAt,
     ...details,
   });
 }
@@ -660,6 +668,8 @@ async function settle(
     settlement_status: "settled",
     settlement_error: null,
     settlement_locked_at: null,
+    settlement_next_attempt_at: null,
+    settlement_last_attempt_at: completedAt,
     settled_at: completedAt,
     state: "completed",
     closed_at: completedAt,

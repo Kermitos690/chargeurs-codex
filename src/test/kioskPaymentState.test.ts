@@ -13,4 +13,9 @@ describe("kiosk payment state presentation", () => {
   it("keeps a verified payment in preparation until the provider reports release", () => {
     expect(kioskPaymentPresentation("payment_succeeded")).toMatchObject({ phase: "waitpay", titleKey: "kiosk.state.payment_succeeded.title" });
   });
+
+  it("separates payment confirmation from physical release", () => {
+    expect(kioskPaymentPresentation("payment_succeeded")).toMatchObject({ visualState: "payment_confirmed" });
+    expect(kioskPaymentPresentation("ejecting")).toMatchObject({ visualState: "releasing" });
+  });
 });

@@ -13,12 +13,16 @@ Deno.test("uncertain ejection results never trigger automatic retry or refund", 
   assert(ejectSource.includes('state: "eject_failed"'));
 });
 
-Deno.test("ChargeNow release callbacks require exact battery identity", () => {
-  assert(callbackSource.includes("RELEASE_IDENTITY_INCOMPLETE"));
+Deno.test("ChargeNow release callbacks are constrained to the persisted command identity", () => {
+  const callbackStart = callbackSource.indexOf("async function applyReleaseSuccess");
+  const callbackEnd = callbackSource.indexOf("Deno.serve", callbackStart);
+  const callbackBlock = callbackSource.slice(callbackStart, callbackEnd);
+  assert(callbackSource.includes("HARDWARE_COMMAND_INTENT_MISSING"));
   assert(callbackSource.includes("RELEASE_BATTERY_MISMATCH"));
-  assert(callbackSource.includes('eventType: "battery_released"'));
-  assert(callbackSource.includes('eventType: "rental_activated"'));
-  assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);
+  assert(callbackBlock.includes("provider_acknowledged"));
+  assertEquals(callbackBlock.includes('eventType: "battery_released"'), false);
+  assertEquals(callbackBlock.includes('eventType: "rental_activated"'), false);
+  assertEquals(callbackBlock.includes('eventType: "rental_failed"'), false);
 });
 
 Deno.test("legacy BATTERY_IN events cannot select the latest station rental", () => {

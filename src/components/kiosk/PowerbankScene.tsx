@@ -76,10 +76,13 @@ export function KioskHolographicFloor() {
  * is not evidence that a battery has physically been taken.
  */
 export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
+  // Physical cabinet geometry: 1 | 3 on the upper row, 2 | 4 below.
+  // Keeping this mapping in the cinematic scene prevents an on-screen slot
+  // marker from pointing a customer to the wrong compartment.
   const position = {
     1: "left-[25%] top-[58%]",
-    2: "left-[73%] top-[58%]",
-    3: "left-[25%] top-[80%]",
+    3: "left-[73%] top-[58%]",
+    2: "left-[25%] top-[80%]",
     4: "left-[73%] top-[80%]",
   }[slotNum ?? 0] ?? "left-1/2 top-2/3";
 
@@ -101,6 +104,31 @@ export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
         className="absolute inset-x-[-15%] bottom-0 h-1/3 bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.38),transparent)] blur-xl"
         animate={{ x: ["-25%", "35%", "-25%"] }}
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </div>
+  );
+}
+
+/**
+ * Stripe payment confirmation is deliberately different from a release
+ * animation. The customer can see that payment is confirmed without being
+ * told, visually or semantically, that the physical compartment has opened.
+ */
+export function PaymentConfirmedScene() {
+  return (
+    <div className="relative aspect-video w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-cyan-100/25 bg-[radial-gradient(circle_at_50%_45%,rgba(34,211,238,.24),transparent_31%),linear-gradient(145deg,rgba(6,18,55,.95),rgba(12,17,50,.86))] shadow-[0_0_70px_rgba(34,211,238,.18)]">
+      <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_20%,rgba(103,232,249,.08)_45%,transparent_70%)]" />
+      <motion.div
+        className="absolute left-1/2 top-1/2 grid h-32 w-32 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-cyan-100/70 bg-cyan-300/15 text-6xl text-cyan-50 shadow-[0_0_56px_rgba(34,211,238,.9)]"
+        animate={{ scale: [1, 1.06, 1], boxShadow: ["0 0 35px rgba(34,211,238,.45)", "0 0 70px rgba(34,211,238,.95)", "0 0 35px rgba(34,211,238,.45)"] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      >
+        ✓
+      </motion.div>
+      <motion.div
+        className="absolute left-1/2 top-1/2 h-[22rem] w-[22rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/25"
+        animate={{ scale: [0.75, 1.08], opacity: [0.75, 0] }}
+        transition={{ duration: 2.1, repeat: Infinity, ease: "easeOut" }}
       />
     </div>
   );

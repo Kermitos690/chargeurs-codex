@@ -193,7 +193,8 @@ html.kiosk-mode body {
   /* No bounce / pull-to-refresh, no overscroll glow. */
   overscroll-behavior: none;
   overflow: hidden;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   /* Disable double-tap zoom; keep taps/scroll responsive. */
   touch-action: manipulation;
   /* No accidental text selection / long-press menus on a public screen. */
@@ -221,7 +222,9 @@ html:not(.kiosk-mode) {
 @media (orientation: landscape) and (max-height: 760px) {
   /* The DTA is a real 16:9 landscape canvas, not a shrunken web card. */
   .kiosk-root { padding: .6rem clamp(.9rem, 2.4vw, 2.4rem); }
-  .kiosk-root > header { min-height: 3.55rem; }
+  .kiosk-root > header { min-height: 3.55rem; flex-wrap: nowrap; }
+  .kiosk-root > header > div:last-child { flex-wrap: nowrap; min-width: 0; }
+  .kiosk-root > header button { white-space: nowrap; }
   .kiosk-root main { min-height: calc(100vh - 4.15rem); max-width: none; }
 
   /* Hero at left, true two-by-two physical cabinet map at right. This uses
@@ -251,7 +254,7 @@ html:not(.kiosk-mode) {
   .kiosk-idle-hero > p { font-size: clamp(1.1rem, 1.8vw, 1.55rem) !important; }
   .kiosk-idle-hero .text-3xl { font-size: clamp(2.1rem, 3.5vw, 3.5rem) !important; }
   .kiosk-slot-grid { grid-column: 2; grid-row: 1 / span 2; max-width: none !important; gap: clamp(.75rem, 1.4vw, 1.4rem) !important; }
-  .kiosk-idle-stage .kiosk-slot-card { min-height: clamp(9.35rem, 25vh, 12.4rem); padding: clamp(.95rem, 1.8vw, 1.45rem); border-radius: 1.65rem; }
+  .kiosk-idle-stage .kiosk-slot-card { min-height: clamp(8.1rem, 20vh, 10.6rem); padding: clamp(.8rem, 1.45vw, 1.2rem); border-radius: 1.65rem; }
   .kiosk-idle-stage .kiosk-slot-visual { height: 2.75rem; margin-top: .5rem; }
   .kiosk-idle-stage .kiosk-slot-card .text-4xl { font-size: clamp(2.25rem, 3.4vw, 3.35rem); line-height: 1; }
   .kiosk-idle-stage .kiosk-slot-card .text-base { font-size: clamp(.95rem, 1.35vw, 1.25rem); }
@@ -280,7 +283,11 @@ html:not(.kiosk-mode) {
   .kiosk-idle-stage { width: 100%; min-height: calc(100vh - 5.5rem); padding: 2rem 3.5rem; }
 }
 
-@media (orientation: portrait), (max-width: 900px) {
+/* Do not apply the compact portrait fallback to a narrow landscape cabinet.
+   The previous comma-separated query matched every viewport below 900px,
+   including landscape WebViews, and collapsed the 16:9 scene into a tiny
+   centred webpage. */
+@media (orientation: portrait) and (max-width: 900px) {
   .kiosk-idle-stage { display: flex !important; min-height: auto; padding: 1rem; }
   .kiosk-idle-hero, .kiosk-idle-cta { align-items: center !important; text-align: center; }
 }

@@ -27,7 +27,7 @@ import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { acceptsKioskStateVersion } from "@/lib/kioskStateVersion";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
-import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
+import { KioskHolographicFloor, PaymentConfirmedScene, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -70,9 +70,9 @@ type KioskFunctionResponse = {
 export default function Kiosk() {
   const { stationId } = useParams();
   const { lang, t } = useI18n();
-  // This is deliberately an opt-in staging preview. A real campaign feed will
-  // replace the demo panel only after operator-managed media is available.
-  const splitLayoutPreview = new URLSearchParams(window.location.search).get("layout") === "split";
+  // The physical DTA screen is landscape. This is not an optional web preview:
+  // the layout must consume the whole 16:9 scene without a scroll escape hatch.
+  const splitLayoutPreview = true;
   const [station, setStation] = useState<Station | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -88,6 +88,7 @@ export default function Kiosk() {
   const [slots, setSlots] = useState<KioskSlot[]>([]);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ title: string; sub: string } | null>(null);
+  const [releaseVisualState, setReleaseVisualState] = useState<"payment_confirmed" | "releasing">("payment_confirmed");
   const [flowFailure, setFlowFailure] = useState<KioskFailure | null>(null);
   const [lockedStation, setLockedStation] = useState<string | null>(null);
   const [stationLoadError, setStationLoadError] = useState<string | null>(null);
@@ -239,7 +240,7 @@ export default function Kiosk() {
   const reset = useCallback(() => {
     idemRef.current = null;
     seenStateVersionRef.current = -1;
-    setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
+    setPhase("idle"); setCheckoutUrl(null); setSessionId(null); setReleaseVisualState("payment_confirmed");
     setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
     void refreshKioskData();
   }, [refreshKioskData]);
@@ -379,6 +380,7 @@ export default function Kiosk() {
     }
     const presentation = kioskPaymentPresentation(s, failureCode);
     if (presentation) {
+      setReleaseVisualState(presentation.visualState ?? "payment_confirmed");
       setStatusMsg({ title: t(presentation.titleKey), sub: t(presentation.subtitleKey) });
       setPhase(presentation.phase);
     }
@@ -396,7 +398,10 @@ export default function Kiosk() {
       // ChargeNow can acknowledge an ejection before it publishes the battery
       // identity. Reconcile only that pending state by reading the selected
       // supplier slot; this endpoint never sends a hardware command.
-      if (phase === "waitpay") {
+      // Physical reconciliation is read-only and is meaningful only after the
+      // server has persisted a single release intent. Calling it merely because
+      // Stripe paid used to make the kiosk animate a release that never started.
+      if (phase === "waitpay" && releaseVisualState === "releasing") {
         const kioskToken = readKioskToken();
         if (kioskToken) {
           await invokeKioskEdgeProxy("/api/kiosk/reconcile-pending-ejection", {
@@ -419,7 +424,7 @@ export default function Kiosk() {
     void poll();
     const interval = setInterval(() => void poll(), 3000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [sessionId, publicCode, phase, stationId, applyState]);
+  }, [sessionId, publicCode, phase, stationId, applyState, releaseVisualState]);
 
   const failFlow = useCallback((failure: KioskFailure) => {
     setFlowFailure(failure);
@@ -707,8 +712,8 @@ export default function Kiosk() {
                   the same arrangement on the touch screen makes "slot 4"
                   immediately locatable after payment. */}
               <div className="kiosk-slot-grid relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
-                {Array.from({ length: 4 }, (_, index) => slots.find((slot) => slot.slot_num === index + 1) ?? {
-                  slot_num: index + 1, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
+                {[1, 3, 2, 4].map((physicalSlotNum, index) => slots.find((slot) => slot.slot_num === physicalSlotNum) ?? {
+                  slot_num: physicalSlotNum, charge_percent: null, rentable: false, confidence: "low" as const, status: "checking" as const, recommended: false,
                 }).map((slot, index) => {
                   const selected = slot.slot_num === slotNum;
                   return <motion.button key={slot.slot_num} type="button" disabled={!slot.rentable}
@@ -831,7 +836,9 @@ export default function Kiosk() {
 
           {phase === "waitpay" && (
             <motion.div key="waitpay" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-release-stage flex w-full max-w-[86rem] flex-col items-center gap-7 px-4">
-              <SlotReleaseScene slotNum={slotNum} />
+              {releaseVisualState === "releasing"
+                ? <SlotReleaseScene slotNum={slotNum} />
+                : <PaymentConfirmedScene />}
               <div className="flex items-center gap-4">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
                 <h2 className="font-display text-5xl font-extrabold tracking-tight">{statusMsg?.title ?? t("kiosk.state.payment_succeeded.title")}</h2>

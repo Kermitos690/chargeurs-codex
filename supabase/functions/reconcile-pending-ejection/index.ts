@@ -24,6 +24,28 @@ function validUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}[0-9a-f]$/i.test(value);
 }
 
+function unexpectedEmptySlotsAfterEjection(
+  requestMetadata: unknown,
+  snapshot: Awaited<ReturnType<typeof readCabinetSnapshot>>,
+  selectedSlotNum: number,
+): number[] {
+  const metadata = requestMetadata && typeof requestMetadata === "object"
+    ? requestMetadata as Record<string, unknown>
+    : {};
+  const preflight = metadata.preflight && typeof metadata.preflight === "object"
+    ? metadata.preflight as Record<string, unknown>
+    : {};
+  const before = Array.isArray(preflight.slots) ? preflight.slots : [];
+  return before.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const row = value as Record<string, unknown>;
+    const slotNum = Number(row.slot_num);
+    if (!Number.isInteger(slotNum) || slotNum === selectedSlotNum || row.battery_present !== true) return [];
+    const after = snapshot.slots.find((slot) => slot.slot_num === slotNum);
+    return after?.battery_present === false ? [slotNum] : [];
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers });
   const correlationId = crypto.randomUUID();
@@ -52,7 +74,10 @@ Deno.serve(async (req) => {
     if (["ejected", "active_rental", "battery_taken", "completed"].includes(String(session.state))) {
       return json(correlationId, { ok: true, state: session.state, alreadyReconciled: true });
     }
-    if (session.state !== "ejecting" || session.chargenow_status !== "release_provider_confirmation_pending") {
+    if (
+      session.state !== "ejecting" ||
+      !["release_provider_confirmation_pending", "release_provider_callback_received"].includes(String(session.chargenow_status))
+    ) {
       return json(correlationId, { ok: true, state: session.state, reconcilable: false });
     }
 
@@ -88,6 +113,47 @@ Deno.serve(async (req) => {
       return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "AWAITING_PROVIDER_SLOT_EMPTY" }, 202);
     }
 
+    const { data: command, error: commandLookupError } = await db.from("hardware_commands")
+      .select("id,request_metadata")
+      .eq("rental_session_id", session.id)
+      .eq("command_type", "eject")
+      .maybeSingle();
+    if (commandLookupError) throw commandLookupError;
+    if (!command) {
+      await auditLog(db, {
+        action: "rental.release.reconciliation_missing_intent",
+        target: String(session.id),
+        data: { station_id: stationId, slot_num: slotNum },
+      });
+      return json(correlationId, { ok: false, state: "needs_support", error: "HARDWARE_COMMAND_INTENT_MISSING" }, 409);
+    }
+    const unexpectedEmptySlots = unexpectedEmptySlotsAfterEjection(command.request_metadata, snapshot, slotNum);
+    if (unexpectedEmptySlots.length) {
+      const reason = "MULTIPLE_SLOT_CHANGE_AFTER_EJECTION";
+      const now = new Date().toISOString();
+      const { error: ambiguityCommandError } = await db.from("hardware_commands").update({
+        state: "physical_ambiguity",
+        response_metadata: { confirmation_source: "supplier_slot_snapshot", selected_slot_num: slotNum, unexpected_empty_slots: unexpectedEmptySlots },
+      }).eq("id", command.id);
+      if (ambiguityCommandError) throw ambiguityCommandError;
+      const { error: ambiguityRentalError } = await db.from("rental_sessions").update({
+        state: "needs_support",
+        chargenow_status: "physical_ambiguity",
+        failure_code: reason,
+        failure_message: "Plusieurs emplacements ont changé pendant l'éjection; vérification opérateur requise.",
+      }).eq("id", session.id).eq("state", "ejecting");
+      if (ambiguityRentalError) throw ambiguityRentalError;
+      const { error: incidentError } = await db.from("system_incidents").insert({
+        type: "eject_failed_after_payment",
+        severity: "critical",
+        message: "Plusieurs slots sont devenus vides après une commande d'éjection unique.",
+        data: { rental_session_id: session.id, station_id: stationId, selected_slot_num: slotNum, unexpected_empty_slots: unexpectedEmptySlots, detected_at: now },
+        resolved: false,
+      });
+      if (incidentError) throw incidentError;
+      return json(correlationId, { ok: false, state: "needs_support", error: reason }, 409);
+    }
+
     const releasedAt = new Date().toISOString();
     const tradeNo = String(session.apifox_trade_no ?? "") || String(session.id);
     await appendRentalEvent(db, {
@@ -112,6 +178,20 @@ Deno.serve(async (req) => {
     }).eq("id", session.id).eq("state", "ejecting").select("id");
     if (updateError) throw updateError;
     if (!updated?.length) return json(correlationId, { ok: true, state: "ejecting", confirmed: false, reason: "RECONCILIATION_RACE" }, 202);
+
+    // This is the first point where the backend records an ejection as
+    // physically confirmed: the exact reserved compartment is observed empty
+    // by a read-only supplier snapshot. The command is never retried here.
+    const { error: commandError } = await db.from("hardware_commands").update({
+      state: "physically_confirmed",
+      confirmed_at: releasedAt,
+      response_metadata: {
+        confirmation_source: "supplier_slot_snapshot",
+        slot_num: slotNum,
+        battery_id: batteryId,
+      },
+    }).eq("rental_session_id", session.id).eq("command_type", "eject");
+    if (commandError) throw commandError;
 
     await auditLog(db, {
       action: "rental.release.reconciled_from_supplier_snapshot",

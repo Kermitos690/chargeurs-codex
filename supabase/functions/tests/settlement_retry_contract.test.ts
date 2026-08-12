@@ -16,6 +16,8 @@ Deno.test("settlement failures release the database lock for retry", () => {
   const block = source.slice(start, end);
   assert(block.includes('settlement_status: "failed"'));
   assert(block.includes("settlement_locked_at: null"));
+  assert(block.includes("settlement_next_attempt_at"));
+  assert(block.includes("next_attempt_at"));
   assert(block.includes("retryable: true"));
 });
 
