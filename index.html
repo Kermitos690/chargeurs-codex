@@ -13,7 +13,11 @@
         try {
           var path = window.location.pathname || "";
           var isKioskPath = path === "/kiosk" || path.indexOf("/kiosk/") === 0;
-          var isNativeKiosk = typeof window.ChargeursNative !== "undefined";
+          // MainActivity appends `ChargeursKiosk/<version>` to the UA before
+          // navigation. Use that synchronous marker as well as the JS bridge so
+          // OEM WebViews cannot miss the 1280×720 bootstrap due to bridge timing.
+          var kioskUserAgent = /(?:^|\s)ChargeursKiosk\//.test(navigator.userAgent || "");
+          var isNativeKiosk = kioskUserAgent || typeof window.ChargeursNative !== "undefined";
           if (!isKioskPath || !isNativeKiosk) return;
 
           var viewport = document.getElementById("chargeurs-viewport");
@@ -34,12 +38,14 @@
               ", viewport-fit=cover, user-scalable=no"
           );
           document.documentElement.dataset.kioskPhysicalViewport = "1280x720";
+          document.documentElement.dataset.kioskNativeDetected = kioskUserAgent ? "ua" : "bridge";
           window.__CHARGEURS_KIOSK_VIEWPORT__ = {
             sourceWidth: sourceWidth,
             sourceHeight: sourceHeight,
             targetWidth: 1280,
             targetHeight: 720,
-            scale: scale
+            scale: scale,
+            nativeDetection: kioskUserAgent ? "ua" : "bridge"
           };
         } catch (error) {
           // Fail open to the ordinary responsive viewport. The kiosk remains
