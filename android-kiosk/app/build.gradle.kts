@@ -34,10 +34,11 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Field RC after the staging payment/hardware lifecycle hardening.
-        // The staging variant appends "-staging" and remains test-only.
-        versionCode = 116
-        versionName = "1.0.16-rc1"
+        // Field recovery RC. Changing the native version deliberately triggers
+        // MainActivity.shouldResetWebRuntime() once after installation, clearing
+        // obsolete WebView storage/cache before the current kiosk shell loads.
+        versionCode = 117
+        versionName = "1.0.17-rc1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
