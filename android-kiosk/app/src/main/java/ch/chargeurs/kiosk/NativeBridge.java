@@ -32,6 +32,8 @@ public final class NativeBridge {
             "deviceId", devicePublicId,
             "stationId", config.stationId(),
             "hardware", cabinetController.status(),
+            "wisePad", WisePadUsbProbe.snapshot(activity),
+            "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
             "vendorCompatibility", VendorAppCompatibility.inspect(activity)
         ).toString();
     }
@@ -50,6 +52,19 @@ public final class NativeBridge {
     }
 
     /**
+     * Safe, read-only payment-reader state for TEST UI. It never requests USB
+     * permission and never contains Stripe secrets, tokens or payment amounts.
+     */
+    @JavascriptInterface
+    public String getPaymentReaderStatus() {
+        return JsonObjects.of(
+            "enabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
+            "mode", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED ? "TERMINAL_USB_TEST" : "QR_ONLY",
+            "reader", WisePadUsbProbe.snapshot(activity)
+        ).toString();
+    }
+
+    /**
      * Metadata-only provider compatibility state for the hidden diagnostics
      * view. It cannot see or take over another app's network/serial session.
      */
@@ -57,6 +72,8 @@ public final class NativeBridge {
     public String getHardwareIntegrationStatus() {
         return JsonObjects.of(
             "cabinet", cabinetController.status(),
+            "wisePad", WisePadUsbProbe.snapshot(activity),
+            "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
             "vendorCompatibility", VendorAppCompatibility.inspect(activity),
             "physicalEjectionEnabled", isPhysicalEjectionEnabled()
         ).toString();
