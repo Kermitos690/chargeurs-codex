@@ -21,10 +21,26 @@ const isKioskSurface =
   hashPath === "/kiosk" ||
   hashPath.startsWith("/kiosk/");
 const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
-// The Android wrapper owns lifecycle, offline recovery and updates. A browser
-// service worker inside that wrapper can retain an obsolete app shell after an
-// APK update, so it is deliberately not used there.
-const isNativeKioskWrapper = "ChargeursNative" in window;
+
+function detectNativeKioskWrapper() {
+  if ("ChargeursNative" in window) return true;
+  if (/\bChargeursKiosk\//i.test(navigator.userAgent || "")) return true;
+  try {
+    return Boolean(window.localStorage.getItem("chargeurs_native_wrapper"));
+  } catch {
+    return false;
+  }
+}
+
+// The Android wrapper owns lifecycle, offline recovery and updates. On the
+// field WebView the Javascript bridge can become observable a little later than
+// the document head, so bridge presence alone is not a reliable native marker.
+// The wrapper also appends ChargeursKiosk/<version> to the UA before navigation
+// and persists a non-secret wrapper-version marker after credential injection.
+const isNativeKioskWrapper = detectNativeKioskWrapper();
+if (isKioskSurface && isNativeKioskWrapper) {
+  document.documentElement.dataset.kioskNativeRuntime = "true";
+}
 
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
@@ -40,7 +56,7 @@ function showNativePreboot() {
     </div>`;
 }
 
-// APK 1.0.15 starts a 20-second native watchdog and expects the web app to call
+// Native kiosk builds start a 20-second watchdog and expect the web app to call
 // ChargeursNative.kioskUiReady() once React has actually painted kiosk UI.
 function armNativeKioskUiReadyHandshake() {
   if (!isKioskSurface || !isNativeKioskWrapper) return;
@@ -111,7 +127,7 @@ async function startApplication() {
 
   // Browser/PWA kiosk routes keep controlled prompt updates because an
   // automatic reload during payment/rental would be unsafe. Native Android
-  // kiosks never register this SW; their shell was cleaned before React above.
+  // kiosks never register this SW; their shell is cleaned before React above.
   if (isKioskSurface && !isStaticHashPreview && !isNativeKioskWrapper) {
     initKioskPwa();
   } else if (!isNativeKioskWrapper && "serviceWorker" in navigator) {
