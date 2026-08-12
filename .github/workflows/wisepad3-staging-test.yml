@@ -1,0 +1,77 @@
+name: WisePad 3 STAGING TEST APK
+
+on:
+  push:
+    branches:
+      - agent/kiosk-wisepad3-stripe-terminal-usb
+    paths:
+      - android-kiosk/**
+      - docs/kiosk/WISEPAD3_ANDROID_STRIPE_TERMINAL_AUDIT.md
+      - .github/workflows/wisepad3-staging-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-inspect-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build STAGING TEST APK
+        working-directory: android-kiosk
+        env:
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+        run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
+
+      - name: Verify Stripe Terminal USB manifest + package
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          test -s "$apk"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
+          "$apksigner_path" verify --verbose "$apk"
+          badging="$($aapt_path dump badging "$apk")"
+          printf '%s\n' "$badging"
+          printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='118'"
+          printf '%s\n' "$badging" | grep -F "1.0.18-wisepad-test-staging"
+          manifest="$($aapt_path dump xmltree "$apk" AndroidManifest.xml)"
+          printf '%s\n' "$manifest" > /tmp/manifest.txt
+          grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
+          grep -Ei "15a2|5538" /tmp/manifest.txt
+          grep -Ei "0101|257" /tmp/manifest.txt
+
+      - name: Prepare APK artifact + provenance
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          mkdir -p dist
+          name="Chargeurs_CH_Kiosk_1.0.18-wisepad-test-staging.apk"
+          cp "$apk" "dist/$name"
+          sha256sum "dist/$name" | tee dist/SHA256SUMS.txt
+          printf 'branch=%s\nsha=%s\npackage=ch.chargeurs.kiosk.staging\nversionCode=118\nversionName=1.0.18-wisepad-test-staging\ntargetUsb=15a2:0101\nstripeTerminal=5.7.0\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" > dist/PROVENANCE.txt
+          echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload STAGING TEST APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wisepad3-${{ steps.artifact.outputs.artifact_name }}
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/*
