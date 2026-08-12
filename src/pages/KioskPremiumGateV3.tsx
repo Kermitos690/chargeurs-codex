@@ -30,6 +30,7 @@ import "./kiosk-production-webview-landscape-failsafe.css";
 import "./kiosk-v3-owned-home.css";
 import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-reference-v5.css";
+import "./kiosk-home-reference-v5-canvas.css";
 
 /**
  * Production kiosk entry.
