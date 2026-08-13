@@ -22,6 +22,12 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
+// STAGING only: CI materializes a persistent test keystore and passes its
+// absolute path explicitly. Local builds keep the normal Android debug signer
+// when this value is absent. This is never used for the production release.
+val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
+val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
+
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
@@ -59,6 +65,18 @@ android {
     }
 
     signingConfigs {
+        if (stagingSigningReady) {
+            create("stagingTest") {
+                storeFile = file(stagingStorePath.get())
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
         if (releaseSigningReady) {
             create("release") {
                 storeFile = file(releaseStorePath.get())
@@ -100,6 +118,7 @@ android {
         }
         create("staging") {
             initWith(getByName("debug"))
+            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingTest")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
