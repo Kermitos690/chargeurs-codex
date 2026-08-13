@@ -10,8 +10,10 @@ on:
       - "src/pages/KioskPremiumGateV3.tsx"
       - "src/pages/kiosk-production-*.css"
       - "src/pages/kiosk-v3-owned-home.css"
+      - "src/pages/kiosk-public-beta-premium-v6*.css"
       - "src/components/kiosk/PowerbankScene.tsx"
       - "src/components/kiosk/KioskDiagnostics.tsx"
+      - "src/components/kiosk/KioskPaymentRailStage.tsx"
       - "src/components/kiosk/KioskHelpLauncher.tsx"
       - "src/components/kiosk/KioskOffersLauncher.tsx"
       - "src/components/kiosk/KioskV3AuthGuard.tsx"
@@ -23,6 +25,7 @@ on:
       - "src/components/kiosk/KioskV3TouchFeedback.tsx"
       - "src/test/kioskUxRecovery.test.ts"
       - "src/test/kioskAuthGuard.test.ts"
+      - "src/test/kioskPublicBetaPremiumV6.test.ts"
       - "docs/kiosk-ux-p1-recovery-*.md"
       - "docs/chargeurs-cinematic-kiosk-direction.md"
       - "docs/agent4-kiosk-auth-failsafe-plan.md"
@@ -34,7 +37,7 @@ permissions:
 jobs:
   typecheck-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +45,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -56,7 +59,7 @@ jobs:
           typecheck_exit=${PIPESTATUS[0]}
           set -e
 
-          if grep -E 'src/(main\.tsx|pwa/nativeKioskBootstrap\.ts|lib/kioskEdgeProxy\.ts|components/kiosk/(PowerbankScene|KioskDiagnostics|KioskHelpLauncher|KioskOffersLauncher|KioskV3AuthGuard|KioskV3HomeChrome|KioskV3OwnedHome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/(kioskUxRecovery|kioskAuthGuard)\.test\.ts)' /tmp/chargeurs-typecheck.log; then
+          if grep -E 'src/(main\.tsx|pwa/nativeKioskBootstrap\.ts|lib/kioskEdgeProxy\.ts|components/kiosk/(PowerbankScene|KioskDiagnostics|KioskPaymentRailStage|KioskHelpLauncher|KioskOffersLauncher|KioskV3AuthGuard|KioskV3HomeChrome|KioskV3OwnedHome|KioskV3JourneyChrome|KioskV3CinematicDirector|KioskV3PricingRecovery|KioskV3TouchFeedback)\.tsx|pages/(KioskHome|KioskPremiumGateV3)\.tsx|test/(kioskUxRecovery|kioskAuthGuard|kioskPublicBetaPremiumV6)\.test\.(ts|tsx))' /tmp/chargeurs-typecheck.log; then
             echo "::error::TypeScript regression detected in Agent 4 kiosk UX files"
             exit 1
           fi
@@ -65,8 +68,8 @@ jobs:
             echo "::warning::Repository baseline type errors remain outside the Agent 4 change surface"
           fi
 
-      - name: Kiosk recovery contract tests
-        run: npx vitest run src/test/kioskUxRecovery.test.ts src/test/kioskAuthGuard.test.ts
+      - name: Kiosk UX contract tests
+        run: npx vitest run src/test/kioskUxRecovery.test.ts src/test/kioskAuthGuard.test.ts src/test/kioskPublicBetaPremiumV6.test.ts
 
       - name: Production build
         run: npm run build
