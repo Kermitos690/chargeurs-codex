@@ -71,7 +71,12 @@ jobs:
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
             -alias androiddebugkey \
-            | grep -E 'Alias name:|SHA256:'
+            | tee /tmp/staging-keytool.txt
+          canonical_signer="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test -n "$canonical_signer"
+          test "${#canonical_signer}" -eq 64
+          printf '%s' "$canonical_signer" > /tmp/canonical_staging_signer_sha256
+          echo "Canonical STAGING signer SHA-256: $canonical_signer"
 
       - uses: gradle/actions/setup-gradle@v5
 
@@ -81,7 +86,7 @@ jobs:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
-        run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
+        run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
       - name: Verify DTA21269 Stripe 2.22 compatibility lane, DEX packaging, package and signer
         shell: bash
@@ -102,12 +107,13 @@ jobs:
           test -s "$application"
           test -s "$bridge"
           test -s "$HOME/.android/debug.keystore"
+          test -s /tmp/canonical_staging_signer_sha256
 
-          # Explicit field compatibility experiment: Stripe 2.22.0 is the
-          # first GA WisePad 3 USB release and uses the pre-offline init API.
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
           grep -F 'versionCode = 121' "$gradle"
           grep -F '1.0.21-terminal-compat-v2' "$gradle"
+          grep -F 'CHARGEURS_STAGING_KEYSTORE_PATH' "$gradle"
+          grep -F 'signingConfigs.getByName("stagingTest")' "$gradle"
           grep -F 'SDK_COMPAT = "2.22.0-test-only"' "$runtime"
           grep -F 'Terminal.initTerminal(' "$runtime"
           grep -F 'DiscoveryMethod.USB' "$runtime"
@@ -134,9 +140,16 @@ jobs:
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
+          canonical_digest="$(cat /tmp/canonical_staging_signer_sha256)"
           test -n "$cert_digest"
           test "${#cert_digest}" -eq 64
+          if [ "$cert_digest" != "$canonical_digest" ]; then
+            echo "STAGING signer mismatch: APK=$cert_digest canonical=$canonical_digest" >&2
+            exit 1
+          fi
           printf '%s' "$cert_digest" > /tmp/apk_signer_sha256
+          echo "STAGING signer continuity gate PASS: $cert_digest"
+
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
@@ -207,6 +220,7 @@ jobs:
           physicalEjectionEnabled=false
           paymentMode=TEST_ONLY
           stagingSigningPolicy=github_actions_cached_explicit_debug_keystore_v1
+          stagingSignerContinuityGate=apk_cert_must_equal_cached_keystore_cert
           fieldRegression1=NoClassDefFoundError_StripeTerminalBackendClient_ConnectionTokenResult_fixed
           fieldRegression2=Stripe5_7_OfflineAesKeyProvider_Keymaster_DEAD_OBJECT_bypassed_for_diagnostic
           dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_present
@@ -214,7 +228,7 @@ jobs:
           signerCertificateSha256=$signer_sha
           signerCertificateSha256Colon=$signer_colon
           signingVerification=apksigner_verify_pass
-          installedSignerContinuity=CANONICAL_STAGING_CACHE_V1_MATERIALIZED
+          installedSignerContinuity=CANONICAL_STAGING_CACHE_V1_ENFORCED
           rollbackRequirement=RETAIN_PREVIOUS_KNOWN_GOOD_APK_SHA_VERSION_SIGNER
           EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
