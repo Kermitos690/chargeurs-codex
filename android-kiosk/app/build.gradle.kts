@@ -44,8 +44,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 122
-        versionName = "1.0.22-terminal-compat-v2-core"
+        versionCode = 123
+        versionName = "1.0.23-terminal-simulator-v2"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -56,6 +56,7 @@ android {
         buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "false")
         buildConfigField("String", "BUILD_ENVIRONMENT", "\"staging\"")
         buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
+        buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
     }
@@ -108,6 +109,7 @@ android {
             )
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",
@@ -121,7 +123,11 @@ android {
             if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingTest")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            // This build is deliberately simulator-only. The proven physical
+            // WisePad USB path remains frozen in 1.0.22 and is restored after
+            // the software payment-rail test.
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "true")
             buildConfigField(
                 "String",
                 "STRIPE_TERMINAL_BACKEND_URL",
@@ -168,9 +174,8 @@ dependencies {
     // Android 11 Keymaster. Never promote this dependency to production.
     implementation("com.stripe:stripeterminal:2.22.0")
 
-    // Stripe 2.22's legacy BBPOS USB adapter references ContextCompat directly
-    // but does not package AndroidX Core into this application transitively.
-    // Keep this explicit in the TEST-only lane and assert the class in DEX CI.
+    // Stripe 2.22's legacy BBPOS adapter references ContextCompat directly but
+    // does not package AndroidX Core into this application transitively.
     implementation("androidx.core:core:1.13.1")
 
     testImplementation("junit:junit:4.13.2")
