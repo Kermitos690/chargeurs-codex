@@ -52,8 +52,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 126
-        versionName = "1.0.26-terminal-simulator-stable-v1"
+        versionCode = 127
+        versionName = "1.0.27-wisepad-usb-staging-v1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -145,11 +145,11 @@ android {
             if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingTest")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            // This build is deliberately simulator-only. The proven physical
-            // WisePad USB path remains frozen in 1.0.22 and is restored after
-            // the software payment-rail test.
-            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
-            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "true")
+            // Dedicated field-test lane: DTA21269 uses its attached BBPOS
+            // WisePad 3 over USB. The simulated reader is excluded so the UI
+            // can never represent a simulated reader as physical hardware.
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",

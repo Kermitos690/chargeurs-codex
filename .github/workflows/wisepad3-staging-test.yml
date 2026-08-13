@@ -1,4 +1,4 @@
-name: WisePad 3 STAGING stable simulator APK
+name: WisePad 3 STAGING USB field-test APK
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build STAGING stable simulator APK
+      - name: Build STAGING WisePad USB field-test APK
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
@@ -84,7 +84,7 @@ jobs:
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify 1.0.26 stable simulator safety, DEX and signer
+      - name: Verify 1.0.27 WisePad USB field-test APK, DEX and signer
         shell: bash
         run: |
           set -euo pipefail
@@ -92,7 +92,6 @@ jobs:
           gradle="android-kiosk/app/build.gradle.kts"
           config="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfig.java"
           validator="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfigValidator.java"
-          sim_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalSimulatedRuntime.java"
           physical_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
           kiosk="src/pages/Kiosk.tsx"
@@ -100,8 +99,8 @@ jobs:
           forbidden_preview="chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 
           test -s "$apk"
-          grep -F 'versionCode = 126' "$gradle"
-          grep -F '1.0.26-terminal-simulator-stable-v1' "$gradle"
+          grep -F 'versionCode = 127' "$gradle"
+          grep -F '1.0.27-wisepad-usb-staging-v1' "$gradle"
           grep -F 'stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
           grep -F 'stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
           ! grep -F "$forbidden_preview" "$gradle"
@@ -111,14 +110,13 @@ jobs:
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
           grep -F 'implementation("androidx.core:core:1.13.1")' "$gradle"
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
-          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")' "$gradle"
-          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "true")' "$gradle"
+          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")' "$gradle"
+          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")' "$gradle"
           grep -F 'SDK_COMPAT = "2.22.0-test-only"' "$physical_runtime"
-          grep -F 'SDK_COMPAT = "2.22.0-simulated-test-only"' "$sim_runtime"
-          grep -F 'new DiscoveryConfiguration(0, DiscoveryMethod.BLUETOOTH_SCAN, true)' "$sim_runtime"
-          grep -F '.connectBluetoothReader(' "$sim_runtime"
-          grep -F '.collectPaymentMethod(' "$sim_runtime"
-          grep -F '.processPayment(' "$sim_runtime"
+          grep -F 'new DiscoveryConfiguration(0, DiscoveryMethod.USB, false)' "$physical_runtime"
+          grep -F '.connectUsbReader(' "$physical_runtime"
+          grep -F '.collectPaymentMethod(' "$physical_runtime"
+          grep -F '.processPayment(' "$physical_runtime"
           grep -F 'BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED' "$bridge"
           grep -F 'return error("HARDWARE_EJECTION_DISABLED")' "$bridge"
           grep -F 'setPhase("payment_ready")' "$kiosk"
@@ -129,8 +127,8 @@ jobs:
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='126'"
-          printf '%s\n' "$badging" | grep -F "1.0.26-terminal-simulator-stable-v1-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='127'"
+          printf '%s\n' "$badging" | grep -F "1.0.27-wisepad-usb-staging-v1-staging"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
@@ -140,7 +138,7 @@ jobs:
 
           : > /tmp/dex_strings.txt
           while IFS= read -r dex; do unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt; done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
-          grep -F 'StripeTerminalSimulatedRuntime' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalReaderRuntime' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
@@ -148,14 +146,14 @@ jobs:
           grep -F 'chargeurs-ch-staging.vercel.app' /tmp/dex_strings.txt
           ! grep -F "$forbidden_preview" /tmp/dex_strings.txt
 
-      - name: Prepare signed stable simulator APK + provenance
+      - name: Prepare signed WisePad USB field-test APK + provenance
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.26-terminal-simulator-stable-v1-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.27-wisepad-usb-staging-v1-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -164,14 +162,14 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=126
-          versionName=1.0.26-terminal-simulator-stable-v1-staging
+          versionCode=127
+          versionName=1.0.27-wisepad-usb-staging-v1-staging
           environment=STAGING_TEST
           enrollmentBase=https://chargeurs-ch-staging.vercel.app
           frontend=https://chargeurs-ch-staging.vercel.app
           stripeTerminalSdk=2.22.0
-          readerMode=SIMULATED
-          simulatedReader=true
+          readerMode=USB_WISEPAD_3
+          simulatedReader=false
           physicalWisePadReference=tmr_GnorJgwc2oWVq3
           productionEligible=false
           physicalEjectionEnabled=false
@@ -179,11 +177,11 @@ jobs:
           apkSha256=$apk_sha
           signerCertificateSha256=$signer_sha
           signingVerification=apksigner_verify_pass
-          rollbackRequirement=RESTORE_1.0.22_PHYSICAL_READER_LANE_AFTER_SIMULATOR_TEST
+          rollbackRequirement=RESTORE_1.0.26_SIMULATOR_APK_IF_USB_FIELD_TEST_FAILS
           EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
 
-      - name: Upload STAGING stable simulator APK
+      - name: Upload STAGING WisePad USB field-test APK
         uses: actions/upload-artifact@v4
         with:
           name: wisepad3-${{ steps.artifact.outputs.artifact_name }}
