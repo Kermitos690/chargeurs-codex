@@ -41,19 +41,19 @@ public final class KioskConfigValidatorTest {
 
     @Test
     public void restrictsTopLevelNavigationToTheConfiguredOrigin() {
-        assertTrue(KioskConfigValidator.isAllowedUrl(
+        assertTrue(KioskConfigValidator.isAllowedUrlForOrigin(
             "https://chargeurs.ch/kiosk/DTA21269",
             "https://chargeurs.ch"
         ));
-        assertFalse(KioskConfigValidator.isAllowedUrl(
+        assertFalse(KioskConfigValidator.isAllowedUrlForOrigin(
             "https://stripe.com/pay",
             "https://chargeurs.ch"
         ));
-        assertFalse(KioskConfigValidator.isAllowedUrl(
+        assertFalse(KioskConfigValidator.isAllowedUrlForOrigin(
             "javascript:alert(1)",
             "https://chargeurs.ch"
         ));
-        assertFalse(KioskConfigValidator.isAllowedUrl(
+        assertFalse(KioskConfigValidator.isAllowedUrlForOrigin(
             "https://chargeurs.ch.evil.example/kiosk/DTA21269",
             "https://chargeurs.ch"
         ));
