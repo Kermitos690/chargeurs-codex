@@ -44,8 +44,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 121
-        versionName = "1.0.21-terminal-compat-v2"
+        versionCode = 122
+        versionName = "1.0.22-terminal-compat-v2-core"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -167,5 +167,11 @@ dependencies {
     // offline-mode initialization that fails against this kiosk's broken
     // Android 11 Keymaster. Never promote this dependency to production.
     implementation("com.stripe:stripeterminal:2.22.0")
+
+    // Stripe 2.22's legacy BBPOS USB adapter references ContextCompat directly
+    // but does not package AndroidX Core into this application transitively.
+    // Keep this explicit in the TEST-only lane and assert the class in DEX CI.
+    implementation("androidx.core:core:1.13.1")
+
     testImplementation("junit:junit:4.13.2")
 }
