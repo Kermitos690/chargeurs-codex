@@ -73,26 +73,34 @@ jobs:
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
-          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify 1.0.24 preview simulator safety, URL, DEX and signer
+      - name: Verify 1.0.25 preview simulator safety, split origins, DEX and signer
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           gradle="android-kiosk/app/build.gradle.kts"
+          config="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfig.java"
+          validator="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfigValidator.java"
           sim_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalSimulatedRuntime.java"
           physical_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
           kiosk="src/pages/Kiosk.tsx"
+          canonical="https://chargeurs-ch-staging.vercel.app"
           preview="https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 
           test -s "$apk"
-          grep -F 'versionCode = 124' "$gradle"
-          grep -F '1.0.24-terminal-simulator-preview-v2' "$gradle"
-          grep -F "$preview" "$gradle"
+          grep -F 'versionCode = 125' "$gradle"
+          grep -F '1.0.25-terminal-simulator-preview-v3' "$gradle"
+          grep -F 'stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
+          grep -F 'stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"' "$gradle"
+          grep -F 'KIOSK_WEB_BASE_URL' "$gradle"
+          grep -F 'KioskConfigValidator.webBaseUrl(baseUrl)' "$config"
+          grep -F 'BuildConfig.KIOSK_WEB_BASE_URL' "$validator"
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
           grep -F 'implementation("androidx.core:core:1.13.1")' "$gradle"
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
@@ -114,8 +122,8 @@ jobs:
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='124'"
-          printf '%s\n' "$badging" | grep -F "1.0.24-terminal-simulator-preview-v2-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='125'"
+          printf '%s\n' "$badging" | grep -F "1.0.25-terminal-simulator-preview-v3-staging"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
@@ -130,6 +138,7 @@ jobs:
           grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
           grep -F 'androidx/core/content/ContextCompat' /tmp/dex_strings.txt
+          grep -F 'chargeurs-ch-staging.vercel.app' /tmp/dex_strings.txt
           grep -F 'chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app' /tmp/dex_strings.txt
 
       - name: Prepare signed preview simulator APK + provenance
@@ -139,7 +148,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.24-terminal-simulator-preview-v2-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.25-terminal-simulator-preview-v3-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -148,9 +157,10 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=124
-          versionName=1.0.24-terminal-simulator-preview-v2-staging
+          versionCode=125
+          versionName=1.0.25-terminal-simulator-preview-v3-staging
           environment=STAGING_TEST
+          enrollmentBase=https://chargeurs-ch-staging.vercel.app
           frontend=https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app
           stripeTerminalSdk=2.22.0
           readerMode=SIMULATED
