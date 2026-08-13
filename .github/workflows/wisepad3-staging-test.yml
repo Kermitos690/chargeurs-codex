@@ -49,6 +49,30 @@ jobs:
           path: ~/.android/debug.keystore
           key: chargeurs-kiosk-staging-debug-keystore-v1
 
+      - name: Ensure canonical STAGING debug signer exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Chargeurs STAGING TEST,O=Chargeurs.ch,C=CH" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+          fi
+          test -s "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            | grep -E 'Alias name:|SHA256:'
+
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build STAGING TEST APK
@@ -77,6 +101,7 @@ jobs:
           test -s "$backend_client"
           test -s "$application"
           test -s "$bridge"
+          test -s "$HOME/.android/debug.keystore"
 
           # Explicit field compatibility experiment: Stripe 2.22.0 is the
           # first GA WisePad 3 USB release and uses the pre-offline init API.
@@ -181,7 +206,7 @@ jobs:
           backendContractSHA=c3fc313f955dc8f40a12c4ef8a33f099888121b6
           physicalEjectionEnabled=false
           paymentMode=TEST_ONLY
-          stagingSigningPolicy=github_actions_cached_debug_keystore_v1
+          stagingSigningPolicy=github_actions_cached_explicit_debug_keystore_v1
           fieldRegression1=NoClassDefFoundError_StripeTerminalBackendClient_ConnectionTokenResult_fixed
           fieldRegression2=Stripe5_7_OfflineAesKeyProvider_Keymaster_DEAD_OBJECT_bypassed_for_diagnostic
           dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_present
@@ -189,7 +214,7 @@ jobs:
           signerCertificateSha256=$signer_sha
           signerCertificateSha256Colon=$signer_colon
           signingVerification=apksigner_verify_pass
-          installedSignerContinuity=CANONICAL_STAGING_CACHE_V1
+          installedSignerContinuity=CANONICAL_STAGING_CACHE_V1_MATERIALIZED
           rollbackRequirement=RETAIN_PREVIOUS_KNOWN_GOOD_APK_SHA_VERSION_SIGNER
           EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
