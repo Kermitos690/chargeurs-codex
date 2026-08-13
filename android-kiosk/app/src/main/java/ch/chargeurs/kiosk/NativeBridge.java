@@ -10,6 +10,7 @@ public final class NativeBridge {
     private final EjectionAuthorizationVerifier authorizationVerifier;
     private final CommandReplayStore replayStore;
     private final LocalAuditLog auditLog;
+    private final StripeTerminalReaderRuntime terminalRuntime;
 
     public NativeBridge(MainActivity activity, KioskConfig config, CabinetController cabinetController) {
         this.activity = activity;
@@ -23,6 +24,8 @@ public final class NativeBridge {
         );
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
+        this.terminalRuntime = StripeTerminalReaderRuntime.getOrCreate(activity.getApplicationContext(), config);
+        this.terminalRuntime.ensureStarted();
     }
 
     @JavascriptInterface
@@ -34,6 +37,7 @@ public final class NativeBridge {
             "hardware", cabinetController.status(),
             "wisePad", WisePadUsbProbe.snapshot(activity),
             "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
+            "paymentReader", terminalRuntime.snapshot(),
             "vendorCompatibility", VendorAppCompatibility.inspect(activity)
         ).toString();
     }
@@ -52,16 +56,36 @@ public final class NativeBridge {
     }
 
     /**
-     * Safe, read-only payment-reader state for TEST UI. It never requests USB
-     * permission and never contains Stripe secrets, tokens or payment amounts.
+     * Canonical, secret-free payment-reader projection for the shared
+     * ChargeursPresentationModel. USB presence is diagnostics only; READY is
+     * emitted solely by the Stripe Terminal connection lifecycle.
      */
     @JavascriptInterface
     public String getPaymentReaderStatus() {
-        return JsonObjects.of(
-            "enabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
-            "mode", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED ? "TERMINAL_USB_TEST" : "QR_ONLY",
-            "reader", WisePadUsbProbe.snapshot(activity)
-        ).toString();
+        terminalRuntime.ensureStarted();
+        terminalRuntime.refreshPaymentState(false);
+        return terminalRuntime.snapshot().toString();
+    }
+
+    /**
+     * Requests a new canonical discovery/connect attempt. This never revokes,
+     * force-stops, disables or uninstalls the supplier POS application.
+     */
+    @JavascriptInterface
+    public String refreshPaymentReader() {
+        terminalRuntime.ensureStarted();
+        return terminalRuntime.snapshot().toString();
+    }
+
+    /**
+     * Starts the Terminal rail for an already-created canonical rental. The
+     * native runtime asks Agent 2's backend to atomically claim TERMINAL before
+     * any Stripe PaymentIntent side effect. No token, client secret, amount or
+     * payment credential crosses back into the WebView.
+     */
+    @JavascriptInterface
+    public String startTerminalPayment(String rentalSessionId) {
+        return terminalRuntime.startTerminalPayment(rentalSessionId).toString();
     }
 
     /**
@@ -73,6 +97,7 @@ public final class NativeBridge {
         return JsonObjects.of(
             "cabinet", cabinetController.status(),
             "wisePad", WisePadUsbProbe.snapshot(activity),
+            "paymentReader", terminalRuntime.snapshot(),
             "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
             "vendorCompatibility", VendorAppCompatibility.inspect(activity),
             "physicalEjectionEnabled", isPhysicalEjectionEnabled()
@@ -84,11 +109,6 @@ public final class NativeBridge {
         return BuildConfig.VERSION_NAME;
     }
 
-    /**
-     * The web kiosk calls this only after React rendered an actionable state.
-     * It carries no credential and lets the native host replace a blank WebView
-     * with an actionable recovery screen on legacy tablet firmware.
-     */
     @JavascriptInterface
     public void kioskUiReady() {
         activity.markKioskUiReady();
@@ -106,9 +126,6 @@ public final class NativeBridge {
 
     @JavascriptInterface
     public String requestLocalEjection(String signedAuthorization) {
-        // This staging APK intentionally has no physical-command path. Keeping
-        // the bridge method preserves the future contract while making any web
-        // request fail closed, including one with a valid server authorization.
         if (!isPhysicalEjectionEnabled()) {
             auditLog.record("ejection.disabled", JsonObjects.of("environment", BuildConfig.BUILD_ENVIRONMENT));
             return error("HARDWARE_EJECTION_DISABLED");
