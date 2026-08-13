@@ -34,7 +34,8 @@ fi
 pass "adb available: $($ADB_BIN version | head -n 1)"
 
 $ADB_BIN devices -l > "$RUN_DIR/adb-devices.txt" 2>&1 || true
-mapfile -t DEVICES < <($ADB_BIN devices | awk 'NR>1 && $2=="device" {print $1}')
+DEVICE_LINES="$($ADB_BIN devices | awk 'NR>1 && $2=="device" {print $1}')"
+DEVICE_COUNT="$(printf '%s\n' "$DEVICE_LINES" | awk 'NF {count++} END {print count+0}')"
 UNAUTHORIZED="$($ADB_BIN devices | awk 'NR>1 && $2=="unauthorized" {count++} END {print count+0}')"
 OFFLINE="$($ADB_BIN devices | awk 'NR>1 && $2=="offline" {count++} END {print count+0}')"
 
@@ -45,7 +46,7 @@ if (( OFFLINE > 0 )); then
   warn "$OFFLINE Android device(s) reported offline by adb"
 fi
 
-if (( ${#DEVICES[@]} == 0 )); then
+if (( DEVICE_COUNT == 0 )); then
   fail 'no authorized Android device detected over ADB'
   printf '\nNEXT ACTION\n'
   printf '1. Keep the station connected by a DATA-capable USB cable.\n'
@@ -55,16 +56,22 @@ if (( ${#DEVICES[@]} == 0 )); then
   exit 3
 fi
 
-if (( ${#DEVICES[@]} > 1 )); then
-  fail "multiple authorized devices detected (${#DEVICES[@]}). Set ANDROID_SERIAL to the intended station and rerun."
+if (( DEVICE_COUNT > 1 )) && [ -z "${ANDROID_SERIAL:-}" ]; then
+  fail "multiple authorized devices detected ($DEVICE_COUNT). Set ANDROID_SERIAL to the intended station and rerun."
   exit 4
 fi
 
-SERIAL="${ANDROID_SERIAL:-${DEVICES[0]}}"
+FIRST_DEVICE="$(printf '%s\n' "$DEVICE_LINES" | awk 'NF {print; exit}')"
+SERIAL="${ANDROID_SERIAL:-$FIRST_DEVICE}"
 export ANDROID_SERIAL="$SERIAL"
 pass "ADB device selected: $SERIAL"
 
 adbsh() { "$ADB_BIN" -s "$SERIAL" shell "$@"; }
+
+if ! "$ADB_BIN" -s "$SERIAL" get-state 2>/dev/null | grep -qx 'device'; then
+  fail "selected ANDROID_SERIAL is not in adb device state: $SERIAL"
+  exit 5
+fi
 
 adbsh getprop > "$RUN_DIR/getprop.txt" 2>&1 || true
 adbsh ip addr > "$RUN_DIR/ip-addr.txt" 2>&1 || true
@@ -81,7 +88,9 @@ SDK="$(adbsh getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
 FINGERPRINT="$(adbsh getprop ro.build.fingerprint 2>/dev/null | tr -d '\r')"
 ABI="$(adbsh getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
 IPV4="$(adbsh ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print $2}' | head -n1 | tr -d '\r')"
-[ -z "$IPV4" ] && IPV4="$(adbsh ip -4 addr show eth0 2>/dev/null | awk '/inet / {print $2}' | head -n1 | tr -d '\r')"
+if [ -z "$IPV4" ]; then
+  IPV4="$(adbsh ip -4 addr show eth0 2>/dev/null | awk '/inet / {print $2}' | head -n1 | tr -d '\r')"
+fi
 
 printf '\nDEVICE IDENTITY\n'
 printf 'serial=%s\nmodel=%s\nboard=%s\nandroid=%s sdk=%s\nabi=%s\nfingerprint=%s\nipv4=%s\n' \
@@ -94,12 +103,12 @@ else
   pass "adb shell non-root uid=${ROOT_UID:-unknown}"
 fi
 
-KIOSK_PACKAGES="$(adbsh pm list packages 2>/dev/null | sed 's/^package://' | grep -E '^ch\.chargeurs\.kiosk(\.|$)|^ch\.chargeurs\.kiosk\.staging$' || true)"
+KIOSK_PACKAGES="$(adbsh pm list packages 2>/dev/null | sed 's/^package://' | grep -E '^ch\.chargeurs\.kiosk($|\.)' || true)"
 if [ -z "$KIOSK_PACKAGES" ]; then
   warn 'no Chargeurs kiosk package found with expected package prefix'
 else
   printf '\nAPK\n'
-  while IFS= read -r PKG; do
+  printf '%s\n' "$KIOSK_PACKAGES" | while IFS= read -r PKG; do
     [ -z "$PKG" ] && continue
     printf 'package=%s\n' "$PKG"
     adbsh dumpsys package "$PKG" > "$RUN_DIR/package-${PKG}.txt" 2>&1 || true
@@ -107,11 +116,11 @@ else
     VERSION_NAME="$(adbsh dumpsys package "$PKG" 2>/dev/null | sed -n 's/.*versionName=//p' | head -n1 | tr -d '\r')"
     VERSION_CODE="$(adbsh dumpsys package "$PKG" 2>/dev/null | sed -n 's/.*versionCode=\([0-9]*\).*/\1/p' | head -n1 | tr -d '\r')"
     printf 'apkPath=%s\nversionName=%s\nversionCode=%s\n' "${APK_PATH:-unknown}" "${VERSION_NAME:-unknown}" "${VERSION_CODE:-unknown}"
-  done <<< "$KIOSK_PACKAGES"
+  done
   pass 'Chargeurs kiosk package metadata captured'
 fi
 
-if grep -qi '15a2.*0101\|Vendor ID: 0x15a2\|Product ID: 0x0101' "$RUN_DIR/macos-usb.txt" "$RUN_DIR/dumpsys-usb.txt" 2>/dev/null; then
+if grep -Eqi '15a2.*0101|Vendor ID: 0x15a2|Product ID: 0x0101' "$RUN_DIR/macos-usb.txt" "$RUN_DIR/dumpsys-usb.txt" 2>/dev/null; then
   pass 'WisePad target USB identity 15a2:0101 appears in captured USB diagnostics'
 else
   warn 'WisePad target USB identity 15a2:0101 not observed in current USB diagnostics'
