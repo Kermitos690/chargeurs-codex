@@ -84,7 +84,7 @@ jobs:
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify 1.0.27 WisePad USB field-test APK, DEX and signer
+      - name: Verify 1.0.28 WisePad USB field-test APK, DEX and signer
         shell: bash
         run: |
           set -euo pipefail
@@ -99,8 +99,8 @@ jobs:
           forbidden_preview="chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 
           test -s "$apk"
-          grep -F 'versionCode = 127' "$gradle"
-          grep -F '1.0.27-wisepad-usb-staging-v1' "$gradle"
+          grep -F 'versionCode = 128' "$gradle"
+          grep -F '1.0.28-wisepad-usb-staging-v2' "$gradle"
           grep -F 'stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
           grep -F 'stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
           ! grep -F "$forbidden_preview" "$gradle"
@@ -127,8 +127,8 @@ jobs:
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='127'"
-          printf '%s\n' "$badging" | grep -F "1.0.27-wisepad-usb-staging-v1-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='128'"
+          printf '%s\n' "$badging" | grep -F "1.0.28-wisepad-usb-staging-v2-staging"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
@@ -153,7 +153,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.27-wisepad-usb-staging-v1-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.28-wisepad-usb-staging-v2-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -162,8 +162,8 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=127
-          versionName=1.0.27-wisepad-usb-staging-v1-staging
+          versionCode=128
+          versionName=1.0.28-wisepad-usb-staging-v2-staging
           environment=STAGING_TEST
           enrollmentBase=https://chargeurs-ch-staging.vercel.app
           frontend=https://chargeurs-ch-staging.vercel.app

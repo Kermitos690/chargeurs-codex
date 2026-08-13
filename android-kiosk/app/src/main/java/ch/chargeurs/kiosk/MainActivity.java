@@ -71,6 +71,7 @@ public final class MainActivity extends Activity {
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
     private CabinetController cabinetController;
+    private SecureConfigStore configStore;
 
     private final Runnable kioskUiReadyTimeout = () -> {
         if (!kioskUiReady && !isFinishing()) {
@@ -95,7 +96,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        SecureConfigStore configStore = new SecureConfigStore(this);
+        configStore = new SecureConfigStore(this);
         config = configStore.load();
         if (config == null || !KioskConfigValidator.matchesPinnedBaseUrl(
             config.baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
@@ -274,6 +275,7 @@ public final class MainActivity extends Activity {
 
                 progress.setVisibility(View.GONE);
                 webView.setVisibility(View.VISIBLE);
+                installOperatorReprovisioningGesture(view);
                 if (splashBrand != null) splashBrand.animate().alpha(0f).setDuration(220L).withEndAction(
                     () -> splashBrand.setVisibility(View.GONE)
                 ).start();
@@ -396,6 +398,23 @@ public final class MainActivity extends Activity {
         });
     }
 
+    /** Installs a native-only operator gesture on the top-left brand. */
+    private void installOperatorReprovisioningGesture(WebView view) {
+        String script = "(function(){"
+            + "if(window.__chargeursOperatorGestureInstalled)return;"
+            + "window.__chargeursOperatorGestureInstalled=true;"
+            + "var taps=0,last=0;"
+            + "document.addEventListener('click',function(event){"
+            + "var node=event.target,header=node&&node.closest?node.closest('header'):null;"
+            + "if(!header||!header.textContent||header.textContent.indexOf('Chargeurs.ch')<0)return;"
+            + "var rect=header.getBoundingClientRect();"
+            + "if(event.clientX>rect.left+Math.min(260,rect.width*.45))return;"
+            + "var now=Date.now();taps=now-last<900?taps+1:1;last=now;"
+            + "if(taps>=5){taps=0;try{window.ChargeursNative&&window.ChargeursNative.requestReprovisioning&&window.ChargeursNative.requestReprovisioning();}catch(_){}}"
+            + "},true);return true;})()";
+        view.evaluateJavascript(script, ignored -> { });
+    }
+
     private void recreateWebView() {
         heartbeatPending = false;
         credentialsInjected = false;
@@ -445,6 +464,22 @@ public final class MainActivity extends Activity {
 
     void restartKioskRuntime() {
         runOnUiThread(this::recreateWebView);
+    }
+
+    void requestReprovisioning() {
+        runOnUiThread(() -> {
+            if (isFinishing()) return;
+            new AlertDialog.Builder(this)
+                .setTitle("Activer cette tablette")
+                .setMessage("Ouvrir l’écran d’activation pour associer cette tablette à une borne ? La liaison actuelle ne sera effacée qu’après confirmation.")
+                .setNegativeButton("Annuler", null)
+                .setPositiveButton("Ouvrir l’activation", (dialog, which) -> {
+                    configStore.clear();
+                    startActivity(new Intent(this, ProvisioningActivity.class));
+                    finish();
+                })
+                .show();
+        });
     }
 
     private void registerConnectivityMonitoring() {

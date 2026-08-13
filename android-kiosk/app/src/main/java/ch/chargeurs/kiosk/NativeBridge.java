@@ -118,6 +118,16 @@ public final class NativeBridge {
         activity.showNativeDiagnostics(cabinetController.status());
     }
 
+    /**
+     * Operator-only path, reached by five deliberate taps on the kiosk brand.
+     * It shows a native confirmation before it clears a device-bound credential;
+     * no WebView or browser-side code can directly alter provisioning state.
+     */
+    @JavascriptInterface
+    public void requestReprovisioning() {
+        activity.requestReprovisioning();
+    }
+
     @JavascriptInterface
     public void restartApp() {
         activity.restartKioskRuntime();

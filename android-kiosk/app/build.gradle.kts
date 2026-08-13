@@ -52,8 +52,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 127
-        versionName = "1.0.27-wisepad-usb-staging-v1"
+        versionCode = 128
+        versionName = "1.0.28-wisepad-usb-staging-v2"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
