@@ -149,15 +149,11 @@ export function KioskPaymentRailStage({
     setNativeError(null);
     setLocalRail("TERMINAL");
     setLocalRailState("CLAIMING"); // immediate first-tap lock; backend claim remains authoritative.
-    const response = parseProjection(native.startTerminalPayment(rentalSessionId));
-    try {
-      const raw = native.startTerminalPayment;
-      void raw;
-    } catch { /* type guard only */ }
-    // startTerminalPayment returns an acknowledgement, not a reader projection.
+    // startTerminalPayment returns one secret-free acknowledgement. The local
+    // rail is locked before this call so a fast second tap cannot start QR.
     let accepted = false;
     try {
-      const ack = JSON.parse((native as NativeTerminalBridge).startTerminalPayment!(rentalSessionId)) as { ok?: boolean; code?: string };
+      const ack = JSON.parse(native.startTerminalPayment(rentalSessionId)) as { ok?: boolean; code?: string };
       accepted = ack?.ok === true;
       if (!accepted) setNativeError(ack?.code ?? "TERMINAL_START_FAILED");
     } catch {
@@ -170,7 +166,6 @@ export function KioskPaymentRailStage({
     }
     setLocalRailState("ENGAGED");
     onTerminalEngaged();
-    void response;
   };
 
   const chooseQr = () => {

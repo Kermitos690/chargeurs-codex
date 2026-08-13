@@ -29,6 +29,7 @@ import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
+import { KioskPaymentRailStage } from "@/components/kiosk/KioskPaymentRailStage";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -49,7 +50,7 @@ type KioskSlot = {
   status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "return_available" | "technical_issue" | "maintenance";
   recommended: boolean;
 };
-type Phase = "loading" | "idle" | "pricing" | "starting" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
+type Phase = "loading" | "idle" | "pricing" | "starting" | "payment_ready" | "terminal" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
 };
@@ -111,7 +112,7 @@ export default function Kiosk() {
   const net = useOnlineStatus();
   const offline = kioskTransportUnavailable(net, backendReachable);
   const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
-  const busy = ["starting", "qr", "waitpay", "success", "support"].includes(phase);
+  const busy = ["starting", "payment_ready", "terminal", "qr", "waitpay", "success", "support"].includes(phase);
 
   const onLogoTap = useCallback(() => {
     const nowMs = Date.now();
@@ -252,7 +253,7 @@ export default function Kiosk() {
   }, [phase, refreshKioskData]);
 
   useEffect(() => {
-    const protectedFlow = ["starting", "qr", "waitpay", "success", "support"].includes(phase);
+    const protectedFlow = ["starting", "payment_ready", "terminal", "qr", "waitpay", "success", "support"].includes(phase);
     if (phase === "idle" || phase === "loading" || protectedFlow) {
       setInactivitySeconds(null);
       return;
@@ -358,7 +359,7 @@ export default function Kiosk() {
   // that scoped state every 700 ms. The old four-endpoint cabinet reconciliation
   // remains a throttled safety fallback; it never sends a second release.
   useEffect(() => {
-    if (!sessionId || !publicCode || !["qr", "waitpay", "starting"].includes(phase)) return;
+    if (!sessionId || !publicCode || !["payment_ready", "terminal", "qr", "waitpay", "starting"].includes(phase)) return;
     let cancelled = false;
     const poll = async () => {
       if (pollInFlightRef.current) return;
@@ -451,12 +452,12 @@ export default function Kiosk() {
       }
       if (!idemRef.current) idemRef.current = createKioskIdempotencyKey();
       const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
-        session?: { id?: string };
+        session?: { id?: string; public_session_code?: string | null; expires_at?: string | null };
       }>("/api/kiosk/create-rental-session", { stationId, language: lang, selectedSlotNum: slotNum }, {
         "X-Kiosk-Token": kioskToken,
         "X-Idempotency-Key": idemRef.current,
       });
-      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string } }) | null;
+      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string; public_session_code?: string | null; expires_at?: string | null } }) | null;
       if (sessionTransportError || !sessionResponse?.ok || !sessionResponse.session?.id) {
         failFlow({
           code: sessionResponse?.error ?? "RENTAL_SESSION_REQUEST_FAILED",
@@ -469,7 +470,12 @@ export default function Kiosk() {
       seenStateVersionRef.current = -1;
       releaseFallbackAtRef.current = 0;
       setSessionId(rentalSessionId);
-      await requestCheckout(rentalSessionId);
+      setPublicCode(sessionResponse.session.public_session_code ?? null);
+      setExpiresAt(sessionResponse.session.expires_at ? new Date(sessionResponse.session.expires_at).getTime() : null);
+      setFlowFailure(null);
+      // #169 canonical boundary: rental + server quote now exist, but no rail
+      // has been claimed. The customer explicitly chooses Terminal or QR next.
+      setPhase("payment_ready");
     } catch {
       failFlow({ code: "RENTAL_SESSION_NETWORK_FAILURE", step: "create_rental_session", sessionId: sessionId ?? undefined });
     }
@@ -673,6 +679,41 @@ export default function Kiosk() {
 
           {phase === "starting" && (
             <motion.div key="starting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-6"><Loader2 className="h-20 w-20 animate-spin text-primary" /><p className="text-3xl font-bold text-muted-foreground">{t("kiosk.starting")}</p></motion.div>
+          )}
+
+          {phase === "payment_ready" && sessionId && (
+            <motion.div key="payment-ready" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full justify-center">
+              <KioskPaymentRailStage
+                lang={lang}
+                rentalSessionId={sessionId}
+                stationId={stationId}
+                stationOnline={station?.online === true}
+                selectedSlot={slotNum ?? undefined}
+                pricingReady={Boolean(quote)}
+                pricingCurrency={quote?.currency}
+                onChooseQr={() => void requestCheckout(sessionId)}
+                onTerminalEngaged={() => setPhase("terminal")}
+                onServerConfirmed={() => setPhase("waitpay")}
+              />
+            </motion.div>
+          )}
+
+          {phase === "terminal" && sessionId && (
+            <motion.div key="terminal" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full justify-center">
+              <KioskPaymentRailStage
+                lang={lang}
+                rentalSessionId={sessionId}
+                stationId={stationId}
+                stationOnline={station?.online === true}
+                selectedSlot={slotNum ?? undefined}
+                pricingReady={Boolean(quote)}
+                pricingCurrency={quote?.currency}
+                inProgress
+                onChooseQr={() => {}}
+                onTerminalEngaged={() => {}}
+                onServerConfirmed={() => setPhase("waitpay")}
+              />
+            </motion.div>
           )}
 
           {phase === "qr" && checkoutUrl && (
