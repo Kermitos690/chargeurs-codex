@@ -24,7 +24,8 @@ public final class NativeBridge {
         );
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
-        this.terminalRuntime = StripeTerminalReaderRuntime.getOrCreate(activity.getApplicationContext(), config);
+        ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
+        this.terminalRuntime = application.terminalRuntime(config);
         this.terminalRuntime.ensureStarted();
     }
 

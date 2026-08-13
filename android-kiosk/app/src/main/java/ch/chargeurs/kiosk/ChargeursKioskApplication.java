@@ -13,6 +13,15 @@ import com.stripe.stripeterminal.TerminalApplicationDelegate;
  * process. USB discovery/connection remains TEST-only behind BuildConfig.
  */
 public final class ChargeursKioskApplication extends Application {
+    private StripeTerminalReaderRuntime terminalRuntime;
+
+    synchronized StripeTerminalReaderRuntime terminalRuntime(KioskConfig config) {
+        if (terminalRuntime == null || !terminalRuntime.matchesStation(config.stationId())) {
+            terminalRuntime = new StripeTerminalReaderRuntime(getApplicationContext(), config);
+        }
+        return terminalRuntime;
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();

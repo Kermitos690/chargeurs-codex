@@ -55,8 +55,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private static final String PREFS = "stripe_terminal_reader";
     private static final String LAST_READER_ID = "last_reader_id";
-    private static StripeTerminalReaderRuntime instance;
-
     private final Context context;
     private final KioskConfig config;
     private final StripeTerminalBackendClient backend;
@@ -88,14 +86,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private Cancelable discoveryCancelable;
     private Cancelable paymentCancelable;
 
-    static synchronized StripeTerminalReaderRuntime getOrCreate(Context context, KioskConfig config) {
-        if (instance == null || !instance.config.stationId().equals(config.stationId())) {
-            instance = new StripeTerminalReaderRuntime(context.getApplicationContext(), config);
-        }
-        return instance;
-    }
-
-    private StripeTerminalReaderRuntime(Context context, KioskConfig config) {
+    StripeTerminalReaderRuntime(Context context, KioskConfig config) {
         this.context = context;
         this.config = config;
         this.backend = new StripeTerminalBackendClient(config);
@@ -103,6 +94,10 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         if (BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) {
             readerState = usbPresent() ? "DISCOVERING" : "ABSENT";
         }
+    }
+
+    boolean matchesStation(String stationId) {
+        return stationId != null && stationId.equals(config.stationId());
     }
 
     void ensureStarted() {
