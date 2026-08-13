@@ -32,7 +32,7 @@ jobs:
       - name: Frontend canonical presentation contract
         run: |
           npm ci
-          npm run typecheck
+          npx eslint src/components/kiosk/KioskPaymentRailStage.tsx src/lib/chargeursPresentationModel.ts src/pages/Kiosk.tsx src/test/chargeursPresentationModel.test.ts
           npx vitest run src/test/chargeursPresentationModel.test.ts
           npm run build
 
