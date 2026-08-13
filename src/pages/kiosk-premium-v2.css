@@ -667,3 +667,312 @@ html.kiosk-mode .text-gradient-cyan {
   .ck2-member-grid { padding-top: 2.8vh; padding-bottom: 3.2vh; }
   .ck2-qr-card { min-height: 66vh; }
 }
+
+/* -------------------------------------------------------------------------
+   Kiosk art direction — "midnight hardware".
+   This is intentionally the final visual owner for the public journey.  It
+   creates depth with small, composited CSS layers instead of a canvas or a
+   large animation dependency, so the Android WebView keeps a stable frame
+   rate while payment and cabinet state remain entirely outside this layer.
+   ------------------------------------------------------------------------- */
+.ck2-shell {
+  --ck2-ice: #cbeeff;
+  --ck2-blue: #52a9ff;
+  --ck2-electric: #5de3ff;
+  --ck2-mint: #a8ff73;
+  --ck2-ink: #02060e;
+  background:
+    radial-gradient(ellipse 55% 70% at 82% 42%, rgba(29, 106, 225, .19), transparent 65%),
+    radial-gradient(ellipse 38% 48% at 8% 88%, rgba(81, 240, 193, .075), transparent 70%),
+    linear-gradient(118deg, #02050a 0%, #071326 48%, #020711 100%) !important;
+}
+
+.ck2-shell::before {
+  z-index: -1;
+  opacity: 1;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px) 0 0 / 84px 84px,
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px) 0 0 / 84px 84px,
+    linear-gradient(114deg, transparent 10%, rgba(117, 204, 255, .055) 47%, transparent 53%, rgba(255,255,255,.018) 54%, transparent 78%),
+    radial-gradient(ellipse 78% 42% at 64% 102%, rgba(30, 110, 220, .19), transparent 69%) !important;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.55), #000 38%, #000 87%, transparent);
+}
+
+.ck2-shell::after {
+  z-index: 100;
+  opacity: .72;
+  box-shadow: inset 0 0 120px rgba(0,0,0,.65), inset 0 0 0 1px rgba(209,238,255,.025);
+}
+
+.ck2-topbar {
+  height: clamp(68px, 8.4vh, 88px) !important;
+  padding-inline: clamp(24px, 4.4vw, 72px) !important;
+  border-bottom-color: rgba(168, 211, 255, .11) !important;
+  background: linear-gradient(180deg, rgba(2, 7, 16, .84), rgba(3, 9, 19, .28)) !important;
+}
+
+.ck2-topbar::after {
+  content: "";
+  position: absolute;
+  right: 4.4vw;
+  bottom: -1px;
+  width: min(26vw, 360px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(100, 199, 255, .75), transparent);
+  box-shadow: 0 0 14px rgba(93, 227, 255, .32);
+}
+
+.ck2-topbar [class*="brand"] {
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .32));
+}
+
+.ck2-pill,
+.ck2-faq,
+.ck2-language {
+  border-color: rgba(160, 211, 255, .18) !important;
+  background: linear-gradient(135deg, rgba(15, 34, 62, .76), rgba(3, 10, 21, .82)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.09), inset 0 -1px rgba(0,0,0,.38), 0 10px 25px rgba(0,0,0,.22) !important;
+}
+
+.ck2-pill,
+.ck2-faq {
+  letter-spacing: .04em;
+}
+
+.ck2-home-grid {
+  grid-template-columns: minmax(0, 1.02fr) minmax(390px, .98fr) !important;
+  gap: clamp(30px, 5.6vw, 100px) !important;
+  padding: clamp(20px, 3.9vh, 52px) clamp(28px, 5.5vw, 88px) !important;
+}
+
+.ck2-hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 780px !important;
+}
+
+.ck2-eyebrow {
+  color: rgba(183, 221, 255, .72) !important;
+  font-size: clamp(10px, .76vw, 13px) !important;
+  letter-spacing: .26em !important;
+}
+
+.ck2-eyebrow::before {
+  width: 38px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--ck2-mint), var(--ck2-electric));
+}
+
+.ck2-hero-copy h1 {
+  margin-top: clamp(12px, 1.8vh, 22px) !important;
+  font-size: clamp(55px, 6.75vw, 110px) !important;
+  line-height: .84 !important;
+  letter-spacing: -.07em !important;
+  text-shadow: 0 22px 50px rgba(0,0,0,.46) !important;
+}
+
+.ck2-hero-copy h1 > strong {
+  background: linear-gradient(105deg, #f6fdff 8%, #9ce7ff 42%, #5799ff 70%, #adb9ff 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+
+.ck2-price-row {
+  position: relative;
+  isolation: isolate;
+  min-height: 54px;
+  margin-top: clamp(18px, 3.2vh, 34px) !important;
+  padding: 9px 15px !important;
+  border-color: rgba(132, 203, 255, .24) !important;
+  border-radius: 17px !important;
+  background: linear-gradient(115deg, rgba(8, 35, 65, .82), rgba(4, 12, 26, .82)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.1), 0 18px 38px rgba(0,0,0,.24), 0 0 26px rgba(62,151,255,.07) !important;
+}
+.ck2-price-row::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(95deg, rgba(93,227,255,.08), transparent 35%, rgba(174,255,117,.055));
+}
+.ck2-price-row strong { color: #fff !important; font-weight: 900; }
+.ck2-price-icon { background: linear-gradient(145deg, rgba(83,180,255,.28), rgba(16,57,120,.2)) !important; color: var(--ck2-electric) !important; }
+
+.ck2-choice-grid { gap: clamp(14px, 1.55vw, 24px) !important; margin-top: clamp(18px, 3vh, 34px) !important; }
+.ck2-choice {
+  min-height: clamp(190px, 25vh, 290px) !important;
+  padding: clamp(20px, 2.15vw, 31px) !important;
+  border-radius: 24px !important;
+  transform: translateZ(0);
+  transition: transform .24s cubic-bezier(.2,.8,.2,1), box-shadow .24s ease, border-color .24s ease !important;
+}
+.ck2-choice::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .75;
+  background: linear-gradient(125deg, rgba(255,255,255,.12), transparent 17% 70%, rgba(255,255,255,.025));
+}
+.ck2-choice::after { background: linear-gradient(118deg, rgba(255,255,255,.05), transparent 29% 69%, rgba(1,6,15,.24)) !important; }
+.ck2-choice-express {
+  border-color: rgba(168,255,115,.52) !important;
+  background: radial-gradient(circle at 12% 5%, rgba(169,255,104,.22), transparent 42%), linear-gradient(145deg, #102a25, #051217 74%) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.12), inset 0 -22px 34px rgba(0,0,0,.19), 0 24px 48px rgba(0,0,0,.26), 0 0 38px rgba(145,255,74,.07) !important;
+}
+.ck2-choice-member {
+  border-color: rgba(101,188,255,.57) !important;
+  background: radial-gradient(circle at 12% 5%, rgba(85,177,255,.28), transparent 43%), linear-gradient(145deg, #102c60, #06132c 74%) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.12), inset 0 -22px 34px rgba(0,0,0,.21), 0 24px 48px rgba(0,0,0,.26), 0 0 40px rgba(81,161,255,.1) !important;
+}
+.ck2-choice-icon {
+  width: 52px !important;
+  height: 52px !important;
+  margin-bottom: 16px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.1), rgba(255,255,255,.015)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.13), 0 12px 20px rgba(0,0,0,.15);
+}
+.ck2-choice > strong { position: relative; font-size: clamp(25px, 2.45vw, 40px) !important; letter-spacing: -.045em !important; }
+.ck2-choice > small { position: relative; max-width: 90%; color: rgba(220,237,252,.68) !important; font-size: clamp(12px, .98vw, 16px) !important; }
+.ck2-choice-kicker { position: relative; color: rgba(218,237,252,.66) !important; }
+.ck2-arrow { background: rgba(255,255,255,.055); box-shadow: inset 0 1px rgba(255,255,255,.12); }
+@media (hover: hover) {
+  .ck2-choice:not(:disabled):hover { transform: translateY(-6px) perspective(800px) rotateX(1deg); }
+  .ck2-choice-express:not(:disabled):hover { border-color: rgba(192,255,146,.9) !important; box-shadow: inset 0 1px rgba(255,255,255,.15), 0 34px 64px rgba(0,0,0,.3), 0 0 52px rgba(145,255,74,.14) !important; }
+  .ck2-choice-member:not(:disabled):hover { border-color: rgba(149,212,255,.92) !important; box-shadow: inset 0 1px rgba(255,255,255,.15), 0 34px 64px rgba(0,0,0,.3), 0 0 55px rgba(81,161,255,.17) !important; }
+}
+
+/* Cabinet: a deliberately restrained, physical object rather than a toy icon. */
+.ck2-device-stage { width: min(42vw, 660px) !important; height: min(78vh, 750px) !important; perspective: 1800px !important; }
+.ck2-device-stage::before {
+  content: "";
+  position: absolute;
+  left: 6%; right: 1%; bottom: 0;
+  height: 24%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(43,133,255,.32), rgba(22,73,150,.08) 43%, transparent 72%);
+  filter: blur(16px);
+  animation: ck2-floor-pulse 5.6s ease-in-out infinite;
+}
+.ck2-device-glow { inset: 2% -9% 1% -3% !important; background: radial-gradient(ellipse, rgba(69,166,255,.22), transparent 63%) !important; filter: blur(36px) !important; }
+.ck2-device {
+  inset: 1% 8% 8% 12% !important;
+  overflow: visible;
+  border-color: rgba(179,221,255,.27) !important;
+  border-radius: 26px 30px 24px 26px !important;
+  background: linear-gradient(104deg, #263748 0%, #0d1621 13%, #172535 50%, #04080e 94%) !important;
+  box-shadow: inset 11px 0 25px rgba(255,255,255,.065), inset -20px 0 37px rgba(0,0,0,.69), 25px 44px 80px rgba(0,0,0,.56), 0 0 58px rgba(38,139,255,.16) !important;
+  transform: rotateY(-11deg) rotateX(2.4deg) translateZ(0) !important;
+}
+.ck2-device::before {
+  content: "";
+  position: absolute;
+  top: 10px; right: -17px; bottom: 8px;
+  width: 19px;
+  border-radius: 0 13px 13px 0;
+  background: linear-gradient(90deg, #07101a, #263d51 48%, #0b121b);
+  transform: skewY(-13deg);
+  transform-origin: left;
+  box-shadow: inset 1px 0 rgba(255,255,255,.1), 10px 8px 20px rgba(0,0,0,.35);
+}
+.ck2-device::after {
+  content: "";
+  position: absolute;
+  top: -12px; left: 12px; right: 2px;
+  height: 14px;
+  border-radius: 12px 12px 2px 2px;
+  background: linear-gradient(180deg, #365169, #122131);
+  transform: skewX(-32deg);
+  transform-origin: bottom;
+  opacity: .86;
+}
+.ck2-device-screen { border-color: rgba(125,208,255,.24) !important; background: radial-gradient(circle at 50% 20%, rgba(74,167,255,.26), transparent 59%), linear-gradient(145deg, #071523, #01050a) !important; box-shadow: inset 0 0 30px rgba(44,133,255,.16), 0 0 0 5px rgba(0,0,0,.18) !important; }
+.ck2-device-divider { background: linear-gradient(90deg, transparent, rgba(119,204,255,.44), transparent) !important; box-shadow: 0 0 15px rgba(87,191,255,.16); }
+.ck2-device-slot { border-color: rgba(133,180,224,.18) !important; background: linear-gradient(150deg, #101b26, #020407) !important; box-shadow: inset 0 4px 13px rgba(255,255,255,.035), inset 0 -12px 19px rgba(0,0,0,.62), 0 11px 18px rgba(0,0,0,.23) !important; }
+.ck2-device-slot > span { height: 3px !important; background: #42a8ff !important; box-shadow: 0 0 13px rgba(66,168,255,.92) !important; }
+.ck2-device-slot.is-ready > span { background: #8dff73 !important; box-shadow: 0 0 13px rgba(141,255,115,.75) !important; }
+
+/* Customer pairing: one centred, architectural QR moment. */
+.ck2-member-grid {
+  grid-template-columns: minmax(0, .86fr) minmax(420px, 1.14fr) !important;
+  gap: clamp(44px, 7vw, 126px) !important;
+  padding: clamp(25px, 4.3vh, 56px) clamp(28px, 6vw, 96px) !important;
+}
+.ck2-member-copy h1 { font-size: clamp(52px, 5.55vw, 92px) !important; letter-spacing: -.065em !important; }
+.ck2-member-copy > p { color: rgba(204,224,243,.68) !important; }
+.ck2-member-rate { color: var(--ck2-ice) !important; }
+.ck2-security { border-color: rgba(128,242,204,.26) !important; background: linear-gradient(110deg, rgba(34,123,97,.24), rgba(8,31,35,.2)) !important; }
+.ck2-qr-card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(141,212,255,.3) !important;
+  border-radius: 32px !important;
+  background: radial-gradient(circle at 50% 8%, rgba(56,151,255,.24), transparent 42%), linear-gradient(145deg, rgba(9,30,65,.96), rgba(2,8,18,.99)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.13), inset 0 -28px 55px rgba(0,0,0,.23), 0 38px 90px rgba(0,0,0,.45), 0 0 65px rgba(39,143,255,.14) !important;
+}
+.ck2-qr-card::before {
+  content: "";
+  position: absolute;
+  width: 130%; height: 20%; left: -15%; top: 12%;
+  background: linear-gradient(90deg, transparent, rgba(149,226,255,.16), transparent);
+  filter: blur(14px);
+  transform: rotate(-18deg);
+  animation: ck2-light-sweep 7.5s ease-in-out infinite;
+}
+.ck2-qr-head, .ck2-qr-instruction { position: relative; z-index: 1; }
+.ck2-qr-wrap { position: relative; z-index: 1; padding: 22px !important; border-radius: 28px !important; box-shadow: 0 0 0 1px rgba(255,255,255,.96), 0 28px 68px rgba(38,148,255,.35), inset 0 1px rgba(255,255,255,.9) !important; }
+
+/* Recognised member screen had no matching layout after the visual cleanup. */
+.ck2-connected { display: block !important; }
+.ck2-connected-grid {
+  position: relative;
+  z-index: 2;
+  width: min(1160px, 88vw);
+  min-height: min(67vh, 640px);
+  margin: clamp(22px, 6vh, 72px) auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  overflow: hidden;
+  border: 1px solid rgba(139,207,255,.24);
+  border-radius: 34px;
+  background: linear-gradient(135deg, rgba(8,29,59,.91), rgba(3,9,19,.96));
+  box-shadow: inset 0 1px rgba(255,255,255,.11), 0 38px 92px rgba(0,0,0,.43), 0 0 58px rgba(55,149,255,.12);
+}
+.ck2-connected-grid::before { content: ""; position: absolute; width: 55%; height: 120%; left: -18%; top: -16%; border-radius: 50%; background: radial-gradient(circle, rgba(83,180,255,.26), transparent 67%); filter: blur(14px); }
+.ck2-connected-copy { position: relative; z-index: 1; padding: clamp(34px, 5vw, 72px); display: flex; flex-direction: column; justify-content: center; border-right: 1px solid rgba(150,209,255,.14); }
+.ck2-connected-check { width: 70px; height: 70px; display: grid; place-items: center; border: 1px solid rgba(143,255,195,.5); border-radius: 22px; background: linear-gradient(145deg, rgba(82,210,143,.28), rgba(14,76,64,.32)); color: #bcffe1; box-shadow: inset 0 1px rgba(255,255,255,.16), 0 0 32px rgba(84,235,158,.14); }
+.ck2-connected-check svg { width: 37px; height: 37px; }
+.ck2-connected-copy h1 { margin: 20px 0 0; color: #f4fbff; font-size: clamp(38px, 4.1vw, 64px); line-height: .9; letter-spacing: -.06em; font-weight: 930; }
+.ck2-connected-copy p { margin: 18px 0 0; color: rgba(211,230,246,.68); font-size: clamp(15px, 1.2vw, 19px); line-height: 1.48; }
+.ck2-connected-plan { width: max-content; max-width: 100%; margin-top: 24px; padding: 8px 13px; border: 1px solid rgba(126,202,255,.23); border-radius: 999px; color: #d9f0ff; background: rgba(255,255,255,.045); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.ck2-connected-benefits { position: relative; z-index: 1; padding: clamp(34px, 4.5vw, 66px); display: flex; flex-direction: column; justify-content: center; }
+.ck2-connected-benefits h2 { margin: 0; font-size: clamp(21px, 2vw, 30px); letter-spacing: -.035em; }
+.ck2-connected-benefit-grid { margin-top: 22px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ck2-connected-benefit-grid article { min-height: 108px; padding: 16px; display: grid; grid-template-columns: 28px 1fr; grid-template-rows: auto auto; column-gap: 11px; border: 1px solid rgba(153,205,255,.15); border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,.06), rgba(255,255,255,.018)); box-shadow: inset 0 1px rgba(255,255,255,.055); }
+.ck2-connected-benefit-grid article > svg { grid-row: span 2; width: 22px; color: var(--ck2-electric); }
+.ck2-connected-benefit-grid article span { color: rgba(197,220,241,.56); font-size: 12px; }
+.ck2-connected-benefit-grid article strong { margin-top: 5px; color: #fff; font-size: clamp(15px, 1.35vw, 20px); letter-spacing: -.025em; }
+.ck2-connected-cta { width: 100%; min-height: 78px; margin-top: 19px; padding: 10px 18px; display: flex; align-items: center; gap: 14px; border: 1px solid rgba(130,215,255,.52); border-radius: 19px; background: linear-gradient(110deg, #176ddb, #2a9cfc 56%, #57c4ff); box-shadow: inset 0 1px rgba(255,255,255,.25), 0 18px 38px rgba(25,117,235,.26); color: #fff; text-align: left; }
+.ck2-connected-cta > svg { width: 27px; height: 27px; }
+.ck2-connected-cta > span { flex: 1; display: grid; gap: 3px; }
+.ck2-connected-cta strong { font-size: clamp(14px, 1.2vw, 17px); letter-spacing: .02em; }
+.ck2-connected-cta small { opacity: .75; font-size: 12px; }
+.ck2-connected-cta > b { font-size: 28px; font-weight: 400; }
+
+/* The in-flow Express screens keep the same darker, physical language. */
+html.kiosk-mode .kiosk-root { background: radial-gradient(ellipse 56% 70% at 82% 30%, rgba(29,106,225,.17), transparent 67%), linear-gradient(118deg, #02050a, #071326 52%, #020711) !important; }
+html.kiosk-mode .kiosk-idle-stage, html.kiosk-mode .kiosk-pricing-card, html.kiosk-mode .kiosk-qr-stage > div > .rounded-\[2rem\] { border-color: rgba(140,203,255,.2) !important; background: linear-gradient(145deg, rgba(8,24,48,.88), rgba(2,8,18,.94)) !important; box-shadow: inset 0 1px rgba(255,255,255,.08), 0 30px 75px rgba(0,0,0,.35) !important; }
+html.kiosk-mode .kiosk-slot-card { border-color: rgba(145,202,255,.18) !important; background: radial-gradient(circle at 92% 10%, rgba(70,160,255,.11), transparent 39%), linear-gradient(145deg, rgba(11,31,60,.91), rgba(3,10,22,.96)) !important; box-shadow: inset 0 1px rgba(255,255,255,.07), inset 0 -20px 35px rgba(0,0,0,.16), 0 18px 38px rgba(0,0,0,.2) !important; }
+html.kiosk-mode .kiosk-slot-card.ring-4 { border-color: rgba(147,255,183,.72) !important; box-shadow: inset 0 1px rgba(255,255,255,.12), 0 0 0 1px rgba(101,243,166,.2), 0 0 42px rgba(85,233,160,.16) !important; }
+html.kiosk-mode .kiosk-idle-cta button { border-color: rgba(136,220,255,.52) !important; background: linear-gradient(110deg, #176ddb, #2a9cfc 58%, #62d4ff) !important; box-shadow: inset 0 1px rgba(255,255,255,.25), 0 20px 42px rgba(25,117,235,.27) !important; }
+
+@keyframes ck2-floor-pulse { 50% { opacity: .7; transform: scale(1.04); } }
+@keyframes ck2-light-sweep { 0%, 25% { transform: translateX(-34%) rotate(-18deg); opacity: 0; } 40% { opacity: .85; } 61%, 100% { transform: translateX(88%) rotate(-18deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ck2-device-stage::before, .ck2-qr-card::before { animation: none; } }
+@media (max-width: 900px) {
+  .ck2-connected-grid { width: calc(100vw - 32px); min-height: 0; grid-template-columns: 1fr; margin-top: 16px; overflow-y: auto; }
+  .ck2-connected-copy { border-right: 0; border-bottom: 1px solid rgba(150,209,255,.14); }
+  .ck2-device-stage { opacity: .5; transform: scale(.9); transform-origin: right center; }
+}
