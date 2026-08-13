@@ -65,12 +65,17 @@ Deno.test("cancel safety refuses confirmed financial side effects and identifies
 });
 
 Deno.test("ConnectionToken reader connectivity requires station not rental and creates no rental", () => {
-  const tokenBranch = backendSource.slice(backendSource.indexOf('if (action === "connection_token")'), backendSource.indexOf('rentalSessionId ='));
+  const tokenStart = backendSource.indexOf('if (action === "connection_token")');
+  const tokenEnd = backendSource.indexOf('rentalSessionId = typeof body.rentalSessionId', tokenStart);
+  assert(tokenStart >= 0);
+  assert(tokenEnd > tokenStart);
+  const tokenBranch = backendSource.slice(tokenStart, tokenEnd);
   assert(tokenBranch.includes("body.stationId"));
   assert(tokenBranch.includes("kioskAuth(req, db, stationId)"));
   assert(tokenBranch.includes('stripe.terminal.connectionTokens.create({ location: String(binding.stripe_location_id) })'));
-  assertEquals(tokenBranch.includes("rental_sessions").valueOf(), false);
-  assertEquals(tokenBranch.includes("insert({ rental").valueOf(), false);
+  assertEquals(tokenBranch.includes("rental_sessions"), false);
+  assertEquals(tokenBranch.includes("stripe.paymentIntents.create"), false);
+  assertEquals(tokenBranch.includes("claim_rental_payment_rail"), false);
 });
 
 Deno.test("Terminal PaymentIntent is card_present manual capture and server-priced", () => {
