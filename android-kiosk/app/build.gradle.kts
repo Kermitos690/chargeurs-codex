@@ -31,12 +31,13 @@ val releaseSigningReady = listOf(
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
 val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
 
-// Enrollment remains pinned to the stable STAGING origin. The simulator-only
-// APK may render a branch preview through a separate web origin without
-// invalidating the durable kiosk credential.
+// Enrollment and WebView navigation remain pinned to the stable STAGING
+// origin. Preview deployments are protected by Vercel SSO and must never be
+// embedded in a field APK; keeping the public origin unchanged also preserves
+// the durable kiosk credential during an in-place update.
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
-val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
+val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -51,8 +52,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 125
-        versionName = "1.0.25-terminal-simulator-preview-v3"
+        versionCode = 126
+        versionName = "1.0.26-terminal-simulator-stable-v1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
