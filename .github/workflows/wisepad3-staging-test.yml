@@ -70,8 +70,9 @@ jobs:
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
-          cert_digest="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print $2; exit}' /tmp/apksigner.txt | tr '[:upper:]' '[:lower:]')"
+          cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
           test -n "$cert_digest"
+          test "${#cert_digest}" -eq 64
           printf '%s' "$cert_digest" > /tmp/apk_signer_sha256
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging"
