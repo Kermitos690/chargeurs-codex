@@ -29,7 +29,7 @@ val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE
 val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
 
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
-val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -44,8 +44,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 123
-        versionName = "1.0.23-terminal-simulator-v2"
+        versionCode = 124
+        versionName = "1.0.24-terminal-simulator-preview-v2"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
