@@ -55,8 +55,14 @@ public final class KioskConfigValidator {
         }
     }
 
+    public static String webBaseUrl(String enrolledBaseUrl) {
+        String override = normalizeBaseUrl(BuildConfig.KIOSK_WEB_BASE_URL);
+        if (override != null) return override;
+        return normalizeBaseUrl(enrolledBaseUrl);
+    }
+
     public static boolean isAllowedUrl(String candidate, String baseUrl) {
-        String normalizedBase = normalizeBaseUrl(baseUrl);
+        String normalizedBase = webBaseUrl(baseUrl);
         if (candidate == null || normalizedBase == null) return false;
         try {
             URI candidateUri = new URI(candidate);
