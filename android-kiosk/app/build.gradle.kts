@@ -38,8 +38,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 120
-        versionName = "1.0.20-terminal-contract"
+        versionCode = 121
+        versionName = "1.0.21-terminal-compat-v2"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -143,6 +143,10 @@ android {
 }
 
 dependencies {
-    implementation("com.stripe:stripeterminal:5.7.0")
+    // TEST-ONLY compatibility lane for DTA21269. Stripe 2.22.0 is the first
+    // release where WisePad 3 USB connectivity is GA and predates the modern
+    // offline-mode initialization that fails against this kiosk's broken
+    // Android 11 Keymaster. Never promote this dependency to production.
+    implementation("com.stripe:stripeterminal:2.22.0")
     testImplementation("junit:junit:4.13.2")
 }
