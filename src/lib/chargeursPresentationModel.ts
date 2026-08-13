@@ -209,22 +209,23 @@ export function buildChargeursPresentationModel(input: {
   const correlationId = typeof input.reader?.payment?.correlationId === "string"
     ? input.reader.payment.correlationId
     : undefined;
+  const effectiveJourneyState: ChargeursJourneyState = recoveryRequired ? "RECOVERY" : input.journeyState;
 
   const sceneCue: ChargeursPresentationModel["visuals"]["sceneCue"] =
-    input.journeyState === "PAYMENT_READY" ? "PAYMENT_READY" :
-    input.journeyState === "PAYMENT_IN_PROGRESS" && rail === "TERMINAL" ? "TERMINAL_PROCESSING" :
-    input.journeyState === "PAYMENT_IN_PROGRESS" && rail === "QR" ? "QR_PROCESSING" :
-    input.journeyState === "PAYMENT_CONFIRMED" ? "PAYMENT_CONFIRMED" :
-    input.journeyState === "HARDWARE_WAIT" ? "RELEASE_WAIT" :
-    input.journeyState === "RELEASE_CONFIRMED" ? "RELEASE_CONFIRMED" :
-    input.journeyState === "ACTIVE_RENTAL" ? "ACTIVE" :
-    input.journeyState === "RETURN_GUIDANCE" ? "RETURN_GUIDANCE" :
-    input.journeyState === "RETURN_ACCEPTED" ? "RETURN_ACCEPTED" :
-    input.journeyState === "RECOVERY" || recoveryRequired ? "RECOVERY" :
-    input.journeyState === "OFFLINE" ? "OFFLINE" :
-    input.journeyState === "ERROR" || input.journeyState === "SUPPORT_REQUIRED" ? "ERROR" :
-    input.journeyState === "HOME" ? "HOME_IDLE" :
-    input.journeyState === "SELECTION" || input.journeyState === "PRICING" ? "SLOT_FOCUS" : "BOOT";
+    effectiveJourneyState === "RECOVERY" ? "RECOVERY" :
+    effectiveJourneyState === "PAYMENT_READY" ? "PAYMENT_READY" :
+    effectiveJourneyState === "PAYMENT_IN_PROGRESS" && rail === "TERMINAL" ? "TERMINAL_PROCESSING" :
+    effectiveJourneyState === "PAYMENT_IN_PROGRESS" && rail === "QR" ? "QR_PROCESSING" :
+    effectiveJourneyState === "PAYMENT_CONFIRMED" ? "PAYMENT_CONFIRMED" :
+    effectiveJourneyState === "HARDWARE_WAIT" ? "RELEASE_WAIT" :
+    effectiveJourneyState === "RELEASE_CONFIRMED" ? "RELEASE_CONFIRMED" :
+    effectiveJourneyState === "ACTIVE_RENTAL" ? "ACTIVE" :
+    effectiveJourneyState === "RETURN_GUIDANCE" ? "RETURN_GUIDANCE" :
+    effectiveJourneyState === "RETURN_ACCEPTED" ? "RETURN_ACCEPTED" :
+    effectiveJourneyState === "OFFLINE" ? "OFFLINE" :
+    effectiveJourneyState === "ERROR" || effectiveJourneyState === "SUPPORT_REQUIRED" ? "ERROR" :
+    effectiveJourneyState === "HOME" ? "HOME_IDLE" :
+    effectiveJourneyState === "SELECTION" || effectiveJourneyState === "PRICING" ? "SLOT_FOCUS" : "BOOT";
 
   return {
     version: 1,
@@ -235,7 +236,7 @@ export function buildChargeursPresentationModel(input: {
       renderTier: input.reducedMotion ? "SAFE" : "HIGH",
     },
     journey: {
-      state: recoveryRequired ? "RECOVERY" : input.journeyState,
+      state: effectiveJourneyState,
       previousState: input.previousJourneyState,
       recoverable: recoveryRequired || ["ERROR", "OFFLINE", "RECOVERY"].includes(input.journeyState),
       supportRequired: input.journeyState === "SUPPORT_REQUIRED",
