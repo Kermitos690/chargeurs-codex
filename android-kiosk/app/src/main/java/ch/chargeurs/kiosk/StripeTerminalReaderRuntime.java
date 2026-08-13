@@ -24,6 +24,7 @@ import com.stripe.stripeterminal.external.models.ConnectionConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionStatus;
 import com.stripe.stripeterminal.external.models.ConnectionTokenException;
 import com.stripe.stripeterminal.external.models.DiscoveryConfiguration;
+import com.stripe.stripeterminal.external.models.DiscoveryMethod;
 import com.stripe.stripeterminal.external.models.PaymentIntent;
 import com.stripe.stripeterminal.external.models.PaymentStatus;
 import com.stripe.stripeterminal.external.models.Reader;
@@ -242,11 +243,11 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                         @Override
                         public void onSuccess(PaymentIntent collected) {
                             paymentCancelable = null;
-                            localPaymentState = "CONFIRMING";
-                            Terminal.getInstance().confirmPaymentIntent(collected, new PaymentIntentCallback() {
+                            localPaymentState = "PROCESSING";
+                            Terminal.getInstance().processPayment(collected, new PaymentIntentCallback() {
                                 @Override
-                                public void onSuccess(PaymentIntent confirmed) {
-                                    activePaymentIntentId = confirmed.getId();
+                                public void onSuccess(PaymentIntent processed) {
+                                    activePaymentIntentId = processed.getId();
                                     localPaymentState = "SDK_SUCCEEDED";
                                     paymentRailState = "PROCESSING";
                                     paymentRunning.set(false);
@@ -311,7 +312,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         if (!discoveryRunning.compareAndSet(false, true)) return;
         readerState = "DISCOVERING";
         safeErrorCode = null;
-        DiscoveryConfiguration config = new DiscoveryConfiguration.UsbDiscoveryConfiguration(0, false);
+        DiscoveryConfiguration config = new DiscoveryConfiguration(0, DiscoveryMethod.USB, false);
         discoveryCancelable = Terminal.getInstance().discoverReaders(
             config,
             new DiscoveryListener() {
