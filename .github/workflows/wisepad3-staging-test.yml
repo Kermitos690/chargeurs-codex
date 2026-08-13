@@ -71,26 +71,30 @@ jobs:
           test -s "$application"
           test -s "$bridge"
 
-          # This APK is an explicit field-compatibility experiment for a broken
-          # Android 11 Keymaster. It must use the pre-offline Stripe 2.22 USB API
-          # and must never silently drift back to the production 5.x lane.
+          # Explicit field compatibility experiment: Stripe 2.22.0 is the
+          # first GA WisePad 3 USB release and uses the pre-offline init API.
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
           grep -F 'versionCode = 121' "$gradle"
           grep -F '1.0.21-terminal-compat-v2' "$gradle"
           grep -F 'SDK_COMPAT = "2.22.0-test-only"' "$runtime"
           grep -F 'Terminal.initTerminal(' "$runtime"
-          grep -F '.connectUsbReader(' "$runtime"
-          grep -F 'new DiscoveryConfiguration.UsbDiscoveryConfiguration' "$runtime"
+          grep -F 'DiscoveryMethod.USB' "$runtime"
+          grep -F 'new DiscoveryConfiguration(0, DiscoveryMethod.USB, false)' "$runtime"
           grep -F '.discoverReaders(' "$runtime"
+          grep -F '.connectUsbReader(' "$runtime"
           grep -F '.retrievePaymentIntent(' "$runtime"
           grep -F '.collectPaymentMethod(' "$runtime"
-          grep -F '.confirmPaymentIntent(' "$runtime"
+          grep -F '.processPayment(' "$runtime"
           if grep -F 'OfflineListener' "$runtime"; then
             echo "Compatibility regression: OfflineListener must not be initialized in the 2.22 field lane" >&2
             exit 1
           fi
           if grep -F '.processPaymentIntent(' "$runtime"; then
             echo "Compatibility regression: v5 processPaymentIntent API leaked into the 2.22 lane" >&2
+            exit 1
+          fi
+          if grep -F '.confirmPaymentIntent(' "$runtime"; then
+            echo "Compatibility regression: unsupported confirmPaymentIntent leaked into the 2.22 lane" >&2
             exit 1
           fi
 
@@ -110,7 +114,6 @@ jobs:
           printf '%s\n' "$manifest" > /tmp/manifest.txt
           grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
 
-          # Preserve the 1.0.19 regression gate: inspect actual DEX payload.
           : > /tmp/dex_strings.txt
           while IFS= read -r dex; do
             unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt
