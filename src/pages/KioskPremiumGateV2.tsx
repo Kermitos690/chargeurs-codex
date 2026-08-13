@@ -4,13 +4,11 @@ import { QRCodeSVG } from "qrcode.react";
 import {
   CheckCircle2,
   Clock3,
-  HelpCircle,
   Loader2,
   RefreshCw,
   ShieldCheck,
   UserRound,
   WalletCards,
-  X,
   Zap,
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -348,7 +346,6 @@ export default function KioskPremiumGateV2() {
   const journeyControl = timerActive ? (
     <div className="ck2-journey-control" role="status" aria-live="polite">
       <Clock3 aria-hidden="true" /><span>{copy.returnHome}</span><strong>{seconds}s</strong>
-      <button type="button" onClick={returnHome} aria-label={copy.cancel}><X aria-hidden="true" /> {copy.cancel}</button>
     </div>
   ) : null;
 
@@ -366,7 +363,7 @@ export default function KioskPremiumGateV2() {
         {journeyControl}
         <header className="ck2-topbar ck2-connected-topbar">
           <BrandLogo size="md" />
-          <button type="button" className="ck2-pill" onClick={returnHome}><X /> {copy.returnHome}</button>
+          <div className="ck2-top-actions"><button type="button" className="ck2-faq" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>FAQ</button><div className="ck2-language"><LanguageSwitcher /></div></div>
         </header>
         <main className="ck2-connected-grid">
           <section className="ck2-connected-copy">
@@ -401,7 +398,7 @@ export default function KioskPremiumGateV2() {
         {journeyControl}
         <header className="ck2-topbar">
           <BrandLogo size="md" />
-          <div className="ck2-top-actions"><LanguageSwitcher /><button type="button" className="ck2-pill" onClick={returnHome}><X /> {copy.cancel}</button></div>
+          <div className="ck2-top-actions"><button type="button" className="ck2-faq" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>FAQ</button><div className="ck2-language"><LanguageSwitcher /></div></div>
         </header>
         <main className="ck2-member-grid">
           <section className="ck2-member-copy">
@@ -436,7 +433,7 @@ export default function KioskPremiumGateV2() {
         <BrandLogo size="md" />
         <div className="ck2-top-actions">
           <button type="button" className="ck2-pill" onClick={() => void refreshOptions()} disabled={refreshing}><RefreshCw className={refreshing ? "ck2-spin-small" : ""} /> {copy.refresh}</button>
-          <button type="button" className="ck2-pill" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}><HelpCircle /> {copy.help}</button>
+          <button type="button" className="ck2-faq" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>FAQ</button>
           <div className="ck2-language"><LanguageSwitcher /></div>
         </div>
       </header>
