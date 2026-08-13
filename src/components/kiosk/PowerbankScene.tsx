@@ -14,9 +14,14 @@ export function PowerbankScene({ charge, selected, recommended, rentable, return
   const iconClass = rentable
     ? "text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,.95)]"
     : "text-amber-200";
+  const visualState = returnAvailable ? "return" : rentable ? "rentable" : "unavailable";
 
   return (
-    <div className="kiosk-slot-visual relative mt-2 flex h-11 items-center justify-between overflow-hidden rounded-2xl border border-white/15 bg-slate-950/25 px-3" aria-hidden="true">
+    <div
+      className={`kiosk-slot-visual kiosk-slot-visual--${visualState} relative mt-2 flex h-11 items-center justify-between overflow-hidden rounded-2xl border border-white/15 bg-slate-950/25 px-3`}
+      data-slot-visual-state={visualState}
+      aria-hidden="true"
+    >
       <motion.div
         className="absolute inset-y-0 left-0 rounded-r-2xl bg-gradient-to-r from-cyan-400/35 via-blue-500/20 to-violet-500/5"
         animate={{ width: `${level}%`, opacity: rentable ? [0.5, 0.85, 0.5] : 0.3 }}
@@ -134,9 +139,6 @@ function CabinetCell({ slot, active }: { slot: number; active: boolean }) {
  * Visual-only release scene. Physical DTA21269 mapping from the front:
  *   1 | 3
  *   2 | 4
- *
- * The scene deliberately remains presentation-only. It never infers a rental
- * state from animation timing and never sends a hardware command.
  */
 export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
   return (
@@ -178,27 +180,12 @@ export function SlotReleaseScene({ slotNum }: { slotNum: number | null }) {
 
       {slotNum != null && (
         <>
-          <motion.div
-            aria-hidden
-            className="absolute left-1/2 top-1/2 h-[58%] w-[3px] -translate-x-1/2 -translate-y-1/2 bg-[linear-gradient(180deg,transparent,rgba(207,250,254,.98),transparent)] shadow-[0_0_30px_rgba(103,232,249,.95)]"
-            animate={{ opacity: [0, 1, 0], scaleY: [.35, 1, .35] }}
-            transition={{ duration: .92, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            aria-hidden
-            className="absolute left-1/2 top-1/2 h-[86%] w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-cyan-100/10"
-            animate={{ scale: [.84, 1.04, 1.16], opacity: [.45, .18, 0] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
-          />
+          <motion.div aria-hidden className="absolute left-1/2 top-1/2 h-[58%] w-[3px] -translate-x-1/2 -translate-y-1/2 bg-[linear-gradient(180deg,transparent,rgba(207,250,254,.98),transparent)] shadow-[0_0_30px_rgba(103,232,249,.95)]" animate={{ opacity: [0, 1, 0], scaleY: [.35, 1, .35] }} transition={{ duration: .92, repeat: Infinity, ease: "easeInOut" }} />
+          <motion.div aria-hidden className="absolute left-1/2 top-1/2 h-[86%] w-[86%] -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-cyan-100/10" animate={{ scale: [.84, 1.04, 1.16], opacity: [.45, .18, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }} />
         </>
       )}
 
-      <motion.div
-        aria-hidden
-        className="absolute inset-x-[-22%] bottom-[-2%] h-[34%] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.28),transparent)] blur-2xl"
-        animate={{ x: ["-34%", "44%", "-34%"] }}
-        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-      />
+      <motion.div aria-hidden className="absolute inset-x-[-22%] bottom-[-2%] h-[34%] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.28),transparent)] blur-2xl" animate={{ x: ["-34%", "44%", "-34%"] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} />
     </motion.div>
   );
 }

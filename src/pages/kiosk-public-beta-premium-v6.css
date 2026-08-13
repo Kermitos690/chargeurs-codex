@@ -1,0 +1,597 @@
+/*
+ * Chargeurs.ch — Public Beta Premium V6
+ * Presentation-only final override for the physical 1280x720 kiosk.
+ *
+ * HARD BOUNDARY: this file never owns pricing, payment, rental, return,
+ * inventory, authentication or hardware state. Existing DOM/state is the
+ * source of truth; this sheet only changes hierarchy, spacing and readability.
+ */
+
+html.kiosk-v3 {
+  --kv6-bg: #010611;
+  --kv6-bg-2: #041126;
+  --kv6-panel: rgba(4, 15, 31, .94);
+  --kv6-panel-soft: rgba(8, 25, 48, .82);
+  --kv6-line: rgba(135, 185, 235, .16);
+  --kv6-line-strong: rgba(124, 196, 255, .28);
+  --kv6-text: #f7fbff;
+  --kv6-muted: #91a9c2;
+  --kv6-cyan: #5ce1ff;
+  --kv6-blue: #339cff;
+  --kv6-green: #92ff55;
+  --kv6-amber: #ffc861;
+  --kv6-danger: #ff6f7d;
+  background: var(--kv6-bg);
+}
+
+html.kiosk-v3 body,
+html.kiosk-v3 #root,
+html.kiosk-v3 .kv3-runtime,
+html.kiosk-v3 .kv3-product-layer,
+html.kiosk-v3 .kiosk-root {
+  background:
+    radial-gradient(circle at 76% 28%, rgba(34, 126, 255, .13), transparent 32%),
+    radial-gradient(circle at 10% 86%, rgba(53, 225, 255, .055), transparent 28%),
+    linear-gradient(142deg, var(--kv6-bg) 0%, var(--kv6-bg-2) 58%, #01050d 100%) !important;
+}
+
+html.kiosk-v3 .kiosk-root {
+  color: var(--kv6-text) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* TOP CHROME — readable but deliberately secondary.                  */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3 .kiosk-root > header {
+  height: 58px !important;
+  min-height: 58px !important;
+  padding-inline: 8px !important;
+}
+
+html.kiosk-v3 .kiosk-root > header button {
+  min-height: 44px !important;
+  height: 44px !important;
+  border-radius: 15px !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: rgba(2, 9, 20, .62) !important;
+  box-shadow: none !important;
+}
+
+html.kiosk-v3 .kiosk-root > header button span,
+html.kiosk-v3 .kiosk-root > header button {
+  font-weight: 800 !important;
+}
+
+html.kiosk-v3 .kv3-progress-rail {
+  top: 18px !important;
+  width: min(560px, 46vw) !important;
+  height: 58px !important;
+  opacity: .86 !important;
+}
+
+html.kiosk-v3 .kv3-progress-step > span {
+  width: 34px !important;
+  height: 34px !important;
+  border-width: 1.5px !important;
+  background: rgba(2, 10, 22, .94) !important;
+}
+
+html.kiosk-v3 .kv3-progress-step small {
+  margin-top: 5px !important;
+  font-size: 9px !important;
+  letter-spacing: .07em !important;
+  opacity: .72;
+}
+
+/* ------------------------------------------------------------------ */
+/* SELECTION — a product selection experience, not a 2x2 dashboard.  */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="idle"] .kiosk-root main {
+  align-items: stretch !important;
+  justify-content: stretch !important;
+}
+
+html.kiosk-v3 .kiosk-idle-stage {
+  width: 100% !important;
+  max-width: 1180px !important;
+  height: 570px !important;
+  margin: 0 auto !important;
+  padding: 22px !important;
+  display: grid !important;
+  grid-template-columns: 330px minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) 86px !important;
+  column-gap: 28px !important;
+  row-gap: 18px !important;
+  align-items: stretch !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(112, 178, 239, .15) !important;
+  border-radius: 30px !important;
+  background:
+    radial-gradient(circle at 78% 32%, rgba(39, 153, 255, .10), transparent 36%),
+    linear-gradient(145deg, rgba(3, 12, 26, .94), rgba(2, 9, 20, .98)) !important;
+  box-shadow: 0 34px 90px rgba(0,0,0,.28), inset 0 1px rgba(255,255,255,.035) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-stage > .pointer-events-none.absolute {
+  opacity: .42 !important;
+}
+
+html.kiosk-v3 .kiosk-idle-hero {
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  align-self: center !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  text-align: left !important;
+  gap: 10px !important;
+  padding: 10px 6px 10px 10px !important;
+}
+
+html.kiosk-v3 .kiosk-idle-hero h1 {
+  max-width: 6.5ch !important;
+  margin: 0 !important;
+  font-size: 52px !important;
+  line-height: .91 !important;
+  letter-spacing: -.055em !important;
+  text-wrap: balance !important;
+}
+
+html.kiosk-v3 .kiosk-idle-hero > p {
+  max-width: 280px !important;
+  font-size: 17px !important;
+  line-height: 1.36 !important;
+  color: rgba(214,230,246,.68) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-hero > p.text-sm {
+  margin-top: 6px !important;
+  font-size: 11px !important;
+  color: rgba(145,169,194,.48) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-hero > div:last-child {
+  margin-top: 8px !important;
+  display: inline-flex !important;
+  width: auto !important;
+  padding: 10px 14px !important;
+  border: 1px solid rgba(92,225,255,.18) !important;
+  border-radius: 14px !important;
+  background: rgba(92,225,255,.055) !important;
+  font-size: 19px !important;
+  line-height: 1 !important;
+}
+
+html.kiosk-v3 .kiosk-slot-grid {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px !important;
+  align-self: stretch !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 17px 18px !important;
+  border-radius: 23px !important;
+  border: 1px solid rgba(127, 180, 231, .16) !important;
+  background:
+    linear-gradient(145deg, rgba(9, 27, 50, .88), rgba(3, 13, 28, .96)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.035), 0 18px 45px rgba(0,0,0,.18) !important;
+  opacity: 1 !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card:not(:disabled):active {
+  transform: scale(.985) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card.ring-4,
+html.kiosk-v3 .kiosk-slot-card[class*="ring-primary"] {
+  border: 2px solid rgba(146,255,85,.82) !important;
+  background:
+    radial-gradient(circle at 84% 12%, rgba(146,255,85,.13), transparent 38%),
+    linear-gradient(145deg, rgba(8, 37, 29, .96), rgba(3, 16, 24, .98)) !important;
+  box-shadow: 0 0 0 1px rgba(146,255,85,.13), 0 22px 48px rgba(0,0,0,.22), 0 0 34px rgba(146,255,85,.08) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card > div:first-of-type {
+  font-size: 16px !important;
+  line-height: 1 !important;
+  color: rgba(225,238,250,.68) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card .kiosk-slot-visual {
+  height: 52px !important;
+  margin-top: 10px !important;
+  padding-inline: 14px !important;
+  border-radius: 16px !important;
+  border-color: rgba(127,190,240,.13) !important;
+  background: rgba(1,7,17,.46) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card .text-5xl {
+  margin-top: 10px !important;
+  font-size: 42px !important;
+  line-height: .9 !important;
+  letter-spacing: -.045em !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card > div.mt-3.text-base,
+html.kiosk-v3 .kiosk-slot-card > div.mt-2.text-base {
+  margin-top: 8px !important;
+  font-size: 13px !important;
+  line-height: 1.1 !important;
+  color: rgba(205,221,238,.64) !important;
+}
+
+/* The legacy DOM prints return_available twice. Keep exactly one visible label. */
+html.kiosk-v3 .kiosk-slot-card:has(.kiosk-slot-visual--return) > div:last-child {
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card:has(.kiosk-slot-visual--return) {
+  border-style: dashed !important;
+  border-color: rgba(92,225,255,.24) !important;
+  background: linear-gradient(145deg, rgba(4,23,36,.78), rgba(2,12,23,.94)) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card:has(.kiosk-slot-visual--unavailable) {
+  opacity: .62 !important;
+  filter: saturate(.65) !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card > span.absolute.right-3.top-3 {
+  top: 13px !important;
+  right: 13px !important;
+  padding: 6px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(146,255,85,.15) !important;
+  border: 1px solid rgba(146,255,85,.28) !important;
+  color: #caffac !important;
+}
+
+html.kiosk-v3 .kiosk-slot-card > span.absolute.bottom-3.right-3 {
+  bottom: 12px !important;
+  right: 12px !important;
+  padding: 5px 9px !important;
+  border: 1px solid rgba(146,255,85,.22) !important;
+  color: #caffac !important;
+  background: rgba(146,255,85,.08) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-cta {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  width: 100% !important;
+  min-height: 86px !important;
+  display: grid !important;
+  grid-template-columns: 1fr auto !important;
+  grid-template-rows: 1fr !important;
+  align-items: center !important;
+  gap: 18px !important;
+  padding: 12px 14px 12px 22px !important;
+  border: 1px solid rgba(146,255,85,.18) !important;
+  border-radius: 22px !important;
+  background: rgba(5,22,22,.80) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-cta::before {
+  content: "Votre batterie est sélectionnée";
+  justify-self: start;
+  color: rgba(221,242,235,.65);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+html.kiosk-v3 .kiosk-idle-cta > button {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 300px !important;
+  min-height: 60px !important;
+  padding: 0 30px !important;
+  border-radius: 17px !important;
+  font-size: 20px !important;
+  background: linear-gradient(135deg, #82f64b, #4ddc59) !important;
+  color: #06110a !important;
+  box-shadow: 0 16px 38px rgba(86,225,80,.18) !important;
+}
+
+html.kiosk-v3 .kiosk-idle-cta > span {
+  position: absolute !important;
+  left: 22px !important;
+  bottom: 12px !important;
+  font-size: 13px !important;
+  color: rgba(146,255,85,.78) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* PRICING — one premium confirmation surface.                        */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3 .kiosk-pricing-stage {
+  width: 100% !important;
+  max-width: 1120px !important;
+  height: 555px !important;
+  gap: 18px !important;
+  justify-content: center !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-stage > h2 {
+  margin: 0 !important;
+  font-size: 48px !important;
+  line-height: 1 !important;
+  letter-spacing: -.045em !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card {
+  width: 100% !important;
+  max-width: 1050px !important;
+  min-height: 310px !important;
+  grid-template-columns: 300px minmax(0,1fr) !important;
+  gap: 0 !important;
+  padding: 30px !important;
+  border-radius: 28px !important;
+  border: 1px solid rgba(92,225,255,.16) !important;
+  background:
+    radial-gradient(circle at 84% 18%, rgba(46,154,255,.12), transparent 35%),
+    linear-gradient(145deg, rgba(5,19,39,.95), rgba(2,10,22,.98)) !important;
+  box-shadow: 0 34px 90px rgba(0,0,0,.30) !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card > div:first-child {
+  min-height: 220px !important;
+  justify-content: center !important;
+  border-right-color: rgba(255,255,255,.08) !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card > div:first-child > div:last-child {
+  width: 118px !important;
+  height: 118px !important;
+  border-radius: 28px !important;
+  background: rgba(92,225,255,.07) !important;
+  border-color: rgba(92,225,255,.22) !important;
+  box-shadow: 0 0 42px rgba(92,225,255,.08) !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card > div:last-child {
+  padding: 12px 18px 12px 36px !important;
+  text-align: left !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card > div:last-child > div:first-child {
+  font-size: 64px !important;
+  line-height: .94 !important;
+  letter-spacing: -.055em !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-card > div:last-child > p {
+  color: rgba(205,221,238,.64) !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-stage > div:last-child {
+  width: 100% !important;
+  max-width: 1050px !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-stage > div:last-child button {
+  min-height: 58px !important;
+  height: 58px !important;
+  border-radius: 16px !important;
+}
+
+html.kiosk-v3 .kiosk-pricing-stage > div:last-child button:last-child {
+  min-width: 320px !important;
+  background: linear-gradient(135deg, #82f64b, #4ddc59) !important;
+  color: #06110a !important;
+  box-shadow: 0 16px 38px rgba(86,225,80,.18) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* PAYMENT — physical-first hierarchy.                                */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3 .kiosk-payment-rail-stage {
+  margin-inline: auto !important;
+}
+
+html.kiosk-v3 .kiosk-payment-terminal-v6,
+html.kiosk-v3 .kiosk-payment-choice-v6,
+html.kiosk-v3 .kiosk-payment-qr-only-v6 {
+  transform: translateY(2px);
+}
+
+html.kiosk-v3 .kiosk-payment-terminal-v6 {
+  height: 500px !important;
+}
+
+html.kiosk-v3 .kiosk-payment-choice-v6 > h2 {
+  text-wrap: balance;
+}
+
+/* QR screen: QR owns the screen, supporting text stays secondary. */
+html.kiosk-v3 .kiosk-qr-stage {
+  width: 100% !important;
+  max-width: 1120px !important;
+  height: 510px !important;
+  grid-template-columns: 430px minmax(0,1fr) !important;
+  gap: 54px !important;
+  align-items: center !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage > div:first-child {
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage > div:first-child > div:first-child {
+  font-size: 30px !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage h2 {
+  margin-top: 16px !important;
+  max-width: 8ch !important;
+  font-size: 50px !important;
+  line-height: .94 !important;
+  letter-spacing: -.045em !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage h2 + p {
+  margin-top: 12px !important;
+  font-size: 18px !important;
+  line-height: 1.4 !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage > div:first-child > div.mt-9 {
+  margin-top: 24px !important;
+  padding: 18px !important;
+  border-radius: 20px !important;
+  border-color: rgba(255,255,255,.08) !important;
+  background: rgba(3,13,28,.56) !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage svg[width="380"] {
+  width: 310px !important;
+  height: 310px !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage .bg-white {
+  padding: 18px !important;
+  border-radius: 28px !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.20), 0 24px 65px rgba(0,0,0,.32), 0 0 54px rgba(51,156,255,.16) !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage > div:last-child > div.mt-6 {
+  margin-top: 16px !important;
+  font-size: 14px !important;
+}
+
+html.kiosk-v3 .kiosk-qr-stage > div:last-child > div.mt-4 {
+  margin-top: 10px !important;
+  font-size: 14px !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* RELEASE / READY — physical instruction first, celebration second.  */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3 .kiosk-release-stage,
+html.kiosk-v3 .kiosk-ready-stage {
+  width: 100% !important;
+  max-width: 1160px !important;
+  height: 510px !important;
+  gap: 30px !important;
+}
+
+html.kiosk-v3 .kiosk-release-stage > div:last-child,
+html.kiosk-v3 .kiosk-ready-stage > div:last-child {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 30px !important;
+  border-radius: 30px !important;
+  background: linear-gradient(145deg, rgba(4,17,35,.95), rgba(2,9,20,.98)) !important;
+  border-color: rgba(92,225,255,.13) !important;
+}
+
+html.kiosk-v3 .kiosk-release-stage h2,
+html.kiosk-v3 .kiosk-ready-stage h2 {
+  font-size: 49px !important;
+  line-height: .93 !important;
+}
+
+html.kiosk-v3 .kiosk-release-stage h2 + p,
+html.kiosk-v3 .kiosk-ready-stage h2 + p {
+  font-size: 20px !important;
+  line-height: 1.4 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* ERROR / EXPIRY / SUPPORT — calm recovery, not developer console.   */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3[data-kiosk-scene="error"] .kiosk-root main > div,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-root main > div,
+html.kiosk-v3[data-kiosk-scene="expired"] .kiosk-root main > div {
+  width: 720px !important;
+  max-width: 86vw !important;
+  min-height: 380px !important;
+  justify-content: center !important;
+  padding: 38px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  border-radius: 30px !important;
+  background: linear-gradient(145deg, rgba(5,17,34,.96), rgba(2,9,20,.98)) !important;
+  box-shadow: 0 34px 90px rgba(0,0,0,.30) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="error"] .kiosk-root main h2,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-root main h2,
+html.kiosk-v3[data-kiosk-scene="expired"] .kiosk-root main h2 {
+  font-size: 38px !important;
+  line-height: 1.02 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="error"] .kiosk-root main p,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-root main p,
+html.kiosk-v3[data-kiosk-scene="expired"] .kiosk-root main p {
+  max-width: 570px !important;
+  font-size: 17px !important;
+  line-height: 1.45 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* OPERATOR DIAGNOSTICS — keep it operator-only and scannable.        */
+/* ------------------------------------------------------------------ */
+html.kiosk-v3 .kiosk-diagnostics-panel {
+  max-width: 1220px !important;
+}
+
+html.kiosk-v3 .kiosk-diagnostics summary::-webkit-details-marker {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion / physical WebView safety.                           */
+/* ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3 .kiosk-payment-terminal-v6 .animate-bounce,
+  html.kiosk-v3 .kiosk-payment-terminal-v6 .animate-spin,
+  html.kiosk-v3 .kiosk-slot-card *,
+  html.kiosk-v3 .kiosk-release-stage *,
+  html.kiosk-v3 .kiosk-ready-stage * {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* OEM WebViews may still expose a density-reduced viewport before native
+ * normalization. Preserve hierarchy without creating a second composition. */
+@media (orientation: landscape) and (max-height: 610px) {
+  html.kiosk-v3 .kiosk-idle-stage {
+    height: calc(100vh - 86px) !important;
+    grid-template-columns: 30% minmax(0,1fr) !important;
+    grid-template-rows: minmax(0,1fr) 72px !important;
+    padding: 14px !important;
+    column-gap: 16px !important;
+    row-gap: 10px !important;
+  }
+
+  html.kiosk-v3 .kiosk-idle-hero h1 { font-size: clamp(34px, 5.8vh, 46px) !important; }
+  html.kiosk-v3 .kiosk-idle-hero > p { font-size: 13px !important; }
+  html.kiosk-v3 .kiosk-slot-grid { gap: 9px !important; }
+  html.kiosk-v3 .kiosk-slot-card { padding: 11px 13px !important; border-radius: 17px !important; }
+  html.kiosk-v3 .kiosk-slot-card .kiosk-slot-visual { height: 38px !important; margin-top: 6px !important; }
+  html.kiosk-v3 .kiosk-slot-card .text-5xl { font-size: 30px !important; }
+  html.kiosk-v3 .kiosk-slot-card > div.mt-3.text-base { font-size: 11px !important; }
+  html.kiosk-v3 .kiosk-idle-cta { min-height: 68px !important; }
+  html.kiosk-v3 .kiosk-idle-cta > button { min-height: 48px !important; min-width: 250px !important; font-size: 16px !important; }
+  html.kiosk-v3 .kiosk-pricing-stage,
+  html.kiosk-v3 .kiosk-payment-terminal-v6,
+  html.kiosk-v3 .kiosk-qr-stage,
+  html.kiosk-v3 .kiosk-release-stage,
+  html.kiosk-v3 .kiosk-ready-stage { height: calc(100vh - 96px) !important; }
+}

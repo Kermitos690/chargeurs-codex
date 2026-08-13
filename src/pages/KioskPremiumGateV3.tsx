@@ -31,20 +31,18 @@ import "./kiosk-v3-owned-home.css";
 import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-reference-v5.css";
 import "./kiosk-home-reference-v5-canvas.css";
+import "./kiosk-public-beta-premium-v6.css";
+import "./kiosk-public-beta-premium-v6-final.css";
 
 /**
  * Production kiosk entry.
- * Business orchestration remains in the proven V2 gate/Kiosk state machine,
- * while the visible Home is owned by the approved 1280x720 V5 reference skin.
- * The V2 hero remains mounted temporarily only as a state/callback adapter and
- * never paints over the canonical Home owner.
- *
- * Cinematic, recovery and hardware presentation layers are presentation-only.
- * They never infer or own payment, rental, return, inventory or hardware state.
+ * Business orchestration remains in the proven V2 gate/Kiosk state machine.
+ * V6 is presentation-only and is loaded last so one physical composition owns
+ * customer-facing hierarchy without mutating payment, rental or hardware state.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "v5-reference-1280x720";
+    document.documentElement.dataset.kioskVersion = "v6-public-beta-premium";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;

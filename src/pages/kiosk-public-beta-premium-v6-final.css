@@ -1,0 +1,22 @@
+/* Final V6 presentation corrections.
+ * Kept separate during field iteration so the already-reviewed V6 composition
+ * remains easy to compare. Codex/integration may fold these rules into the V6
+ * stylesheet once physical 1280x720 QA is complete.
+ */
+
+html.kiosk-v3 .kiosk-idle-cta::before {
+  content: none !important;
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-idle-cta > span {
+  position: static !important;
+  grid-column: 1 !important;
+  grid-row: 1 !important;
+  justify-self: start !important;
+  align-self: center !important;
+  margin: 0 !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  color: rgba(202,255,172,.78) !important;
+}
