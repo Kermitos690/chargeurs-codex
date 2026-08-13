@@ -11,6 +11,7 @@ public final class NativeBridge {
     private final CommandReplayStore replayStore;
     private final LocalAuditLog auditLog;
     private final StripeTerminalReaderRuntime terminalRuntime;
+    private final StripeTerminalSimulatedRuntime simulatedRuntime;
 
     public NativeBridge(MainActivity activity, KioskConfig config, CabinetController cabinetController) {
         this.activity = activity;
@@ -25,8 +26,15 @@ public final class NativeBridge {
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
         ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
-        this.terminalRuntime = application.terminalRuntime(config);
-        this.terminalRuntime.ensureStarted();
+        if (BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED) {
+            this.terminalRuntime = null;
+            this.simulatedRuntime = application.simulatedTerminalRuntime(config);
+            this.simulatedRuntime.ensureStarted();
+        } else {
+            this.simulatedRuntime = null;
+            this.terminalRuntime = application.terminalRuntime(config);
+            this.terminalRuntime.ensureStarted();
+        }
     }
 
     @JavascriptInterface
@@ -38,7 +46,8 @@ public final class NativeBridge {
             "hardware", cabinetController.status(),
             "wisePad", WisePadUsbProbe.snapshot(activity),
             "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
-            "paymentReader", terminalRuntime.snapshot(),
+            "stripeTerminalSimulatedTestEnabled", BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED,
+            "paymentReader", paymentReaderSnapshot(),
             "vendorCompatibility", VendorAppCompatibility.inspect(activity)
         ).toString();
     }
@@ -56,50 +65,39 @@ public final class NativeBridge {
         return getHardwareIntegrationStatus();
     }
 
-    /**
-     * Canonical, secret-free payment-reader projection for the shared
-     * ChargeursPresentationModel. USB presence is diagnostics only; READY is
-     * emitted solely by the Stripe Terminal connection lifecycle.
-     */
+    /** Canonical, secret-free payment-reader projection for the shared UI. */
     @JavascriptInterface
     public String getPaymentReaderStatus() {
-        terminalRuntime.ensureStarted();
-        terminalRuntime.refreshPaymentState(false);
-        return terminalRuntime.snapshot().toString();
+        ensurePaymentReaderStarted();
+        refreshPaymentReaderState(false);
+        return paymentReaderSnapshot().toString();
     }
 
-    /**
-     * Requests a new canonical discovery/connect attempt. This never revokes,
-     * force-stops, disables or uninstalls the supplier POS application.
-     */
+    /** Requests a fresh TEST discovery/connect attempt without touching vendor USB ownership. */
     @JavascriptInterface
     public String refreshPaymentReader() {
-        terminalRuntime.ensureStarted();
-        return terminalRuntime.snapshot().toString();
+        ensurePaymentReaderStarted();
+        return paymentReaderSnapshot().toString();
     }
 
-    /**
-     * Starts the Terminal rail for an already-created canonical rental. The
-     * native runtime asks Agent 2's backend to atomically claim TERMINAL before
-     * any Stripe PaymentIntent side effect. No token, client secret, amount or
-     * payment credential crosses back into the WebView.
-     */
+    /** Starts the canonical Terminal rail for an already-created rental. */
     @JavascriptInterface
     public String startTerminalPayment(String rentalSessionId) {
+        if (simulatedRuntime != null) {
+            return simulatedRuntime.startTerminalPayment(rentalSessionId).toString();
+        }
         return terminalRuntime.startTerminalPayment(rentalSessionId).toString();
     }
 
-    /**
-     * Metadata-only provider compatibility state for the hidden diagnostics
-     * view. It cannot see or take over another app's network/serial session.
-     */
+    /** Metadata-only provider compatibility state for hidden diagnostics. */
     @JavascriptInterface
     public String getHardwareIntegrationStatus() {
         return JsonObjects.of(
             "cabinet", cabinetController.status(),
             "wisePad", WisePadUsbProbe.snapshot(activity),
-            "paymentReader", terminalRuntime.snapshot(),
+            "paymentReader", paymentReaderSnapshot(),
             "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
+            "stripeTerminalSimulatedTestEnabled", BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED,
             "vendorCompatibility", VendorAppCompatibility.inspect(activity),
             "physicalEjectionEnabled", isPhysicalEjectionEnabled()
         ).toString();
@@ -131,8 +129,9 @@ public final class NativeBridge {
             auditLog.record("ejection.disabled", JsonObjects.of("environment", BuildConfig.BUILD_ENVIRONMENT));
             return error("HARDWARE_EJECTION_DISABLED");
         }
+        EjectionAuthorization authorization = null;
         try {
-            EjectionAuthorization authorization = authorizationVerifier.verify(signedAuthorization);
+            authorization = authorizationVerifier.verify(signedAuthorization);
             if (!replayStore.claim(authorization.commandId(), authorization.expiresAtSeconds())) {
                 auditLog.record("ejection.replay_rejected", JsonObjects.of("commandId", authorization.commandId()));
                 return error("AUTHORIZATION_REPLAYED");
@@ -148,6 +147,20 @@ public final class NativeBridge {
 
     static boolean isPhysicalEjectionEnabled() {
         return BuildConfig.HARDWARE_EJECTION_ENABLED;
+    }
+
+    private void ensurePaymentReaderStarted() {
+        if (simulatedRuntime != null) simulatedRuntime.ensureStarted();
+        else terminalRuntime.ensureStarted();
+    }
+
+    private void refreshPaymentReaderState(boolean reconcile) {
+        if (simulatedRuntime != null) simulatedRuntime.refreshPaymentState(reconcile);
+        else terminalRuntime.refreshPaymentState(reconcile);
+    }
+
+    private org.json.JSONObject paymentReaderSnapshot() {
+        return simulatedRuntime != null ? simulatedRuntime.snapshot() : terminalRuntime.snapshot();
     }
 
     private static String error(String code) {
