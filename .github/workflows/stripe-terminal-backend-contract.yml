@@ -1,0 +1,30 @@
+name: Stripe Terminal backend contract
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/stripe-terminal-backend/**'
+      - 'supabase/functions/_shared/stripeTerminalTest.ts'
+      - 'supabase/functions/create-stripe-checkout/index.ts'
+      - 'supabase/functions/tests/stripe_terminal_backend_contract.test.ts'
+      - 'supabase/migrations/*stripe_terminal*'
+      - 'docs/payments/WISEPAD3_STRIPE_TERMINAL_*'
+      - '.github/workflows/stripe-terminal-backend-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check Terminal backend
+        run: deno check supabase/functions/stripe-terminal-backend/index.ts
+      - name: Run targeted Terminal contract tests
+        run: deno test --allow-read --no-check supabase/functions/tests/stripe_terminal_backend_contract.test.ts
