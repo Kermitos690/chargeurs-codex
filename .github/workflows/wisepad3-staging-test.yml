@@ -52,19 +52,21 @@ jobs:
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify #169/#171 reader lifecycle, package and signer
+      - name: Verify #169/#171 reader lifecycle, DEX packaging, package and signer
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           probe="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/WisePadUsbProbe.java"
           runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
+          backend_client="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalBackendClient.java"
           application="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/ChargeursKioskApplication.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
           kiosk="src/pages/Kiosk.tsx"
           test -s "$apk"
           test -s "$probe"
           test -s "$runtime"
+          test -s "$backend_client"
           test -s "$application"
           test -s "$bridge"
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
@@ -77,11 +79,30 @@ jobs:
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='119'"
-          printf '%s\n' "$badging" | grep -F "1.0.19-terminal-contract-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='120'"
+          printf '%s\n' "$badging" | grep -F "1.0.20-terminal-contract-staging"
           manifest="$($aapt_path dump xmltree "$apk" AndroidManifest.xml)"
           printf '%s\n' "$manifest" > /tmp/manifest.txt
           grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
+
+          # Physical DTA21269 regression gate: the 1.0.19 field build crashed
+          # with NoClassDefFoundError for ConnectionTokenResult. Inspect the
+          # actual DEX payload, not only source, before publishing the APK.
+          : > /tmp/dex_strings.txt
+          while IFS= read -r dex; do
+            unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt
+          done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
+          grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
+          if grep -F 'record ConnectionTokenResult' "$backend_client"; then
+            echo "Java record regression: use explicit nested classes for Android field compatibility" >&2
+            exit 1
+          fi
+          grep -F 'static final class ConnectionTokenResult' "$backend_client"
+          grep -F 'static final class PaymentIntentResult' "$backend_client"
+          grep -F 'static final class PaymentStateResult' "$backend_client"
+
           grep -F "TARGET_VENDOR_ID = 0x15A2" "$probe"
           grep -F "TARGET_PRODUCT_ID = 0x0101" "$probe"
           grep -F "new DiscoveryConfiguration.UsbDiscoveryConfiguration" "$runtime"
@@ -118,7 +139,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.19-terminal-contract-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.20-terminal-contract-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -128,8 +149,8 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=119
-          versionName=1.0.19-terminal-contract-staging
+          versionCode=120
+          versionName=1.0.20-terminal-contract-staging
           environment=STAGING_TEST
           targetUsb=15a2:0101
           stripeTerminalSdk=5.7.0
@@ -139,6 +160,8 @@ jobs:
           architectureContractPR=169
           architectureContractSHA=218db4416ff62ac5b112d9eba03710c5c4c0bc63
           qaGateIssue=171
+          fieldRegression=NoClassDefFoundError_StripeTerminalBackendClient_ConnectionTokenResult_fixed
+          dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_present
           apkSha256=$apk_sha
           signerCertificateSha256=$signer_sha
           signerCertificateSha256Colon=$signer_colon
