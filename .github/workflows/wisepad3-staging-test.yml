@@ -93,14 +93,20 @@ jobs:
           grep -F "STRIPE_FINE_LOCATION_PERMISSION_REQUIRED" "$runtime"
           grep -F ".retrievePaymentIntent(" "$runtime"
           grep -F ".processPaymentIntent(" "$runtime"
-          ! grep -F "static StripeTerminalReaderRuntime instance" "$runtime"
+          if grep -F "static StripeTerminalReaderRuntime instance" "$runtime"; then
+            echo "static StripeTerminalReaderRuntime singleton would retain Context" >&2
+            exit 1
+          fi
           grep -F "private StripeTerminalReaderRuntime terminalRuntime" "$application"
           grep -F "application.terminalRuntime(config)" "$bridge"
           grep -F '"readerState"' "$bridge"
           grep -F '"capability"' "$runtime"
           grep -F '"TERMINAL_AND_QR"' "$runtime"
           grep -F '"QR_ONLY"' "$runtime"
-          ! grep -F '"mode", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED ? "TERMINAL_USB_TEST"' "$bridge"
+          if grep -F '"mode", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED ? "TERMINAL_USB_TEST"' "$bridge"; then
+            echo "legacy TERMINAL_USB_TEST product projection leaked into NativeBridge" >&2
+            exit 1
+          fi
           grep -F 'setPhase("payment_ready")' "$kiosk"
           grep -F 'phase === "payment_ready"' "$kiosk"
           grep -F 'phase === "terminal"' "$kiosk"
