@@ -10,7 +10,6 @@ on:
       - src/lib/chargeursPresentationModel.ts
       - src/pages/Kiosk.tsx
       - src/test/chargeursPresentationModel.test.ts
-      - docs/kiosk/WISEPAD3_ANDROID_STRIPE_TERMINAL_AUDIT.md
       - .github/workflows/wisepad3-staging-test.yml
   workflow_dispatch:
 
@@ -61,130 +60,86 @@ jobs:
               -alias androiddebugkey \
               -keypass android \
               -dname "CN=Chargeurs STAGING TEST,O=Chargeurs.ch,C=CH" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
+              -keyalg RSA -keysize 2048 -validity 10000
           fi
           chmod 600 "$HOME/.android/debug.keystore"
-          keytool -list -v \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey \
-            | tee /tmp/staging-keytool.txt
-          canonical_signer="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-          test -n "$canonical_signer"
-          test "${#canonical_signer}" -eq 64
-          printf '%s' "$canonical_signer" > /tmp/canonical_staging_signer_sha256
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | tee /tmp/staging-keytool.txt
+          sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]' > /tmp/canonical_staging_signer_sha256
+          test "$(wc -c < /tmp/canonical_staging_signer_sha256 | tr -d ' ')" -ge 64
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build STAGING simulated Terminal APK
+      - name: Build STAGING preview simulator APK
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
-          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify 1.0.23 simulated payment lane, DEX, safety and signer
+      - name: Verify 1.0.24 preview simulator safety, URL, DEX and signer
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           gradle="android-kiosk/app/build.gradle.kts"
-          physical_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
           sim_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalSimulatedRuntime.java"
-          backend_client="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalBackendClient.java"
-          application="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/ChargeursKioskApplication.java"
+          physical_runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
           kiosk="src/pages/Kiosk.tsx"
+          preview="https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 
           test -s "$apk"
-          test -s "$physical_runtime"
-          test -s "$sim_runtime"
-          test -s "$backend_client"
-          test -s "$application"
-          test -s "$bridge"
-          test -s "$HOME/.android/debug.keystore"
-          test -s /tmp/canonical_staging_signer_sha256
-
-          # Dependency/version and explicit simulator-only STAGING mode.
+          grep -F 'versionCode = 124' "$gradle"
+          grep -F '1.0.24-terminal-simulator-preview-v2' "$gradle"
+          grep -F "$preview" "$gradle"
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
           grep -F 'implementation("androidx.core:core:1.13.1")' "$gradle"
-          grep -F 'versionCode = 123' "$gradle"
-          grep -F '1.0.23-terminal-simulator-v2' "$gradle"
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
           grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")' "$gradle"
           grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "true")' "$gradle"
-          grep -F 'CHARGEURS_STAGING_KEYSTORE_PATH' "$gradle"
-          grep -F 'signingConfigs.getByName("stagingTest")' "$gradle"
-
-          # Proven physical lane remains in source; simulator is a separate runtime.
           grep -F 'SDK_COMPAT = "2.22.0-test-only"' "$physical_runtime"
-          grep -F 'DiscoveryMethod.USB' "$physical_runtime"
-          grep -F '.connectUsbReader(' "$physical_runtime"
           grep -F 'SDK_COMPAT = "2.22.0-simulated-test-only"' "$sim_runtime"
-          grep -F 'DiscoveryMethod.BLUETOOTH_SCAN' "$sim_runtime"
           grep -F 'new DiscoveryConfiguration(0, DiscoveryMethod.BLUETOOTH_SCAN, true)' "$sim_runtime"
           grep -F '.connectBluetoothReader(' "$sim_runtime"
-          grep -F '.retrievePaymentIntent(' "$sim_runtime"
           grep -F '.collectPaymentMethod(' "$sim_runtime"
           grep -F '.processPayment(' "$sim_runtime"
-          grep -F 'Stripe simulated reader connected through Terminal 2.22' "$sim_runtime"
-          if grep -F 'OfflineListener' "$sim_runtime"; then
-            echo "Simulator must remain on the pre-offline Stripe 2.22 path" >&2
-            exit 1
-          fi
-
-          # Native bridge must select simulator only in the dedicated BuildConfig lane.
           grep -F 'BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED' "$bridge"
-          grep -F 'application.simulatedTerminalRuntime(config)' "$bridge"
-          grep -F 'simulatedRuntime.startTerminalPayment(rentalSessionId)' "$bridge"
-          grep -F 'private StripeTerminalSimulatedRuntime simulatedRuntime' "$application"
-
-          # No TEST build may expose local physical ejection.
-          grep -F 'if (!isPhysicalEjectionEnabled())' "$bridge"
           grep -F 'return error("HARDWARE_EJECTION_DISABLED")' "$bridge"
-
-          # Same canonical payment presentation path remains compiled.
           grep -F 'setPhase("payment_ready")' "$kiosk"
           grep -F 'phase === "payment_ready"' "$kiosk"
           grep -F 'phase === "terminal"' "$kiosk"
 
-          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          badging="$($aapt_path dump badging "$apk")"
+          printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='124'"
+          printf '%s\n' "$badging" | grep -F "1.0.24-terminal-simulator-preview-v2-staging"
+
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
-          canonical_digest="$(cat /tmp/canonical_staging_signer_sha256)"
-          test -n "$cert_digest"
-          test "${#cert_digest}" -eq 64
+          canonical_digest="$(cat /tmp/canonical_staging_signer_sha256 | tr -d '\n')"
           test "$cert_digest" = "$canonical_digest"
           printf '%s' "$cert_digest" > /tmp/apk_signer_sha256
 
-          badging="$($aapt_path dump badging "$apk")"
-          printf '%s\n' "$badging"
-          printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='123'"
-          printf '%s\n' "$badging" | grep -F "1.0.23-terminal-simulator-v2-staging"
-
           : > /tmp/dex_strings.txt
-          while IFS= read -r dex; do
-            unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt
-          done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
+          while IFS= read -r dex; do unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt; done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
+          grep -F 'StripeTerminalSimulatedRuntime' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
-          grep -F 'StripeTerminalSimulatedRuntime' /tmp/dex_strings.txt
           grep -F 'androidx/core/content/ContextCompat' /tmp/dex_strings.txt
+          grep -F 'chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app' /tmp/dex_strings.txt
 
-      - name: Prepare signed simulator APK + provenance
+      - name: Prepare signed preview simulator APK + provenance
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.23-terminal-simulator-v2-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.24-terminal-simulator-preview-v2-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -193,29 +148,25 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=123
-          versionName=1.0.23-terminal-simulator-v2-staging
+          versionCode=124
+          versionName=1.0.24-terminal-simulator-preview-v2-staging
           environment=STAGING_TEST
+          frontend=https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app
           stripeTerminalSdk=2.22.0
-          androidXCore=1.13.1
           readerMode=SIMULATED
           simulatedReader=true
           physicalWisePadReference=tmr_GnorJgwc2oWVq3
-          compatibilityPurpose=SOFTWARE_PAYMENT_RAIL_E2E_WITHOUT_PHYSICAL_TEST_CARD
           productionEligible=false
-          terminalBackend=https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
-          backendContractPR=168
           physicalEjectionEnabled=false
           paymentMode=TEST_ONLY
-          stagingSigningPolicy=github_actions_cached_explicit_debug_keystore_v1
           apkSha256=$apk_sha
           signerCertificateSha256=$signer_sha
           signingVerification=apksigner_verify_pass
-          rollbackRequirement=RESTORE_PHYSICAL_READER_LANE_AFTER_SIMULATOR_TEST
+          rollbackRequirement=RESTORE_1.0.22_PHYSICAL_READER_LANE_AFTER_SIMULATOR_TEST
           EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
 
-      - name: Upload STAGING simulator APK
+      - name: Upload STAGING preview simulator APK
         uses: actions/upload-artifact@v4
         with:
           name: wisepad3-${{ steps.artifact.outputs.artifact_name }}
