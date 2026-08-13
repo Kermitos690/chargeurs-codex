@@ -99,7 +99,7 @@ jobs:
           fi
           grep -F "private StripeTerminalReaderRuntime terminalRuntime" "$application"
           grep -F "application.terminalRuntime(config)" "$bridge"
-          grep -F '"readerState"' "$bridge"
+          grep -F '"readerState"' "$runtime"
           grep -F '"capability"' "$runtime"
           grep -F '"TERMINAL_AND_QR"' "$runtime"
           grep -F '"QR_ONLY"' "$runtime"
