@@ -88,7 +88,7 @@ jobs:
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: CHARGEURS_STAGING_KEYSTORE_PATH="$HOME/.android/debug.keystore" ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify DTA21269 Stripe 2.22 compatibility lane, DEX packaging, package and signer
+      - name: Verify DTA21269 Stripe 2.22 compatibility lane, AndroidX, DEX packaging, package and signer
         shell: bash
         run: |
           set -euo pipefail
@@ -110,8 +110,9 @@ jobs:
           test -s /tmp/canonical_staging_signer_sha256
 
           grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
-          grep -F 'versionCode = 121' "$gradle"
-          grep -F '1.0.21-terminal-compat-v2' "$gradle"
+          grep -F 'implementation("androidx.core:core:1.13.1")' "$gradle"
+          grep -F 'versionCode = 122' "$gradle"
+          grep -F '1.0.22-terminal-compat-v2-core' "$gradle"
           grep -F 'CHARGEURS_STAGING_KEYSTORE_PATH' "$gradle"
           grep -F 'signingConfigs.getByName("stagingTest")' "$gradle"
           grep -F 'SDK_COMPAT = "2.22.0-test-only"' "$runtime"
@@ -153,8 +154,8 @@ jobs:
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='121'"
-          printf '%s\n' "$badging" | grep -F "1.0.21-terminal-compat-v2-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='122'"
+          printf '%s\n' "$badging" | grep -F "1.0.22-terminal-compat-v2-core-staging"
           manifest="$($aapt_path dump xmltree "$apk" AndroidManifest.xml)"
           printf '%s\n' "$manifest" > /tmp/manifest.txt
           grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
@@ -166,6 +167,7 @@ jobs:
           grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
           grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
+          grep -F 'androidx/core/content/ContextCompat' /tmp/dex_strings.txt
           grep -F 'static final class ConnectionTokenResult' "$backend_client"
           grep -F 'static final class PaymentIntentResult' "$backend_client"
           grep -F 'static final class PaymentStateResult' "$backend_client"
@@ -197,7 +199,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.21-terminal-compat-v2-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.22-terminal-compat-v2-core-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -207,11 +209,12 @@ jobs:
           branch=$GITHUB_REF_NAME
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=121
-          versionName=1.0.21-terminal-compat-v2-staging
+          versionCode=122
+          versionName=1.0.22-terminal-compat-v2-core-staging
           environment=STAGING_TEST
           targetUsb=15a2:0101
           stripeTerminalSdk=2.22.0
+          androidXCore=1.13.1
           compatibilityPurpose=DTA21269_BROKEN_ANDROID11_KEYMASTER_PRE_OFFLINE_USB_PROOF
           productionEligible=false
           terminalBackend=https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
@@ -223,7 +226,8 @@ jobs:
           stagingSignerContinuityGate=apk_cert_must_equal_cached_keystore_cert
           fieldRegression1=NoClassDefFoundError_StripeTerminalBackendClient_ConnectionTokenResult_fixed
           fieldRegression2=Stripe5_7_OfflineAesKeyProvider_Keymaster_DEAD_OBJECT_bypassed_for_diagnostic
-          dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_present
+          fieldRegression3=Stripe2_22_BBPOS_ContextCompat_missing_packaged_androidx_core_fixed
+          dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_ContextCompat_present
           apkSha256=$apk_sha
           signerCertificateSha256=$signer_sha
           signerCertificateSha256Colon=$signer_colon
