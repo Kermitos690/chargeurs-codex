@@ -1,7 +1,9 @@
 package ch.chargeurs.kiosk;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -63,6 +65,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
+    private final AtomicBoolean bindingBootstrapRunning = new AtomicBoolean(false);
 
     private volatile String readerState = "UNAVAILABLE";
     private volatile String safeErrorCode;
@@ -70,6 +73,10 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private volatile String stripeReaderSerial;
     private volatile String stripeLocationId;
     private volatile String expectedReaderId;
+    // One-shot TEST ConnectionToken fetched only to obtain the server-owned
+    // location/reader binding before connectReader(). It is consumed by the
+    // Stripe SDK provider and is never persisted, logged or exposed to JS.
+    private volatile String prefetchedConnectionTokenSecret;
     private volatile String localPaymentState = "IDLE";
     private volatile String activeRentalSessionId;
     private volatile String activePaymentIntentId;
@@ -105,6 +112,17 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         }
         if (!usbPresent()) {
             if (!"BUSY".equals(readerState) && !"UPDATING".equals(readerState)) readerState = "ABSENT";
+            return;
+        }
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
+            return;
+        }
+        // Agent 2 owns the TEST Location/optional Reader binding. Fetch it
+        // before discovery so USB presence can never be promoted to READY and
+        // connectReader() is never attempted without the canonical binding.
+        if (blankToNull(stripeLocationId) == null) {
+            bootstrapConnectionBinding();
             return;
         }
         main.post(() -> {
@@ -282,6 +300,10 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             readerState = usbPresent() ? "UNAVAILABLE" : "ABSENT";
             return;
         }
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
+            return;
+        }
         if (!discoveryRunning.compareAndSet(false, true)) return;
         readerState = "DISCOVERING";
         safeErrorCode = null;
@@ -334,6 +356,10 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
 
     private void connect(Reader reader) {
         if ("CONNECTING".equals(readerState) || "READY".equals(readerState)) return;
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
+            return;
+        }
         String location = blankToNull(stripeLocationId);
         if (location == null) {
             setError("TERMINAL_LOCATION_BINDING_REQUIRED");
@@ -446,9 +472,37 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         return value == null || value.isBlank() ? JSONObject.NULL : value;
     }
 
+    private void bootstrapConnectionBinding() {
+        if (!bindingBootstrapRunning.compareAndSet(false, true)) return;
+        readerState = "DISCOVERING";
+        io.execute(() -> {
+            try {
+                StripeTerminalBackendClient.ConnectionTokenResult result = backend.fetchConnectionToken();
+                String location = blankToNull(result.locationId());
+                if (location == null) throw new IOException("TERMINAL_LOCATION_BINDING_REQUIRED");
+                stripeLocationId = location;
+                expectedReaderId = blankToNull(result.expectedReaderId());
+                prefetchedConnectionTokenSecret = result.secret();
+                safeErrorCode = null;
+            } catch (Exception error) {
+                prefetchedConnectionTokenSecret = null;
+                setError(StripeTerminalBackendClient.safeCode(error.getMessage()));
+            } finally {
+                bindingBootstrapRunning.set(false);
+            }
+            if (blankToNull(stripeLocationId) != null) main.post(this::ensureStarted);
+        });
+    }
+
     private final class BackendConnectionTokenProvider implements ConnectionTokenProvider {
         @Override
         public void fetchConnectionToken(ConnectionTokenCallback callback) {
+            String prefetched = prefetchedConnectionTokenSecret;
+            if (prefetched != null && !prefetched.isBlank()) {
+                prefetchedConnectionTokenSecret = null;
+                callback.onSuccess(prefetched);
+                return;
+            }
             io.execute(() -> {
                 try {
                     StripeTerminalBackendClient.ConnectionTokenResult result = backend.fetchConnectionToken();

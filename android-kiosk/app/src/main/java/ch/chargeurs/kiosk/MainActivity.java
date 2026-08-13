@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -8,6 +9,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -49,6 +51,7 @@ public final class MainActivity extends Activity {
     private static final int WEB_VIEW_LAYER_INDEX = 1;
     private static final String WEB_RUNTIME_PREFS = "chargeurs_web_runtime";
     private static final String WEB_RUNTIME_VERSION = "last_runtime_version";
+    private static final int STRIPE_TERMINAL_PERMISSION_REQUEST = 4701;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private FrameLayout container;
@@ -111,10 +114,17 @@ public final class MainActivity extends Activity {
         KioskVisuals.applyKioskWindow(this);
         registerBackBlocking();
         setContentView(buildRoot());
+        requestStripeTerminalPermissionIfNeeded();
         resetWebRuntimeOnFirstLoad = shouldResetWebRuntime();
         registerConnectivityMonitoring();
         createWebView();
         handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
+    }
+
+    private void requestStripeTerminalPermissionIfNeeded() {
+        if (!BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return;
+        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, STRIPE_TERMINAL_PERMISSION_REQUEST);
     }
 
     private FrameLayout buildRoot() {
