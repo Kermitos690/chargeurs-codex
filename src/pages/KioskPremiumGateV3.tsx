@@ -32,6 +32,7 @@ import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-reference-v5.css";
 import "./kiosk-home-reference-v5-canvas.css";
 import "./kiosk-public-beta-premium-v6.css";
+import "./kiosk-public-beta-premium-v6-final.css";
 
 /**
  * Production kiosk entry.
