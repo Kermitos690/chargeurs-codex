@@ -6,76 +6,161 @@ on:
       - agent/kiosk-wisepad3-stripe-terminal-usb
     paths:
       - android-kiosk/**
+      - src/components/kiosk/KioskPaymentRailStage.tsx
+      - src/lib/chargeursPresentationModel.ts
+      - src/pages/Kiosk.tsx
+      - src/test/chargeursPresentationModel.test.ts
+      - scripts/apply-terminal-presentation-contract.mjs
       - docs/kiosk/WISEPAD3_ANDROID_STRIPE_TERMINAL_AUDIT.md
       - .github/workflows/wisepad3-staging-test.yml
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-inspect-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
 
+      - name: Apply canonical #169 payment presentation patch once
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-terminal-presentation-contract.mjs
+          if git diff --quiet -- src/pages/Kiosk.tsx src/components/kiosk/KioskPaymentRailStage.tsx; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Kiosk.tsx src/components/kiosk/KioskPaymentRailStage.tsx
+          git commit -m "feat(kiosk): converge PAYMENT_READY and first-rail-wins UI"
+          git push origin HEAD:agent/kiosk-wisepad3-stripe-terminal-usb
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.patch.outputs.changed != 'true'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Frontend canonical presentation contract
+        if: steps.patch.outputs.changed != 'true'
+        run: |
+          npm ci
+          npm run typecheck
+          npx vitest run src/test/chargeursPresentationModel.test.ts
+          npm run build
+
       - uses: actions/setup-java@v5
+        if: steps.patch.outputs.changed != 'true'
         with:
           distribution: temurin
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+        if: steps.patch.outputs.changed != 'true'
       - uses: gradle/actions/setup-gradle@v5
+        if: steps.patch.outputs.changed != 'true'
 
       - name: Build STAGING TEST APK
+        if: steps.patch.outputs.changed != 'true'
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify Stripe Terminal USB manifest + package
+      - name: Verify #169/#171 reader lifecycle, package and signer
+        if: steps.patch.outputs.changed != 'true'
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           probe="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/WisePadUsbProbe.java"
+          runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
+          bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
+          kiosk="src/pages/Kiosk.tsx"
           test -s "$apk"
           test -s "$probe"
+          test -s "$runtime"
+          test -s "$bridge"
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
-          "$apksigner_path" verify --verbose "$apk"
+          "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
+          cert_digest="$(awk -F': ' '/Signer #1 certificate SHA-256 digest:/ {print $2; exit}' /tmp/apksigner.txt | tr '[:upper:]' '[:lower:]')"
+          test -n "$cert_digest"
+          printf '%s' "$cert_digest" > /tmp/apk_signer_sha256
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='118'"
-          printf '%s\n' "$badging" | grep -F "1.0.18-wisepad-test-staging"
+          printf '%s\n' "$badging" | grep -F "versionCode='119'"
+          printf '%s\n' "$badging" | grep -F "1.0.19-terminal-contract-staging"
           manifest="$($aapt_path dump xmltree "$apk" AndroidManifest.xml)"
           printf '%s\n' "$manifest" > /tmp/manifest.txt
-          # Stripe's SDK contributes the USB event receiver to the merged APK.
           grep -F "com.stripe.stripeterminal.internal.common.usb.UsbEventReceiverActivity" /tmp/manifest.txt
-          # Chargeurs' native adapter is intentionally pinned to the exact field
-          # reader. Stripe does not expose the BBPOS VID/PID as a manifest literal,
-          # so validate the adapter constants at the same source revision used to
-          # build this APK instead of asserting a false manifest contract.
           grep -F "TARGET_VENDOR_ID = 0x15A2" "$probe"
           grep -F "TARGET_PRODUCT_ID = 0x0101" "$probe"
+          grep -F "new DiscoveryConfiguration.UsbDiscoveryConfiguration" "$runtime"
+          grep -F ".discoverReaders(" "$runtime"
+          grep -F ".connectReader(" "$runtime"
+          grep -F "ConnectionTokenProvider" "$runtime"
+          grep -F ".retrievePaymentIntent(" "$runtime"
+          grep -F ".processPaymentIntent(" "$runtime"
+          grep -F '"readerState"' "$bridge"
+          grep -F '"capability"' "$runtime"
+          grep -F '"TERMINAL_AND_QR"' "$runtime"
+          grep -F '"QR_ONLY"' "$runtime"
+          ! grep -F '"mode", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED ? "TERMINAL_USB_TEST"' "$bridge"
+          grep -F 'setPhase("payment_ready")' "$kiosk"
+          grep -F 'phase === "payment_ready"' "$kiosk"
+          grep -F 'phase === "terminal"' "$kiosk"
 
-      - name: Prepare APK artifact + provenance
+      - name: Prepare signed APK artifact + complete provenance
+        if: steps.patch.outputs.changed != 'true'
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.18-wisepad-test-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.19-terminal-contract-staging.apk"
           cp "$apk" "dist/$name"
-          sha256sum "dist/$name" | tee dist/SHA256SUMS.txt
-          printf 'branch=%s\nsha=%s\npackage=ch.chargeurs.kiosk.staging\nversionCode=118\nversionName=1.0.18-wisepad-test-staging\ntargetUsb=15a2:0101\nstripeTerminal=5.7.0\n' "$GITHUB_REF_NAME" "$GITHUB_SHA" > dist/PROVENANCE.txt
+          apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
+          signer_sha="$(cat /tmp/apk_signer_sha256)"
+          signer_colon="$(printf '%s' "$signer_sha" | sed 's/../&:/g;s/:$//' | tr '[:lower:]' '[:upper:]')"
+          printf '%s  %s\n' "$apk_sha" "$name" | tee dist/SHA256SUMS.txt
+          cat > dist/PROVENANCE.txt <<EOF
+          branch=$GITHUB_REF_NAME
+          sha=$GITHUB_SHA
+          package=ch.chargeurs.kiosk.staging
+          versionCode=119
+          versionName=1.0.19-terminal-contract-staging
+          environment=STAGING_TEST
+          targetUsb=15a2:0101
+          stripeTerminalSdk=5.7.0
+          terminalBackend=https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
+          backendContractPR=168
+          backendContractSHA=c3fc313f955dc8f40a12c4ef8a33f099888121b6
+          architectureContractPR=169
+          architectureContractSHA=218db4416ff62ac5b112d9eba03710c5c4c0bc63
+          qaGateIssue=171
+          apkSha256=$apk_sha
+          signerCertificateSha256=$signer_sha
+          signerCertificateSha256Colon=$signer_colon
+          signingVerification=apksigner_verify_pass
+          installedSignerContinuity=PHYSICAL_GATE_REQUIRED_BEFORE_ADB_INSTALL_R
+          rollbackRequirement=RETAIN_PREVIOUS_KNOWN_GOOD_APK_SHA_VERSION_SIGNER
+          EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload STAGING TEST APK
+        if: steps.patch.outputs.changed != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: wisepad3-${{ steps.artifact.outputs.artifact_name }}
