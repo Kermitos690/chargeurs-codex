@@ -30,6 +30,7 @@ import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { KioskPaymentRailStage } from "@/components/kiosk/KioskPaymentRailStage";
+import "./kiosk-field-ui.css";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
