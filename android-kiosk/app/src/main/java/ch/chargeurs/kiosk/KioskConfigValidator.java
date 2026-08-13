@@ -61,8 +61,12 @@ public final class KioskConfigValidator {
         return normalizeBaseUrl(enrolledBaseUrl);
     }
 
-    public static boolean isAllowedUrl(String candidate, String baseUrl) {
-        String normalizedBase = webBaseUrl(baseUrl);
+    public static boolean isAllowedUrl(String candidate, String enrolledBaseUrl) {
+        return isAllowedUrlForOrigin(candidate, webBaseUrl(enrolledBaseUrl));
+    }
+
+    static boolean isAllowedUrlForOrigin(String candidate, String allowedOrigin) {
+        String normalizedBase = normalizeBaseUrl(allowedOrigin);
         if (candidate == null || normalizedBase == null) return false;
         try {
             URI candidateUri = new URI(candidate);
