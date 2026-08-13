@@ -38,8 +38,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 119
-        versionName = "1.0.19-terminal-contract"
+        versionCode = 120
+        versionName = "1.0.20-terminal-contract"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
