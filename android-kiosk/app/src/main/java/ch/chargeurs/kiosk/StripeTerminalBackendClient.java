@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -26,10 +27,10 @@ final class StripeTerminalBackendClient {
     }
 
     ConnectionTokenResult fetchConnectionToken() throws IOException {
-        JSONObject body = new JSONObject();
-        body.put("action", "connection_token");
-        body.put("stationId", config.stationId());
-        JSONObject response = post(body);
+        JSONObject response = post(body(
+            "action", "connection_token",
+            "stationId", config.stationId()
+        ));
         String secret = response.optString("secret", "");
         if (secret.isBlank()) throw new IOException("CONNECTION_TOKEN_MISSING");
         return new ConnectionTokenResult(
@@ -40,10 +41,10 @@ final class StripeTerminalBackendClient {
     }
 
     PaymentIntentResult createPaymentIntent(String rentalSessionId) throws IOException {
-        JSONObject body = new JSONObject();
-        body.put("action", "create_payment_intent");
-        body.put("rentalSessionId", rentalSessionId);
-        JSONObject response = post(body);
+        JSONObject response = post(body(
+            "action", "create_payment_intent",
+            "rentalSessionId", rentalSessionId
+        ));
         String clientSecret = response.optString("clientSecret", "");
         String paymentIntentId = response.optString("paymentIntentId", "");
         if (clientSecret.isBlank() || paymentIntentId.isBlank()) {
@@ -62,10 +63,10 @@ final class StripeTerminalBackendClient {
     }
 
     PaymentStateResult getPaymentState(String rentalSessionId, boolean reconcile) throws IOException {
-        JSONObject body = new JSONObject();
-        body.put("action", reconcile ? "reconcile_payment_intent" : "get_payment_state");
-        body.put("rentalSessionId", rentalSessionId);
-        JSONObject response = post(body);
+        JSONObject response = post(body(
+            "action", reconcile ? "reconcile_payment_intent" : "get_payment_state",
+            "rentalSessionId", rentalSessionId
+        ));
         return new PaymentStateResult(
             response.optString("rail", "NONE"),
             response.optString("railState", "UNCLAIMED"),
@@ -73,6 +74,19 @@ final class StripeTerminalBackendClient {
             response.optBoolean("recoveryRequired", false),
             response.optString("correlationId", "")
         );
+    }
+
+    private static JSONObject body(Object... pairs) throws IOException {
+        if (pairs.length % 2 != 0) throw new IOException("TERMINAL_BACKEND_REQUEST_INVALID");
+        JSONObject body = new JSONObject();
+        try {
+            for (int index = 0; index < pairs.length; index += 2) {
+                body.put(String.valueOf(pairs[index]), pairs[index + 1]);
+            }
+            return body;
+        } catch (JSONException error) {
+            throw new IOException("TERMINAL_BACKEND_REQUEST_INVALID", error);
+        }
     }
 
     private JSONObject post(JSONObject body) throws IOException {
