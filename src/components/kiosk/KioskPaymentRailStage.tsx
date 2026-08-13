@@ -109,6 +109,7 @@ export function KioskPaymentRailStage({
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
   const [nativeError, setNativeError] = useState<string | null>(null);
   const confirmedRef = useRef(false);
+  const railTapLockRef = useRef(inProgress);
 
   useEffect(() => {
     if (!nativeBridge) return;
@@ -145,12 +146,13 @@ export function KioskPaymentRailStage({
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
   const chooseTerminal = () => {
-    if (!model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
+    if (railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
+    railTapLockRef.current = true;
     setNativeError(null);
     setLocalRail("TERMINAL");
-    setLocalRailState("CLAIMING"); // immediate first-tap lock; backend claim remains authoritative.
-    // startTerminalPayment returns one secret-free acknowledgement. The local
-    // rail is locked before this call so a fast second tap cannot start QR.
+    setLocalRailState("CLAIMING");
+    // Synchronous ref lock closes the pre-render double-tap window; the Agent 2
+    // backend remains authoritative and atomically enforces first-rail-wins.
     let accepted = false;
     try {
       const ack = JSON.parse(native.startTerminalPayment(rentalSessionId)) as { ok?: boolean; code?: string };
@@ -160,6 +162,7 @@ export function KioskPaymentRailStage({
       setNativeError("TERMINAL_START_FAILED");
     }
     if (!accepted) {
+      railTapLockRef.current = false;
       setLocalRail("NONE");
       setLocalRailState("UNCLAIMED");
       return;
@@ -169,7 +172,8 @@ export function KioskPaymentRailStage({
   };
 
   const chooseQr = () => {
-    if (!model.payment.canChooseQr) return;
+    if (railTapLockRef.current || !model.payment.canChooseQr) return;
+    railTapLockRef.current = true;
     setLocalRail("QR");
     setLocalRailState("CLAIMING");
     onChooseQr();
