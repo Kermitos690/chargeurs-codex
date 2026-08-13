@@ -42,6 +42,13 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+
+      - name: Restore canonical STAGING debug signer
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chargeurs-kiosk-staging-debug-keystore-v1
+
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build STAGING TEST APK
@@ -174,6 +181,7 @@ jobs:
           backendContractSHA=c3fc313f955dc8f40a12c4ef8a33f099888121b6
           physicalEjectionEnabled=false
           paymentMode=TEST_ONLY
+          stagingSigningPolicy=github_actions_cached_debug_keystore_v1
           fieldRegression1=NoClassDefFoundError_StripeTerminalBackendClient_ConnectionTokenResult_fixed
           fieldRegression2=Stripe5_7_OfflineAesKeyProvider_Keymaster_DEAD_OBJECT_bypassed_for_diagnostic
           dexPackagingGate=ConnectionTokenResult_PaymentIntentResult_PaymentStateResult_present
@@ -181,7 +189,7 @@ jobs:
           signerCertificateSha256=$signer_sha
           signerCertificateSha256Colon=$signer_colon
           signingVerification=apksigner_verify_pass
-          installedSignerContinuity=PHYSICAL_GATE_REQUIRED_BEFORE_ADB_INSTALL_R
+          installedSignerContinuity=CANONICAL_STAGING_CACHE_V1
           rollbackRequirement=RETAIN_PREVIOUS_KNOWN_GOOD_APK_SHA_VERSION_SIGNER
           EOF
           echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
