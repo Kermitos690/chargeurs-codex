@@ -8,6 +8,9 @@ val enrollmentUrl = providers.gradleProperty("chargeursEnrollmentUrl")
 val kioskPublicBaseUrl = providers.gradleProperty("chargeursKioskPublicBaseUrl")
     .orElse(providers.environmentVariable("CHARGEURS_KIOSK_PUBLIC_BASE_URL"))
     .orElse("")
+val kioskWebBaseUrl = providers.gradleProperty("chargeursKioskWebBaseUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_KIOSK_WEB_BASE_URL"))
+    .orElse("")
 val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBackendUrl")
     .orElse(providers.environmentVariable("CHARGEURS_STRIPE_TERMINAL_BACKEND_URL"))
     .orElse("")
@@ -28,8 +31,12 @@ val releaseSigningReady = listOf(
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
 val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
 
+// Enrollment remains pinned to the stable STAGING origin. The simulator-only
+// APK may render a branch preview through a separate web origin without
+// invalidating the durable kiosk credential.
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
-val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
+val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-git-agent-550b8f-gaetans-projects-4974c31a.vercel.app"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -44,12 +51,17 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 124
-        versionName = "1.0.24-terminal-simulator-preview-v2"
+        versionCode = 125
+        versionName = "1.0.25-terminal-simulator-preview-v3"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
         buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
+        buildConfigField(
+            "String",
+            "KIOSK_WEB_BASE_URL",
+            quotedBuildConfig(kioskWebBaseUrl.get().ifBlank { kioskPublicBaseUrl.get() }),
+        )
         buildConfigField("String", "STRIPE_TERMINAL_BACKEND_URL", quotedBuildConfig(terminalBackendUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
         buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
@@ -115,6 +127,15 @@ android {
                 "KIOSK_PUBLIC_BASE_URL",
                 quotedBuildConfig(kioskPublicBaseUrl.get().ifBlank { stagingKioskPublicBaseUrl }),
             )
+            buildConfigField(
+                "String",
+                "KIOSK_WEB_BASE_URL",
+                quotedBuildConfig(
+                    kioskWebBaseUrl.get().ifBlank {
+                        kioskPublicBaseUrl.get().ifBlank { stagingKioskPublicBaseUrl }
+                    },
+                ),
+            )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
         }
@@ -128,6 +149,16 @@ android {
             // the software payment-rail test.
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
             buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "true")
+            buildConfigField(
+                "String",
+                "KIOSK_PUBLIC_BASE_URL",
+                quotedBuildConfig(stagingKioskPublicBaseUrl),
+            )
+            buildConfigField(
+                "String",
+                "KIOSK_WEB_BASE_URL",
+                quotedBuildConfig(kioskWebBaseUrl.get().ifBlank { stagingKioskWebBaseUrl }),
+            )
             buildConfigField(
                 "String",
                 "STRIPE_TERMINAL_BACKEND_URL",
