@@ -8,6 +8,9 @@ val enrollmentUrl = providers.gradleProperty("chargeursEnrollmentUrl")
 val kioskPublicBaseUrl = providers.gradleProperty("chargeursKioskPublicBaseUrl")
     .orElse(providers.environmentVariable("CHARGEURS_KIOSK_PUBLIC_BASE_URL"))
     .orElse("")
+val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBackendUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_STRIPE_TERMINAL_BACKEND_URL"))
+    .orElse("")
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
@@ -21,6 +24,7 @@ val releaseSigningReady = listOf(
 
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
     .replace("\\", "\\\\")
@@ -34,14 +38,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // WisePad 3 Stripe Terminal USB TEST build. Version bump also forces
-        // the native WebView runtime reset once after installation.
-        versionCode = 118
-        versionName = "1.0.18-wisepad-test"
+        versionCode = 119
+        versionName = "1.0.19-terminal-contract"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
         buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
+        buildConfigField("String", "STRIPE_TERMINAL_BACKEND_URL", quotedBuildConfig(terminalBackendUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
         buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
         buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "false")
@@ -80,6 +83,11 @@ android {
                 "ENROLLMENT_URL",
                 quotedBuildConfig(enrollmentUrl.get().ifBlank { stagingEnrollmentUrl }),
             )
+            buildConfigField(
+                "String",
+                "STRIPE_TERMINAL_BACKEND_URL",
+                quotedBuildConfig(terminalBackendUrl.get().ifBlank { stagingTerminalBackendUrl }),
+            )
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
             buildConfigField(
@@ -94,9 +102,12 @@ android {
             initWith(getByName("debug"))
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            // TEST-only artifact: Stripe Terminal USB is enabled here while
-            // production/release remains disabled until the contract gate is closed.
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField(
+                "String",
+                "STRIPE_TERMINAL_BACKEND_URL",
+                quotedBuildConfig(terminalBackendUrl.get().ifBlank { stagingTerminalBackendUrl }),
+            )
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
