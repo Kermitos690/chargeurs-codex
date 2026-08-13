@@ -51,6 +51,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Lint V6 change surface
+        run: >-
+          npx eslint
+          src/components/kiosk/KioskPaymentRailStage.tsx
+          src/components/kiosk/KioskDiagnostics.tsx
+          src/components/kiosk/PowerbankScene.tsx
+          src/pages/KioskPremiumGateV3.tsx
+          src/test/kioskPublicBetaPremiumV6.test.ts
+
       - name: Typecheck Agent 4 surface
         shell: bash
         run: |
