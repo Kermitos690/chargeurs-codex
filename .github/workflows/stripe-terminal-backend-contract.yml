@@ -25,6 +25,6 @@ jobs:
         with:
           deno-version: v2.x
       - name: Check Terminal backend
-        run: deno check supabase/functions/stripe-terminal-backend/index.ts
+        run: deno check --node-modules-dir=auto supabase/functions/stripe-terminal-backend/index.ts
       - name: Run targeted Terminal contract tests
-        run: deno test --allow-read --no-check supabase/functions/tests/stripe_terminal_backend_contract.test.ts
+        run: deno test --node-modules-dir=auto --allow-read --no-check supabase/functions/tests/stripe_terminal_backend_contract.test.ts
