@@ -31,10 +31,10 @@ const PAYMENTS = [
 ];
 
 const FAQ = [
-  { q: "Combien coûte une location ?", a: `La location coûte ${formatChf(PUBLIC_PRICING.hourlyRate)} par heure, facturée par tranches de ${PUBLIC_PRICING.incrementMinutes} minutes à ${formatChf(PUBLIC_PRICING.incrementPrice)}, avec un plafond de ${formatChf(PUBLIC_PRICING.dailyCap)} par jour.` },
-  { q: "À quoi sert la caution de 30 CHF ?", a: "La caution sécurise la mise à disposition de la batterie. À la restitution, le montant final de la location est calculé et le solde non utilisé est libéré ou remboursé selon le parcours de paiement." },
+  { q: "Combien coûte une location ?", a: `La grille est ${formatChf(1.9)} jusqu'à 30 minutes, ${formatChf(3.9)} jusqu'à 2 heures, ${formatChf(5.9)} jusqu'à 6 heures et ${formatChf(PUBLIC_PRICING.dailyCap)} jusqu'à 24 heures.` },
+  { q: "Y a-t-il une caution ?", a: "Aucune caution n'est configurée pour ce pilote. Le moyen de paiement et les conditions exactes sont affichés avant confirmation." },
   { q: "Où puis-je rendre la batterie ?", a: "Dans une borne compatible du réseau Chargeurs.ch disposant d'un emplacement libre. Le retour est détecté automatiquement par le système." },
-  { q: "Que se passe-t-il si je ne rends pas la batterie ?", a: `En cas de non-retour selon les conditions applicables, le montant total peut atteindre ${formatChf(PUBLIC_PRICING.nonReturnTotal)}. La caution initiale de ${formatChf(PUBLIC_PRICING.deposit)} est alors complétée par un solde de ${formatChf(PUBLIC_PRICING.nonReturnBalanceAfterDeposit)}.` },
+  { q: "Que se passe-t-il si je ne rends pas la batterie ?", a: `En cas de non-retour après 72 heures selon les conditions applicables, le montant total peut atteindre ${formatChf(PUBLIC_PRICING.nonReturnTotal)}.` },
   { q: "La batterie est-elle compatible avec mon téléphone ?", a: "Les modèles proposés sont conçus pour les smartphones courants, notamment USB-C et Lightning. La compatibilité exacte est indiquée sur la borne et la fiche du lieu." },
 ];
 
@@ -88,7 +88,7 @@ export default function Index() {
             </div>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-success" />Paiements sécurisés par Stripe</span>
-              <span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" />Tarif transparent dès {formatChf(PUBLIC_PRICING.incrementPrice)} / 30 min</span>
+              <span className="inline-flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary" />Dès {formatChf(PUBLIC_PRICING.startingPrice)} · jusqu'à 24 h {formatChf(PUBLIC_PRICING.dailyCap)}</span>
             </div>
           </motion.div>
         </Section>
@@ -134,9 +134,10 @@ export default function Index() {
           <h2 className="font-display text-3xl font-bold sm:text-4xl">Tarification simple et transparente</h2>
           <p className="mt-2 max-w-3xl text-muted-foreground">Le client voit les conditions avant de confirmer. Les règles centrales pourront ensuite être attribuées à une borne ou un partenaire depuis le back-office.</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">Caution initiale</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.deposit)}</p><p className="mt-2 text-sm text-muted-foreground">Autorisation sécurisée au démarrage.</p></article>
-            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">Location</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.hourlyRate)} / h</p><p className="mt-2 text-sm text-muted-foreground">Facturée par tranches de {PUBLIC_PRICING.incrementMinutes} minutes.</p></article>
-            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">Plafond journalier</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.dailyCap)}</p><p className="mt-2 text-sm text-muted-foreground">Maximum de location par période journalière.</p></article>
+            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">BOOST 30</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(1.9)}</p><p className="mt-2 text-sm text-muted-foreground">Jusqu'à 30 minutes.</p></article>
+            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">CITY 2H</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(3.9)}</p><p className="mt-2 text-sm text-muted-foreground">Jusqu'à 2 heures.</p></article>
+            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">FREEDOM 6H</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(5.9)}</p><p className="mt-2 text-sm text-muted-foreground">Jusqu'à 6 heures.</p></article>
+            <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">DAY 24H</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.dailyCap)}</p><p className="mt-2 text-sm text-muted-foreground">Jusqu'à 24 heures.</p></article>
             <article className="glass liquid-border rounded-2xl p-6"><p className="text-sm text-muted-foreground">Non-retour</p><p className="mt-2 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.nonReturnTotal)}</p><p className="mt-2 text-sm text-muted-foreground">Montant total prévu lorsqu'une batterie n'est pas restituée.</p></article>
           </div>
         </Section>

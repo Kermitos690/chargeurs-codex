@@ -40,6 +40,7 @@ type Quote = {
   final_cents: number; profile_id: string; source: string; error?: string;
   deposit_cents: number; period_minutes: number; price_per_period_cents: number;
   daily_cap_cents: number; unreturned_fee_cents: number;
+  tiered?: boolean; tiers?: Array<{ upper_minutes: number; total_cents: number }>;
 };
 type KioskSlot = {
   slot_num: number;
@@ -177,6 +178,11 @@ export default function Kiosk() {
       price_per_period_cents: Number(snap.price_per_period_cents ?? snap.duration_cents),
       daily_cap_cents: Number(snap.daily_cap_cents),
       unreturned_fee_cents: Number(snap.unreturned_fee_cents),
+      tiered: Boolean(snap.tiered),
+      tiers: Array.isArray(snap.tiers) ? snap.tiers.map((tier) => ({
+        upper_minutes: Number((tier as Record<string, unknown>).upper_minutes),
+        total_cents: Number((tier as Record<string, unknown>).total_cents),
+      })) : [],
     });
   }, [stationId]);
 
@@ -480,7 +486,12 @@ export default function Kiosk() {
   const connection = stationConnectionState(station ?? { status: null, online: null });
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);
-  const hourlyCents = quote ? hourlyRateCents(quote.price_per_period_cents, quote.period_minutes) : null;
+  const hourlyCents = quote && !quote.tiered ? hourlyRateCents(quote.price_per_period_cents, quote.period_minutes) : null;
+  const tierDuration = (minutes: number) => minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`;
+  const tierSummary = quote?.tiered ? (quote.tiers ?? []).map((tier) => `${tierDuration(tier.upper_minutes)} ${fmtCents(tier.total_cents, quote.currency)}`).join(" · ") : null;
+  const pricingHeadline = quote?.tiered && quote.tiers?.[0]
+    ? `Dès ${fmtCents(quote.tiers[0].total_cents, quote.currency)} / ${tierDuration(quote.tiers[0].upper_minutes)}`
+    : hourlyCents != null ? `${fmtCents(hourlyCents, quote?.currency)} / ${t("kiosk.hour")}` : "—";
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
@@ -628,7 +639,7 @@ export default function Kiosk() {
                   <h1 className={`font-display font-black leading-[.95] tracking-tight ${splitLayoutPreview ? "text-4xl" : "text-5xl sm:text-7xl"}`}>{t("kiosk.choose.title")}</h1>
                   <p className={`${splitLayoutPreview ? "text-lg" : "text-xl sm:text-2xl"} max-w-4xl font-medium text-muted-foreground`}>{t("kiosk.choose.subtitle")}</p>
                   {lastDataRefresh && <p className="text-sm text-muted-foreground">{t("kiosk.updated")}</p>}
-                  {hourlyCents != null && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</div>}
+                  {quote && <div className={`${splitLayoutPreview ? "text-2xl" : "text-3xl"} font-bold text-gradient-cyan`}>{pricingHeadline}</div>}
                 </div>
                 <div className="kiosk-slot-grid relative z-10 grid w-full max-w-5xl grid-cols-2 gap-5">
                   {([1, 3, 2, 4] as const).map((physicalSlotNum) => slots.find((slot) => slot.slot_num === physicalSlotNum) ?? {
@@ -648,7 +659,7 @@ export default function Kiosk() {
                 {canRent ? (
                   <div className="kiosk-idle-cta relative z-10 flex flex-col items-center gap-2">
                     <Button onClick={() => { goFullscreen(); setPhase("pricing"); }} className="h-auto rounded-full bg-gradient-primary px-10 py-5 text-xl font-bold shadow-glow transition-transform hover:scale-105 active:scale-95">{t("kiosk.rent_selected")}</Button>
-                    {hourlyCents != null && <span className="text-lg text-muted-foreground">{fmtCents(hourlyCents, quote?.currency)} / {t("kiosk.hour")}</span>}
+                    {quote && <span className="text-lg text-muted-foreground">{pricingHeadline}</span>}
                   </div>
                 ) : (
                   <div className="relative z-10 glass rounded-2xl px-8 py-5 text-lg text-warning">{offline ? t("kiosk.connection_unavailable") : snapshotError ? t("kiosk.slot.unavailable") : !configured ? t("kiosk.api_not_configured") : !station.online ? t("kiosk.station_unverified") : slots.some((slot) => slot.status === "checking") ? t("kiosk.inventory_verifying") : t("kiosk.no_battery")}</div>
@@ -664,7 +675,7 @@ export default function Kiosk() {
               {quote ? (
                 <div className="kiosk-pricing-card glass liquid-border grid w-full max-w-6xl grid-cols-[.8fr_1.2fr] items-center gap-8 rounded-[2.25rem] p-8 text-center sm:p-10">
                   <div className="flex flex-col items-center gap-4 border-r border-white/15 pr-8"><div className="text-xl font-bold text-muted-foreground">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div><div className="grid h-28 w-28 place-items-center rounded-[2rem] border border-primary/40 bg-primary/10 shadow-glow"><span className="font-display text-7xl font-extrabold text-gradient-cyan">{slotNum ?? "—"}</span></div></div>
-                  <div><div className="font-display text-6xl font-extrabold leading-none text-gradient-cyan sm:text-7xl">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div><p className="mt-5 text-xl font-semibold text-muted-foreground">{fmtCents(quote.price_per_period_cents, quote.currency)} / {quote.period_minutes} {t("kiosk.minutes")}</p><p className="mt-7 text-base text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p></div>
+                  <div><div className="font-display text-5xl font-extrabold leading-none text-gradient-cyan sm:text-6xl">{pricingHeadline}</div><p className="mt-5 text-xl font-semibold text-muted-foreground">{tierSummary ?? `${fmtCents(quote.price_per_period_cents, quote.currency)} / ${quote.period_minutes} ${t("kiosk.minutes")}`}</p>{quote.deposit_cents > 0 && <p className="mt-7 text-base text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>}</div>
                 </div>
               ) : <p className="text-warning">{quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID" ? t("kiosk.pricing.auth_error") : quoteError === "PRICING_NOT_CONFIGURED" ? t("kiosk.pricing.error") : quoteError ? t("kiosk.error.pricing.title") : t("kiosk.pricing.loading")}</p>}
               <div className="flex gap-5"><Button variant="ghost" onClick={reset} className="h-16 px-8 text-xl">{t("kiosk.back")}</Button><Button onClick={startRental} disabled={!quote || slotNum === null} className="h-16 rounded-full bg-gradient-primary px-14 text-2xl font-bold shadow-glow">{t("kiosk.rent_selected")}</Button></div>
@@ -678,7 +689,7 @@ export default function Kiosk() {
           {phase === "qr" && checkoutUrl && (
             <motion.div key="qr" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="kiosk-qr-stage grid w-full max-w-[88rem] items-center gap-8 px-4 lg:grid-cols-[.85fr_1.15fr] lg:px-8">
               <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
-                {quote && <div className="font-display text-5xl font-extrabold text-gradient-cyan sm:text-6xl">{hourlyCents != null ? `${fmtCents(hourlyCents, quote.currency)} / ${t("kiosk.hour")}` : "—"}</div>}
+                {quote && <div className="font-display text-5xl font-extrabold text-gradient-cyan sm:text-6xl">{pricingHeadline}</div>}
                 <h2 className="mt-6 font-display text-5xl font-extrabold tracking-tight sm:text-6xl">{t("kiosk.qr.title")}</h2><p className="mt-4 text-2xl font-medium text-muted-foreground">{t("kiosk.qr.phone")}</p>
                 <div className="mt-9 w-full rounded-[2rem] border border-white/15 bg-slate-950/20 p-6 text-left"><div className="flex items-center gap-3 text-xl font-bold"><Smartphone className="h-7 w-7 text-primary" />{t("kiosk.qr.methods")}</div><div className="mt-5"><KioskPaymentMarks cardLabel={t("kiosk.qr.card")} /></div><p className="mt-5 text-base text-muted-foreground">{t("kiosk.qr.eligibility")}</p></div>
               </div>
