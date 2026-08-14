@@ -13,12 +13,21 @@ Deno.test("uncertain ejection results never trigger automatic retry or refund", 
   assert(ejectSource.includes('state: "eject_failed"'));
 });
 
-Deno.test("ChargeNow release callbacks require exact battery identity", () => {
-  assert(callbackSource.includes("RELEASE_IDENTITY_INCOMPLETE"));
-  assert(callbackSource.includes("RELEASE_BATTERY_MISMATCH"));
-  assert(callbackSource.includes('eventType: "battery_released"'));
-  assert(callbackSource.includes('eventType: "rental_activated"'));
-  assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);
+Deno.test("ChargeNow release callbacks never activate a rental without physical reconciliation", () => {
+  assert(callbackSource.includes("RELEASE_PROVIDER_NOTIFICATION_ONLY"));
+  assert(callbackSource.includes("requires_physical_reconciliation: true"));
+  assertEquals(callbackSource.includes("confirmProviderRelease("), false);
+  assertEquals(callbackSource.includes('eventType: "battery_released"'), false);
+  assertEquals(callbackSource.includes('eventType: "rental_activated"'), false);
+});
+
+Deno.test("customer ejection is blocked until the supplier proves a single-slot contract", () => {
+  assert(ejectSource.includes("hasVerifiedSingleSlotRentalContract"));
+  assert(ejectSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+  assert(ejectSource.indexOf("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED") < ejectSource.indexOf("orderCreate({ deviceId"));
+  assert(ejectSource.includes("requiresPhysicalReconciliation: true"));
+  assert(cabinetEventSource.includes("DIRECT_BORROW_OUT_ACTIVATION_ENABLED = false"));
+  assert(cabinetEventSource.includes("AWAITING_COMPLETE_PHYSICAL_RECONCILIATION"));
 });
 
 Deno.test("ChargeNow return callbacks never fall back to the reserved battery identity", () => {
