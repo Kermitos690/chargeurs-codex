@@ -27,7 +27,7 @@ final class OperatorPinVerifier {
     private static final int ITERATIONS = 120_000;
     private static final int KEY_BITS = 256;
     private static final int MAX_FAILURES = 5;
-    private static final long LOCKOUT_MS = 5 * 60_000L;
+    static final long LOCKOUT_MS = 60_000L;
 
     // PBKDF2-HMAC-SHA256 verifier for the owner-selected PIN. Plaintext is not
     // present in source, resources, BuildConfig, JavaScript or the Web bundle.
