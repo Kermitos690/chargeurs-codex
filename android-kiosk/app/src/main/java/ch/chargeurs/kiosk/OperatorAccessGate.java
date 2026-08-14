@@ -1,0 +1,260 @@
+package ch.chargeurs.kiosk;
+
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.SystemClock;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.GridLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.util.WeakHashMap;
+
+/**
+ * Native operator entry point intentionally placed above the WebView. It stays
+ * reachable when the web UI, Ads overlay or kiosk authentication is degraded.
+ * The PIN is verified remotely; no fixed PIN value exists in this APK.
+ */
+final class OperatorAccessGate {
+    private static final Object LOCK = new Object();
+    private static final WeakHashMap<MainActivity, View> HOTSPOTS = new WeakHashMap<>();
+    private static final WeakHashMap<MainActivity, AlertDialog> DIALOGS = new WeakHashMap<>();
+
+    private OperatorAccessGate() {}
+
+    static void install(MainActivity activity) {
+        activity.runOnUiThread(() -> {
+            synchronized (LOCK) {
+                View existing = HOTSPOTS.get(activity);
+                if (existing != null && existing.getParent() != null) return;
+
+                OperatorTapSequence sequence = new OperatorTapSequence();
+                View hotspot = new View(activity);
+                hotspot.setBackgroundColor(Color.TRANSPARENT);
+                hotspot.setClickable(true);
+                hotspot.setFocusable(false);
+                hotspot.setContentDescription("");
+                hotspot.setOnClickListener(view -> {
+                    if (sequence.record(SystemClock.elapsedRealtime())) open(activity);
+                });
+                hotspot.setElevation(dp(activity, 100));
+
+                android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+                    dp(activity, 92),
+                    dp(activity, 92)
+                );
+                params.gravity = Gravity.TOP | Gravity.START;
+                activity.addContentView(hotspot, params);
+                HOTSPOTS.put(activity, hotspot);
+            }
+        });
+    }
+
+    static void open(MainActivity activity) {
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing()) return;
+            synchronized (LOCK) {
+                AlertDialog existing = DIALOGS.get(activity);
+                if (existing != null && existing.isShowing()) return;
+            }
+            showPinDialog(activity);
+        });
+    }
+
+    private static void showPinDialog(MainActivity activity) {
+        int gap = dp(activity, 10);
+        StringBuilder pin = new StringBuilder(6);
+
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(activity, 24), dp(activity, 22), dp(activity, 24), dp(activity, 22));
+        content.setBackground(KioskVisuals.glassPanel(dp(activity, 24)));
+
+        TextView brand = KioskVisuals.brandText(activity, 20);
+        content.addView(brand, fullWidth(0, gap));
+
+        TextView title = text(activity, "Accès opérateur", 26, KioskVisuals.WHITE);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        content.addView(title, fullWidth(0, gap));
+
+        TextView help = text(
+            activity,
+            "Saisissez le code de maintenance. Cet accès ouvre uniquement les outils locaux de la borne.",
+            14,
+            KioskVisuals.MUTED
+        );
+        content.addView(help, fullWidth(0, dp(activity, 16)));
+
+        TextView code = text(activity, "○  ○  ○  ○  ○  ○", 28, KioskVisuals.WHITE);
+        code.setGravity(Gravity.CENTER);
+        content.addView(code, fullWidth(0, dp(activity, 14)));
+
+        TextView status = text(activity, "", 13, KioskVisuals.MUTED);
+        status.setGravity(Gravity.CENTER);
+        content.addView(status, fullWidth(0, gap));
+
+        GridLayout keypad = new GridLayout(activity);
+        keypad.setColumnCount(3);
+        String[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "Effacer", "0", "⌫" };
+        final Button[] verifyHolder = new Button[1];
+        for (String key : keys) {
+            Button button = new Button(activity);
+            button.setText(key);
+            button.setTextColor(KioskVisuals.WHITE);
+            button.setTextSize(key.length() == 1 ? 22 : 13);
+            button.setAllCaps(false);
+            button.setBackground(KioskVisuals.secondaryButton(dp(activity, 16)));
+            button.setOnClickListener(view -> {
+                if ("Effacer".equals(key)) pin.setLength(0);
+                else if ("⌫".equals(key)) {
+                    if (pin.length() > 0) pin.deleteCharAt(pin.length() - 1);
+                } else if (pin.length() < 6) pin.append(key);
+                updatePinDisplay(code, pin.length());
+                if (verifyHolder[0] != null) verifyHolder[0].setEnabled(pin.length() == 6);
+                status.setText("");
+            });
+            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+            params.width = 0;
+            params.height = dp(activity, 56);
+            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            params.setMargins(dp(activity, 4), dp(activity, 4), dp(activity, 4), dp(activity, 4));
+            keypad.addView(button, params);
+        }
+        content.addView(keypad, fullWidth(0, dp(activity, 16)));
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.CENTER);
+
+        Button cancel = new Button(activity);
+        cancel.setText("Annuler");
+        cancel.setAllCaps(false);
+        cancel.setTextColor(KioskVisuals.WHITE);
+        cancel.setBackground(KioskVisuals.secondaryButton(dp(activity, 22)));
+        actions.addView(cancel, weightedButton(1f, 0, dp(activity, 5)));
+
+        Button verify = new Button(activity);
+        verify.setText("Vérifier");
+        verify.setAllCaps(false);
+        verify.setTextColor(KioskVisuals.WHITE);
+        verify.setBackground(KioskVisuals.primaryButton(dp(activity, 22)));
+        verify.setEnabled(false);
+        verifyHolder[0] = verify;
+        actions.addView(verify, weightedButton(1f, dp(activity, 5), 0));
+        content.addView(actions, fullWidth(0, 0));
+
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+            .setView(content)
+            .setCancelable(true)
+            .create();
+        synchronized (LOCK) { DIALOGS.put(activity, dialog); }
+        dialog.setOnDismissListener(ignored -> {
+            pin.setLength(0);
+            synchronized (LOCK) { DIALOGS.remove(activity); }
+        });
+        cancel.setOnClickListener(view -> dialog.dismiss());
+        verify.setOnClickListener(view -> {
+            if (pin.length() != 6) return;
+            final String candidate = pin.toString();
+            verify.setEnabled(false);
+            cancel.setEnabled(false);
+            status.setText("Vérification sécurisée…");
+            status.setTextColor(KioskVisuals.MUTED);
+            new Thread(() -> {
+                try {
+                    OperatorUnlockClient.verify(
+                        BuildConfig.ENROLLMENT_URL,
+                        candidate,
+                        DeviceIdentity.getOrCreate(activity),
+                        BuildConfig.VERSION_NAME
+                    );
+                    activity.runOnUiThread(() -> {
+                        if (activity.isFinishing()) return;
+                        dialog.dismiss();
+                        activity.startActivity(new Intent(activity, OperatorMaintenanceActivity.class));
+                    });
+                } catch (Exception error) {
+                    activity.runOnUiThread(() -> {
+                        if (activity.isFinishing() || !dialog.isShowing()) return;
+                        pin.setLength(0);
+                        updatePinDisplay(code, 0);
+                        verify.setEnabled(false);
+                        cancel.setEnabled(true);
+                        status.setText(unlockErrorMessage(error));
+                        status.setTextColor(KioskVisuals.WARNING);
+                    });
+                }
+            }, "chargeurs-operator-unlock").start();
+        });
+
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setDimAmount(.72f);
+            dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            dialog.getWindow().setLayout(
+                Math.min(dp(activity, 560), activity.getResources().getDisplayMetrics().widthPixels - dp(activity, 32)),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+    }
+
+    private static String unlockErrorMessage(Exception error) {
+        if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible.";
+        if (error instanceof SocketTimeoutException) return "Le serveur de sécurité ne répond pas à temps.";
+        String code = error.getMessage() == null ? "" : error.getMessage().trim();
+        if ("TOO_MANY_OPERATOR_ATTEMPTS".equals(code)) return "Trop de tentatives. Attendez avant de réessayer.";
+        if ("OPERATOR_ACCESS_NOT_CONFIGURED".equals(code) || "OPERATOR_ACCESS_UNAVAILABLE".equals(code)) {
+            return "Accès maintenance temporairement indisponible.";
+        }
+        return "Code opérateur incorrect.";
+    }
+
+    private static void updatePinDisplay(TextView view, int length) {
+        StringBuilder display = new StringBuilder();
+        for (int index = 0; index < 6; index += 1) {
+            if (index > 0) display.append("  ");
+            display.append(index < length ? "●" : "○");
+        }
+        view.setText(display.toString());
+    }
+
+    private static TextView text(MainActivity activity, String value, int size, int color) {
+        TextView view = new TextView(activity);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        return view;
+    }
+
+    private static LinearLayout.LayoutParams fullWidth(int top, int bottom) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, top, 0, bottom);
+        return params;
+    }
+
+    private static LinearLayout.LayoutParams weightedButton(float weight, int left, int right) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dpStatic(56), weight);
+        params.setMargins(left, 0, right, 0);
+        return params;
+    }
+
+    private static int dp(MainActivity activity, int value) {
+        return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    // Used only by weightedButton where the Activity is not in the signature;
+    // Android will re-measure WRAP/MATCH widths, while 56 raw px remains usable
+    // on mdpi industrial panels. The helper is overwritten below in call sites.
+    private static int dpStatic(int value) {
+        return value;
+    }
+}
