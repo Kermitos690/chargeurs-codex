@@ -57,10 +57,44 @@ function sceneNow(): string {
   return document.documentElement.dataset.kioskScene ?? (document.querySelector(".ck2-home") ? "home" : "other");
 }
 
+function kioskAuthRequiredNow(): boolean {
+  return document.documentElement.dataset.kioskAuth === "required";
+}
+
 function interactionOverlayOpen(): boolean {
   return Boolean(document.querySelector(
     '[role="dialog"][aria-modal="true"], .kiosk-offers-modal, .fixed.inset-0[class*="z-[120]"], .fixed.inset-0[class*="z-[250]"]',
   ));
+}
+
+export function adsPlaylistHeaders(token: string | null): Record<string, string> {
+  return token ? { "X-Kiosk-Token": token } : {};
+}
+
+export function resolveAdvertisingSurface(input: {
+  authRequired: boolean;
+  scene: string;
+  overlayOpen: boolean;
+  screensaver: boolean;
+  splitCount: number;
+  saverCount: number;
+}): { splitActive: boolean; saverActive: boolean } {
+  if (input.overlayOpen) return { splitActive: false, saverActive: false };
+
+  // Rental authentication is not an Advertising availability gate. When the
+  // rental rail is unavailable, prefer a paid fullscreen screensaver campaign;
+  // if none exists, keep a configured split campaign visible next to the safe
+  // activation panel. No rental/payment action is enabled by this decision.
+  if (input.authRequired) {
+    if (input.saverCount > 0) return { splitActive: false, saverActive: true };
+    return { splitActive: input.splitCount > 0, saverActive: false };
+  }
+
+  const safeHome = input.scene === "home";
+  return {
+    splitActive: safeHome && !input.screensaver && input.splitCount > 0,
+    saverActive: safeHome && input.screensaver && input.saverCount > 0,
+  };
 }
 
 function flattenCampaigns(campaigns: AdCampaign[], mode: DisplayMode): AdEntry[] {
@@ -106,6 +140,8 @@ async function reportPlayback(
   errorCode?: string | null,
 ) {
   const token = readKioskToken();
+  // Display must survive a missing rental credential, but billing-grade
+  // impression writes remain authenticated until Ads has its own device proof.
   if (!token || !stationId) return;
   try {
     await invokeKioskEdgeProxy<PlaylistResponse>(
@@ -324,6 +360,7 @@ function KioskAdvertisingRuntime() {
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
   const [scene, setScene] = useState(() => sceneNow());
+  const [authRequired, setAuthRequired] = useState(() => kioskAuthRequiredNow());
   const [overlayOpen, setOverlayOpen] = useState(() => interactionOverlayOpen());
   const [screensaver, setScreensaver] = useState(false);
   const lastActivityRef = useRef(Date.now());
@@ -340,12 +377,11 @@ function KioskAdvertisingRuntime() {
   const load = useCallback(async () => {
     if (!stationId) return;
     const token = readKioskToken();
-    if (!token) return;
     try {
       const { data, transportError } = await invokeKioskEdgeProxy<PlaylistResponse>(
         "/api/kiosk/ads-playlist",
         { action: "playlist", stationId },
-        { "X-Kiosk-Token": token },
+        adsPlaylistHeaders(token),
       );
       if (!transportError && data?.ok && Array.isArray(data.campaigns)) {
         setPlaylist(data);
@@ -370,11 +406,12 @@ function KioskAdvertisingRuntime() {
   useEffect(() => {
     const detect = () => {
       setScene(sceneNow());
+      setAuthRequired(kioskAuthRequiredNow());
       setOverlayOpen(interactionOverlayOpen());
     };
     detect();
     const htmlObserver = new MutationObserver(detect);
-    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-kiosk-scene"] });
+    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-kiosk-scene", "data-kiosk-auth"] });
     const bodyObserver = new MutationObserver(detect);
     bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "role", "aria-modal"] });
     const timer = window.setInterval(detect, 750);
@@ -402,6 +439,10 @@ function KioskAdvertisingRuntime() {
   }, [markActivity]);
 
   useEffect(() => {
+    if (authRequired) {
+      setScreensaver(false);
+      return;
+    }
     if (scene !== "home" || overlayOpen || saverEntries.length === 0) {
       setScreensaver(false);
       lastActivityRef.current = Date.now();
@@ -411,11 +452,18 @@ function KioskAdvertisingRuntime() {
       if (Date.now() - lastActivityRef.current >= idleAfterSeconds * 1000) setScreensaver(true);
     }, 500);
     return () => window.clearInterval(timer);
-  }, [idleAfterSeconds, overlayOpen, saverEntries.length, scene]);
+  }, [authRequired, idleAfterSeconds, overlayOpen, saverEntries.length, scene]);
 
-  const safeHome = scene === "home" && !overlayOpen;
-  const splitActive = safeHome && !screensaver && splitEntries.length > 0;
-  const saverActive = safeHome && screensaver && saverEntries.length > 0;
+  const surface = resolveAdvertisingSurface({
+    authRequired,
+    scene,
+    overlayOpen,
+    screensaver,
+    splitCount: splitEntries.length,
+    saverCount: saverEntries.length,
+  });
+  const splitActive = surface.splitActive;
+  const saverActive = surface.saverActive;
   const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version);
   const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version);
 
@@ -430,10 +478,27 @@ function KioskAdvertisingRuntime() {
   }, [split.current, splitActive]);
 
   const copy = lang === "de"
-    ? { sponsored: "Partner", touch: "Bildschirm berühren, um eine Powerbank zu mieten", muted: "Video ohne Ton" }
+    ? {
+        sponsored: "Partner",
+        touch: "Bildschirm berühren, um eine Powerbank zu mieten",
+        muted: "Video ohne Ton",
+        unavailable: "Vermietung vorübergehend nicht verfügbar · Dienst wird reaktiviert",
+      }
     : lang === "en"
-      ? { sponsored: "Partner", touch: "Touch the screen to rent a powerbank", muted: "Video muted" }
-      : { sponsored: "Partenaire", touch: "Touchez l’écran pour louer une batterie", muted: "Vidéo sans son" };
+      ? {
+          sponsored: "Partner",
+          touch: "Touch the screen to rent a powerbank",
+          muted: "Video muted",
+          unavailable: "Rental temporarily unavailable · service is being restored",
+        }
+      : {
+          sponsored: "Partenaire",
+          touch: "Touchez l’écran pour louer une batterie",
+          muted: "Vidéo sans son",
+          unavailable: "Location momentanément indisponible · service en cours de réactivation",
+        };
+
+  const saverLabel = authRequired ? copy.unavailable : copy.touch;
 
   return (
     <>
@@ -452,7 +517,14 @@ function KioskAdvertisingRuntime() {
       )}
 
       {saverActive && (
-        <div className="kiosk-ad-screensaver" role="button" tabIndex={0} aria-label={copy.touch} onClick={markActivity} onKeyDown={markActivity}>
+        <div
+          className="kiosk-ad-screensaver"
+          role={authRequired ? "region" : "button"}
+          tabIndex={authRequired ? undefined : 0}
+          aria-label={saverLabel}
+          onClick={authRequired ? undefined : markActivity}
+          onKeyDown={authRequired ? undefined : markActivity}
+        >
           {saver.current ? (
             <AdMedia
               entry={saver.current}
@@ -466,7 +538,10 @@ function KioskAdvertisingRuntime() {
           )}
           <div className="kiosk-ad-screensaver-shade" aria-hidden />
           <div className="kiosk-ad-screensaver-brand"><Zap /> Chargeurs.ch</div>
-          <div className="kiosk-ad-screensaver-cta"><span>{copy.touch}</span><b>→</b></div>
+          <div className={`kiosk-ad-screensaver-cta${authRequired ? " kiosk-ad-screensaver-cta--unavailable" : ""}`}>
+            <span>{saverLabel}</span>
+            {!authRequired && <b>→</b>}
+          </div>
           {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
         </div>
       )}
