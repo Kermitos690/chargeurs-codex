@@ -46,9 +46,6 @@ Deno.serve(async (req) => {
       const explicitPlaybackStatus = typeof body.playbackStatus === "string" && PLAYBACK_STATUSES.has(body.playbackStatus)
         ? body.playbackStatus
         : null;
-      // Backward compatibility for already-deployed kiosk clients during rollout:
-      // legacy clients have no started/playbackStatus fields. Treat them conservatively
-      // as interrupted displays, never as completed playback.
       const playbackStatus = explicitPlaybackStatus ?? "interrupted";
       const started = body.started === true || (body.started === undefined && durationMs >= IMPRESSION_THRESHOLD_MS);
       if (!campaignId || !assetId || !displayMode) {
@@ -64,9 +61,6 @@ Deno.serve(async (req) => {
       if (itemError) throw itemError;
       if (!item) return reply({ ok: false, error: "CAMPAIGN_ASSET_MISMATCH" }, 409);
 
-      // Billing-grade definition: a media impression exists only after the browser
-      // confirmed playback/rendering started and the media remained visible >= 1s.
-      // Failed loads, scheduled entries and zero-duration attempts are never impressions.
       if (!started || durationMs < IMPRESSION_THRESHOLD_MS) {
         return reply({
           ok: true,
@@ -93,8 +87,6 @@ Deno.serve(async (req) => {
       return reply({ ok: true, recorded: true, thresholdMs: IMPRESSION_THRESHOLD_MS });
     }
 
-    // The public read path is station-scoped and read-only. Unknown station IDs
-    // do not become an oracle for campaign inventory.
     const { data: station, error: stationError } = await db.from("stations")
       .select("station_id")
       .eq("station_id", stationId)
@@ -118,7 +110,9 @@ Deno.serve(async (req) => {
       if (ends !== null && Number.isFinite(ends) && ends <= nowMs) return false;
       return true;
     });
-    if (!candidates.length) return reply({ ok: true, stationId, version: "empty", campaigns: [] });
+    if (!candidates.length) {
+      return reply({ ok: true, stationId, version: "empty", serverTimeMs: Date.now(), timelineEpochMs: 0, campaigns: [] });
+    }
 
     const campaignIds = candidates.map((campaign) => campaign.id);
     const [targetResult, itemResult] = await Promise.all([
@@ -182,7 +176,9 @@ Deno.serve(async (req) => {
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
 
-    return reply({ ok: true, stationId, version, campaigns: payload });
+    // Kiosks use this server clock only to choose the same deterministic media
+    // position. It does not grant any authority over rental/payment state.
+    return reply({ ok: true, stationId, version, serverTimeMs: Date.now(), timelineEpochMs: 0, campaigns: payload });
   } catch (error) {
     console.error("kiosk-ads-playlist", error instanceof Error ? error.message : "UNKNOWN_ERROR");
     return reply({ ok: false, error: "ADS_PLAYLIST_FAILED" }, 500);
