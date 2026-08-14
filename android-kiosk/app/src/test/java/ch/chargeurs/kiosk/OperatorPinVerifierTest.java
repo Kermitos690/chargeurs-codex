@@ -18,6 +18,11 @@ public final class OperatorPinVerifierTest {
     }
 
     @Test
+    public void lockoutContractIsSixtySeconds() {
+        assertEquals(60_000L, OperatorPinVerifier.LOCKOUT_MS);
+    }
+
+    @Test
     public void pbkdf2ContractIsStableWithoutUsingConfiguredPin() throws Exception {
         byte[] derived = OperatorPinVerifier.derive(
             "012345".toCharArray(),
