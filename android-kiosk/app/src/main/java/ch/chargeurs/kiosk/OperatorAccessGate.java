@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
@@ -12,7 +13,7 @@ import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.util.WeakHashMap;
+import java.lang.ref.WeakReference;
 
 /**
  * Native operator entry point intentionally placed above the WebView. It stays
@@ -20,48 +21,44 @@ import java.util.WeakHashMap;
  * degraded. The fixed PIN is checked only by native code against a derived
  * verifier; it grants no backend credential.
  */
+@SuppressLint("SetTextI18n")
 final class OperatorAccessGate {
-    private static final Object LOCK = new Object();
-    private static final WeakHashMap<MainActivity, View> HOTSPOTS = new WeakHashMap<>();
-    private static final WeakHashMap<MainActivity, AlertDialog> DIALOGS = new WeakHashMap<>();
+    private static final String HOTSPOT_TAG = "chargeurs.operator.hotspot.v1";
+    private static WeakReference<AlertDialog> dialogRef = new WeakReference<>(null);
 
     private OperatorAccessGate() {}
 
     static void install(MainActivity activity) {
         activity.runOnUiThread(() -> {
-            synchronized (LOCK) {
-                View existing = HOTSPOTS.get(activity);
-                if (existing != null && existing.getParent() != null) return;
+            View decor = activity.getWindow().getDecorView();
+            if (decor.findViewWithTag(HOTSPOT_TAG) != null) return;
 
-                OperatorTapSequence sequence = new OperatorTapSequence();
-                View hotspot = new View(activity);
-                hotspot.setBackgroundColor(Color.TRANSPARENT);
-                hotspot.setClickable(true);
-                hotspot.setFocusable(false);
-                hotspot.setContentDescription("");
-                hotspot.setOnClickListener(view -> {
-                    if (sequence.record(SystemClock.elapsedRealtime())) open(activity);
-                });
-                hotspot.setElevation(dp(activity, 100));
+            OperatorTapSequence sequence = new OperatorTapSequence();
+            View hotspot = new View(activity);
+            hotspot.setTag(HOTSPOT_TAG);
+            hotspot.setBackgroundColor(Color.TRANSPARENT);
+            hotspot.setClickable(true);
+            hotspot.setFocusable(false);
+            hotspot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            hotspot.setOnClickListener(view -> {
+                if (sequence.record(SystemClock.elapsedRealtime())) open(activity);
+            });
+            hotspot.setElevation(dp(activity, 100));
 
-                android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
-                    dp(activity, 92),
-                    dp(activity, 92)
-                );
-                params.gravity = Gravity.TOP | Gravity.START;
-                activity.addContentView(hotspot, params);
-                HOTSPOTS.put(activity, hotspot);
-            }
+            android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+                dp(activity, 92),
+                dp(activity, 92)
+            );
+            params.gravity = Gravity.TOP | Gravity.START;
+            activity.addContentView(hotspot, params);
         });
     }
 
     static void open(MainActivity activity) {
         activity.runOnUiThread(() -> {
             if (activity.isFinishing()) return;
-            synchronized (LOCK) {
-                AlertDialog existing = DIALOGS.get(activity);
-                if (existing != null && existing.isShowing()) return;
-            }
+            AlertDialog existing = dialogRef.get();
+            if (existing != null && existing.isShowing()) return;
             showPinDialog(activity);
         });
     }
@@ -152,10 +149,11 @@ final class OperatorAccessGate {
             .setView(content)
             .setCancelable(true)
             .create();
-        synchronized (LOCK) { DIALOGS.put(activity, dialog); }
+        dialogRef = new WeakReference<>(dialog);
         dialog.setOnDismissListener(ignored -> {
             pin.setLength(0);
-            synchronized (LOCK) { DIALOGS.remove(activity); }
+            AlertDialog current = dialogRef.get();
+            if (current == dialog) dialogRef.clear();
         });
         cancel.setOnClickListener(view -> dialog.dismiss());
         verify.setOnClickListener(view -> {
