@@ -25,11 +25,19 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
-// STAGING only: CI materializes a persistent test keystore and passes its
-// absolute path explicitly. Local builds keep the normal Android debug signer
-// when this value is absent. This is never used for the production release.
+// STAGING field APKs need a durable signing identity. A runner-local Android
+// debug key changes between hosted runners and makes `adb install -r` unsafe.
+// CI materializes the keystore from a repository secret into RUNNER_TEMP and
+// supplies these four values. Local developer builds may still use the normal
+// debug signer, but those APKs are validation-only and must not be deployed to
+// a DTA field tablet as the durable bootstrap package.
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
-val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
+val stagingStorePassword = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PASSWORD").orElse("")
+val stagingKeyAlias = providers.environmentVariable("CHARGEURS_STAGING_KEY_ALIAS").orElse("")
+val stagingKeyPassword = providers.environmentVariable("CHARGEURS_STAGING_KEY_PASSWORD").orElse("")
+val stagingSigningReady = listOf(
+    stagingStorePath.get(), stagingStorePassword.get(), stagingKeyAlias.get(), stagingKeyPassword.get(),
+).all { it.isNotBlank() } && file(stagingStorePath.get()).isFile
 
 // Enrollment and WebView navigation remain pinned to the stable STAGING
 // origin. Preview deployments are protected by Vercel SSO and must never be
@@ -52,8 +60,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 128
-        versionName = "1.0.28-wisepad-usb-staging-v2"
+        versionCode = 129
+        versionName = "1.0.29-operator-recovery"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -80,11 +88,11 @@ android {
 
     signingConfigs {
         if (stagingSigningReady) {
-            create("stagingTest") {
+            create("stagingPersistent") {
                 storeFile = file(stagingStorePath.get())
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+                storePassword = stagingStorePassword.get()
+                keyAlias = stagingKeyAlias.get()
+                keyPassword = stagingKeyPassword.get()
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -142,7 +150,7 @@ android {
         }
         create("staging") {
             initWith(getByName("debug"))
-            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingTest")
+            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingPersistent")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             // Dedicated field-test lane: DTA21269 uses its attached BBPOS
