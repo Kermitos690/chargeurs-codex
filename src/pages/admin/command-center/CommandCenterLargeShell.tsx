@@ -44,11 +44,11 @@ export function CommandCenterLargeShell({ model, roles, generatedAt, loading, er
 
       {error && <div role="alert" className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
 
-      <div className="grid gap-5 xl:grid-cols-12">
-        <div className="xl:col-span-5"><HealthPanel health={model.health} roles={roles} /></div>
-        <div className="xl:col-span-7"><DevelopmentPanel development={model.development} roles={roles} /></div>
-        <div className="xl:col-span-7"><StationsPanel stations={model.stations} roles={roles} compact /></div>
-        <div className="xl:col-span-5"><DecisionsPanel decisions={model.decisions} roles={roles} /></div>
+      <div className="grid gap-5 sm:grid-cols-12">
+        <div className="sm:col-span-5"><HealthPanel health={model.health} roles={roles} /></div>
+        <div className="sm:col-span-7"><DevelopmentPanel development={model.development} roles={roles} /></div>
+        <div className="sm:col-span-7"><StationsPanel stations={model.stations} roles={roles} compact /></div>
+        <div className="sm:col-span-5"><DecisionsPanel decisions={model.decisions} roles={roles} /></div>
       </div>
 
       <MorePanel roles={roles} />

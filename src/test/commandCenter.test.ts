@@ -38,6 +38,14 @@ describe("resolveCommandCenterMode", () => {
     expect(resolveCommandCenterMode(932, 430)).toBe("large");
   });
 
+  it("also switches a narrower phone to the large shell in landscape once 640px are available", () => {
+    expect(resolveCommandCenterMode(667, 375)).toBe("large");
+  });
+
+  it("keeps a narrow landscape viewport mobile below the large-mode floor", () => {
+    expect(resolveCommandCenterMode(639, 360)).toBe("mobile");
+  });
+
   it("uses the large shell for a tablet in portrait", () => {
     expect(resolveCommandCenterMode(768, 1024)).toBe("large");
   });

@@ -19,6 +19,8 @@ const ALL_INTERNAL = [
   "maintenance_technician", "staff", "operator", "viewer",
 ] as const;
 const OPERATIONS = ["super_admin", "admin", "operations_admin", "operator"] as const;
+// Physical/provider mutation-capable screens intentionally exclude the generic
+// operator role unless their backend exposes a separate read-only contract.
 const OPERATIONS_ADMIN = ["super_admin", "admin", "operations_admin"] as const;
 const OPERATIONS_READ = [...OPERATIONS, "support_agent", "maintenance_technician", "staff", "viewer"] as const;
 const FINANCE = ["super_admin", "admin", "finance_admin"] as const;

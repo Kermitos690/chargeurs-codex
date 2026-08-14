@@ -26,7 +26,7 @@ function Panel({ children, className = "" }: { children: ReactNode; className?: 
 function AccessibleNav({ href, roles, className, children, disabledLabel = "Accès limité" }: { href: string; roles: string[]; className: string; children: ReactNode; disabledLabel?: string }) {
   const allowed = !href.startsWith("/admin") || canAccessAdminPath(href, roles);
   if (allowed) return <Link to={href} className={className}>{children}</Link>;
-  return <div aria-disabled="true" className={`${className} cursor-not-allowed opacity-65`}>{children}<span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground"><LockKeyhole className="h-3 w-3" />{disabledLabel}</span></div>;
+  return <div aria-disabled="true" className={`${className} cursor-not-allowed opacity-60`}>{children}<span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground"><LockKeyhole className="h-3 w-3" />{disabledLabel}</span></div>;
 }
 
 function ActionPill({ action }: { action: CommandCenterDevelopment["action"] }) {
