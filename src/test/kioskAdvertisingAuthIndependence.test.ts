@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   adsPlaylistHeaders,
@@ -47,7 +48,7 @@ describe("paid advertising availability when rental auth is unavailable", () => 
 
   it("keeps the backend playlist read-only while impression writes still require kiosk authentication", () => {
     const source = readFileSync(
-      new URL("../../supabase/functions/kiosk-ads-playlist/index.ts", import.meta.url),
+      resolve(process.cwd(), "supabase/functions/kiosk-ads-playlist/index.ts"),
       "utf8",
     );
 
