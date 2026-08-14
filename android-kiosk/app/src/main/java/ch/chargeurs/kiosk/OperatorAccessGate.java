@@ -1,6 +1,7 @@
 package ch.chargeurs.kiosk;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
@@ -16,10 +17,10 @@ import android.widget.TextView;
 import java.lang.ref.WeakReference;
 
 /**
- * Native operator entry point intentionally placed above the WebView. It stays
- * reachable when the web UI, Ads overlay, kiosk authentication or network is
- * degraded. The fixed PIN is checked only by native code against a derived
- * verifier; it grants no backend credential.
+ * Native operator entry point intentionally placed above the WebView or locked
+ * activation surface. It stays reachable when Ads, kiosk auth or network is
+ * degraded. The fixed PIN is checked only against a native derived verifier;
+ * it grants no backend credential.
  */
 @SuppressLint("SetTextI18n")
 final class OperatorAccessGate {
@@ -28,7 +29,7 @@ final class OperatorAccessGate {
 
     private OperatorAccessGate() {}
 
-    static void install(MainActivity activity) {
+    static void install(Activity activity) {
         activity.runOnUiThread(() -> {
             View decor = activity.getWindow().getDecorView();
             if (decor.findViewWithTag(HOTSPOT_TAG) != null) return;
@@ -54,7 +55,7 @@ final class OperatorAccessGate {
         });
     }
 
-    static void open(MainActivity activity) {
+    static void open(Activity activity) {
         activity.runOnUiThread(() -> {
             if (activity.isFinishing()) return;
             AlertDialog existing = dialogRef.get();
@@ -63,7 +64,7 @@ final class OperatorAccessGate {
         });
     }
 
-    private static void showPinDialog(MainActivity activity) {
+    private static void showPinDialog(Activity activity) {
         int gap = dp(activity, 10);
         StringBuilder pin = new StringBuilder(6);
 
@@ -178,7 +179,7 @@ final class OperatorAccessGate {
                     cancel.setEnabled(true);
                     if (result == OperatorPinVerifier.Result.LOCKED) {
                         long seconds = Math.max(1L, (OperatorPinVerifier.remainingLockoutMs(activity) + 999L) / 1000L);
-                        status.setText("Accès temporairement verrouillé après plusieurs essais (" + seconds + " s). ");
+                        status.setText("Accès temporairement verrouillé après plusieurs essais (" + seconds + " s).");
                     } else {
                         status.setText("Code opérateur incorrect.");
                     }
@@ -207,7 +208,7 @@ final class OperatorAccessGate {
         view.setText(display.toString());
     }
 
-    private static TextView text(MainActivity activity, String value, int size, int color) {
+    private static TextView text(Activity activity, String value, int size, int color) {
         TextView view = new TextView(activity);
         view.setText(value);
         view.setTextSize(size);
@@ -224,13 +225,13 @@ final class OperatorAccessGate {
         return params;
     }
 
-    private static LinearLayout.LayoutParams weightedButton(MainActivity activity, float weight, int left, int right) {
+    private static LinearLayout.LayoutParams weightedButton(Activity activity, float weight, int left, int right) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(activity, 56), weight);
         params.setMargins(left, 0, right, 0);
         return params;
     }
 
-    private static int dp(MainActivity activity, int value) {
+    private static int dp(Activity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 }
