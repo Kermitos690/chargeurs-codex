@@ -29,6 +29,7 @@
 
         <activity android:name=".ProvisioningActivity" android:exported="false" />
         <activity android:name=".HardwareDiagnosticActivity" android:exported="false" />
+        <activity android:name=".OperatorMaintenanceActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"

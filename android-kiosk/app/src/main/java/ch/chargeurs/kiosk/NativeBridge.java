@@ -25,6 +25,11 @@ public final class NativeBridge {
         );
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
+
+        // Install the physical recovery gesture before optional payment-reader
+        // startup. A degraded reader must never remove the local operator path.
+        OperatorAccessGate.install(activity);
+
         ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
         if (BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED) {
             this.terminalRuntime = null;
@@ -119,13 +124,12 @@ public final class NativeBridge {
     }
 
     /**
-     * Operator-only path, reached by five deliberate taps on the kiosk brand.
-     * It shows a native confirmation before it clears a device-bound credential;
-     * no WebView or browser-side code can directly alter provisioning state.
+     * Legacy DOM five-tap fallback now reaches the same native PIN gate.
+     * Browser-side code can no longer clear the secure binding.
      */
     @JavascriptInterface
     public void requestReprovisioning() {
-        activity.requestReprovisioning();
+        OperatorAccessGate.open(activity);
     }
 
     @JavascriptInterface

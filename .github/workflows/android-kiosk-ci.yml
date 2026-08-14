@@ -2,12 +2,6 @@ name: Chargeurs.ch Android Kiosk Build
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - agent/kiosk-wisepad3-stripe-terminal-usb
-    paths:
-      - "android-kiosk/**"
-      - ".github/workflows/android-kiosk-ci.yml"
   pull_request:
     branches:
       - agent/kiosk-wisepad3-stripe-terminal-usb
@@ -27,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # This is the existing TEST-only canonical STAGING signer. The private
+      # keystore bytes live in the Actions cache created on the Android field
+      # branch; these are the standard non-secret debug-keystore credentials.
       CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
       CHARGEURS_STAGING_KEY_ALIAS: androiddebugkey
       CHARGEURS_STAGING_KEY_PASSWORD: android
@@ -41,7 +38,7 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Restore canonical STAGING signer
+      - name: Restore canonical STAGING signer from the field branch
         id: staging-signer-cache
         uses: actions/cache@v4
         with:
@@ -53,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ steps.staging-signer-cache.outputs.cache-hit }}" != "true" ]]; then
-            echo "::error title=Canonical staging signer unavailable::Refusing to create a field APK with a new signer. Restore the canonical Chargeurs STAGING signing cache first."
+            echo "::error title=Canonical staging signer unavailable::The PR build could not restore chargeurs-kiosk-staging-debug-keystore-v1 from its base field branch. Refusing to create a DTA APK with a new signer."
             exit 23
           fi
 
@@ -68,7 +65,7 @@ jobs:
           actual="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           expected="$(printf '%s' "$CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           if [[ "$actual" != "$expected" ]]; then
-            echo "::error title=Canonical signer mismatch::Expected $expected but restored $actual."
+            echo "::error title=Canonical signer mismatch::Expected $expected but restored $actual. Refusing to build a non-updatable DTA APK."
             exit 24
           fi
 
@@ -96,6 +93,9 @@ jobs:
           "$apksigner_path" verify --verbose "$apk"
 
           cert_output="$($apksigner_path verify --print-certs "$apk")"
+          # apksigner wording varies slightly across build-tools releases.
+          # Match the semantic certificate digest instead of pinning the whole
+          # output prefix, then normalize separators/case before comparison.
           signer_sha256="$(printf '%s\n' "$cert_output" | sed -n 's/^.*certificate SHA-256 digest:[[:space:]]*//p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
           expected="$(printf '%s' "$CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
           if [[ -z "$signer_sha256" ]]; then
@@ -131,14 +131,19 @@ jobs:
           signingMode=canonical-staging-cache-v1
           signerSha256=$signer_sha256
           fieldInstallable=true
+          fieldTarget=DTA21277
+          fieldTargetHuman=DTA 212-77
           updateMode=IN_PLACE_ONLY_IF_INSTALLED_SIGNER_MATCHES
           EOF
-          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
-      - name: Upload canonical-signed staging APK
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+          echo "signer_sha256=$signer_sha256" >> "$GITHUB_OUTPUT"
+          echo "apk_sha256=$apk_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload DTA21277 staging APK and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-${{ steps.artifact.outputs.artifact_name }}
+          name: dta21277-${{ steps.artifact.outputs.artifact_name }}
           retention-days: 7
           if-no-files-found: error
           path: dist/*
