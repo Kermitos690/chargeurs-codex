@@ -2,6 +2,34 @@
 
 These rules are mandatory for every agent and contributor working in this repository.
 
+## Agent Operating System
+
+This file is the compact constitution and router for the Chargeurs Agent
+Operating System. The canonical operating documents are in
+[`docs/agents/`](docs/agents/README.md).
+
+- An **Agent** is a logical domain owner. It is not a continuously-running
+  Codex process and does not imply a separate model run.
+- Default to **one primary agent and one writer per implementation surface**.
+  Use a subagent only for a bounded, independent task with a documented benefit.
+- Every important capability has one primary owner. Contributors may assist but
+  do not acquire ownership merely by touching a file.
+- An owner must hand work across domains with the compact contract in
+  [`HANDOFF_PROTOCOL.md`](docs/agents/HANDOFF_PROTOCOL.md).
+- Changes to Protected Core must be marked `PROTECTED_CORE_CHANGE` and satisfy
+  the gates in [`PROTECTED_CORE.md`](docs/agents/PROTECTED_CORE.md). UI, Ads,
+  Growth, and Inventory surfaces may not weaken a server-side safety invariant.
+- `MERGED`, `DEPLOYED`, `APK_INSTALLED`, and `PHYSICALLY_VALIDATED` are distinct
+  states. Only the release gate may declare `READY_FOR_RELEASE`.
+- Business decisions (price, deposit, caps, refunds, terms, commercial promises,
+  or business model) require explicit human approval: `BUSINESS_DECISION_REQUIRED`.
+- No new paid AI service, multi-agent platform, SaaS monitoring, vector database,
+  cloud service, or recurring LLM job may be added without
+  `COST_APPROVAL_REQUIRED`.
+
+For the current roster, ownership, QA and release model, and migration findings,
+read the documents above before changing governance or cross-domain work.
+
 ## Default workflow
 
 - Start feature work in a **draft pull request**.
