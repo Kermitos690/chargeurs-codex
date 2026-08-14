@@ -2,7 +2,11 @@ package ch.chargeurs.kiosk;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,6 +18,8 @@ import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import org.json.JSONObject;
 
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -74,37 +80,28 @@ public final class OperatorMaintenanceActivity extends Activity {
         TextView brand = KioskVisuals.brandText(this, 22);
         content.addView(brand, fullWidth(0, dp(10)));
 
-        TextView title = text("Maintenance borne", 30, KioskVisuals.WHITE);
+        TextView title = text("Service Console", 30, KioskVisuals.WHITE);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         content.addView(title, fullWidth(0, dp(8)));
 
         TextView security = text(
-            "Session locale temporaire · sans publicité · aucun droit de paiement, location ou éjection n’est accordé par le code opérateur.",
+            "Session technicien locale · sans publicité · aucun droit de paiement, location ou éjection n’est accordé par le code technicien.",
             14,
             KioskVisuals.MUTED
         );
         content.addView(security, fullWidth(0, dp(18)));
 
         KioskConfig current = store.load();
-        TextView binding = text(
-            current == null
-                ? "Tablette non liée\nAppareil : " + DeviceIdentity.getOrCreate(this)
-                : "Liaison actuelle : " + current.stationId()
-                    + "\nAppareil : " + DeviceIdentity.getOrCreate(this)
-                    + "\nAPK : " + BuildConfig.VERSION_NAME,
-            15,
-            KioskVisuals.WHITE
-        );
-        binding.setPadding(dp(16), dp(14), dp(16), dp(14));
-        binding.setBackground(KioskVisuals.secondaryButton(dp(18)));
-        content.addView(binding, fullWidth(0, dp(20)));
 
-        TextView pairingTitle = text("Lier / réactiver cette tablette", 20, KioskVisuals.WHITE);
+        // Pairing is deliberately the first and most prominent maintenance
+        // action. There is no manual station picker: station authority remains
+        // the one-time backend pairing code and the enrolled KioskConfig.
+        TextView pairingTitle = text("Appairage tablette", 22, KioskVisuals.WHITE);
         pairingTitle.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         content.addView(pairingTitle, fullWidth(0, dp(6)));
 
         TextView pairingHelp = text(
-            "Générez dans le back-office le code temporaire à 6 chiffres de la borne à associer, puis saisissez-le ici. La liaison actuelle n’est pas effacée avant la réussite complète.",
+            "Générez dans le back-office le code temporaire à 6 chiffres de la borne à associer, puis saisissez-le ici. La liaison actuelle n’est jamais effacée avant la réussite complète.",
             14,
             KioskVisuals.MUTED
         );
@@ -151,7 +148,7 @@ public final class OperatorMaintenanceActivity extends Activity {
         content.addView(status, fullWidth(0, dp(10)));
 
         pairButton = new Button(this);
-        pairButton.setText("Associer la tablette");
+        pairButton.setText("Associer cette tablette");
         pairButton.setTextColor(KioskVisuals.WHITE);
         pairButton.setTextSize(16);
         pairButton.setAllCaps(false);
@@ -161,10 +158,37 @@ public final class OperatorMaintenanceActivity extends Activity {
             armTimeout();
             pair();
         });
-        content.addView(pairButton, fixedButton(dp(56), 0, dp(10)));
+        content.addView(pairButton, fixedButton(dp(58), 0, dp(22)));
+
+        content.addView(sectionCard(
+            "Identité de la borne",
+            current == null
+                ? "Station : non appairée\nAppareil : " + DeviceIdentity.getOrCreate(this)
+                : "Station : " + current.stationId()
+                    + "\nAppareil : " + DeviceIdentity.getOrCreate(this)
+        ), fullWidth(0, dp(10)));
+
+        content.addView(sectionCard(
+            "Réseau / serveurs",
+            networkSummary(current)
+        ), fullWidth(0, dp(10)));
+
+        SecureConfigStore.StorageHealth storageHealth = store.inspect();
+        content.addView(sectionCard(
+            "État de l’APK Chargeurs.ch",
+            "Package : " + getPackageName()
+                + "\nVersion : " + BuildConfig.VERSION_NAME
+                + "\nStockage sécurisé : " + storageHealth.code()
+                + "\nJeton affiché : non"
+        ), fullWidth(0, dp(10)));
+
+        content.addView(sectionCard(
+            "Fournisseur Bajie",
+            vendorSummary()
+        ), fullWidth(0, dp(18)));
 
         Button diagnostics = new Button(this);
-        diagnostics.setText("Diagnostics matériel et terminal");
+        diagnostics.setText("Diagnostic complet matériel / terminal");
         diagnostics.setTextColor(KioskVisuals.WHITE);
         diagnostics.setAllCaps(false);
         diagnostics.setBackground(KioskVisuals.secondaryButton(dp(24)));
@@ -174,8 +198,16 @@ public final class OperatorMaintenanceActivity extends Activity {
         });
         content.addView(diagnostics, fixedButton(dp(54), 0, dp(10)));
 
+        Button restart = new Button(this);
+        restart.setText("Redémarrer le kiosque");
+        restart.setTextColor(KioskVisuals.WHITE);
+        restart.setAllCaps(false);
+        restart.setBackground(KioskVisuals.secondaryButton(dp(24)));
+        restart.setOnClickListener(view -> restartKiosk());
+        content.addView(restart, fixedButton(dp(54), 0, dp(10)));
+
         Button close = new Button(this);
-        close.setText("Retour au kiosque");
+        close.setText("Quitter le mode service");
         close.setTextColor(KioskVisuals.WHITE);
         close.setAllCaps(false);
         close.setBackground(KioskVisuals.secondaryButton(dp(24)));
@@ -184,6 +216,54 @@ public final class OperatorMaintenanceActivity extends Activity {
 
         KioskVisuals.fadeIn(content);
         return root;
+    }
+
+    private TextView sectionCard(String title, String body) {
+        TextView card = text(title + "\n" + body, 14, KioskVisuals.WHITE);
+        card.setLineSpacing(dp(3), 1f);
+        card.setPadding(dp(16), dp(14), dp(16), dp(14));
+        card.setBackground(KioskVisuals.secondaryButton(dp(18)));
+        return card;
+    }
+
+    private String networkSummary(KioskConfig current) {
+        ConnectivityManager manager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        boolean internet = false;
+        String transport = "indéterminé";
+        if (manager != null) {
+            Network active = manager.getActiveNetwork();
+            NetworkCapabilities capabilities = active == null ? null : manager.getNetworkCapabilities(active);
+            if (capabilities != null) {
+                internet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) transport = "Wi-Fi";
+                else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) transport = "Ethernet";
+                else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) transport = "cellulaire";
+                else transport = "autre";
+            }
+        }
+        String server = current == null ? BuildConfig.KIOSK_PUBLIC_BASE_URL : current.baseUrl();
+        return "Internet : " + (internet ? "disponible" : "indisponible")
+            + "\nTransport : " + transport
+            + "\nServeur kiosque configuré : " + server;
+    }
+
+    private String vendorSummary() {
+        JSONObject vendor = VendorAppCompatibility.inspect(this);
+        String version = vendor.optString("versionName", "");
+        return "Package : " + VendorAppCompatibility.VENDOR_PACKAGE
+            + "\nInstallée : " + (vendor.optBoolean("installed", false) ? "oui" : "non")
+            + (version.isEmpty() ? "" : "\nVersion : " + version)
+            + "\nÉtat : " + vendor.optString("state", "inconnu")
+            + "\nBridge public : " + vendor.optString("publicBridgeStatus", "inconnu")
+            + "\nContrôle fournisseur : aucune action invasive depuis cette console";
+    }
+
+    private void restartKiosk() {
+        armTimeout();
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        finish();
     }
 
     private void pair() {
@@ -242,7 +322,7 @@ public final class OperatorMaintenanceActivity extends Activity {
         if (error instanceof SocketTimeoutException) return "Le serveur d’appairage ne répond pas à temps.";
         String code = error.getMessage() == null ? "UNKNOWN_ERROR" : error.getMessage().trim();
         if (code.startsWith("STORAGE_PREFLIGHT_") || code.startsWith("STORAGE_SAVE_")) {
-            return "Stockage sécurisé indisponible. Ouvrez Diagnostics avant de générer un nouveau code.";
+            return "Stockage sécurisé indisponible. Ouvrez Diagnostic avant de générer un nouveau code.";
         }
         switch (code) {
             case "PAIRING_CODE_INVALID_OR_EXPIRED":
@@ -253,7 +333,7 @@ public final class OperatorMaintenanceActivity extends Activity {
             case "DEVICE_BOUND_TO_ANOTHER_STATION":
                 return "Cette tablette est enregistrée sur une autre borne. Révoquez d’abord cette liaison dans le back-office, puis générez un nouveau code.";
             case "KIOSK_ORIGIN_MISMATCH":
-                return "Le serveur a renvoyé une adresse kiosk non autorisée.";
+                return "Le serveur a renvoyé une adresse kiosque non autorisée.";
             default:
                 return "Appairage impossible. Vérifiez le code temporaire et la connexion.";
         }
