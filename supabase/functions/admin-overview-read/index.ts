@@ -8,6 +8,7 @@ const READ_ROLES = [
 ] as const;
 const KIOSK_STALE_MS = 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+const SEVERITY_RANK = { critical: 0, warning: 1, info: 2 } as const;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
@@ -25,7 +26,7 @@ function number(value: unknown): number {
 
 type Alert = {
   id: string;
-  severity: "critical" | "warning" | "info";
+  severity: keyof typeof SEVERITY_RANK;
   stationId: string;
   title: string;
   detail: string;
@@ -61,7 +62,6 @@ Deno.serve(async (req) => {
   }
 
   const allStations = stationsResult.data ?? [];
-  // Demonstration fixtures should not create production-style incident noise.
   const stations = allStations.filter((row: any) => !String(row.station_id ?? "").startsWith("DEMO-"));
   const kioskRows = kioskResult.data ?? [];
   const payments = paymentsResult.data ?? [];
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
   const criticalCount = alerts.filter((row) => row.severity === "critical").length;
   const healthScore = fleet.length ? Math.round((rentalReadyCount / fleet.length) * 100) : 100;
 
-  alerts.sort((a, b) => ({ critical: 0, warning: 1, info: 2 }[a.severity] - ({ critical: 0, warning: 1, info: 2 }[b.severity]));
+  alerts.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
 
   return json({
     ok: true,
