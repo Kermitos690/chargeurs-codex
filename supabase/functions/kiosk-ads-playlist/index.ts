@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
 
     const nowMs = Date.now();
     const { data: campaigns, error: campaignError } = await db.from("advertising_campaigns")
-      .select("id,name,status,display_modes,all_stations,starts_at,ends_at,idle_after_seconds,split_ratio,priority,updated_at")
+      .select("id,name,status,display_modes,all_stations,starts_at,ends_at,idle_after_seconds,split_ratio,priority,qr_url,updated_at")
       .in("status", ["active", "scheduled"])
       .order("priority", { ascending: false })
       .order("created_at", { ascending: true })
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
     const [targetResult, itemResult] = await Promise.all([
       db.from("advertising_campaign_stations").select("campaign_id,station_id").in("campaign_id", campaignIds),
       db.from("advertising_campaign_items")
-        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,duration_seconds,poster_storage_path,active,updated_at)")
+        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,width,height,duration_seconds,poster_storage_path,active,updated_at)")
         .in("campaign_id", campaignIds)
         .eq("enabled", true)
         .order("sort_order", { ascending: true }),
@@ -145,6 +145,8 @@ Deno.serve(async (req) => {
         mimeType: asset.mime_type,
         url: publicUrl,
         posterUrl,
+        width: asset.width ?? null,
+        height: asset.height ?? null,
         imageDurationSeconds: row.image_duration_seconds ?? 8,
         mediaDurationSeconds: asset.duration_seconds ?? null,
         sortOrder: row.sort_order,
@@ -162,13 +164,14 @@ Deno.serve(async (req) => {
         idleAfterSeconds: campaign.idle_after_seconds,
         splitRatio: Number(campaign.split_ratio),
         priority: campaign.priority,
+        qrUrl: campaign.qr_url ?? null,
         updatedAt: campaign.updated_at,
         items: itemsByCampaign.get(campaign.id) ?? [],
       }))
       .filter((campaign) => campaign.items.length > 0);
 
     const versionSeed = payload
-      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`)
+      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`)
       .join("|");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionSeed || "empty"));
     const version = Array.from(new Uint8Array(digest))
