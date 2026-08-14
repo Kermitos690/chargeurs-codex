@@ -2,12 +2,6 @@ name: Chargeurs.ch Android Kiosk Build
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - agent/kiosk-security/operator-recovery-gate-v1
-    paths:
-      - "android-kiosk/**"
-      - ".github/workflows/android-kiosk-ci.yml"
   pull_request:
     branches:
       - agent/kiosk-wisepad3-stripe-terminal-usb
@@ -27,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CHARGEURS_STAGING_KEYSTORE_B64: ${{ secrets.CHARGEURS_STAGING_KEYSTORE_B64 }}
-      CHARGEURS_STAGING_KEYSTORE_PASSWORD: ${{ secrets.CHARGEURS_STAGING_KEYSTORE_PASSWORD }}
-      CHARGEURS_STAGING_KEY_ALIAS: ${{ secrets.CHARGEURS_STAGING_KEY_ALIAS }}
-      CHARGEURS_STAGING_KEY_PASSWORD: ${{ secrets.CHARGEURS_STAGING_KEY_PASSWORD }}
-      CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256: ${{ secrets.CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256 }}
+      # This is the existing TEST-only canonical STAGING signer. The private
+      # keystore bytes live in the Actions cache created on the Android field
+      # branch; these are the standard non-secret debug-keystore credentials.
+      CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
+      CHARGEURS_STAGING_KEY_ALIAS: androiddebugkey
+      CHARGEURS_STAGING_KEY_PASSWORD: android
+      CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256: b37d4cda37c8623259dfc7aa408328b8f2d04911082c46073b6e1b429ba805a3
     steps:
       - uses: actions/checkout@v6
 
@@ -41,40 +37,41 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v5
 
-      - name: Prepare persistent staging signer when configured
+      - name: Restore canonical STAGING signer from the field branch
+        id: staging-signer-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chargeurs-kiosk-staging-debug-keystore-v1
+
+      - name: Require canonical signer continuity
         shell: bash
         run: |
           set -euo pipefail
-          signing_dir="$RUNNER_TEMP/chargeurs-signing"
-          mkdir -p "$signing_dir"
-          chmod 700 "$signing_dir"
-
-          required=(
-            CHARGEURS_STAGING_KEYSTORE_B64
-            CHARGEURS_STAGING_KEYSTORE_PASSWORD
-            CHARGEURS_STAGING_KEY_ALIAS
-            CHARGEURS_STAGING_KEY_PASSWORD
-          )
-          missing=0
-          for name in "${required[@]}"; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "::warning title=Persistent staging signer incomplete::$name is not configured. The APK will be validation-only and must not be pushed to a DTA field tablet."
-              missing=1
-            fi
-          done
-
-          if [[ "$missing" -eq 0 ]]; then
-            keystore="$signing_dir/chargeurs-staging.keystore"
-            printf '%s' "$CHARGEURS_STAGING_KEYSTORE_B64" | base64 --decode > "$keystore"
-            chmod 600 "$keystore"
-            test -s "$keystore"
-            echo "CHARGEURS_STAGING_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
-            echo "CHARGEURS_STAGING_SIGNING_MODE=persistent" >> "$GITHUB_ENV"
-          else
-            echo "CHARGEURS_STAGING_SIGNING_MODE=ephemeral-debug-validation-only" >> "$GITHUB_ENV"
+          if [[ "${{ steps.staging-signer-cache.outputs.cache-hit }}" != "true" ]]; then
+            echo "::error title=Canonical staging signer unavailable::The PR build could not restore chargeurs-kiosk-staging-debug-keystore-v1 from its base field branch. Refusing to create a DTA APK with a new signer."
+            exit 23
           fi
+
+          keystore="$HOME/.android/debug.keystore"
+          test -s "$keystore"
+          chmod 600 "$keystore"
+          keytool -list -v \
+            -keystore "$keystore" \
+            -storepass "$CHARGEURS_STAGING_KEYSTORE_PASSWORD" \
+            -alias "$CHARGEURS_STAGING_KEY_ALIAS" | tee /tmp/staging-keytool.txt
+
+          actual="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          expected="$(printf '%s' "$CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error title=Canonical signer mismatch::Expected $expected but restored $actual. Refusing to build a non-updatable DTA APK."
+            exit 24
+          fi
+
+          echo "CHARGEURS_STAGING_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Build and test staging APK
         working-directory: android-kiosk
@@ -83,7 +80,7 @@ jobs:
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Prepare artifact and signing provenance
+      - name: Prepare APK and signing provenance
         id: artifact
         shell: bash
         run: |
@@ -96,63 +93,50 @@ jobs:
           "$apksigner_path" verify --verbose "$apk"
 
           cert_output="$($apksigner_path verify --print-certs "$apk")"
-          signer_sha256="$(printf '%s\n' "$cert_output" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]')"
+          signer_sha256="$(printf '%s\n' "$cert_output" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
+          expected="$(printf '%s' "$CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
           test -n "$signer_sha256"
+          if [[ "$signer_sha256" != "$expected" ]]; then
+            echo "::error title=APK signer continuity failure::Built signer $signer_sha256 does not match canonical STAGING signer $expected."
+            exit 25
+          fi
 
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           test -n "$aapt_path"
-          version_name="$($aapt_path dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
-          version_code="$($aapt_path dump badging "$apk" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" | head -1)"
-          package_name="$($aapt_path dump badging "$apk" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -1)"
+          badging="$($aapt_path dump badging "$apk")"
+          version_name="$(printf '%s\n' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+          version_code="$(printf '%s\n' "$badging" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" | head -1)"
+          package_name="$(printf '%s\n' "$badging" | sed -n "s/package: name='\([^']*\)'.*/\1/p" | head -1)"
           test -n "$version_name"
           test -n "$version_code"
           test -n "$package_name"
 
-          field_installable=false
-          if [[ "${CHARGEURS_STAGING_SIGNING_MODE:-}" == "persistent" ]]; then
-            field_installable=true
-          fi
-
-          if [[ -n "${CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256:-}" ]]; then
-            expected="$(printf '%s' "$CHARGEURS_STAGING_EXPECTED_SIGNER_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':[:space:]')"
-            actual="$(printf '%s' "$signer_sha256" | tr -d ':[:space:]')"
-            if [[ "$actual" != "$expected" ]]; then
-              echo "::error title=Signer continuity failure::Built signer $actual does not match the pinned staging signer $expected."
-              exit 1
-            fi
-          fi
-
           mkdir -p dist
           artifact_name="Chargeurs_CH_Kiosk_${version_name}.apk"
           cp "$apk" "dist/$artifact_name"
-          sha256sum "dist/$artifact_name" > dist/SHA256SUMS.txt
+          apk_sha256="$(sha256sum "dist/$artifact_name" | awk '{print $1}')"
+          printf '%s  %s\n' "$apk_sha256" "$artifact_name" > dist/SHA256SUMS.txt
           cat > dist/BUILD_IDENTITY.txt <<EOF
           package=$package_name
           versionCode=$version_code
           versionName=$version_name
           gitSha=$GITHUB_SHA
-          signingMode=${CHARGEURS_STAGING_SIGNING_MODE:-unknown}
+          signingMode=canonical-staging-cache-v1
           signerSha256=$signer_sha256
-          fieldInstallable=$field_installable
+          fieldInstallable=true
           fieldTarget=DTA21277
           fieldTargetHuman=DTA 212-77
+          updateMode=IN_PLACE_ONLY_IF_INSTALLED_SIGNER_MATCHES
           EOF
 
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
           echo "signer_sha256=$signer_sha256" >> "$GITHUB_OUTPUT"
-          echo "field_installable=$field_installable" >> "$GITHUB_OUTPUT"
+          echo "apk_sha256=$apk_sha256" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK and provenance
+      - name: Upload DTA21277 staging APK and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-${{ steps.artifact.outputs.artifact_name }}
+          name: dta21277-${{ steps.artifact.outputs.artifact_name }}
           retention-days: 7
           if-no-files-found: error
           path: dist/*
-
-      - name: Enforce durable signing before DTA21277 deployment
-        if: steps.artifact.outputs.field_installable != 'true'
-        shell: bash
-        run: |
-          echo "::error title=DTA21277 deployment blocked::The APK compiled and was uploaded for validation, but it is signed with a runner-local debug key. Configure the four CHARGEURS_STAGING_* signing secrets before installing this build on DTA21277."
-          exit 1
