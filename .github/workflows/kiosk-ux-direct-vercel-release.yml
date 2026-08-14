@@ -3,22 +3,22 @@ name: Kiosk UX direct Vercel release
 on:
   push:
     branches:
-      - main
+      - agent/kiosk-ux/dta21269-pricing-first-progress-v1
     paths:
       - .deploy/kiosk-ux-release-trigger
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout main
+      - name: Checkout exact candidate
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Setup Node
@@ -28,36 +28,22 @@ jobs:
           cache: npm
 
       - name: Verify Vercel credentials
-        id: credentials
-        continue-on-error: true
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          if [ -n "$VERCEL_TOKEN" ]; then echo "token_present=true" >> "$GITHUB_OUTPUT"; else echo "token_present=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -n "$VERCEL_ORG_ID" ]; then echo "org_present=true" >> "$GITHUB_OUTPUT"; else echo "org_present=false" >> "$GITHUB_OUTPUT"; fi
-          if [ -n "$VERCEL_PROJECT_ID" ]; then echo "project_present=true" >> "$GITHUB_OUTPUT"; else echo "project_present=false" >> "$GITHUB_OUTPUT"; fi
           test -n "$VERCEL_TOKEN" || { echo "VERCEL_TOKEN is not configured"; exit 21; }
           test -n "$VERCEL_ORG_ID" || { echo "VERCEL_ORG_ID is not configured"; exit 22; }
           test -n "$VERCEL_PROJECT_ID" || { echo "VERCEL_PROJECT_ID is not configured"; exit 23; }
 
       - name: Install dependencies
-        id: install
-        if: steps.credentials.outcome == 'success'
-        continue-on-error: true
         run: npm ci --no-audit --no-fund
 
       - name: Build production bundle
-        id: app_build
-        if: steps.credentials.outcome == 'success' && steps.install.outcome == 'success'
-        continue-on-error: true
         run: npm run build
 
-      - name: Link Vercel project
-        id: link
-        if: steps.credentials.outcome == 'success' && steps.install.outcome == 'success' && steps.app_build.outcome == 'success'
-        continue-on-error: true
+      - name: Link Vercel staging project
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -65,77 +51,17 @@ jobs:
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
 
-      - name: Pull production environment
-        id: vercel_pull
-        if: steps.credentials.outcome == 'success' && steps.install.outcome == 'success' && steps.app_build.outcome == 'success' && steps.link.outcome == 'success'
-        continue-on-error: true
+      - name: Pull production environment of staging project
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Build Vercel prebuilt output
-        id: vercel_build
-        if: steps.vercel_pull.outcome == 'success'
-        continue-on-error: true
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
 
-      - name: Deploy prebuilt production
-        id: deploy
-        if: steps.vercel_build.outcome == 'success'
-        continue-on-error: true
+      - name: Force deploy canonical staging domain
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
-
-      - name: Record Agent 4 release diagnostics
-        if: always()
-        env:
-          TOKEN_PRESENT: ${{ steps.credentials.outputs.token_present }}
-          ORG_PRESENT: ${{ steps.credentials.outputs.org_present }}
-          PROJECT_PRESENT: ${{ steps.credentials.outputs.project_present }}
-          CREDENTIALS: ${{ steps.credentials.outcome }}
-          INSTALL: ${{ steps.install.outcome }}
-          APP_BUILD: ${{ steps.app_build.outcome }}
-          LINK: ${{ steps.link.outcome }}
-          VERCEL_PULL: ${{ steps.vercel_pull.outcome }}
-          VERCEL_BUILD: ${{ steps.vercel_build.outcome }}
-          DEPLOY: ${{ steps.deploy.outcome }}
-        run: |
-          status=failure
-          failure_stage=unknown
-          if [ "$CREDENTIALS" != "success" ]; then
-            failure_stage=credentials
-          elif [ "$INSTALL" != "success" ]; then
-            failure_stage=install
-          elif [ "$APP_BUILD" != "success" ]; then
-            failure_stage=app_build
-          elif [ "$LINK" != "success" ]; then
-            failure_stage=link
-          elif [ "$VERCEL_PULL" != "success" ]; then
-            failure_stage=vercel_pull
-          elif [ "$VERCEL_BUILD" != "success" ]; then
-            failure_stage=vercel_build
-          elif [ "$DEPLOY" != "success" ]; then
-            failure_stage=deploy
-          else
-            status=success
-            failure_stage=none
-          fi
-
-          mkdir -p .deploy
-          printf 'status=%s\nfailure_stage=%s\nvercel_token_present=%s\nvercel_org_id_present=%s\nvercel_project_id_present=%s\ncredentials=%s\ninstall=%s\napp_build=%s\nlink=%s\nvercel_pull=%s\nvercel_build=%s\ndeploy=%s\nsource_commit=%s\ncompleted_at=%s\n' \
-            "$status" "$failure_stage" "$TOKEN_PRESENT" "$ORG_PRESENT" "$PROJECT_PRESENT" "$CREDENTIALS" "$INSTALL" "$APP_BUILD" "$LINK" "$VERCEL_PULL" "$VERCEL_BUILD" "$DEPLOY" "${{ github.sha }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            > .deploy/kiosk-ux-release-status
-
-          git config user.name "chargeurs-kiosk-ux-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add .deploy/kiosk-ux-release-status
-          git commit -m "chore(kiosk-ux): record production release diagnostics" || exit 0
-          git pull --rebase origin main
-          git push origin HEAD:main
-
-      - name: Fail workflow when production deploy failed
-        if: always() && steps.deploy.outcome != 'success'
-        run: exit 1
