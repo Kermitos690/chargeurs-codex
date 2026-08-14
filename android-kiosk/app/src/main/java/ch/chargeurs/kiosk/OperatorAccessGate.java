@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.SystemClock;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,6 +26,7 @@ import java.lang.ref.WeakReference;
 @SuppressLint("SetTextI18n")
 final class OperatorAccessGate {
     private static final String HOTSPOT_TAG = "chargeurs.operator.hotspot.v1";
+    private static final float HOTSPOT_SCREEN_RATIO = 0.15f;
     private static WeakReference<AlertDialog> dialogRef = new WeakReference<>(null);
 
     private OperatorAccessGate() {}
@@ -46,11 +48,14 @@ final class OperatorAccessGate {
             });
             hotspot.setElevation(dp(activity, 100));
 
+            DisplayMetrics metrics = activity.getResources().getDisplayMetrics();
+            int hotspotWidth = Math.max(dp(activity, 72), Math.round(metrics.widthPixels * HOTSPOT_SCREEN_RATIO));
+            int hotspotHeight = Math.max(dp(activity, 72), Math.round(metrics.heightPixels * HOTSPOT_SCREEN_RATIO));
             android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
-                dp(activity, 92),
-                dp(activity, 92)
+                hotspotWidth,
+                hotspotHeight
             );
-            params.gravity = Gravity.TOP | Gravity.START;
+            params.gravity = Gravity.TOP | Gravity.END;
             activity.addContentView(hotspot, params);
         });
     }
@@ -76,7 +81,7 @@ final class OperatorAccessGate {
         TextView brand = KioskVisuals.brandText(activity, 20);
         content.addView(brand, fullWidth(0, gap));
 
-        TextView title = text(activity, "Accès opérateur", 26, KioskVisuals.WHITE);
+        TextView title = text(activity, "Accès technicien Chargeurs.ch", 26, KioskVisuals.WHITE);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         content.addView(title, fullWidth(0, gap));
 
@@ -181,7 +186,7 @@ final class OperatorAccessGate {
                         long seconds = Math.max(1L, (OperatorPinVerifier.remainingLockoutMs(activity) + 999L) / 1000L);
                         status.setText("Accès temporairement verrouillé après plusieurs essais (" + seconds + " s).");
                     } else {
-                        status.setText("Code opérateur incorrect.");
+                        status.setText("Code technicien incorrect.");
                     }
                     status.setTextColor(KioskVisuals.WARNING);
                 });
@@ -190,7 +195,10 @@ final class OperatorAccessGate {
 
         dialog.show();
         if (dialog.getWindow() != null) {
-            dialog.getWindow().setDimAmount(.72f);
+            // The native gate deliberately obscures any fullscreen advertising
+            // while the technician PIN is being entered. The ad runtime itself
+            // remains untouched and resumes normally when the gate is closed.
+            dialog.getWindow().setDimAmount(.92f);
             dialog.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             dialog.getWindow().setLayout(
                 Math.min(dp(activity, 560), activity.getResources().getDisplayMetrics().widthPixels - dp(activity, 32)),
