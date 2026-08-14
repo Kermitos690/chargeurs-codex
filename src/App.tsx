@@ -36,6 +36,7 @@ import AdminUsers from "./pages/admin/AdminUsers.tsx";
 import AdminKioskDevices from "./pages/admin/AdminKioskDevices.tsx";
 import AdminLayout from "./pages/admin/AdminLayout.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
+import AdminNetworkOverview from "./pages/admin/AdminNetworkOverview.tsx";
 import AdminStations from "./pages/admin/AdminStations.tsx";
 import AdminStationDetail from "./pages/admin/AdminStationDetail.tsx";
 import AdminRemoteKiosk from "./pages/admin/AdminRemoteKiosk.tsx";
@@ -106,6 +107,7 @@ const App = () => (
             <Route path="/admin/reset-password" element={<ResetPassword />} />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
+              <Route path="network-overview" element={<AdminNetworkOverview />} />
               <Route path="stations" element={<AdminStations />} />
               <Route path="stations/:stationId" element={<AdminStationDetail />} />
               <Route path="remote-kiosk" element={<AdminRemoteKiosk />} />

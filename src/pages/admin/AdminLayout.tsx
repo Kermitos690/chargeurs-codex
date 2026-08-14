@@ -52,6 +52,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const isCommandCenterHome = location.pathname === "/admin";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -96,7 +97,6 @@ export default function AdminLayout() {
     <div className="relative min-h-screen">
       <LiquidBackground />
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className="glass-strong sticky top-0 hidden h-screen w-64 flex-col p-5 lg:flex">
           <div className="mb-6"><BrandLogo size="sm" /></div>
           <ScrollArea className="-mx-2 flex-1 px-2">
@@ -107,8 +107,7 @@ export default function AdminLayout() {
           </Button>
         </aside>
 
-        {/* Mobile top bar with hamburger sheet */}
-        <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
+        {!isCommandCenterHome && <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
           <BrandLogo size="sm" />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -128,9 +127,12 @@ export default function AdminLayout() {
               </div>
             </SheetContent>
           </Sheet>
-        </header>
+        </header>}
 
-        <main className="flex-1 overflow-x-hidden p-5 pt-20 sm:p-8 lg:pt-8">
+        <main className={cn(
+          "flex-1 overflow-x-hidden",
+          isCommandCenterHome ? "p-0 lg:p-8" : "p-5 pt-20 sm:p-8 lg:pt-8",
+        )}>
           <Outlet />
         </main>
       </div>
