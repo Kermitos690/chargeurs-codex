@@ -15,6 +15,7 @@ n’autorise pas une action à lui seul.
 4. [Protected Core](PROTECTED_CORE.md) — frontières protégées et gates de changement.
 5. [Protocole de handoff](HANDOFF_PROTOCOL.md) — charge utile minimale entre propriétaires.
 6. [Rapport de migration](MIGRATION_REPORT.md) — preuves, collisions et travail exclu de ce changement.
+7. [Guide d’utilisation et test manuel](GUIDE_UTILISATION.md) — comment garder la main et vérifier le modèle sans coût additionnel.
 
 ## Principes directeurs
 
