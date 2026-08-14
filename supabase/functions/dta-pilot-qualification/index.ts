@@ -215,8 +215,8 @@ async function dashboard(db: SupabaseClient) {
       .order("created_at", { ascending: false })
       .limit(50),
     db.from("battery_physical_labels")
-      .select("id,battery_id,label_code,observed_station_id,observed_slot_num,observed_at,verification_state,assigned_at")
-      .eq("verification_state", "operator_confirmed")
+      .select("id,battery_id,label_code,physical_description,observed_station_id,observed_slot_num,observed_at,verification_state,assigned_at")
+      .in("verification_state", ["planned", "operator_confirmed"])
       .order("assigned_at", { ascending: false }),
   ]);
   if (station.error) throw station.error;
@@ -278,6 +278,36 @@ Deno.serve(async (req) => {
 
     if (action === "status") return json({ ok: true, ...(await dashboard(db)) });
 
+    if (action === "reserve_physical_label") {
+      const labelCode = typeof body.labelCode === "string" ? body.labelCode.trim().toUpperCase() : "";
+      const physicalDescription = typeof body.physicalDescription === "string" ? body.physicalDescription.trim().slice(0, 240) : "";
+      if (!/^[A-Z0-9][A-Z0-9-]{1,31}$/.test(labelCode) || !physicalDescription) {
+        return json({ ok: false, error: "VALID_PLANNED_LABEL_REQUIRED" }, 400);
+      }
+      const { data: existing, error: existingError } = await db.from("battery_physical_labels")
+        .select("id,verification_state")
+        .eq("label_code", labelCode)
+        .in("verification_state", ["planned", "operator_confirmed"])
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (existing) return json({ ok: false, error: "PHYSICAL_LABEL_ALREADY_EXISTS" }, 409);
+      const { error: insertError } = await db.from("battery_physical_labels").insert({
+        label_code: labelCode,
+        physical_description: physicalDescription,
+        observed_at: new Date().toISOString(),
+        verification_state: "planned",
+        assigned_by: actor,
+      });
+      if (insertError) throw insertError;
+      await auditLog(db, {
+        actor,
+        action: "battery.physical_label.reserved",
+        target: labelCode,
+        data: { physical_description: physicalDescription },
+      });
+      return json({ ok: true, ...(await dashboard(db)) });
+    }
+
     if (action === "assign_physical_label") {
       const batteryId = typeof body.batteryId === "string" ? body.batteryId.trim() : "";
       const labelCode = typeof body.labelCode === "string" ? body.labelCode.trim().toUpperCase() : "";
@@ -298,11 +328,11 @@ Deno.serve(async (req) => {
         return json({ ok: false, error: "BATTERY_MUST_BE_DETECTED_IN_DTA21269" }, 409);
       }
 
-      const [{ data: labelInUse, error: labelInUseError }, { data: batteryLabel, error: batteryLabelError }] = await Promise.all([
+      const [{ data: labelRecord, error: labelRecordError }, { data: batteryLabel, error: batteryLabelError }] = await Promise.all([
         db.from("battery_physical_labels")
-          .select("id,battery_id,label_code")
+          .select("id,battery_id,label_code,verification_state")
           .eq("label_code", labelCode)
-          .eq("verification_state", "operator_confirmed")
+          .in("verification_state", ["planned", "operator_confirmed"])
           .maybeSingle(),
         db.from("battery_physical_labels")
           .select("id,battery_id,label_code")
@@ -310,17 +340,29 @@ Deno.serve(async (req) => {
           .eq("verification_state", "operator_confirmed")
           .maybeSingle(),
       ]);
-      if (labelInUseError) throw labelInUseError;
+      if (labelRecordError) throw labelRecordError;
       if (batteryLabelError) throw batteryLabelError;
-      if (labelInUse && labelInUse.battery_id !== batteryId) {
+      if (labelRecord?.verification_state === "operator_confirmed" && labelRecord.battery_id !== batteryId) {
         return json({ ok: false, error: "PHYSICAL_LABEL_ALREADY_ASSIGNED" }, 409);
       }
       if (batteryLabel && batteryLabel.label_code !== labelCode) {
         return json({ ok: false, error: "BATTERY_ALREADY_HAS_PHYSICAL_LABEL" }, 409);
       }
 
-      if (!labelInUse && !batteryLabel) {
-        const observedAt = typeof battery.updated_at === "string" ? battery.updated_at : new Date().toISOString();
+      const observedAt = typeof battery.updated_at === "string" ? battery.updated_at : new Date().toISOString();
+      if (labelRecord?.verification_state === "planned" && !batteryLabel) {
+        const { error: confirmError } = await db.from("battery_physical_labels").update({
+          battery_id: batteryId,
+          observed_station_id: DTA_PILOT_STATION_ID,
+          observed_slot_num: battery.slot_num,
+          observed_at: observedAt,
+          verification_state: "operator_confirmed",
+          notes: notes || null,
+          assigned_by: actor,
+          assigned_at: new Date().toISOString(),
+        }).eq("id", labelRecord.id).eq("verification_state", "planned");
+        if (confirmError) throw confirmError;
+      } else if (!labelRecord && !batteryLabel) {
         const { error: insertError } = await db.from("battery_physical_labels").insert({
           battery_id: batteryId,
           label_code: labelCode,
@@ -331,6 +373,9 @@ Deno.serve(async (req) => {
           assigned_by: actor,
         });
         if (insertError) throw insertError;
+      }
+
+      if (!batteryLabel && (labelRecord?.verification_state === "planned" || !labelRecord)) {
         const { error: observationError } = await db.from("battery_observations").insert({
           battery_id: batteryId,
           station_id: DTA_PILOT_STATION_ID,

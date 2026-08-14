@@ -62,8 +62,9 @@ type RunRow = {
 
 type PhysicalLabel = {
   id: string;
-  battery_id: string;
+  battery_id: string | null;
   label_code: string;
+  physical_description: string | null;
   observed_station_id: string | null;
   observed_slot_num: number | null;
   observed_at: string;
@@ -138,6 +139,8 @@ export default function AdminBatteryQualification() {
   const [selectedBatteryId, setSelectedBatteryId] = useState("");
   const [physicalLabelCode, setPhysicalLabelCode] = useState("");
   const [physicalLabelNotes, setPhysicalLabelNotes] = useState("");
+  const [plannedLabelCode, setPlannedLabelCode] = useState("");
+  const [plannedLabelDescription, setPlannedLabelDescription] = useState("");
   const [method, setMethod] = useState("label_verification");
   const [modelCode, setModelCode] = useState("");
   const [ratedCapacityMah, setRatedCapacityMah] = useState("");
@@ -241,12 +244,25 @@ export default function AdminBatteryQualification() {
     }
   };
 
+  const reservePhysicalLabel = async () => {
+    const data = await invoke("reserve_physical_label", {
+      labelCode: plannedLabelCode,
+      physicalDescription: plannedLabelDescription,
+    });
+    if (data?.ok) {
+      setPlannedLabelCode("");
+      setPlannedLabelDescription("");
+      toast.success("Étiquette préparée et enregistrée.");
+    }
+  };
+
   if (!dashboard) {
     return <div className="grid min-h-64 place-items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
   const { station, campaign, guards, batteries, runs } = dashboard;
   const labelByBatteryId = new Map((dashboard.physicalLabels ?? []).map((label) => [label.battery_id, label]));
+  const plannedLabels = (dashboard.physicalLabels ?? []).filter((label) => label.verification_state === "planned");
   const detectedBatteries = batteries.filter((battery) => (
     battery.station_id === "DTA21269" && battery.slot_num != null && battery.status === "in_station"
   ));
@@ -319,6 +335,21 @@ export default function AdminBatteryQualification() {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+      </section>
+
+      <section className="glass liquid-border space-y-4 rounded-2xl p-6">
+        <div>
+          <h2 className="font-display text-xl font-bold">Préparer une étiquette avant de la poser</h2>
+          <p className="text-sm text-muted-foreground">
+            Créez maintenant la fiche de votre autocollant avec un repère visuel. Elle restera « préparée » tant que la borne n’aura pas détecté la batterie exacte. Elle ne sera donc jamais confondue avec un identifiant fournisseur.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_2fr_auto]">
+          <label className="space-y-1 text-sm"><span>Code à imprimer</span><Input value={plannedLabelCode} onChange={(event) => setPlannedLabelCode(event.target.value.toUpperCase())} placeholder="CH-PB-001" maxLength={32} /></label>
+          <label className="space-y-1 text-sm"><span>Repère physique</span><Input value={plannedLabelDescription} onChange={(event) => setPlannedLabelDescription(event.target.value)} placeholder="Ex. batterie marquée CHARGEURS.CH, photo 1" maxLength={240} /></label>
+          <div className="flex items-end"><Button onClick={reservePhysicalLabel} disabled={busy !== null || !plannedLabelCode.trim() || !plannedLabelDescription.trim()}>Préparer</Button></div>
+        </div>
+        {plannedLabels.length > 0 && <div className="rounded-xl border border-border p-4"><p className="mb-2 text-sm font-semibold">Étiquettes préparées — identité fournisseur non vérifiée</p><div className="space-y-2">{plannedLabels.map((label) => <div key={label.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm"><span className="font-mono font-semibold">{label.label_code}</span><span className="text-muted-foreground">{label.physical_description ?? "sans repère"}</span></div>)}</div></div>}
       </section>
 
       <section className="glass liquid-border space-y-4 rounded-2xl p-6">
