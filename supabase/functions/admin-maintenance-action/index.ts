@@ -11,6 +11,9 @@ import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
+  let auditActionType: string | null = null;
+  let auditStationId: string | null = null;
+  let auditSlotNum: number | null = null;
 
   const adminId = await requireAdmin(req, db);
   if (!adminId) {
@@ -20,6 +23,9 @@ Deno.serve(async (req) => {
 
   try {
     const { actionType, stationId, slotNum, eventPushUrl, language, batteryId, permitId } = await req.json();
+    auditActionType = typeof actionType === "string" ? actionType : null;
+    auditStationId = typeof stationId === "string" ? stationId : null;
+    auditSlotNum = Number.isInteger(Number(slotNum)) ? Number(slotNum) : null;
 
     // Real backend health probe (no secrets exposed, only booleans).
     if (actionType === "health_check") {
@@ -229,7 +235,12 @@ Deno.serve(async (req) => {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
+    const error = String(e);
+    await logApi(db, {
+      service: "chargenow", endpoint: "maintenance:unhandled", method: "POST", status_code: 500,
+      request: { actionType: auditActionType, stationId: auditStationId, slotNum: auditSlotNum }, error,
+    });
+    return new Response(JSON.stringify({ ok: false, error: "MAINTENANCE_ACTION_FAILED", detail: error }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
