@@ -25,6 +25,11 @@ public final class NativeBridge {
         );
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
+
+        // Install the physical recovery gesture before optional payment-reader
+        // startup. A degraded reader must never remove the local operator path.
+        OperatorAccessGate.install(activity);
+
         ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
         if (BuildConfig.STRIPE_TERMINAL_SIMULATED_TEST_ENABLED) {
             this.terminalRuntime = null;
@@ -35,9 +40,6 @@ public final class NativeBridge {
             this.terminalRuntime = application.terminalRuntime(config);
             this.terminalRuntime.ensureStarted();
         }
-        // Native overlay, above the WebView and Advertising. It remains usable
-        // even when the browser DOM/header is obscured by a degraded kiosk state.
-        OperatorAccessGate.install(activity);
     }
 
     @JavascriptInterface
@@ -122,8 +124,8 @@ public final class NativeBridge {
     }
 
     /**
-     * Legacy DOM five-tap fallback now reaches the same remote-verified native
-     * operator gate. Browser-side code can no longer clear the secure binding.
+     * Legacy DOM five-tap fallback now reaches the same native PIN gate.
+     * Browser-side code can no longer clear the secure binding.
      */
     @JavascriptInterface
     public void requestReprovisioning() {
