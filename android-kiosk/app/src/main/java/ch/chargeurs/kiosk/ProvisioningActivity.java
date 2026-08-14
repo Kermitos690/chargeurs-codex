@@ -47,6 +47,63 @@ public final class ProvisioningActivity extends Activity {
         KioskVisuals.applyKioskWindow(this);
         setContentView(buildView());
         checkSecureStorageBeforeEnrollment();
+        installLockedProvisioningCover();
+        OperatorAccessGate.install(this);
+    }
+
+    /**
+     * A genuinely unpaired tablet must not expose the enrollment keypad to a
+     * passer-by. Keep the legacy provisioning implementation mounted underneath
+     * for rollback compatibility, but cover it with a neutral public-safe shell.
+     * The native five-tap corner gate is added above this cover and opens the
+     * dedicated OperatorMaintenanceActivity after local PIN verification.
+     */
+    private void installLockedProvisioningCover() {
+        FrameLayout cover = new FrameLayout(this);
+        cover.setClickable(true);
+        cover.setFocusable(true);
+        cover.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        cover.addView(new KioskAmbientBackground(this), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.CENTER);
+        panel.setPadding(dp(34), dp(30), dp(34), dp(30));
+        panel.setBackground(KioskVisuals.glassPanel(dp(30)));
+
+        TextView brand = KioskVisuals.brandText(this, 28);
+        brand.setGravity(Gravity.CENTER);
+        panel.addView(brand, matchWrap(0, dp(22)));
+
+        TextView title = text("Borne en attente de configuration", 30, KioskVisuals.WHITE);
+        title.setGravity(Gravity.CENTER);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        panel.addView(title, matchWrap(0, dp(14)));
+
+        TextView body = text(
+            "Cette tablette doit être configurée par un opérateur Chargeurs.ch avant de pouvoir proposer la location.",
+            16,
+            KioskVisuals.MUTED
+        );
+        body.setGravity(Gravity.CENTER);
+        panel.addView(body, matchWrap(0, 0));
+
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
+            Math.min(dp(760), getResources().getDisplayMetrics().widthPixels - dp(64)),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        panelParams.gravity = Gravity.CENTER;
+        panelParams.setMargins(dp(24), dp(24), dp(24), dp(24));
+        cover.addView(panel, panelParams);
+
+        addContentView(cover, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        KioskVisuals.fadeIn(panel);
     }
 
     private FrameLayout buildView() {
