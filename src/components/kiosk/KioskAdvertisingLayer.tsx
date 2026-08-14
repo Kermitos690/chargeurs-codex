@@ -129,7 +129,7 @@ async function reportPlayback(
   }
 }
 
-function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string, playlistVersion?: string) {
+export function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string, playlistVersion?: string) {
   const [index, setIndex] = useState(0);
   const [epoch, setEpoch] = useState(0);
   const [blockedKeys, setBlockedKeys] = useState<Set<string>>(() => new Set());
@@ -192,12 +192,7 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     if (!active || !current || startedRef.current) return;
     startedRef.current = true;
     startedAtRef.current = Date.now();
-
-    if (current.item.mediaType === "image") {
-      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
-      timerRef.current = window.setTimeout(complete, seconds * 1000);
-    }
-  }, [active, complete, current]);
+  }, [active, current]);
 
   useEffect(() => {
     if (!active || !current) return;
@@ -206,6 +201,15 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     startedAtRef.current = 0;
     statusRef.current = "interrupted";
     errorCodeRef.current = null;
+
+    // Rotation must not depend on an image load event. Some Android WebViews can
+    // restore a cached image without reliably delivering React's onLoad after a
+    // remount; tying the timer to onLoad leaves the screensaver frozen forever.
+    // onLoad remains useful only to qualify the impression as actually started.
+    if (current.item.mediaType === "image") {
+      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
+      timerRef.current = window.setTimeout(complete, seconds * 1000);
+    }
 
     return () => {
       clearTimer();
@@ -221,7 +225,7 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
         errorCodeRef.current,
       );
     };
-  }, [active, clearTimer, current, epoch, mode, playlistVersion, stationId]);
+  }, [active, clearTimer, complete, current, epoch, mode, playlistVersion, stationId]);
 
   useEffect(() => {
     if (!active || availableEntries.length < 2) return;
