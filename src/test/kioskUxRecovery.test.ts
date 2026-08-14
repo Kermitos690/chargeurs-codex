@@ -90,13 +90,13 @@ describe("return presentation stage detection", () => {
 
 describe("journey progress contract", () => {
   it.each([
-    ["selection", 1],
     ["pricing", 1],
-    ["starting", 2],
-    ["payment", 2],
+    ["selection", 2],
+    ["starting", 3],
+    ["payment", 3],
     ["release", 3],
-    ["active", 4],
-    ["return", 5],
+    ["active", 3],
+    ["return", 4],
   ] satisfies Array<[KioskScene, number]>)('maps Express %s to step %i', (scene, active) => {
     expect(buildKioskProgressConfig(scene, "express", "fr").active).toBe(active);
   });
@@ -104,13 +104,13 @@ describe("journey progress contract", () => {
   it.each([
     ["member", 1],
     ["connected", 1],
+    ["pricing", 1],
     ["selection", 2],
-    ["pricing", 2],
     ["starting", 3],
     ["payment", 3],
-    ["release", 4],
-    ["active", 4],
-    ["return", 5],
+    ["release", 3],
+    ["active", 3],
+    ["return", 4],
   ] satisfies Array<[KioskScene, number]>)('maps Client %s to step %i', (scene, active) => {
     expect(buildKioskProgressConfig(scene, "client", "fr").active).toBe(active);
   });
@@ -118,7 +118,7 @@ describe("journey progress contract", () => {
   it.each(["expired", "error", "support"] satisfies KioskScene[])(
     "keeps payment position visible through %s",
     (transient) => {
-      expect(buildKioskProgressConfig(transient, "express", "fr", "payment").active).toBe(2);
+      expect(buildKioskProgressConfig(transient, "express", "fr", "payment").active).toBe(3);
       expect(buildKioskProgressConfig(transient, "client", "fr", "payment").active).toBe(3);
       expect(shouldShowKioskProgress(transient, "payment")).toBe(true);
     },
@@ -131,17 +131,18 @@ describe("journey progress contract", () => {
     },
   );
 
-  it("never shows progress on home or loading", () => {
+  it("does not show transactional progress before a real journey exists", () => {
     expect(shouldShowKioskProgress("home", null)).toBe(false);
     expect(shouldShowKioskProgress("loading", null)).toBe(false);
+    expect(shouldShowKioskProgress("member", null)).toBe(false);
   });
 
-  it("keeps Express and Client color/journey identity independent", () => {
+  it("keeps one canonical milestone vocabulary while preserving journey identity", () => {
     const express = buildKioskProgressConfig("release", "express", "fr");
     const client = buildKioskProgressConfig("release", "client", "fr");
     expect(express.client).toBe(false);
     expect(client.client).toBe(true);
-    expect(express.labels).toEqual(["CHOIX", "PAIEMENT", "DÉPART", "LOCATION", "RETOUR"]);
-    expect(client.labels).toEqual(["CONNEXION", "SÉLECTION", "PAIEMENT", "RETIRER", "RETOUR"]);
+    expect(express.labels).toEqual(["TARIF", "BATTERIE", "PAIEMENT", "RETOUR"]);
+    expect(client.labels).toEqual(["TARIF", "BATTERIE", "PAIEMENT", "RETOUR"]);
   });
 });
