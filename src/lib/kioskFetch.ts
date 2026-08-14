@@ -2,13 +2,16 @@ const KIOSK_TOKEN_KEY = "kiosk_token";
 const KIOSK_SYNC_FUNCTION_PATH = "/functions/v1/sync-cabinet-status";
 const KIOSK_QUOTE_RPC_PATH = "/rest/v1/rpc/kiosk_quote";
 
-const EXPECTED_KIOSK_QUOTE = {
+const PREMIUM_GUEST = {
   currency: "CHF",
-  periodMinutes: 30,
-  firstPeriodCents: 75,
-  depositCents: 3_000,
-  dailyCapCents: 1_800,
-  nonReturnCents: 9_900,
+  depositCents: 0,
+  totalCapCents: 2_990,
+  tiers: [
+    { upperMinutes: 30, totalCents: 190 },
+    { upperMinutes: 120, totalCents: 390 },
+    { upperMinutes: 360, totalCents: 590 },
+    { upperMinutes: 1_440, totalCents: 790 },
+  ],
 } as const;
 
 const KIOSK_TOKEN_PATTERN = /^kt_[A-Za-z0-9_-]{24,128}$/;
@@ -74,19 +77,43 @@ export function isKioskQuoteRequest(input: RequestInfo | URL): boolean {
   return requestPath(input).endsWith(KIOSK_QUOTE_RPC_PATH);
 }
 
+function isPremiumGuestQuote(quote: Record<string, unknown>): boolean {
+  if (String(quote.customer_segment ?? "guest") !== "guest") return false;
+  if (quote.tiered !== true) return false;
+  if (String(quote.currency ?? "").toUpperCase() !== PREMIUM_GUEST.currency) return false;
+  if (Number(quote.deposit_cents) !== PREMIUM_GUEST.depositCents) return false;
+  if (Number(quote.total_cap_cents) !== PREMIUM_GUEST.totalCapCents) return false;
+  if (Number(quote.final_cents) < PREMIUM_GUEST.tiers[0].totalCents || Number(quote.final_cents) > PREMIUM_GUEST.totalCapCents) return false;
+
+  const tiers = Array.isArray(quote.tiers) ? quote.tiers : [];
+  if (tiers.length !== PREMIUM_GUEST.tiers.length) return false;
+  return PREMIUM_GUEST.tiers.every((expected, index) => {
+    const actual = tiers[index];
+    return Boolean(actual && typeof actual === "object")
+      && Number((actual as Record<string, unknown>).upper_minutes) === expected.upperMinutes
+      && Number((actual as Record<string, unknown>).total_cents) === expected.totalCents;
+  });
+}
+
+function isConfiguredMemberQuote(quote: Record<string, unknown>): boolean {
+  if (String(quote.customer_segment ?? "") !== "member") return false;
+  if (String(quote.currency ?? "").toUpperCase() !== "CHF") return false;
+  const finalCents = Number(quote.final_cents);
+  const periodMinutes = Number(quote.period_minutes);
+  const periodCents = Number(quote.price_per_period_cents);
+  const maxCents = Number(quote.max_amount_cents);
+  return Number.isFinite(finalCents) && finalCents > 0
+    && Number.isFinite(periodMinutes) && periodMinutes > 0
+    && Number.isFinite(periodCents) && periodCents > 0
+    && Number.isFinite(maxCents) && maxCents >= finalCents;
+}
+
 export function isSafeKioskQuote(value: unknown): boolean {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw || typeof raw !== "object") return false;
   const quote = raw as Record<string, unknown>;
   if (quote.error) return false;
-  return String(quote.currency ?? "").toUpperCase() === EXPECTED_KIOSK_QUOTE.currency
-    && Number(quote.period_minutes) === EXPECTED_KIOSK_QUOTE.periodMinutes
-    && Number(quote.duration_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
-    && Number(quote.price_per_period_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
-    && Number(quote.final_cents) === EXPECTED_KIOSK_QUOTE.firstPeriodCents
-    && Number(quote.deposit_cents) === EXPECTED_KIOSK_QUOTE.depositCents
-    && Number(quote.daily_cap_cents) === EXPECTED_KIOSK_QUOTE.dailyCapCents
-    && Number(quote.unreturned_fee_cents) === EXPECTED_KIOSK_QUOTE.nonReturnCents;
+  return isPremiumGuestQuote(quote) || isConfiguredMemberQuote(quote);
 }
 
 export function buildKioskAwareRequestInit(
