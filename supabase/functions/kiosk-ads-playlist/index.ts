@@ -24,12 +24,21 @@ Deno.serve(async (req) => {
     const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) return reply({ ok: false, error: "INVALID_STATION" }, 400);
 
-    const db = adminClient();
-    const kiosk = await verifyKioskDevice(req, db, stationId);
-    if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
-
     const action = typeof body.action === "string" ? body.action : "playlist";
+    if (action !== "playlist" && action !== "impression") {
+      return reply({ ok: false, error: "UNKNOWN_ACTION" }, 400);
+    }
+
+    const db = adminClient();
+
+    // Paid advertising availability is deliberately independent from the rental
+    // credential. A known station may read only its already-active/scheduled,
+    // station-targeted public media projection even when rental auth is missing.
+    // Mutating/billing-grade impression telemetry remains station-authenticated.
     if (action === "impression") {
+      const kiosk = await verifyKioskDevice(req, db, stationId);
+      if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
+
       const campaignId = typeof body.campaignId === "string" ? body.campaignId : "";
       const assetId = typeof body.assetId === "string" ? body.assetId : "";
       const displayMode = body.displayMode === "screensaver" ? "screensaver" : body.displayMode === "split" ? "split" : "";
@@ -57,7 +66,7 @@ Deno.serve(async (req) => {
 
       // Billing-grade definition: a media impression exists only after the browser
       // confirmed playback/rendering started and the media remained visible >= 1s.
-      // Failed loads, scheduled items and zero-duration attempts are never impressions.
+      // Failed loads, scheduled entries and zero-duration attempts are never impressions.
       if (!started || durationMs < IMPRESSION_THRESHOLD_MS) {
         return reply({
           ok: true,
@@ -84,7 +93,14 @@ Deno.serve(async (req) => {
       return reply({ ok: true, recorded: true, thresholdMs: IMPRESSION_THRESHOLD_MS });
     }
 
-    if (action !== "playlist") return reply({ ok: false, error: "UNKNOWN_ACTION" }, 400);
+    // The public read path is station-scoped and read-only. Unknown station IDs
+    // do not become an oracle for campaign inventory.
+    const { data: station, error: stationError } = await db.from("stations")
+      .select("station_id")
+      .eq("station_id", stationId)
+      .maybeSingle();
+    if (stationError) throw stationError;
+    if (!station) return reply({ ok: false, error: "STATION_NOT_FOUND" }, 404);
 
     const nowMs = Date.now();
     const { data: campaigns, error: campaignError } = await db.from("advertising_campaigns")
