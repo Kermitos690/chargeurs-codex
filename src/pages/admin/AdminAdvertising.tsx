@@ -21,6 +21,7 @@ type Campaign = {
   ends_at: string | null;
   idle_after_seconds: number;
   split_ratio: number | string;
+  qr_url: string | null;
   priority: number;
   created_at: string;
   updated_at: string;
@@ -78,6 +79,7 @@ type EditState = {
   endsAt: string;
   idleAfterSeconds: number;
   splitPercent: number;
+  qrUrl: string;
   priority: number;
   stationIds: string[];
   playlist: Array<{ assetId: string; imageDurationSeconds: number; enabled: boolean }>;
@@ -102,10 +104,24 @@ function toIso(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function validHttpsUrl(value: string): boolean {
+  if (!value.trim()) return true;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 function bytesLabel(value: number | null): string {
   if (!value) return "—";
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} Mo`;
   return `${Math.round(value / 1024)} Ko`;
+}
+
+function dimensionsLabel(asset: Asset): string {
+  return asset.width && asset.height ? `${asset.width}×${asset.height}` : "dimensions inconnues";
 }
 
 function statusLabel(status: CampaignStatus) {
@@ -121,7 +137,8 @@ function createEdit(campaign: Campaign, items: CampaignItem[], targets: Campaign
     startsAt: toLocalInput(campaign.starts_at),
     endsAt: toLocalInput(campaign.ends_at),
     idleAfterSeconds: campaign.idle_after_seconds ?? 45,
-    splitPercent: Math.round(Number(campaign.split_ratio ?? .35) * 100),
+    splitPercent: Math.max(32, Math.round(Number(campaign.split_ratio ?? .35) * 100)),
+    qrUrl: campaign.qr_url ?? "",
     priority: campaign.priority ?? 100,
     stationIds: targets.filter((target) => target.campaign_id === campaign.id).map((target) => target.station_id),
     playlist: items.filter((item) => item.campaign_id === campaign.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
@@ -235,6 +252,7 @@ export default function AdminAdvertising() {
     if (!selected || !edit || !canWrite) return;
     if (!edit.name.trim()) { toast.error("Le nom de campagne est obligatoire."); return; }
     if (!edit.displayModes.length) { toast.error("Choisissez au moins un mode d’affichage."); return; }
+    if (!validHttpsUrl(edit.qrUrl)) { toast.error("Le lien QR doit être une adresse HTTPS valide."); return; }
     const startsAt = toIso(edit.startsAt);
     const endsAt = toIso(edit.endsAt);
     if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) { toast.error("La date de fin doit être après le début."); return; }
@@ -243,7 +261,8 @@ export default function AdminAdvertising() {
       await invoke({
         action: "update_campaign", campaignId: selected.id, name: edit.name.trim(), status: edit.status,
         displayModes: edit.displayModes, allStations: edit.allStations, startsAt, endsAt,
-        idleAfterSeconds: edit.idleAfterSeconds, splitRatio: edit.splitPercent / 100, priority: edit.priority,
+        idleAfterSeconds: edit.idleAfterSeconds, splitRatio: edit.splitPercent / 100,
+        qrUrl: edit.qrUrl.trim() || null, priority: edit.priority,
       });
       await invoke({
         action: "set_campaign_items", campaignId: selected.id,
@@ -296,7 +315,7 @@ export default function AdminAdvertising() {
         width: meta.width, height: meta.height, durationSeconds: meta.durationSeconds,
       });
       await load(true);
-      toast.success("Média ajouté à la bibliothèque.");
+      toast.success("Média ajouté. Le rendu borne adaptera automatiquement son cadrage à l’accueil.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload impossible.");
     } finally {
@@ -340,7 +359,7 @@ export default function AdminAdvertising() {
         <div>
           <div className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-[.16em] text-primary"><Megaphone className="h-4 w-4" /> Chargeurs Ads</div>
           <h1 className="font-display text-3xl font-bold">Publicités sur les bornes</h1>
-          <p className="mt-2 max-w-3xl text-muted-foreground">Photos et vidéos en défilement, écran partagé et écran de veille plein écran. Le parcours de location reste toujours prioritaire.</p>
+          <p className="mt-2 max-w-3xl text-muted-foreground">Photos et vidéos en défilement, accueil intégré et écran de veille plein écran. Le parcours de location reste toujours prioritaire.</p>
         </div>
         <Button variant="ghost" className="gap-2" onClick={() => void load(true)} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Actualiser
@@ -369,8 +388,9 @@ export default function AdminAdvertising() {
                 <button key={campaign.id} type="button" onClick={() => setSelectedId(campaign.id)} className={`w-full rounded-xl border p-3 text-left transition ${selectedId === campaign.id ? "border-primary/60 bg-primary/10" : "border-border/70 bg-muted/20 hover:bg-muted/40"}`}>
                   <div className="flex items-start justify-between gap-2"><strong className="line-clamp-2 text-sm">{campaign.name}</strong><Status status={campaign.status} /></div>
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                    {campaign.display_modes.includes("split") && <span className="rounded-full bg-muted px-2 py-1">Split</span>}
+                    {campaign.display_modes.includes("split") && <span className="rounded-full bg-muted px-2 py-1">Accueil</span>}
                     {campaign.display_modes.includes("screensaver") && <span className="rounded-full bg-muted px-2 py-1">Veille</span>}
+                    {campaign.qr_url && <span className="rounded-full bg-muted px-2 py-1">QR</span>}
                     <span className="rounded-full bg-muted px-2 py-1">{campaign.all_stations ? "Toutes bornes" : "Ciblée"}</span>
                   </div>
                 </button>
@@ -397,22 +417,23 @@ export default function AdminAdvertising() {
                   <Field label="État"><select value={edit.status} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, status: event.target.value as CampaignStatus })} className="ad-input"><option value="draft">Brouillon</option><option value="scheduled">Planifiée</option><option value="active">Active</option><option value="paused">En pause</option><option value="archived">Archivée</option></select></Field>
                   <Field label="Début (facultatif)"><input type="datetime-local" value={edit.startsAt} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, startsAt: event.target.value })} className="ad-input" /></Field>
                   <Field label="Fin (facultatif)"><input type="datetime-local" value={edit.endsAt} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, endsAt: event.target.value })} className="ad-input" /></Field>
+                  <div className="lg:col-span-2"><Field label="Lien du QR publicitaire (facultatif)"><input type="url" inputMode="url" value={edit.qrUrl} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, qrUrl: event.target.value })} placeholder="https://partenaire.ch/offre" className="ad-input" /></Field><p className="mt-2 text-xs text-muted-foreground">Le QR apparaît automatiquement sur l’accueil et en plein écran pour cette campagne. HTTPS uniquement.</p></div>
                 </div>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <ToggleCard title="Écran partagé" body="La publicité défile à côté de l’accueil Chargeurs.ch." active={edit.displayModes.includes("split")} disabled={!canWrite} onChange={(active) => setEdit({ ...edit, displayModes: active ? [...edit.displayModes.filter((mode) => mode !== "split"), "split"] : edit.displayModes.filter((mode) => mode !== "split") })} icon={MonitorPlay} />
+                  <ToggleCard title="Accueil intégré" body="La publicité devient le rail droit de l’accueil au lieu d’une fenêtre posée dessus." active={edit.displayModes.includes("split")} disabled={!canWrite} onChange={(active) => setEdit({ ...edit, displayModes: active ? [...edit.displayModes.filter((mode) => mode !== "split"), "split"] : edit.displayModes.filter((mode) => mode !== "split") })} icon={MonitorPlay} />
                   <ToggleCard title="Écran de veille" body="Après inactivité, la publicité passe en plein écran jusqu’au prochain toucher." active={edit.displayModes.includes("screensaver")} disabled={!canWrite} onChange={(active) => setEdit({ ...edit, displayModes: active ? [...edit.displayModes.filter((mode) => mode !== "screensaver"), "screensaver"] : edit.displayModes.filter((mode) => mode !== "screensaver") })} icon={Clock3} />
                 </div>
 
                 <div className="mt-5 grid gap-5 md:grid-cols-3">
                   <Field label={`Veille après ${edit.idleAfterSeconds} s`}><input type="range" min="10" max="180" step="5" value={edit.idleAfterSeconds} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, idleAfterSeconds: Number(event.target.value) })} className="w-full" /></Field>
-                  <Field label={`Largeur publicité ${edit.splitPercent}%`}><input type="range" min="20" max="50" step="1" value={edit.splitPercent} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, splitPercent: Number(event.target.value) })} className="w-full" /></Field>
+                  <Field label={`Largeur publicité ${edit.splitPercent}%`}><input type="range" min="32" max="46" step="1" value={edit.splitPercent} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, splitPercent: Number(event.target.value) })} className="w-full" /></Field>
                   <Field label="Priorité"><input type="number" min="0" max="10000" value={edit.priority} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, priority: Number(event.target.value) })} className="ad-input" /></Field>
                 </div>
               </section>
 
               <section className="glass liquid-border rounded-2xl p-5 sm:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-xl font-bold">Playlist</h2><p className="mt-1 text-sm text-muted-foreground">L’ordre ci-dessous est exactement l’ordre de diffusion.</p></div><span className="rounded-full bg-muted px-3 py-1 text-xs font-bold">{edit.playlist.length} média{edit.playlist.length > 1 ? "s" : ""}</span></div>
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-xl font-bold">Playlist</h2><p className="mt-1 text-sm text-muted-foreground">L’ordre ci-dessous est exactement l’ordre de diffusion. Les visuels paysage sont adaptés automatiquement au rail d’accueil.</p></div><span className="rounded-full bg-muted px-3 py-1 text-xs font-bold">{edit.playlist.length} média{edit.playlist.length > 1 ? "s" : ""}</span></div>
                 <div className="mt-4 space-y-2">
                   {edit.playlist.map((row, index) => {
                     const asset = assets.find((candidate) => candidate.id === row.assetId);
@@ -420,7 +441,7 @@ export default function AdminAdvertising() {
                     return (
                       <div key={row.assetId} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-background/35 p-3">
                         <Preview asset={asset} compact />
-                        <div className="min-w-0 flex-1"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"}</span><span>#{index + 1}</span></div></div>
+                        <div className="min-w-0 flex-1"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"}</span><span>{dimensionsLabel(asset)}</span><span>#{index + 1}</span></div></div>
                         {asset.media_type === "image" && <label className="flex items-center gap-2 text-xs text-muted-foreground">Durée <input type="number" min="2" max="300" value={row.imageDurationSeconds} disabled={!canWrite} onChange={(event) => { const playlist = [...edit.playlist]; playlist[index] = { ...row, imageDurationSeconds: Number(event.target.value) }; setEdit({ ...edit, playlist }); }} className="w-16 rounded-lg border border-border bg-background px-2 py-1.5 text-foreground" /> s</label>}
                         <div className="flex gap-1"><Button size="icon" variant="ghost" disabled={!canWrite || index === 0} onClick={() => movePlaylist(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite || index === edit.playlist.length - 1} onClick={() => movePlaylist(index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite} onClick={() => setEdit({ ...edit, playlist: edit.playlist.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 className="h-4 w-4" /></Button></div>
                       </div>
@@ -442,9 +463,9 @@ export default function AdminAdvertising() {
       </div>
 
       <section className="glass liquid-border rounded-2xl p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-display text-xl font-bold">Médiathèque</h2><p className="mt-1 text-sm text-muted-foreground">JPG, PNG, WebP, MP4 ou WebM · 100 Mo maximum par média.</p></div><div><input ref={fileInputRef} type="file" accept={ACCEPTED} className="hidden" onChange={(event) => void uploadFile(event.target.files?.[0] ?? null)} /><Button className="gap-2" disabled={!canWrite || uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Ajouter photo / vidéo</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-display text-xl font-bold">Médiathèque</h2><p className="mt-1 text-sm text-muted-foreground">JPG, PNG, WebP, MP4 ou WebM · 100 Mo maximum. Les images paysage sont automatiquement adaptées au format du rail sur la borne.</p></div><div><input ref={fileInputRef} type="file" accept={ACCEPTED} className="hidden" onChange={(event) => void uploadFile(event.target.files?.[0] ?? null)} /><Button className="gap-2" disabled={!canWrite || uploading} onClick={() => fileInputRef.current?.click()}>{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Ajouter photo / vidéo</Button></div></div>
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {assets.map((asset) => <div key={asset.id} className="overflow-hidden rounded-2xl border border-border bg-background/35"><Preview asset={asset} /><div className="p-3"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"} · {bytesLabel(asset.file_size_bytes)}</span><Button size="icon" variant="ghost" disabled={!canWrite} onClick={() => void deleteAsset(asset.id)} aria-label="Supprimer"><Trash2 className="h-4 w-4" /></Button></div></div></div>)}
+          {assets.map((asset) => <div key={asset.id} className="overflow-hidden rounded-2xl border border-border bg-background/35"><Preview asset={asset} /><div className="p-3"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"} · {dimensionsLabel(asset)} · {bytesLabel(asset.file_size_bytes)}</span><Button size="icon" variant="ghost" disabled={!canWrite} onClick={() => void deleteAsset(asset.id)} aria-label="Supprimer"><Trash2 className="h-4 w-4" /></Button></div></div></div>)}
           {!loading && assets.length === 0 && <button type="button" onClick={() => canWrite && fileInputRef.current?.click()} className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-border text-muted-foreground"><span className="flex flex-col items-center gap-2"><Upload className="h-7 w-7" /><b>Ajouter le premier média</b></span></button>}
         </div>
       </section>
