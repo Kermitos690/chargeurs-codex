@@ -8,7 +8,22 @@ const headers = {
   "Access-Control-Expose-Headers": "x-correlation-id",
 };
 
+type Tier = { upper_minutes: number; total_cents: number };
+
+function normalizedTiers(snapshot: Record<string, unknown>): Tier[] {
+  if (!Array.isArray(snapshot.tiers)) return [];
+  return snapshot.tiers
+    .map((raw) => {
+      const row = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+      return { upper_minutes: Number(row.upper_minutes), total_cents: Number(row.total_cents) };
+    })
+    .filter((row) => Number.isInteger(row.upper_minutes) && row.upper_minutes > 0 && Number.isInteger(row.total_cents) && row.total_cents > 0)
+    .sort((a, b) => a.upper_minutes - b.upper_minutes);
+}
+
 function hourlyCents(snapshot: Record<string, unknown>): number | null {
+  // A tiered tariff has no truthful single CHF/hour representation.
+  if (snapshot.tiered === true) return null;
   const cents = Number(snapshot.price_per_period_cents);
   const minutes = Number(snapshot.period_minutes);
   if (!Number.isFinite(cents) || !Number.isFinite(minutes) || cents < 0 || minutes <= 0) return null;
@@ -49,18 +64,28 @@ Deno.serve(async (req) => {
         p_end: null,
         p_rental_state: "quote",
         p_return_state: "normal",
-        p_currency: station.currency ?? null,
+        // The resolved pricing profile owns its currency. Passing the legacy
+        // station currency here can incorrectly reject an otherwise valid quote.
+        p_currency: null,
       });
       if (error || !data) return null;
       const snapshot = data as Record<string, unknown>;
+      const tiers = normalizedTiers(snapshot);
       return {
         segment,
         currency: String(snapshot.currency ?? station.currency ?? "CHF"),
+        tiered: snapshot.tiered === true,
+        tiers,
+        starting_cents: Number(snapshot.final_cents ?? tiers[0]?.total_cents ?? 0),
         hourly_cents: hourlyCents(snapshot),
         period_minutes: Number(snapshot.period_minutes ?? 0),
         price_per_period_cents: Number(snapshot.price_per_period_cents ?? 0),
         daily_cap_cents: Number(snapshot.daily_cap_cents ?? 0),
+        total_cap_cents: Number(snapshot.total_cap_cents ?? 0),
+        unreturned_after_minutes: Number(snapshot.unreturned_after_minutes ?? 0),
+        unreturned_fee_cents: Number(snapshot.unreturned_fee_cents ?? 0),
         profile_name: String(snapshot.profile_name ?? ""),
+        pricing_rules_version: Number(snapshot.pricing_rules_version ?? 0),
       };
     };
 
