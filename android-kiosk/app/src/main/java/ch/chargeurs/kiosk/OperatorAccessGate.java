@@ -12,14 +12,13 @@ import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.net.SocketTimeoutException;
-import java.net.UnknownHostException;
 import java.util.WeakHashMap;
 
 /**
  * Native operator entry point intentionally placed above the WebView. It stays
- * reachable when the web UI, Ads overlay or kiosk authentication is degraded.
- * The PIN is verified remotely; no fixed PIN value exists in this APK.
+ * reachable when the web UI, Ads overlay, kiosk authentication or network is
+ * degraded. The fixed PIN is checked only by native code against a derived
+ * verifier; it grants no backend credential.
  */
 final class OperatorAccessGate {
     private static final Object LOCK = new Object();
@@ -85,7 +84,7 @@ final class OperatorAccessGate {
 
         TextView help = text(
             activity,
-            "Saisissez le code de maintenance. Cet accès ouvre uniquement les outils locaux de la borne.",
+            "Saisissez le code de maintenance. Cet accès ouvre uniquement les outils locaux de la borne et reste disponible hors ligne.",
             14,
             KioskVisuals.MUTED
         );
@@ -162,35 +161,32 @@ final class OperatorAccessGate {
         verify.setOnClickListener(view -> {
             if (pin.length() != 6) return;
             final String candidate = pin.toString();
+            pin.setLength(0);
             verify.setEnabled(false);
             cancel.setEnabled(false);
-            status.setText("Vérification sécurisée…");
+            status.setText("Vérification locale…");
             status.setTextColor(KioskVisuals.MUTED);
             new Thread(() -> {
-                try {
-                    OperatorUnlockClient.verify(
-                        BuildConfig.ENROLLMENT_URL,
-                        candidate,
-                        DeviceIdentity.getOrCreate(activity),
-                        BuildConfig.VERSION_NAME
-                    );
-                    activity.runOnUiThread(() -> {
-                        if (activity.isFinishing()) return;
+                OperatorPinVerifier.Result result = OperatorPinVerifier.verify(activity, candidate);
+                activity.runOnUiThread(() -> {
+                    if (activity.isFinishing() || !dialog.isShowing()) return;
+                    if (result == OperatorPinVerifier.Result.ACCEPTED) {
                         dialog.dismiss();
                         activity.startActivity(new Intent(activity, OperatorMaintenanceActivity.class));
-                    });
-                } catch (Exception error) {
-                    activity.runOnUiThread(() -> {
-                        if (activity.isFinishing() || !dialog.isShowing()) return;
-                        pin.setLength(0);
-                        updatePinDisplay(code, 0);
-                        verify.setEnabled(false);
-                        cancel.setEnabled(true);
-                        status.setText(unlockErrorMessage(error));
-                        status.setTextColor(KioskVisuals.WARNING);
-                    });
-                }
-            }, "chargeurs-operator-unlock").start();
+                        return;
+                    }
+                    updatePinDisplay(code, 0);
+                    verify.setEnabled(false);
+                    cancel.setEnabled(true);
+                    if (result == OperatorPinVerifier.Result.LOCKED) {
+                        long seconds = Math.max(1L, (OperatorPinVerifier.remainingLockoutMs(activity) + 999L) / 1000L);
+                        status.setText("Accès temporairement verrouillé après plusieurs essais (" + seconds + " s). ");
+                    } else {
+                        status.setText("Code opérateur incorrect.");
+                    }
+                    status.setTextColor(KioskVisuals.WARNING);
+                });
+            }, "chargeurs-operator-pin").start();
         });
 
         dialog.show();
@@ -202,17 +198,6 @@ final class OperatorAccessGate {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             );
         }
-    }
-
-    private static String unlockErrorMessage(Exception error) {
-        if (error instanceof UnknownHostException) return "Connexion Internet ou DNS indisponible.";
-        if (error instanceof SocketTimeoutException) return "Le serveur de sécurité ne répond pas à temps.";
-        String code = error.getMessage() == null ? "" : error.getMessage().trim();
-        if ("TOO_MANY_OPERATOR_ATTEMPTS".equals(code)) return "Trop de tentatives. Attendez avant de réessayer.";
-        if ("OPERATOR_ACCESS_NOT_CONFIGURED".equals(code) || "OPERATOR_ACCESS_UNAVAILABLE".equals(code)) {
-            return "Accès maintenance temporairement indisponible.";
-        }
-        return "Code opérateur incorrect.";
     }
 
     private static void updatePinDisplay(TextView view, int length) {
