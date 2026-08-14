@@ -8,10 +8,11 @@
   overflow: hidden;
   border: 1px solid rgba(165, 243, 252, .22);
   border-radius: 2rem;
-  background: rgba(2, 8, 23, .78);
+  background: #020817;
   box-shadow: 0 28px 90px rgba(0, 0, 0, .38), 0 0 50px rgba(34, 211, 238, .08);
   pointer-events: none;
   isolation: isolate;
+  contain: paint;
 }
 
 .kiosk-ad-split::after {
@@ -31,6 +32,10 @@
   object-fit: cover;
   object-position: center;
   background: #020817;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: opacity, transform;
 }
 
 .kiosk-ad-split-badge,
@@ -87,6 +92,9 @@
   background: #020817;
   outline: none;
   touch-action: manipulation;
+  isolation: isolate;
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .kiosk-ad-screensaver-shade {
