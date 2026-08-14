@@ -2,13 +2,8 @@ import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3Atmosphere } from "@/components/kiosk/KioskV3Atmosphere";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
-import { KioskV3CinematicDirector } from "@/components/kiosk/KioskV3CinematicDirector";
 import { KioskV3OwnedHome } from "@/components/kiosk/KioskV3OwnedHome";
 import { KioskV3JourneyChrome } from "@/components/kiosk/KioskV3JourneyChrome";
-import { KioskV3PricingRecovery } from "@/components/kiosk/KioskV3PricingRecovery";
-import { KioskV3TimeoutOwnershipGuard } from "@/components/kiosk/KioskV3TimeoutOwnershipGuard";
-import { KioskV3TouchFeedback } from "@/components/kiosk/KioskV3TouchFeedback";
-import { KioskAdvertisingLayer } from "@/components/kiosk/KioskAdvertisingLayer";
 import "./kiosk-production-cinematic.css";
 import "./kiosk-production-objects.css";
 import "./kiosk-production-scenes.css";
@@ -32,19 +27,22 @@ import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-atmosphere-canonical.css";
 
 /**
- * Production kiosk entry.
- * Business orchestration remains in the proven V2 gate/Kiosk state machine.
- * The visible Home is the cinematic Atmosphere composition (lightning sculpture
- * + 2.5D station) with one thin interactive adapter for the existing Express
- * and Client callbacks. The V2 Home stays mounted only as state/callback source
- * and never paints over the canonical Home.
+ * Canonical production kiosk entry.
  *
- * Cinematic, recovery and hardware presentation layers are presentation-only.
- * They never infer or own payment, rental, return, inventory or hardware state.
+ * There is exactly one presentation owner for each surface:
+ * - V2 owns the transactional state machine and journey screens.
+ * - OwnedHome owns the visible home while V2's home remains only the callback source.
+ * - JourneyChrome owns the single progress rail during a transaction.
+ * - Atmosphere is background-only and AuthGuard is security-only.
+ *
+ * Previous presentation observers/recovery/touch/advertising directors were
+ * intentionally removed from this root. They all inspected the same DOM and
+ * could paint concurrent controls above V2, which produced duplicated buttons,
+ * overlapping recovery cards and the appearance of two kiosk versions.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "atmosphere-canonical-1280x720";
+    document.documentElement.dataset.kioskVersion = "premium-single-owner-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
@@ -60,18 +58,13 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime">
+    <div className="kv3-runtime" data-presentation-owner="premium-single-owner">
       <KioskV3Atmosphere />
-      <KioskV3CinematicDirector />
       <div className="kv3-product-layer">
         <KioskPremiumGateV2 />
       </div>
       <KioskV3OwnedHome />
-      <KioskV3TimeoutOwnershipGuard />
       <KioskV3JourneyChrome />
-      <KioskV3PricingRecovery />
-      <KioskV3TouchFeedback />
-      <KioskAdvertisingLayer />
       <KioskV3AuthGuard />
     </div>
   );
