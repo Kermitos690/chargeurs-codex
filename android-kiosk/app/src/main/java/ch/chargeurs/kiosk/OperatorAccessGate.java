@@ -137,7 +137,7 @@ final class OperatorAccessGate {
         cancel.setAllCaps(false);
         cancel.setTextColor(KioskVisuals.WHITE);
         cancel.setBackground(KioskVisuals.secondaryButton(dp(activity, 22)));
-        actions.addView(cancel, weightedButton(1f, 0, dp(activity, 5)));
+        actions.addView(cancel, weightedButton(activity, 1f, 0, dp(activity, 5)));
 
         Button verify = new Button(activity);
         verify.setText("Vérifier");
@@ -146,7 +146,7 @@ final class OperatorAccessGate {
         verify.setBackground(KioskVisuals.primaryButton(dp(activity, 22)));
         verify.setEnabled(false);
         verifyHolder[0] = verify;
-        actions.addView(verify, weightedButton(1f, dp(activity, 5), 0));
+        actions.addView(verify, weightedButton(activity, 1f, dp(activity, 5), 0));
         content.addView(actions, fullWidth(0, 0));
 
         AlertDialog dialog = new AlertDialog.Builder(activity)
@@ -241,20 +241,13 @@ final class OperatorAccessGate {
         return params;
     }
 
-    private static LinearLayout.LayoutParams weightedButton(float weight, int left, int right) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dpStatic(56), weight);
+    private static LinearLayout.LayoutParams weightedButton(MainActivity activity, float weight, int left, int right) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(activity, 56), weight);
         params.setMargins(left, 0, right, 0);
         return params;
     }
 
     private static int dp(MainActivity activity, int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
-    }
-
-    // Used only by weightedButton where the Activity is not in the signature;
-    // Android will re-measure WRAP/MATCH widths, while 56 raw px remains usable
-    // on mdpi industrial panels. The helper is overwritten below in call sites.
-    private static int dpStatic(int value) {
-        return value;
     }
 }
