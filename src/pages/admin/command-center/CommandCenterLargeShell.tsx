@@ -1,5 +1,4 @@
 import { RefreshCw } from "lucide-react";
-import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { DevelopmentPanel, DecisionsPanel, HealthPanel, MorePanel, StationsPanel } from "./CommandCenterBlocks";
 import type { CommandCenterHomeModel } from "./model";
@@ -24,15 +23,12 @@ function relative(value: string): string {
 
 export function CommandCenterLargeShell({ model, roles, generatedAt, loading, error, onRefresh }: Props) {
   return (
-    <div className="mx-auto max-w-[1600px] space-y-5 pb-10">
+    <div className="mx-auto max-w-[1600px] space-y-5 px-4 pb-10 sm:px-6 lg:px-0">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <BrandLogo size="sm" className="lg:hidden" />
-          <div>
-            <div className="text-xs font-black uppercase tracking-[.18em] text-primary">Chargeurs.ch · Product Command Center</div>
-            <h1 className="mt-1 font-display text-3xl font-bold">Constater. Décider. Agir.</h1>
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Vue exécutive volontairement limitée aux quatre questions qui pilotent le développement : santé, bornes, décisions et prochain chantier autorisé.</p>
-          </div>
+        <div>
+          <div className="text-xs font-black uppercase tracking-[.18em] text-primary">Chargeurs.ch · Product Command Center</div>
+          <h1 className="mt-1 font-display text-3xl font-bold">Constater. Décider. Agir.</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Vue exécutive volontairement limitée aux quatre questions qui pilotent le développement : santé, bornes, décisions et prochain chantier autorisé.</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">Mis à jour {relative(generatedAt)}</span>

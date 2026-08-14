@@ -109,11 +109,11 @@ export default function AdminLayout() {
           </Button>
         </aside>
 
-        {!isCommandCenterHome && <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
+        <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
           <BrandLogo size="sm" />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" aria-label="Ouvrir le menu" className="gap-2 border border-border px-3">
+              <Button variant="ghost" aria-label="Ouvrir le menu administrateur" className="gap-2 border border-border px-3">
                 <Menu className="h-5 w-5" /> <span>Menu</span>
               </Button>
             </SheetTrigger>
@@ -129,11 +129,11 @@ export default function AdminLayout() {
               </div>
             </SheetContent>
           </Sheet>
-        </header>}
+        </header>
 
         <main className={cn(
           "flex-1 overflow-x-hidden",
-          isCommandCenterHome ? "p-0 lg:p-8" : "p-5 pt-20 sm:p-8 lg:pt-8",
+          isCommandCenterHome ? "p-0 pt-16 lg:p-8 lg:pt-8" : "p-5 pt-20 sm:p-8 lg:pt-8",
         )}>
           <Outlet context={{ roles } satisfies AdminOutletContext} />
         </main>
