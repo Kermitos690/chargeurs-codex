@@ -29,22 +29,22 @@ import "./kiosk-production-contextual-help.css";
 import "./kiosk-production-webview-landscape-failsafe.css";
 import "./kiosk-v3-owned-home.css";
 import "./kiosk-v4-canonical-1280x720.css";
-import "./kiosk-home-reference-v5.css";
-import "./kiosk-home-reference-v5-canvas.css";
+import "./kiosk-home-atmosphere-canonical.css";
 
 /**
  * Production kiosk entry.
- * Business orchestration remains in the proven V2 gate/Kiosk state machine,
- * while the visible Home is owned by the approved 1280x720 V5 reference skin.
- * The V2 hero remains mounted temporarily only as a state/callback adapter and
- * never paints over the canonical Home owner.
+ * Business orchestration remains in the proven V2 gate/Kiosk state machine.
+ * The visible Home is the cinematic Atmosphere composition (lightning sculpture
+ * + 2.5D station) with one thin interactive adapter for the existing Express
+ * and Client callbacks. The V2 Home stays mounted only as state/callback source
+ * and never paints over the canonical Home.
  *
  * Cinematic, recovery and hardware presentation layers are presentation-only.
  * They never infer or own payment, rental, return, inventory or hardware state.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "v5-reference-1280x720";
+    document.documentElement.dataset.kioskVersion = "atmosphere-canonical-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
