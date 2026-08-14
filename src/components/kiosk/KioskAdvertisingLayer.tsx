@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { adEntryDurationMs, estimateServerClockOffsetMs, resolveAdSyncPosition } from "@/lib/adSync";
@@ -16,6 +17,8 @@ type AdItem = {
   mimeType: string;
   url: string;
   posterUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
   imageDurationSeconds?: number | null;
   mediaDurationSeconds?: number | null;
   sortOrder: number;
@@ -28,6 +31,7 @@ type AdCampaign = {
   idleAfterSeconds: number;
   splitRatio: number;
   priority: number;
+  qrUrl?: string | null;
   updatedAt: string;
   items: AdItem[];
 };
@@ -47,6 +51,7 @@ type AdEntry = {
   campaignId: string;
   campaignName: string;
   splitRatio: number;
+  qrUrl?: string | null;
   item: AdItem;
 };
 
@@ -108,9 +113,20 @@ function flattenCampaigns(campaigns: AdCampaign[], mode: DisplayMode): AdEntry[]
       campaignId: campaign.id,
       campaignName: campaign.name,
       splitRatio: Math.min(.5, Math.max(.2, Number(campaign.splitRatio) || .35)),
+      qrUrl: campaign.qrUrl ?? null,
       item,
     }));
   });
+}
+
+function splitMediaLayout(item: AdItem): "cover" | "adaptive" {
+  const width = Number(item.width ?? 0);
+  const height = Number(item.height ?? 0);
+  if (item.mediaType !== "image" || width <= 0 || height <= 0) return "cover";
+  // The integrated Home rail is portrait-ish. Wide creative is preserved in a
+  // foreground contain layer over a blurred full-bleed copy instead of losing
+  // most of the artwork to a hard center crop.
+  return width / height > 1.15 ? "adaptive" : "cover";
 }
 
 function loadCached(stationId: string): PlaylistResponse | null {
@@ -143,8 +159,6 @@ async function reportPlayback(
   errorCode?: string | null,
 ) {
   const token = readKioskToken();
-  // Display must survive a missing rental credential, but billing-grade
-  // impression writes remain authenticated until Ads has its own device proof.
   if (!token || !stationId) return;
   try {
     await invokeKioskEdgeProxy<PlaylistResponse>(
@@ -227,8 +241,6 @@ export function useAdRotation(
         Date.now() + Number(sharedClockOffsetMs),
         timelineEpochMs,
       );
-      // A video's encoded duration can be slightly shorter than its declared
-      // duration. Do not let onEnded advance a single kiosk ahead of the shared clock.
       if (position?.index === currentIndex && position.remainingMs > 60) return;
     }
 
@@ -246,8 +258,6 @@ export function useAdRotation(
     }
 
     if (synchronized) {
-      // The next render resolves the media from the authoritative shared clock,
-      // eliminating accumulated setTimeout drift between kiosks.
       setEpoch((value) => value + 1);
       return;
     }
@@ -279,12 +289,8 @@ export function useAdRotation(
         Date.now() + Number(sharedClockOffsetMs),
         timelineEpochMs,
       );
-      if (position) {
-        // A tiny guard keeps the timeout on the far side of the shared boundary.
-        timerRef.current = window.setTimeout(complete, position.remainingMs + 8);
-      }
+      if (position) timerRef.current = window.setTimeout(complete, position.remainingMs + 8);
     } else if (current.item.mediaType === "image") {
-      // Legacy/offline fallback: rotation remains independent from image onLoad.
       const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
       timerRef.current = window.setTimeout(complete, seconds * 1000);
     }
@@ -458,6 +464,15 @@ function BufferedAdMedia({
   );
 }
 
+function AdvertisingQr({ url, label, mode }: { url: string; label: string; mode: DisplayMode }) {
+  return (
+    <div className={`kiosk-ad-qr kiosk-ad-qr--${mode}`} aria-label={label}>
+      <span className="kiosk-ad-qr__code"><QRCodeSVG value={url} level="M" marginSize={1} /></span>
+      <strong>{label}</strong>
+    </div>
+  );
+}
+
 function LocalBrandFallback() {
   return (
     <div className="kiosk-ad-local-brand" aria-label="Chargeurs.ch">
@@ -608,8 +623,9 @@ function KioskAdvertisingRuntime() {
 
   useEffect(() => {
     if (!splitActive || !split.current) return;
+    const displayRatio = Math.min(.46, Math.max(.32, split.current.splitRatio));
     document.documentElement.dataset.kioskAdsSplit = "true";
-    document.documentElement.style.setProperty("--kiosk-ad-split-ratio", String(split.current.splitRatio));
+    document.documentElement.style.setProperty("--kiosk-ad-split-ratio", String(displayRatio));
     return () => {
       delete document.documentElement.dataset.kioskAdsSplit;
       document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
@@ -622,6 +638,7 @@ function KioskAdvertisingRuntime() {
         touch: "Bildschirm berühren, um eine Powerbank zu mieten",
         muted: "Video ohne Ton",
         unavailable: "Vermietung vorübergehend nicht verfügbar · Dienst wird reaktiviert",
+        scan: "QR scannen",
       }
     : lang === "en"
       ? {
@@ -629,20 +646,30 @@ function KioskAdvertisingRuntime() {
           touch: "Touch the screen to rent a powerbank",
           muted: "Video muted",
           unavailable: "Rental temporarily unavailable · service is being restored",
+          scan: "Scan QR",
         }
       : {
           sponsored: "Partenaire",
           touch: "Touchez l’écran pour louer une batterie",
           muted: "Vidéo sans son",
           unavailable: "Location momentanément indisponible · service en cours de réactivation",
+          scan: "Scanner le QR",
         };
 
   const saverLabel = authRequired ? copy.unavailable : copy.touch;
+  const splitLayout = split.current ? splitMediaLayout(split.current.item) : "cover";
 
   return (
     <>
       {splitActive && split.current && (
-        <aside className="kiosk-ad-split" aria-label={`${copy.sponsored}: ${split.current.campaignName}`}>
+        <aside
+          className="kiosk-ad-split"
+          data-media-layout={splitLayout}
+          aria-label={`${copy.sponsored}: ${split.current.campaignName}`}
+        >
+          {splitLayout === "adaptive" && split.current.item.mediaType === "image" && (
+            <img className="kiosk-ad-media-backdrop" src={split.current.item.url} alt="" aria-hidden draggable={false} />
+          )}
           <BufferedAdMedia
             entry={split.current}
             epoch={split.epoch}
@@ -652,6 +679,7 @@ function KioskAdvertisingRuntime() {
             onFailed={split.fail}
           />
           <div className="kiosk-ad-split-badge"><Megaphone /> {copy.sponsored}</div>
+          {split.current.qrUrl && <AdvertisingQr url={split.current.qrUrl} label={copy.scan} mode="split" />}
           {split.current.item.mediaType === "video" && <div className="kiosk-ad-muted"><VolumeX /> {copy.muted}</div>}
         </aside>
       )}
@@ -683,6 +711,7 @@ function KioskAdvertisingRuntime() {
             <span>{saverLabel}</span>
             {!authRequired && <b>→</b>}
           </div>
+          {saver.current?.qrUrl && <AdvertisingQr url={saver.current.qrUrl} label={copy.scan} mode="screensaver" />}
           {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
         </div>
       )}
