@@ -54,8 +54,8 @@ export function detectKioskScene(root: ParentNode = document): KioskScene {
   if (root.querySelector(".ck2-home")) return "home";
   if (root.querySelector(".ck2-member")) return "member";
   if (root.querySelector(".ck2-connected")) return "connected";
-  if (root.querySelector(".kiosk-idle-stage")) return "selection";
   if (root.querySelector(".kiosk-pricing-stage")) return "pricing";
+  if (root.querySelector(".kiosk-idle-stage")) return "selection";
   if (root.querySelector(".kiosk-qr-stage")) return "payment";
   if (root.querySelector('.kiosk-release-stage:not([data-kiosk-timeout-owner="inner"])')) return "release";
   if (root.querySelector(".kiosk-ready-stage") || root.querySelector(".kiosk-root .bg-gradient-success")) return "active";
@@ -87,40 +87,31 @@ export function buildKioskProgressConfig(
   const client = journey === "client" || effectiveScene === "member" || effectiveScene === "connected";
   const fr = lang === "fr";
   const de = lang === "de";
-  const labels = client
-    ? de ? ["VERBINDUNG", "AUSWAHL", "ZAHLUNG", "ENTNEHMEN", "RÜCKGABE"]
-      : fr ? ["CONNEXION", "SÉLECTION", "PAIEMENT", "RETIRER", "RETOUR"]
-        : ["CONNECT", "SELECT", "PAYMENT", "COLLECT", "RETURN"]
-    : de ? ["AUSWAHL", "ZAHLUNG", "AUSGABE", "MIETE", "RÜCKGABE"]
-      : fr ? ["CHOIX", "PAIEMENT", "DÉPART", "LOCATION", "RETOUR"]
-        : ["CHOOSE", "PAYMENT", "RELEASE", "RENTAL", "RETURN"];
+  const labels = de
+    ? ["TARIF", "AKKU", "ZAHLUNG", "RÜCKGABE"]
+    : fr
+      ? ["TARIF", "BATTERIE", "PAIEMENT", "RETOUR"]
+      : ["PRICE", "POWERBANK", "PAYMENT", "RETURN"];
 
   let active = 1;
-  if (effectiveScene === "return") active = 5;
-  else if (client) {
-    if (effectiveScene === "selection" || effectiveScene === "pricing") active = 2;
-    else if (effectiveScene === "starting" || effectiveScene === "payment") active = 3;
-    else if (effectiveScene === "release" || effectiveScene === "active") active = 4;
-  } else {
-    if (effectiveScene === "starting" || effectiveScene === "payment") active = 2;
-    else if (effectiveScene === "release") active = 3;
-    else if (effectiveScene === "active") active = 4;
-  }
+  if (effectiveScene === "return") active = 4;
+  else if (effectiveScene === "selection") active = 2;
+  else if (["starting", "payment", "release", "active"].includes(effectiveScene)) active = 3;
+  else if (effectiveScene === "pricing" || effectiveScene === "member" || effectiveScene === "connected") active = 1;
 
   return { labels, active, client };
 }
 
 export function shouldShowKioskProgress(scene: KioskScene, lastTransactionalScene: KioskScene | null): boolean {
-  if (scene === "home" || scene === "loading") return false;
+  if (scene === "home" || scene === "loading" || scene === "member") return false;
   if (TRANSIENT_SCENES.has(scene) && !lastTransactionalScene) return false;
   return true;
 }
 
 const TRACKABLE_SCENES = new Set<KioskScene>([
-  "member",
   "connected",
-  "selection",
   "pricing",
+  "selection",
   "starting",
   "payment",
   "release",

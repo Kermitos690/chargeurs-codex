@@ -1,5 +1,6 @@
-release=kiosk-p1-recovery
-source_commit=95f64818d12461542ad1bdab5bc8cd08cc765e47
-validated_parent=86223191941272fae2b9fd8fdf2474192bbefa36
-requested_by=agent-4
-attempt=4
+release=dta21269-pricing-first-force
+source_commit=9c01a6f726d2164ff0c09aa49ec6dcaceaa52bde
+pricing_candidate=24a286016ddf764c138c07b60ba2da81d3308860
+requested_by=agent-0
+scope=all-online-dta-staging
+requested_at=2026-08-14T16:24:00+02:00
