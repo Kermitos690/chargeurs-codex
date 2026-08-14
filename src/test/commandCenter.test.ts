@@ -62,14 +62,29 @@ describe("buildCommandCenterHomeModel", () => {
     expect(model.development).toMatchObject({ action: "FIX", lane: "NOW", title: "Corriger le blocage", source: "LIVE_ALERT" });
   });
 
+  it("does not claim there is no critical issue when the metric reports one without alert details", () => {
+    const base = overview();
+    const model = buildCommandCenterHomeModel(overview({ metrics: { ...base.metrics, criticalAlerts: 1 } }));
+    expect(model.health).toMatchObject({ tone: "critical", criticalAlerts: 1 });
+    expect(model.development).toMatchObject({ action: "FIX", lane: "NOW", source: "OPERATIONS" });
+  });
+
   it("never fabricates operational decisions when the source returns no alerts", () => {
     const model = buildCommandCenterHomeModel(overview());
     expect(model.decisions).toEqual([]);
     expect(model.development).toMatchObject({ action: "VALIDATE", lane: "NOW", source: "OPERATIONS" });
   });
 
+  it("treats an empty station source as missing operational visibility", () => {
+    const base = overview();
+    const model = buildCommandCenterHomeModel(overview({ metrics: { ...base.metrics, stations: 0, rentalReady: 0 } }));
+    expect(model.health.tone).toBe("warning");
+    expect(model.development).toMatchObject({ action: "VALIDATE", lane: "NOW", source: "OPERATIONS" });
+  });
+
   it("falls back to the validated P0 governance rule only when all stations are ready and no alert exists", () => {
-    const data = overview({ metrics: { ...overview().metrics, rentalReady: 2 } });
+    const base = overview();
+    const data = overview({ metrics: { ...base.metrics, rentalReady: 2 } });
     const model = buildCommandCenterHomeModel(data);
     expect(model.health.tone).toBe("success");
     expect(model.development).toMatchObject({ action: "VALIDATE", lane: "NOW", source: "GOVERNANCE" });

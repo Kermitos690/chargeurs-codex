@@ -53,17 +53,18 @@ export function buildCommandCenterHomeModel(data: OverviewData): CommandCenterHo
     ...alert,
     action: actionForSeverity(alert.severity),
   }));
-  const criticalAlerts = sortedAlerts.filter((alert) => alert.severity === "critical");
+  const detailedCriticalAlerts = sortedAlerts.filter((alert) => alert.severity === "critical");
+  const criticalAlertCount = Math.max(detailedCriticalAlerts.length, Math.max(0, Number(data.metrics.criticalAlerts || 0)));
 
   let health: CommandCenterHealth;
-  if (criticalAlerts.length > 0) {
+  if (criticalAlertCount > 0) {
     health = {
       score: data.metrics.healthScore,
       label: "Action immédiate",
       tone: "critical",
       rentalReady: data.metrics.rentalReady,
       stations: data.metrics.stations,
-      criticalAlerts: criticalAlerts.length,
+      criticalAlerts: criticalAlertCount,
     };
   } else if (data.metrics.stations > 0 && data.metrics.rentalReady === data.metrics.stations) {
     health = {
@@ -95,6 +96,24 @@ export function buildCommandCenterHomeModel(data: OverviewData): CommandCenterHo
       reason: leadingAlert.title,
       href: leadingAlert.href,
       source: "LIVE_ALERT",
+    };
+  } else if (criticalAlertCount > 0) {
+    development = {
+      action: "FIX",
+      lane: "NOW",
+      title: "Traiter les alertes critiques du réseau",
+      reason: `${criticalAlertCount} alerte(s) critique(s) sont comptabilisées sans détail exploitable dans la réponse actuelle.`,
+      href: "/admin/network-overview",
+      source: "OPERATIONS",
+    };
+  } else if (data.metrics.stations === 0) {
+    development = {
+      action: "VALIDATE",
+      lane: "NOW",
+      title: "Rétablir la visibilité opérationnelle des bornes",
+      reason: "Aucune borne n’est remontée par la source opérationnelle ; ne pas conclure que le parc est sain.",
+      href: "/admin/network-overview",
+      source: "OPERATIONS",
     };
   } else if (data.metrics.rentalReady < data.metrics.stations) {
     development = {
