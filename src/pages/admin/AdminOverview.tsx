@@ -2,12 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity, AlertTriangle, BatteryCharging, CheckCircle2, ChevronRight, CircleDollarSign,
-  Clock3, CreditCard, Loader2, Megaphone, RefreshCw, Server, ShieldAlert, Wifi, WifiOff,
+  CreditCard, Loader2, Megaphone, RefreshCw, Server, ShieldAlert, Wifi, WifiOff,
   type LucideIcon,
 } from "lucide-react";
-import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +42,7 @@ type TrendRow = {
   revenueCents: number;
   adMinutes: number;
 };
+type TrendDisplayRow = TrendRow & { label: string; revenue: number };
 type Metrics = {
   stations: number;
   providerOnline: number;
@@ -129,6 +127,48 @@ function FleetState({ row }: { row: FleetRow }) {
   return <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-xs font-bold text-warning"><BatteryCharging className="h-3.5 w-3.5" /> Stock</span>;
 }
 
+function ActivityChart({ rows }: { rows: TrendDisplayRow[] }) {
+  const width = 700;
+  const height = 220;
+  const padX = 34;
+  const padY = 24;
+  const max = Math.max(1, ...rows.flatMap((row) => [row.rentals, row.payments]));
+  const x = (index: number) => padX + (rows.length <= 1 ? 0 : index * ((width - padX * 2) / (rows.length - 1)));
+  const y = (value: number) => height - padY - (value / max) * (height - padY * 2);
+  const points = (key: "rentals" | "payments") => rows.map((row, index) => `${x(index)},${y(row[key])}`).join(" ");
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-64 w-full" role="img" aria-label="Locations et paiements des sept derniers jours">
+        {[0, .25, .5, .75, 1].map((ratio) => <line key={ratio} x1={padX} x2={width - padX} y1={padY + ratio * (height - padY * 2)} y2={padY + ratio * (height - padY * 2)} stroke="currentColor" className="text-border" strokeDasharray="5 7" />)}
+        <polyline points={points("rentals")} fill="none" stroke="hsl(var(--primary))" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <polyline points={points("payments")} fill="none" stroke="hsl(var(--secondary))" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity=".9" />
+        {rows.map((row, index) => <g key={row.date}><circle cx={x(index)} cy={y(row.rentals)} r="5" fill="hsl(var(--primary))" /><circle cx={x(index)} cy={y(row.payments)} r="4" fill="hsl(var(--secondary))" /></g>)}
+      </svg>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">{rows.map((row) => <span key={row.date}>{row.label}</span>)}</div>
+      <div className="mt-4 flex gap-4 text-xs"><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-primary" /> Locations</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-secondary" /> Paiements</span></div>
+    </div>
+  );
+}
+
+function RevenueChart({ rows }: { rows: TrendDisplayRow[] }) {
+  const max = Math.max(1, ...rows.map((row) => row.revenue));
+  return (
+    <div className="flex h-[19rem] items-end gap-2 pt-8 sm:gap-3">
+      {rows.map((row) => {
+        const height = Math.max(row.revenue > 0 ? 8 : 2, (row.revenue / max) * 100);
+        return (
+          <div key={row.date} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2">
+            <div className="text-[10px] font-semibold text-muted-foreground">{row.revenue > 0 ? row.revenue.toFixed(2) : ""}</div>
+            <div className="relative flex h-52 w-full items-end overflow-hidden rounded-xl bg-muted/25"><div className="w-full rounded-xl bg-primary/80 transition-all" style={{ height: `${height}%` }} /></div>
+            <span className="text-[11px] text-muted-foreground">{row.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminOverview() {
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,7 +193,7 @@ export default function AdminOverview() {
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const trendData = useMemo(() => (data?.trends ?? []).map((row) => ({ ...row, label: dayLabel(row.date), revenue: row.revenueCents / 100 })), [data]);
+  const trendData = useMemo<TrendDisplayRow[]>(() => (data?.trends ?? []).map((row) => ({ ...row, label: dayLabel(row.date), revenue: row.revenueCents / 100 })), [data]);
   const metrics = data?.metrics;
   const criticalAlerts = data?.alerts.filter((row) => row.severity === "critical") ?? [];
   const secondaryAlerts = data?.alerts.filter((row) => row.severity !== "critical") ?? [];
@@ -205,34 +245,11 @@ export default function AdminOverview() {
         <section className="grid gap-6 xl:grid-cols-2">
           <div className="glass liquid-border rounded-2xl p-5 sm:p-6">
             <div className="mb-5"><h2 className="font-display text-xl font-bold">Activité réseau · 7 jours</h2><p className="mt-1 text-sm text-muted-foreground">Locations créées et paiements enregistrés, sans données de démonstration.</p></div>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ left: -18, right: 8, top: 8, bottom: 0 }}>
-                  <defs><linearGradient id="rentalsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} /><stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} /></linearGradient></defs>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.16} vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", background: "hsl(var(--background))" }} />
-                  <Area type="monotone" dataKey="rentals" name="Locations" stroke="hsl(var(--primary))" fill="url(#rentalsFill)" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="payments" name="Paiements" stroke="hsl(var(--secondary))" fillOpacity={0} strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <ActivityChart rows={trendData} />
           </div>
-
           <div className="glass liquid-border rounded-2xl p-5 sm:p-6">
-            <div className="mb-5"><h2 className="font-display text-xl font-bold">Revenu encaissé · 7 jours</h2><p className="mt-1 text-sm text-muted-foreground">Montants capturés moins remboursements, en CHF.</p></div>
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trendData} margin={{ left: -10, right: 8, top: 8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.16} vertical={false} />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={12} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={12} />
-                  <Tooltip formatter={(value) => [`${Number(value).toFixed(2)} CHF`, "Revenu"]} contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))", background: "hsl(var(--background))" }} />
-                  <Bar dataKey="revenue" name="Revenu" fill="hsl(var(--primary))" radius={[8, 8, 2, 2]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <div><h2 className="font-display text-xl font-bold">Revenu encaissé · 7 jours</h2><p className="mt-1 text-sm text-muted-foreground">Montants capturés moins remboursements, en CHF.</p></div>
+            <RevenueChart rows={trendData} />
           </div>
         </section>
 
