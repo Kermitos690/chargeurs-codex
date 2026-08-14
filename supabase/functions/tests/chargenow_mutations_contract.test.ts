@@ -354,6 +354,28 @@ Deno.test("C2 one-time maintenance permit bypasses no other mutation gate", asyn
   }
 });
 
+Deno.test("C2 accepts only the supplied exact maintenance permit", async () => {
+  const previousMutations = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
+  const previousPermit = Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+  Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
+  Deno.env.delete("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  const permit = { id: "permit-db-1", stationId: "DTA21269", slotNum: 1, expiresAt: "2099-01-01T00:00:00.000Z" };
+  try {
+    const allowed = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1, permit);
+    assertEquals(allowed.ok, true);
+    const blocked = await cn.ejectByRepairWithOneTimePermit("DTA21269", 2, permit);
+    assertEquals(blocked.error, "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED");
+    assertEquals(s.calls.length, 1);
+  } finally {
+    s.restore();
+    if (previousMutations === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");
+    else Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", previousMutations);
+    if (previousPermit === undefined) Deno.env.delete("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
+    else Deno.env.set("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT", previousPermit);
+  }
+});
+
 // ----------------------------------------------------------------
 // C3 — Eject By Rent (POST /cabinet/ejectByRent) — BLOCKED_BY_SAFETY
 // ----------------------------------------------------------------
