@@ -1,6 +1,5 @@
-release=inventory-staging-promotion
-source_commit=5d3774721277e24eeea99716f85240e137832855
-triggered_at=2026-08-12T01:21:00+02:00
-attempt=2
-requested_by=agent0
-reason=promote-current-main-with-inventory-admin-to-canonical-staging
+release=ads-delivery-recovery
+source_commit=703decf67504a466ac63b19e9933fc512e134ef3
+triggered_at=2026-08-14T03:16:24.023Z
+requested_by=gaetan
+reason=restore-canonical-staging-kiosk-advertising-engine-from-main
