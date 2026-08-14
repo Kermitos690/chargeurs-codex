@@ -1,4 +1,6 @@
-import { act, renderHook } from "@testing-library/react";
+import { useLayoutEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { act } from "react-dom/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAdRotation } from "@/components/kiosk/KioskAdvertisingLayer";
 
@@ -52,24 +54,38 @@ describe("kiosk advertising rotation", () => {
   });
 
   it("advances a screensaver image even when no image load event is delivered", () => {
-    const { result, unmount } = renderHook(() =>
-      useAdRotation(imageEntries, true, "screensaver", "", "playlist-v1"),
-    );
+    let currentKey: string | null = null;
 
-    expect(result.current.current?.key).toBe("campaign:item-1");
+    function RotationHarness() {
+      const rotation = useAdRotation(imageEntries, true, "screensaver", "", "playlist-v1");
+      useLayoutEffect(() => {
+        currentKey = rotation.current?.key ?? null;
+      }, [rotation.current?.key]);
+      return null;
+    }
+
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<RotationHarness />);
+    });
+    expect(currentKey).toBe("campaign:item-1");
 
     act(() => {
       vi.advanceTimersByTime(1_999);
     });
-    expect(result.current.current?.key).toBe("campaign:item-1");
+    expect(currentKey).toBe("campaign:item-1");
 
-    // Intentionally never call result.current.markStarted(): rotation must be
-    // driven by the player timer, not by React's image onLoad event.
+    // No media-start callback is fired here. The player lifecycle must arm the
+    // image timer independently from React/WebView image load delivery.
     act(() => {
       vi.advanceTimersByTime(1);
     });
+    expect(currentKey).toBe("campaign:item-2");
 
-    expect(result.current.current?.key).toBe("campaign:item-2");
-    unmount();
+    act(() => {
+      root.unmount();
+    });
   });
 });
