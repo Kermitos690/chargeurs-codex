@@ -8,7 +8,9 @@ on:
     paths:
       - "src/components/kiosk/KioskAdvertisingLayer.tsx"
       - "src/components/kiosk/kiosk-advertising.css"
+      - "src/components/kiosk/kiosk-advertising-failsafe.css"
       - "src/test/kioskAdvertisingRotation.test.tsx"
+      - "src/test/kioskAdvertisingAuthIndependence.test.ts"
       - "src/pages/admin/AdminAdvertising.tsx"
       - "src/pages/admin/admin-advertising.css"
       - "src/pages/KioskPremiumGateV3.tsx"
@@ -39,12 +41,16 @@ jobs:
       - name: Full repository typecheck (baseline diagnostic)
         continue-on-error: true
         run: npm run typecheck
-      - name: Screensaver carousel rotation regression
-        run: npx vitest run src/test/kioskAdvertisingRotation.test.tsx
+      - name: Advertising availability regressions
+        run: >-
+          npx vitest run
+          src/test/kioskAdvertisingRotation.test.tsx
+          src/test/kioskAdvertisingAuthIndependence.test.ts
       - name: Lint Chargeurs Ads frontend changes
         run: >-
           npx eslint
           src/components/kiosk/KioskAdvertisingLayer.tsx
+          src/test/kioskAdvertisingAuthIndependence.test.ts
           src/pages/admin/AdminAdvertising.tsx
           src/pages/KioskPremiumGateV3.tsx
           src/pages/admin/adminNav.ts
