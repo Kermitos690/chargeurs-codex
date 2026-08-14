@@ -20,3 +20,69 @@ html.kiosk-v3 .kiosk-idle-cta > span {
   font-weight: 800 !important;
   color: rgba(202,255,172,.78) !important;
 }
+
+/* DTA21269 field correction — the journey rail belongs between the global
+ * header and the customer workspace, not inside the top chrome. Four customer
+ * milestones keep the route readable at standing distance; release/active are
+ * represented by the Payment milestone and never advanced by animation. */
+html.kiosk-v3 .kv3-progress-rail {
+  top: 70px !important;
+  width: min(820px, 68vw) !important;
+  height: 76px !important;
+  padding: 0 18px !important;
+  opacity: 1 !important;
+  z-index: 45 !important;
+}
+
+html.kiosk-v3 .kv3-progress-step {
+  min-width: 0 !important;
+}
+
+html.kiosk-v3 .kv3-progress-step > span {
+  width: 44px !important;
+  height: 44px !important;
+  border-width: 2px !important;
+  font-size: 15px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.22) !important;
+  transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease, background-color .28s ease !important;
+}
+
+html.kiosk-v3 .kv3-progress-step.is-current > span {
+  transform: scale(1.09) !important;
+  box-shadow: 0 0 0 5px rgba(146,255,85,.08), 0 10px 28px rgba(0,0,0,.28) !important;
+}
+
+html.kiosk-v3 .kv3-progress-rail.is-client .kv3-progress-step.is-current > span {
+  box-shadow: 0 0 0 5px rgba(51,156,255,.10), 0 10px 28px rgba(0,0,0,.28) !important;
+}
+
+html.kiosk-v3 .kv3-progress-step small {
+  margin-top: 7px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  letter-spacing: .055em !important;
+  font-weight: 900 !important;
+  opacity: .88 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="active"] .kiosk-root main,
+html.kiosk-v3[data-kiosk-scene="return"] .kiosk-root main {
+  padding-top: 78px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+  height: 500px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3 .kv3-progress-step > span {
+    transition: none !important;
+  }
+  html.kiosk-v3 .kv3-progress-step.is-current > span {
+    transform: none !important;
+  }
+}
