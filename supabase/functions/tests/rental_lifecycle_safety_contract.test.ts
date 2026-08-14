@@ -21,6 +21,12 @@ Deno.test("ChargeNow release callbacks require exact battery identity", () => {
   assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);
 });
 
+Deno.test("ChargeNow return callbacks never fall back to the reserved battery identity", () => {
+  assert(callbackSource.includes("RETURN_IDENTITY_INCOMPLETE"));
+  assertEquals(callbackSource.includes('parsed.batteryId ?? (typeof session.battery_id'), false);
+  assertEquals(callbackSource.includes("provider_identity_fallback: false"), true);
+});
+
 Deno.test("legacy BATTERY_IN events cannot select the latest station rental", () => {
   assertEquals(cabinetEventSource.includes('order("created_at", { ascending: false })'), false);
   assertEquals(cabinetEventSource.includes("delegateBatteryReturn"), true);

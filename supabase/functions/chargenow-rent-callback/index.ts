@@ -316,6 +316,20 @@ Deno.serve(async (req) => {
     }
     if (parsed.status !== "2") return json({ received: true, ignored: true, reason: "UNKNOWN_STATUS" }, 202);
 
+    // A generic order-status callback is not physical return evidence. The
+    // return must name the actual battery, receiving station and slot. Falling
+    // back to the reserved identity here can settle the wrong rental after a
+    // supplier double-ejection.
+    if (!parsed.batteryId || !parsed.stationId || parsed.slotNum == null) {
+      await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le callback de retour ne contient pas l'identité physique complète; aucune clôture ni capture n'est autorisée.", {
+        tradeNo: parsed.tradeNo,
+        battery_id: parsed.batteryId,
+        station_id: parsed.stationId,
+        slot_num: parsed.slotNum,
+      });
+      return json({ received: true, settlement_triggered: false, reason: "RETURN_IDENTITY_INCOMPLETE" }, 202);
+    }
+
     if (session.state === "ejecting") {
       const { data: releaseEvidence } = await client.from("chargenow_callbacks")
         .select("idempotency_key,created_at")
@@ -330,9 +344,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const batteryId = parsed.batteryId ?? (typeof session.battery_id === "string" ? session.battery_id : null);
-    const stationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
-    const slotNum = parsed.slotNum ?? Number(session.selected_slot_num);
+    const batteryId = parsed.batteryId;
+    const stationId = parsed.stationId;
+    const slotNum = parsed.slotNum;
     const eventId = parsed.eventId ?? `trade-${canonicalTradeNo || parsed.tradeNo || session.id}-return`;
     if (!batteryId || !stationId || !Number.isInteger(slotNum) || slotNum < 1) {
       await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le retour fournisseur ne peut pas être corrélé à l'identité réservée de la location.", { tradeNo: parsed.tradeNo });
@@ -368,7 +382,7 @@ Deno.serve(async (req) => {
       physical_event_id: physical?.externalEventId ?? null,
       provider_trade_no: parsed.tradeNo || null,
       canonical_trade_no: canonicalTradeNo || null,
-      provider_identity_fallback: !parsed.batteryId || !parsed.stationId || parsed.slotNum == null,
+      provider_identity_fallback: false,
       settlement_ok: settlement.ok,
     });
     if (!settlement.ok) await incident(client, session, "SETTLEMENT_RETRY_REQUIRED", "Le retour est enregistré mais le règlement financier doit être réconcilié.", { settlement_status: settlement.status, battery_id: batteryId });
