@@ -136,9 +136,9 @@ Deno.serve(async (req) => {
       const requestedPermitId = typeof permitId === "string" ? permitId.trim() : "";
       const { data: permitRow, error: permitError } = await db.from("maintenance_actions")
         .select("id,params,performed_by")
-        .eq("id", requestedPermitId)
         .eq("action_type", "pending_one_time_maintenance_ejection")
         .eq("performed_by", adminId)
+        .contains("params", { oneTimePermitId: requestedPermitId })
         .maybeSingle();
       if (permitError) throw permitError;
       const permitParams = permitRow?.params && typeof permitRow.params === "object" ? permitRow.params as Record<string, unknown> : {};
