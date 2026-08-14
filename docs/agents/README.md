@@ -1,25 +1,22 @@
-# Chargeurs Agent Operating System V2
+# Système d’exploitation des agents Chargeurs V2
 
-Status: `CANONICAL GOVERNANCE PROPOSAL — DRAFT PR REQUIRED`
+Statut : `CANONICAL GOVERNANCE PROPOSAL — DRAFT PR REQUIRED`
 
-This directory documents logical responsibility owners for Chargeurs.ch. An
-agent role is an ownership and handoff contract; it does **not** launch a Codex
-subagent, create a paid dependency, or authorize work by itself.
+Ce répertoire documente les propriétaires logiques de responsabilités de
+Chargeurs.ch. Un rôle d’agent est un contrat de propriété et de handoff ; il ne
+lance **pas** un sous-agent Codex, ne crée pas de dépendance payante et
+n’autorise pas une action à lui seul.
 
-## Read in this order
+## À lire dans cet ordre
 
-1. [Current Agent Registry](CURRENT_AGENT_REGISTRY.md) — verified current roles
-   and launch recommendation.
-2. [Ownership Matrix](OWNERSHIP_MATRIX.md) — exactly one primary owner per
-   critical capability.
-3. [Operating Model](OPERATING_MODEL.md) — dispatch, QA, release, physical
-   truth, sources of truth, and subagent policy.
-4. [Protected Core](PROTECTED_CORE.md) — protected boundaries and change gates.
-5. [Handoff Protocol](HANDOFF_PROTOCOL.md) — the minimal cross-owner payload.
-6. [Migration Report](MIGRATION_REPORT.md) — evidence, collisions, and work not
-   performed by this governance change.
+1. [Registre actuel des agents](CURRENT_AGENT_REGISTRY.md) — rôles vérifiés et recommandation de lancement.
+2. [Matrice de responsabilités](OWNERSHIP_MATRIX.md) — exactement un propriétaire principal par capacité critique.
+3. [Modèle opérationnel](OPERATING_MODEL.md) — dispatch, QA, release, vérité physique, sources de vérité et politique de sous-agents.
+4. [Protected Core](PROTECTED_CORE.md) — frontières protégées et gates de changement.
+5. [Protocole de handoff](HANDOFF_PROTOCOL.md) — charge utile minimale entre propriétaires.
+6. [Rapport de migration](MIGRATION_REPORT.md) — preuves, collisions et travail exclu de ce changement.
 
-## Governing principles
+## Principes directeurs
 
 ```text
 HUMAN DECIDES BUSINESS
@@ -32,5 +29,5 @@ PHYSICAL REALITY OVERRIDES ASSUMPTION
 GROWTH SELLS ONLY VERIFIED CAPABILITY
 ```
 
-No document here overrides an explicit human business decision or the existing
-cost-aware rules in the root `AGENTS.md`.
+Aucun document ici ne remplace une décision métier humaine explicite ni les
+règles existantes attentives aux coûts du `AGENTS.md` racine.

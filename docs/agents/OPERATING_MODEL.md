@@ -1,78 +1,84 @@
-# Operating Model
+# Modèle opérationnel
 
-## 1. Dispatch and writers
+## 1. Dispatch et rédacteurs
 
-Default execution is `ONE TASK -> ONE PRIMARY AGENT`. A0 identifies the domain
-owner, records the active writer surface, and requests a handoff only when the
-owner lacks authority or evidence.
+L’exécution par défaut est `ONE TASK -> ONE PRIMARY AGENT`. A0 identifie le
+propriétaire du domaine, consigne la surface active d’écriture et ne demande un
+handoff que si le propriétaire n’a pas l’autorité ou les preuves nécessaires.
 
-There is one writer at a time per implementation surface. Parallel work is
-allowed only when the surfaces and acceptance criteria are independent. A
-read-only investigation does not grant write ownership.
+Il n’y a qu’un rédacteur à la fois par surface d’implémentation. Le travail en
+parallèle n’est autorisé que lorsque les surfaces et critères d’acceptation sont
+indépendants. Une investigation en lecture seule ne donne pas la propriété en
+écriture.
 
-If two roles claim a capability, mark `OWNERSHIP_COLLISION`, stop new work on
-that collision, and let A0 with A1 recommend one owner and a handoff rule.
+Si deux rôles revendiquent une capacité, marquer `OWNERSHIP_COLLISION`, arrêter
+le nouveau travail sur cette collision et demander à A0 avec A1 de recommander
+un seul propriétaire et une règle de handoff.
 
-## 2. Subagent policy
+## 2. Politique de sous-agents
 
-`SUBAGENTS = 0` by default. The logical A0–A9 registry never creates running
-Codex agents automatically.
+`SUBAGENTS = 0` par défaut. Le registre logique A0–A9 ne crée jamais
+automatiquement des agents Codex en cours d’exécution.
 
-An additional Codex subagent is allowed only when all are true:
+Un sous-agent Codex supplémentaire n’est autorisé que si toutes les conditions
+suivantes sont vraies :
 
-1. the task is bounded and truly independent;
-2. parallel work has a clear benefit over a single primary agent;
-3. no writer surface overlaps;
-4. it does not duplicate completed investigation; and
-5. the dispatch records purpose, read/write scope, expected output, and cost
-   risk.
+1. la tâche est bornée et réellement indépendante ;
+2. le parallélisme apporte un bénéfice clair par rapport à un seul agent principal ;
+3. aucune surface d’écriture ne se chevauche ;
+4. il ne duplique pas une investigation terminée ;
+5. le dispatch consigne objectif, périmètre lecture/écriture, sortie attendue et risque de coût.
 
-Prefer read-only, narrow workers. Never launch A0–A9 in parallel merely because
-those roles exist. No custom `.codex/agents/*.toml` files or local Skills are
-introduced by this proposal.
+Privilégier les workers étroits et en lecture seule. Ne jamais lancer A0–A9 en
+parallèle seulement parce que ces rôles existent. Cette proposition n’introduit
+ni fichiers `.codex/agents/*.toml`, ni Skills locaux.
 
-Potential future workflow candidates are `bug-rca`, `protected-core-change`,
-`release-validation`, `physical-validation`, and `agent-handoff`; a Skill is
-only justified after repeated use proves that a compact document is insufficient.
+Les candidats éventuels à un workflow futur sont `bug-rca`,
+`protected-core-change`, `release-validation`, `physical-validation` et
+`agent-handoff`. Un Skill n’est justifié qu’après un usage répété démontrant
+qu’un document compact ne suffit pas.
 
-## 3. Status model
+## 3. Modèle de statuts
 
-Use exactly one current software status:
+Utiliser exactement un statut logiciel courant :
 
 `BACKLOG`, `READY`, `IN_PROGRESS`, `BLOCKED`, `NEEDS_EVIDENCE`,
 `HANDOFF_REQUIRED`, `READY_FOR_VALIDATION`, `VALIDATION_FAILED`, `VALIDATED`,
-`READY_FOR_RELEASE`, `RELEASE_BLOCKED`, `RELEASED`, `ROLLED_BACK`, or
+`READY_FOR_RELEASE`, `RELEASE_BLOCKED`, `RELEASED`, `ROLLED_BACK` ou
 `CANCELLED`.
 
-Record physical reality separately:
+Consigner séparément la réalité physique :
 
-`SOFTWARE_ONLY`, `DEVICE_INSTALLED`, `PHYSICAL_TEST_REQUIRED`, or
+`SOFTWARE_ONLY`, `DEVICE_INSTALLED`, `PHYSICAL_TEST_REQUIRED` ou
 `PHYSICALLY_VALIDATED`.
 
 `PR_OPEN`, `MERGED`, `DEPLOYED`, `APK_BUILT`, `APK_INSTALLED`, `DB_MIGRATED`,
-`EDGE_DEPLOYED`, and `PHYSICALLY_VALIDATED` are evidence facts, not synonyms.
+`EDGE_DEPLOYED` et `PHYSICALLY_VALIDATED` sont des faits de preuve, pas des
+synonymes.
 
-## 4. QA contract
+## 4. Contrat QA
 
-The recommended model is **Option B: an independent QA protocol without a new
-logical Agent ID**, with A8 owning integration/release/physical gates.
+Le modèle recommandé est **Option B : protocole QA indépendant sans nouvel ID
+d’agent logique**, A8 possédant les gates d’intégration, de release et de
+validation physique.
 
-| Gate | Writer | Required evidence | Validator |
+| Gate | Rédacteur | Preuve exigée | Validateur |
 | --- | --- | --- | --- |
-| `DOMAIN_TESTED` | domain owner | targeted tests and their result | domain owner; A3 checks RCA fixes |
-| `INTEGRATION_TESTED` | participating owner | integration result on exact candidate | A8 |
-| `PHYSICAL_VALIDATED` | A8 with operator/device evidence | device, station, window, observed event and result | A8 |
-| `READY_FOR_RELEASE` | A8 | complete release identity and all applicable gates | A8; human approves external/business risk |
+| `DOMAIN_TESTED` | propriétaire du domaine | tests ciblés et résultat | propriétaire ; A3 vérifie les correctifs RCA |
+| `INTEGRATION_TESTED` | propriétaire participant | résultat d’intégration sur candidat exact | A8 |
+| `PHYSICAL_VALIDATED` | A8 avec preuve opérateur/appareil | appareil, station, fenêtre, événement observé et résultat | A8 |
+| `READY_FOR_RELEASE` | A8 | identité complète de release et tous gates applicables | A8 ; humain pour risque externe/métier |
 
-An implementer may report tests but may not self-declare the release gate passed.
-Failed QA returns to the owner through a handoff; it does not trigger an
-opportunistic redesign.
+Un implémenteur peut rapporter ses tests mais ne peut pas déclarer seul le gate
+de release passé. Une QA échouée retourne au propriétaire via un handoff ; elle
+ne déclenche pas un redesign opportuniste.
 
-## 5. Physical and release truth
+## 5. Vérité physique et release
 
-The release manifest must bind the candidate to Git SHA, PR set, migrations,
-Edge versions, web deployment, APK version/hash, station/device, test window,
-and results. Provider HTTP acknowledgement is not physical ejection proof.
+Le manifeste de release doit lier le candidat au SHA Git, ensemble de PRs,
+migrations, versions Edge, déploiement web, version/hash APK, station/appareil,
+fenêtre de test et résultats. L’accusé HTTP d’un fournisseur n’est pas une preuve
+d’éjection physique.
 
 ```text
 CODE_EXISTS
@@ -85,31 +91,34 @@ CODE_EXISTS
 -> PHYSICALLY_VALIDATED
 ```
 
-Each step requires its own evidence. A8 may set `RELEASE_BLOCKED` if a required
-step is absent.
+Chaque étape exige sa propre preuve. A8 peut poser `RELEASE_BLOCKED` si une étape
+requise est absente.
 
-## 6. Source-of-truth registry
+## 6. Registre des sources de vérité
 
-| Information | Canonical source of truth | Owner | Allowed projections |
+| Information | Source de vérité canonique | Propriétaire | Projections autorisées |
 | --- | --- | --- | --- |
-| Pricing and customer segment quote | server-side pricing resolution and immutable snapshot | A2 | kiosk, web, account, receipts |
-| Payment state | signed Stripe events plus server payment records | A2 | kiosk/account/admin status |
-| Rental state | canonical server rental lifecycle/state version | A2 | kiosk, account, admin |
-| Hardware command intent | persisted authorized server intent | A2 | admin/observability |
-| Physical battery identity/event | correlated physical/provider event evidence | A2 for rental correlation; A7 for asset truth | kiosk/admin/inventory evidence |
-| Inventory asset and readiness | serialized asset, location and supplier evidence | A7 | admin and capacity proposals |
-| Campaign state | advertising campaign/playlist runtime | A5 | kiosk idle surface and analytics |
-| Release identity | release manifest and exact artifacts | A8 | operations and growth readiness |
-| Commercial pipeline | documented partnership records | A9 | planning only; never operational truth |
+| Pricing et devis du segment client | résolution pricing serveur et snapshot immuable | A2 | Kiosk, web, compte, reçus |
+| État de paiement | événements Stripe signés et données paiement serveur | A2 | statut Kiosk/compte/admin |
+| État de location | cycle serveur canonique / state version | A2 | Kiosk, compte, admin |
+| Intention de commande hardware | intention serveur autorisée et persistée | A2 | admin/observabilité |
+| Identité/événement batterie physique | preuve corrélée d’événement physique/fournisseur | A2 pour corrélation location ; A7 pour asset | Kiosk/admin/Inventory |
+| Asset Inventory et readiness | asset sérialisé, localisation et preuve fournisseur | A7 | admin et propositions de capacité |
+| État campagne | runtime campagne/playlist Advertising | A5 | surface idle Kiosk et analytics |
+| Identité de release | manifeste de release et artefacts exacts | A8 | opérations et readiness Growth |
+| Pipeline commercial | dossiers de partenariat documentés | A9 | planification seulement, jamais vérité opérationnelle |
 
-Two sources may coexist only with an explicit synchronization rule. A projection
-may never silently replace canonical business or physical truth.
+Deux sources ne peuvent coexister qu’avec une règle de synchronisation explicite.
+Une projection ne peut jamais remplacer silencieusement une vérité métier ou
+physique canonique.
 
-## 7. Business authority and cost
+## 7. Autorité métier et coût
 
-A human must decide price, deposit, caps, penalties, subscriptions, customer
-terms, refunds, commercial commitments, and business model. Missing information
-is `BUSINESS_DECISION_REQUIRED`, not permission to invent a value.
+Un humain décide prix, caution, plafonds, pénalités, abonnements, conditions
+client, remboursements, engagements commerciaux et modèle économique. Une
+information manquante est `BUSINESS_DECISION_REQUIRED`, pas une permission
+d’inventer une valeur.
 
-No incremental paid dependency is required by this operating model. Any proposal
-for one is `COST_APPROVAL_REQUIRED` and must state recurring and one-off cost.
+Ce modèle opérationnel ne requiert aucune dépendance payante incrémentale. Toute
+proposition en ce sens est `COST_APPROVAL_REQUIRED` et doit indiquer les coûts
+ponctuels et récurrents.

@@ -1,8 +1,8 @@
-# Handoff Protocol
+# Protocole de handoff
 
-Use this compact payload only when work must cross ownership boundaries. A
-handoff is not a long project brief and does not transfer authority outside its
-stated scope.
+Utiliser cette charge utile compacte uniquement lorsqu’un travail traverse une
+frontière de responsabilité. Un handoff n’est pas un long brief projet et ne
+transfère aucune autorité hors de son périmètre déclaré.
 
 ```text
 TASK_ID:
@@ -25,12 +25,9 @@ ACCEPTANCE_CRITERIA:
 NEXT_ACTION:
 ```
 
-Rules:
+Règles :
 
-- Link evidence by issue, PR, SHA, test output, release identity, or recorded
-  physical observation; do not replace it with an assertion.
-- State `PROTECTED_CORE: YES` before any protected implementation change.
-- A recipient accepts, rejects, or returns the handoff as incomplete. It may not
-  silently broaden scope.
-- A failed validation returns a new handoff to the domain owner with the exact
-  failed gate and evidence.
+- Lier les preuves par issue, PR, SHA, sortie de test, identité de release ou observation physique consignée ; ne pas les remplacer par une affirmation.
+- Déclarer `PROTECTED_CORE: YES` avant toute modification d’implémentation protégée.
+- Le destinataire accepte, refuse ou retourne le handoff comme incomplet. Il ne peut pas élargir silencieusement le périmètre.
+- Une validation échouée retourne un nouveau handoff au propriétaire du domaine avec le gate exact échoué et les preuves.

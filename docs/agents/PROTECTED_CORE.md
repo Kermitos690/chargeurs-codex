@@ -1,40 +1,39 @@
 # Protected Core
 
-Protected Core is the set of contracts where a local convenience, UI fallback,
-or unverified provider response may cause incorrect payment, rental, hardware,
-security, or settlement behavior.
+Le Protected Core est l’ensemble des contrats où une facilité locale, un fallback
+UI ou une réponse fournisseur non vérifiée peut provoquer un comportement erroné
+de paiement, location, hardware, sécurité ou settlement.
 
-## Protected registry
+## Registre protégé
 
-| Protected capability | Primary owner | Non-negotiable rule |
+| Capacité protégée | Propriétaire principal | Règle non négociable |
 | --- | --- | --- |
-| Server pricing resolution and immutable snapshot | A2 | frontend cannot calculate charge truth |
-| Stripe Checkout, PaymentIntent, capture, refund and settlement | A2 | signed/server evidence controls money state |
-| Rental lifecycle and transactional idempotency | A2 | state/version transitions are server-owned and idempotent |
-| Hardware command intent and supplier eject mutation | A2 after A3 RCA | persist one authorized intent before one supplier mutation |
-| Kiosk device authentication and credentials | A2 / native owner through A3 RCA | no credential leak or insecure fallback |
-| Battery release evidence | A2 | provider acknowledgement is not physical release proof |
-| Physical return correlation | A2 | exact contractual battery and accepted `BATTERY_IN` evidence precede settlement |
-| Non-return handling | A2 | no timer or UI guess creates a charge decision |
-| Privileged DB, RLS, migrations and secrets | A2 | no broad bypass for debugging; secrets never enter logs or UI |
+| Résolution pricing serveur et snapshot immuable | A2 | le frontend ne peut pas calculer la vérité de facturation |
+| Stripe Checkout, PaymentIntent, capture, remboursement et settlement | A2 | les preuves signées/côté serveur contrôlent l’état financier |
+| Cycle de location et idempotence transactionnelle | A2 | transitions état/version côté serveur et idempotentes |
+| Intention de commande hardware et mutation fournisseur d’éjection | A2 après RCA A3 | persister une intention autorisée avant une seule mutation fournisseur |
+| Authentification et credentials de l’appareil Kiosk | A2 / propriétaire natif via RCA A3 | aucune fuite de credential ni fallback non sûr |
+| Preuve de libération de batterie | A2 | l’accusé fournisseur n’est pas une preuve de libération physique |
+| Corrélation de retour physique | A2 | batterie contractuelle exacte et preuve `BATTERY_IN` acceptée avant settlement |
+| Gestion de non-retour | A2 | aucun timer ou supposition UI ne crée une décision de facturation |
+| DB privilégiée, RLS, migrations et secrets | A2 | aucun bypass large pour déboguer ; secrets jamais dans logs ou UI |
 
-## Change gates
+## Gates de changement
 
-Every change in this registry must include `PROTECTED_CORE_CHANGE` in its PR or
-handoff and provide:
+Chaque changement de ce registre doit inclure `PROTECTED_CORE_CHANGE` dans sa PR
+ou son handoff et fournir :
 
-1. A3 RCA evidence when the work is incident-driven.
-2. The A2 domain-owner implementation and targeted tests.
-3. A1 review for cross-domain contract or invariant impact.
-4. A8 integration evidence and, where relevant, exact physical validation.
-5. Explicit human approval for business-policy or external-risk decisions.
+1. Preuve RCA A3 lorsque le travail provient d’un incident.
+2. Implémentation du propriétaire A2 et tests ciblés.
+3. Revue A1 pour impact sur contrat ou invariant inter-domaines.
+4. Preuve d’intégration A8 et, si pertinent, validation physique exacte.
+5. Approbation humaine explicite pour décision de politique métier ou risque externe.
 
-The following are forbidden:
+Les éléments suivants sont interdits :
 
-- client-side fallback that weakens a server fail-closed rule;
-- timer-driven payment, ejection, return or settlement success;
-- an automatic second ejection after ambiguous supplier result;
-- settlement without accepted physical return evidence;
-- a security/RLS bypass used as a production fix;
-- reinterpreting animation, DOM state, a Git merge, or an HTTP 200 as physical
-  proof.
+- fallback client qui affaiblit une règle serveur fail-closed ;
+- succès de paiement, éjection, retour ou settlement piloté par timer ;
+- seconde éjection automatique après résultat fournisseur ambigu ;
+- settlement sans preuve de retour physique acceptée ;
+- bypass sécurité/RLS utilisé comme correctif de production ;
+- interprétation d’animation, état DOM, merge Git ou HTTP 200 comme preuve physique.

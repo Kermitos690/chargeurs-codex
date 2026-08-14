@@ -1,30 +1,27 @@
-# Ownership Matrix
+# Matrice de responsabilités
 
-One capability has one primary owner. Contributors may read or assist through a
-handoff, but cannot take ownership by adjacency or file touch.
+Une capacité a un seul propriétaire principal. Les contributeurs peuvent lire ou
+aider via un handoff, mais ne deviennent pas propriétaires par proximité ou
+simple modification de fichier.
 
-| Domain | Primary owner | Allowed contributors | Reviewer / validator | Release gate | Handoff to |
+| Domaine | Propriétaire principal | Contributeurs autorisés | Relecteur / validateur | Gate de release | Handoff vers |
 | --- | --- | --- | --- | --- | --- |
-| Governance, WIP and collision control | A0 | A1, A8 | A0 | A0 | relevant owner |
-| Product architecture and cross-domain contracts | A1 | A0, A2, A4, A7, A8 | A1 | A8 if release-affecting | domain owner |
-| Pricing, Checkout, PaymentIntent and settlement contracts | A2 | A3, A8 | A2 + A1 for Protected Core | A8 | A4 for projections |
-| Rental lifecycle and hardware-command intent | A2 after A3 RCA handoff | A3, A7, A8 | A2 + A1 | A8 | A4 for presentation |
-| Root-cause analysis and minimal safety correction | A3 | relevant domain owner | A3 | A8 when shipped | actual domain owner |
-| Kiosk presentation, navigation and user-facing state | A4 | A5, A6, A2/A3 as truth providers | A4 | A8 physical matrix | A8 |
-| Advertising campaigns, playlist, media and playback | A5 | A4, A8 | A5 | A8 when deployed | A4 |
-| 3D/motion primitives and safe degradation | A6 | A4, A8 | A4 for kiosk semantics; A6 for primitive quality | A8 if release-relevant | A4 |
-| Inventory, supplier evidence and serialized asset truth | A7 | A2, A3, A8 | A7 | A8 for field readiness | A9 for capacity |
-| Integration, release identity, rollback and physical QA | A8 | every domain owner supplies evidence | A8 | A8 | A0 / human release decision |
-| Growth, venues, events and partnerships | A9 | A7, A1/A2, A8 | A9 + required truth owner | A8 for readiness | human business decision |
+| Gouvernance, WIP et contrôle des collisions | A0 | A1, A8 | A0 | A0 | propriétaire concerné |
+| Architecture produit et contrats inter-domaines | A1 | A0, A2, A4, A7, A8 | A1 | A8 si impact release | propriétaire du domaine |
+| Pricing, Checkout, PaymentIntent et contrats de settlement | A2 | A3, A8 | A2 + A1 pour Protected Core | A8 | A4 pour projections |
+| Cycle de location et intention de commande hardware | A2 après handoff RCA A3 | A3, A7, A8 | A2 + A1 | A8 | A4 pour présentation |
+| Analyse de cause racine et correction minimale | A3 | propriétaire concerné | A3 | A8 si livré | propriétaire réel |
+| Présentation, navigation et états Kiosk | A4 | A5, A6, A2/A3 comme sources de vérité | A4 | matrice physique A8 | A8 |
+| Campagnes, playlists, médias et lecture Advertising | A5 | A4, A8 | A5 | A8 si déployé | A4 |
+| Primitives 3D/motion et dégradation sûre | A6 | A4, A8 | A4 pour sémantique Kiosk ; A6 pour qualité de primitive | A8 si lié à une release | A4 |
+| Inventory, preuve fournisseur et vérité des assets sérialisés | A7 | A2, A3, A8 | A7 | A8 pour readiness terrain | A9 pour capacité |
+| Intégration, identité de release, rollback et QA physique | A8 | chaque propriétaire apporte les preuves | A8 | A8 | A0 / décision humaine de release |
+| Growth, lieux, événements et partenariats | A9 | A7, A1/A2, A8 | A9 + propriétaire de vérité requis | A8 pour readiness | décision métier humaine |
 
-## Safety boundaries
+## Frontières de sécurité
 
-- Kiosk displays prices but does not own or calculate charge truth.
-- Advertising may read an explicit kiosk surface contract but may not affect a
-  rental transaction. `AD_FAILURE = NO_AD`, never rental failure.
-- Inventory may observe physical events but cannot rewrite rental state or issue
-  hardware commands.
-- Growth may not promise capacity, release readiness, price, terms, refunds or
-  a feature without the relevant source of truth and human business approval.
-- A release owner validates evidence; only a human authorizes production when a
-  business or external-risk decision is involved.
+- Le Kiosk affiche les prix mais ne possède ni ne calcule la vérité de facturation.
+- Advertising peut lire un contrat explicite de surface Kiosk mais ne peut pas affecter une transaction de location. `AD_FAILURE = NO_AD`, jamais une panne de location.
+- Inventory peut observer les événements physiques mais ne peut pas réécrire l’état de location ni émettre des commandes hardware.
+- Growth ne peut pas promettre capacité, readiness de release, prix, conditions, remboursements ou fonctionnalité sans source de vérité pertinente et approbation métier humaine.
+- Un propriétaire de release valide les preuves ; seul un humain autorise la production lorsqu’une décision métier ou un risque externe est concerné.
