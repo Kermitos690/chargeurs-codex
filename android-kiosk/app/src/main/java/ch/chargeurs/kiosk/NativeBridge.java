@@ -35,6 +35,9 @@ public final class NativeBridge {
             this.terminalRuntime = application.terminalRuntime(config);
             this.terminalRuntime.ensureStarted();
         }
+        // Native overlay, above the WebView and Advertising. It remains usable
+        // even when the browser DOM/header is obscured by a degraded kiosk state.
+        OperatorAccessGate.install(activity);
     }
 
     @JavascriptInterface
@@ -119,13 +122,12 @@ public final class NativeBridge {
     }
 
     /**
-     * Operator-only path, reached by five deliberate taps on the kiosk brand.
-     * It shows a native confirmation before it clears a device-bound credential;
-     * no WebView or browser-side code can directly alter provisioning state.
+     * Legacy DOM five-tap fallback now reaches the same remote-verified native
+     * operator gate. Browser-side code can no longer clear the secure binding.
      */
     @JavascriptInterface
     public void requestReprovisioning() {
-        activity.requestReprovisioning();
+        OperatorAccessGate.open(activity);
     }
 
     @JavascriptInterface
