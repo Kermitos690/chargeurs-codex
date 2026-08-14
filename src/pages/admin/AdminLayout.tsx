@@ -11,6 +11,8 @@ import { LogOut, Loader2, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ADMIN_NAV, canAccessAdminPath } from "./adminNav";
 
+export type AdminOutletContext = { roles: string[] };
+
 function NavGroups({ roles, onNavigate }: { roles: string[]; onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-5">
@@ -133,7 +135,7 @@ export default function AdminLayout() {
           "flex-1 overflow-x-hidden",
           isCommandCenterHome ? "p-0 lg:p-8" : "p-5 pt-20 sm:p-8 lg:pt-8",
         )}>
-          <Outlet />
+          <Outlet context={{ roles } satisfies AdminOutletContext} />
         </main>
       </div>
     </div>

@@ -15,7 +15,6 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { canAccessAdminPath } from "../adminNav";
 import type { CommandCenterDecision, CommandCenterDevelopment, CommandCenterHealth } from "./model";
 import type { FleetRow } from "./types";
@@ -24,14 +23,8 @@ function Panel({ children, className = "" }: { children: ReactNode; className?: 
   return <section className={`glass liquid-border rounded-3xl border border-border/60 ${className}`}>{children}</section>;
 }
 
-function useCanAccess(href: string): boolean {
-  const { roles } = useAuth();
-  if (!href.startsWith("/admin")) return true;
-  return canAccessAdminPath(href, roles);
-}
-
-function AccessibleNav({ href, className, children, disabledLabel = "Accès limité" }: { href: string; className: string; children: ReactNode; disabledLabel?: string }) {
-  const allowed = useCanAccess(href);
+function AccessibleNav({ href, roles, className, children, disabledLabel = "Accès limité" }: { href: string; roles: string[]; className: string; children: ReactNode; disabledLabel?: string }) {
+  const allowed = !href.startsWith("/admin") || canAccessAdminPath(href, roles);
   if (allowed) return <Link to={href} className={className}>{children}</Link>;
   return <div aria-disabled="true" className={`${className} cursor-not-allowed opacity-65`}>{children}<span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground"><LockKeyhole className="h-3 w-3" />{disabledLabel}</span></div>;
 }
@@ -45,7 +38,7 @@ function ActionPill({ action }: { action: CommandCenterDevelopment["action"] }) 
   return <span className={`rounded-full border px-2.5 py-1 text-[11px] font-black tracking-wide ${tone}`}>{action}</span>;
 }
 
-export function HealthPanel({ health, compact = false }: { health: CommandCenterHealth; compact?: boolean }) {
+export function HealthPanel({ health, roles, compact = false }: { health: CommandCenterHealth; roles: string[]; compact?: boolean }) {
   const score = Math.max(0, Math.min(100, health.score));
   const tone = health.tone === "critical" ? "text-destructive" : health.tone === "warning" ? "text-warning" : "text-success";
   const border = health.tone === "critical" ? "border-destructive/25" : health.tone === "warning" ? "border-warning/25" : "border-success/25";
@@ -75,7 +68,7 @@ export function HealthPanel({ health, compact = false }: { health: CommandCenter
           </div>
         </div>
       </div>
-      <AccessibleNav href="/admin/network-overview" className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
+      <AccessibleNav href="/admin/network-overview" roles={roles} className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
         <span>Analyse réseau détaillée</span><ChevronRight className="h-4 w-4" />
       </AccessibleNav>
     </Panel>
@@ -89,35 +82,35 @@ function StationState({ row }: { row: FleetRow }) {
   return <span className="inline-flex items-center gap-1 text-xs font-bold text-warning"><BatteryCharging className="h-3.5 w-3.5" /> Stock à vérifier</span>;
 }
 
-export function StationsPanel({ stations, compact = false }: { stations: FleetRow[]; compact?: boolean }) {
+export function StationsPanel({ stations, roles, compact = false }: { stations: FleetRow[]; roles: string[]; compact?: boolean }) {
   const visible = compact ? stations.slice(0, 2) : stations;
   return (
     <Panel>
       <div className="flex items-center justify-between gap-3 px-5 pt-5"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-muted-foreground">Bornes</p><h2 className="mt-1 font-display text-xl font-bold">État terrain</h2></div><Server className="h-5 w-5 text-primary" /></div>
       <div className="mt-4 grid gap-3 px-5 pb-5 sm:grid-cols-2">
         {visible.map((row) => (
-          <AccessibleNav key={row.stationId} href={`/admin/stations/${encodeURIComponent(row.stationId)}`} className="rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-primary/40 hover:bg-muted/20">
+          <AccessibleNav key={row.stationId} href={`/admin/stations/${encodeURIComponent(row.stationId)}`} roles={roles} className="rounded-2xl border border-border/70 bg-background/40 p-4 transition hover:border-primary/40 hover:bg-muted/20">
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="font-mono text-xs text-muted-foreground">{row.stationId}</div><div className="mt-1 truncate font-bold">{row.name}</div></div><StationState row={row} /></div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/30 p-2"><div className="font-bold">{row.rentableCount}/{row.totalCount}</div><div className="text-[10px] text-muted-foreground">rentables</div></div><div className="rounded-xl bg-muted/30 p-2"><div className="font-bold">{row.providerOnline ? "OK" : "HS"}</div><div className="text-[10px] text-muted-foreground">matériel</div></div><div className="rounded-xl bg-muted/30 p-2"><div className="font-bold">{row.kioskAuthenticated ? "OK" : "HS"}</div><div className="text-[10px] text-muted-foreground">kiosk</div></div></div>
           </AccessibleNav>
         ))}
         {!visible.length && <div className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground sm:col-span-2">Aucune borne n’est remontée par la source opérationnelle.</div>}
       </div>
-      <AccessibleNav href="/admin/stations" className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
+      <AccessibleNav href="/admin/stations" roles={roles} className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
         <span>Toutes les bornes</span><ChevronRight className="h-4 w-4" />
       </AccessibleNav>
     </Panel>
   );
 }
 
-export function DecisionsPanel({ decisions, compact = false }: { decisions: CommandCenterDecision[]; compact?: boolean }) {
+export function DecisionsPanel({ decisions, roles, compact = false }: { decisions: CommandCenterDecision[]; roles: string[]; compact?: boolean }) {
   const visible = compact ? decisions.slice(0, 2) : decisions;
   return (
     <Panel>
       <div className="flex items-center justify-between gap-3 px-5 pt-5"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-muted-foreground">Décisions</p><h2 className="mt-1 font-display text-xl font-bold">À traiter maintenant</h2></div><ClipboardCheck className="h-5 w-5 text-primary" /></div>
       <div className="mt-4 space-y-3 px-5 pb-5">
         {visible.map((decision) => (
-          <AccessibleNav key={decision.id} href={decision.href} className={`block rounded-2xl border p-4 transition hover:bg-muted/20 ${decision.severity === "critical" ? "border-destructive/30 bg-destructive/[.05]" : "border-warning/25 bg-warning/[.04]"}`}>
+          <AccessibleNav key={decision.id} href={decision.href} roles={roles} className={`block rounded-2xl border p-4 transition hover:bg-muted/20 ${decision.severity === "critical" ? "border-destructive/30 bg-destructive/[.05]" : "border-warning/25 bg-warning/[.04]"}`}>
             <div className="flex items-start gap-3">
               {decision.severity === "critical" ? <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-destructive" /> : <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />}
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><b>{decision.title}</b><ActionPill action={decision.action} /></div><p className="mt-1 text-sm text-muted-foreground">{decision.recommendation}</p></div>
@@ -131,7 +124,7 @@ export function DecisionsPanel({ decisions, compact = false }: { decisions: Comm
   );
 }
 
-export function DevelopmentPanel({ development }: { development: CommandCenterDevelopment }) {
+export function DevelopmentPanel({ development, roles }: { development: CommandCenterDevelopment; roles: string[] }) {
   const sourceLabel = development.source === "LIVE_ALERT" ? "État réel" : development.source === "OPERATIONS" ? "Exploitation" : "Gouvernance P0";
   return (
     <Panel className="overflow-hidden">
@@ -139,7 +132,7 @@ export function DevelopmentPanel({ development }: { development: CommandCenterDe
         <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-muted-foreground">Développement</p><h2 className="mt-1 font-display text-xl font-bold">Prochain chantier autorisé</h2></div><Code2 className="h-5 w-5 text-primary" /></div>
         <div className="mt-5 rounded-2xl border border-primary/25 bg-primary/[.05] p-4"><div className="flex flex-wrap items-center gap-2"><ActionPill action={development.action} /><span className="rounded-full border border-border bg-background/60 px-2.5 py-1 text-[11px] font-bold">{development.lane}</span><span className="text-[11px] font-semibold text-muted-foreground">{sourceLabel}</span></div><h3 className="mt-3 text-lg font-bold leading-snug">{development.title}</h3><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{development.reason}</p></div>
       </div>
-      <AccessibleNav href={development.href} className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
+      <AccessibleNav href={development.href} roles={roles} className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-sm font-semibold text-primary transition hover:bg-muted/25">
         <span>Ouvrir le chantier</span><ChevronRight className="h-4 w-4" />
       </AccessibleNav>
     </Panel>
@@ -153,8 +146,7 @@ const moreLinks: Array<{ label: string; detail: string; href: string; icon: Luci
   { label: "Maintenance", detail: "Actions opérateur et incidents", href: "/admin/maintenance", icon: Wrench },
 ];
 
-export function MorePanel() {
-  const { roles } = useAuth();
+export function MorePanel({ roles }: { roles: string[] }) {
   const visibleLinks = moreLinks.filter((link) => canAccessAdminPath(link.href, roles));
   return (
     <Panel>

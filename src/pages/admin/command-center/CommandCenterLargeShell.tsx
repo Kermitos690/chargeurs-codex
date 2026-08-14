@@ -6,6 +6,7 @@ import type { CommandCenterHomeModel } from "./model";
 
 type Props = {
   model: CommandCenterHomeModel;
+  roles: string[];
   generatedAt: string;
   loading: boolean;
   error: string | null;
@@ -21,7 +22,7 @@ function relative(value: string): string {
   return `il y a ${Math.floor(ms / 86_400_000)} j`;
 }
 
-export function CommandCenterLargeShell({ model, generatedAt, loading, error, onRefresh }: Props) {
+export function CommandCenterLargeShell({ model, roles, generatedAt, loading, error, onRefresh }: Props) {
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 pb-10">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -44,13 +45,13 @@ export function CommandCenterLargeShell({ model, generatedAt, loading, error, on
       {error && <div role="alert" className="rounded-2xl border border-destructive/35 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
 
       <div className="grid gap-5 xl:grid-cols-12">
-        <div className="xl:col-span-5"><HealthPanel health={model.health} /></div>
-        <div className="xl:col-span-7"><DevelopmentPanel development={model.development} /></div>
-        <div className="xl:col-span-7"><StationsPanel stations={model.stations} compact /></div>
-        <div className="xl:col-span-5"><DecisionsPanel decisions={model.decisions} /></div>
+        <div className="xl:col-span-5"><HealthPanel health={model.health} roles={roles} /></div>
+        <div className="xl:col-span-7"><DevelopmentPanel development={model.development} roles={roles} /></div>
+        <div className="xl:col-span-7"><StationsPanel stations={model.stations} roles={roles} compact /></div>
+        <div className="xl:col-span-5"><DecisionsPanel decisions={model.decisions} roles={roles} /></div>
       </div>
 
-      <MorePanel />
+      <MorePanel roles={roles} />
     </div>
   );
 }

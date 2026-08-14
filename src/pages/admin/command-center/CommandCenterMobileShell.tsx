@@ -9,6 +9,7 @@ type MobileTab = "home" | "stations" | "development" | "decisions" | "more";
 
 type Props = {
   model: CommandCenterHomeModel;
+  roles: string[];
   generatedAt: string;
   loading: boolean;
   error: string | null;
@@ -23,7 +24,7 @@ function relative(value: string): string {
   return `il y a ${Math.floor(ms / 3_600_000)} h`;
 }
 
-export function CommandCenterMobileShell({ model, generatedAt, loading, error, onRefresh }: Props) {
+export function CommandCenterMobileShell({ model, roles, generatedAt, loading, error, onRefresh }: Props) {
   const [tab, setTab] = useState<MobileTab>("home");
   const nav = useMemo(() => [
     { id: "home" as const, label: "Accueil", icon: Home },
@@ -34,8 +35,8 @@ export function CommandCenterMobileShell({ model, generatedAt, loading, error, o
   ], []);
 
   return (
-    <div className="relative min-h-[100dvh] bg-background/88 pb-28">
-      <header className="sticky top-0 z-30 border-b border-border/65 bg-background/90 px-4 py-3 backdrop-blur-xl">
+    <div className="relative min-h-[100dvh] bg-background/90 pb-28">
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 px-4 py-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <BrandLogo size="sm" />
           <div className="flex items-center gap-2">
@@ -52,16 +53,16 @@ export function CommandCenterMobileShell({ model, generatedAt, loading, error, o
 
         {tab === "home" && <>
           <div><p className="text-xs font-black uppercase tracking-[.16em] text-primary">Product Command Center</p><h1 className="mt-1 font-display text-2xl font-bold">Décider quoi faire maintenant</h1><p className="mt-1 text-sm text-muted-foreground">Constater → décider → agir. Les détails restent au second niveau.</p></div>
-          <HealthPanel health={model.health} compact />
-          <StationsPanel stations={model.stations} compact />
-          <DecisionsPanel decisions={model.decisions} compact />
-          <DevelopmentPanel development={model.development} />
+          <HealthPanel health={model.health} roles={roles} compact />
+          <StationsPanel stations={model.stations} roles={roles} compact />
+          <DecisionsPanel decisions={model.decisions} roles={roles} compact />
+          <DevelopmentPanel development={model.development} roles={roles} />
         </>}
 
-        {tab === "stations" && <><div><h1 className="font-display text-2xl font-bold">Bornes</h1><p className="mt-1 text-sm text-muted-foreground">État réellement remonté par le réseau.</p></div><StationsPanel stations={model.stations} /></>}
-        {tab === "development" && <><div><h1 className="font-display text-2xl font-bold">Développement</h1><p className="mt-1 text-sm text-muted-foreground">Le prochain chantier autorisé, sans fragiliser P0.</p></div><DevelopmentPanel development={model.development} /></>}
-        {tab === "decisions" && <><div><h1 className="font-display text-2xl font-bold">Décisions</h1><p className="mt-1 text-sm text-muted-foreground">Maximum trois sujets opérationnels prioritaires.</p></div><DecisionsPanel decisions={model.decisions} /></>}
-        {tab === "more" && <><div><h1 className="font-display text-2xl font-bold">Plus</h1><p className="mt-1 text-sm text-muted-foreground">Accéder aux analyses et outils spécialisés.</p></div><MorePanel /></>}
+        {tab === "stations" && <><div><h1 className="font-display text-2xl font-bold">Bornes</h1><p className="mt-1 text-sm text-muted-foreground">État réellement remonté par le réseau.</p></div><StationsPanel stations={model.stations} roles={roles} /></>}
+        {tab === "development" && <><div><h1 className="font-display text-2xl font-bold">Développement</h1><p className="mt-1 text-sm text-muted-foreground">Le prochain chantier autorisé, sans fragiliser P0.</p></div><DevelopmentPanel development={model.development} roles={roles} /></>}
+        {tab === "decisions" && <><div><h1 className="font-display text-2xl font-bold">Décisions</h1><p className="mt-1 text-sm text-muted-foreground">Maximum trois sujets opérationnels prioritaires.</p></div><DecisionsPanel decisions={model.decisions} roles={roles} /></>}
+        {tab === "more" && <><div><h1 className="font-display text-2xl font-bold">Plus</h1><p className="mt-1 text-sm text-muted-foreground">Accéder aux analyses et outils spécialisés.</p></div><MorePanel roles={roles} /></>}
       </main>
 
       <nav aria-label="Navigation Product Command Center" className="fixed inset-x-0 bottom-0 z-40 border-t border-border/75 bg-background/95 px-2 pb-[max(.55rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
@@ -69,7 +70,7 @@ export function CommandCenterMobileShell({ model, generatedAt, loading, error, o
           {nav.map(({ id, label, icon: Icon }) => {
             const active = tab === id;
             return (
-              <button key={id} type="button" aria-current={active ? "page" : undefined} onClick={() => setTab(id)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold transition ${active ? "bg-primary/12 text-primary" : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"}`}>
+              <button key={id} type="button" aria-current={active ? "page" : undefined} onClick={() => setTab(id)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[10px] font-bold transition ${active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"}`}>
                 <Icon className="h-5 w-5" />
                 <span className="max-w-full truncate">{label}</span>
               </button>

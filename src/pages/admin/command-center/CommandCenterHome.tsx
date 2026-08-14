@@ -1,5 +1,7 @@
 import { Loader2, RefreshCw } from "lucide-react";
+import { useOutletContext } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import type { AdminOutletContext } from "../AdminLayout";
 import { buildCommandCenterHomeModel } from "./model";
 import { CommandCenterLargeShell } from "./CommandCenterLargeShell";
 import { CommandCenterMobileShell } from "./CommandCenterMobileShell";
@@ -8,6 +10,7 @@ import { useCommandCenterOverview } from "./useCommandCenterOverview";
 
 export function CommandCenterHome() {
   const mode = useCommandCenterMode();
+  const { roles } = useOutletContext<AdminOutletContext>();
   const { data, loading, error, refresh } = useCommandCenterOverview();
 
   if (!data) {
@@ -35,6 +38,7 @@ export function CommandCenterHome() {
   const model = buildCommandCenterHomeModel(data);
   const common = {
     model,
+    roles,
     generatedAt: data.generatedAt,
     loading,
     error,
