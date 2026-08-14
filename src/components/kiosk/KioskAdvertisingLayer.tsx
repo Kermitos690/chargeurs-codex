@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
+import { adEntryDurationMs, estimateServerClockOffsetMs, resolveAdSyncPosition } from "@/lib/adSync";
 import { useI18n } from "@/i18n/i18n";
 import "./kiosk-advertising.css";
 import "./kiosk-advertising-failsafe.css";
@@ -35,6 +36,8 @@ type PlaylistResponse = {
   ok?: boolean;
   stationId?: string;
   version?: string;
+  serverTimeMs?: number;
+  timelineEpochMs?: number;
   campaigns?: AdCampaign[];
   error?: string;
 };
@@ -165,7 +168,15 @@ async function reportPlayback(
   }
 }
 
-export function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string, playlistVersion?: string) {
+export function useAdRotation(
+  entries: AdEntry[],
+  active: boolean,
+  mode: DisplayMode,
+  stationId: string,
+  playlistVersion?: string,
+  sharedClockOffsetMs: number | null = null,
+  timelineEpochMs = 0,
+) {
   const [index, setIndex] = useState(0);
   const [epoch, setEpoch] = useState(0);
   const [blockedKeys, setBlockedKeys] = useState<Set<string>>(() => new Set());
@@ -192,7 +203,13 @@ export function useAdRotation(entries: AdEntry[], active: boolean, mode: Display
     setIndex(0);
   }, [availableEntries.length, index]);
 
-  const current = availableEntries.length ? availableEntries[index % availableEntries.length] : null;
+  const synchronized = sharedClockOffsetMs !== null && Number.isFinite(sharedClockOffsetMs);
+  const sharedNowMs = Date.now() + (synchronized ? Number(sharedClockOffsetMs) : 0);
+  const syncPosition = synchronized
+    ? resolveAdSyncPosition(availableEntries, sharedNowMs, timelineEpochMs)
+    : null;
+  const currentIndex = syncPosition?.index ?? (availableEntries.length ? index % availableEntries.length : 0);
+  const current = availableEntries.length ? availableEntries[currentIndex] : null;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -203,6 +220,18 @@ export function useAdRotation(entries: AdEntry[], active: boolean, mode: Display
 
   const finish = useCallback((status: PlaybackStatus, errorCode?: string) => {
     if (!current) return;
+
+    if (status === "completed" && synchronized) {
+      const position = resolveAdSyncPosition(
+        availableEntries,
+        Date.now() + Number(sharedClockOffsetMs),
+        timelineEpochMs,
+      );
+      // A video's encoded duration can be slightly shorter than its declared
+      // duration. Do not let onEnded advance a single kiosk ahead of the shared clock.
+      if (position?.index === currentIndex && position.remainingMs > 60) return;
+    }
+
     statusRef.current = status;
     errorCodeRef.current = errorCode ?? null;
     clearTimer();
@@ -216,10 +245,16 @@ export function useAdRotation(entries: AdEntry[], active: boolean, mode: Display
       return;
     }
 
+    if (synchronized) {
+      // The next render resolves the media from the authoritative shared clock,
+      // eliminating accumulated setTimeout drift between kiosks.
+      setEpoch((value) => value + 1);
+      return;
+    }
+
     setIndex((value) => availableEntries.length ? (value + 1) % availableEntries.length : 0);
-    // Forces a fresh media element even for a one-item playlist.
     setEpoch((value) => value + 1);
-  }, [availableEntries.length, clearTimer, current]);
+  }, [availableEntries, clearTimer, current, currentIndex, sharedClockOffsetMs, synchronized, timelineEpochMs]);
 
   const complete = useCallback(() => finish("completed"), [finish]);
   const fail = useCallback((errorCode: string) => finish("failed", errorCode), [finish]);
@@ -238,11 +273,18 @@ export function useAdRotation(entries: AdEntry[], active: boolean, mode: Display
     statusRef.current = "interrupted";
     errorCodeRef.current = null;
 
-    // Rotation must not depend on an image load event. Some Android WebViews can
-    // restore a cached image without reliably delivering React's onLoad after a
-    // remount; tying the timer to onLoad leaves the screensaver frozen forever.
-    // onLoad remains useful only to qualify the impression as actually started.
-    if (current.item.mediaType === "image") {
+    if (synchronized) {
+      const position = resolveAdSyncPosition(
+        availableEntries,
+        Date.now() + Number(sharedClockOffsetMs),
+        timelineEpochMs,
+      );
+      if (position) {
+        // A tiny guard keeps the timeout on the far side of the shared boundary.
+        timerRef.current = window.setTimeout(complete, position.remainingMs + 8);
+      }
+    } else if (current.item.mediaType === "image") {
+      // Legacy/offline fallback: rotation remains independent from image onLoad.
       const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
       timerRef.current = window.setTimeout(complete, seconds * 1000);
     }
@@ -261,36 +303,48 @@ export function useAdRotation(entries: AdEntry[], active: boolean, mode: Display
         errorCodeRef.current,
       );
     };
-  }, [active, clearTimer, complete, current, epoch, mode, playlistVersion, stationId]);
+  }, [active, availableEntries, clearTimer, complete, current, epoch, mode, playlistVersion, sharedClockOffsetMs, stationId, synchronized, timelineEpochMs]);
 
   useEffect(() => {
     if (!active || availableEntries.length < 2) return;
-    const next = availableEntries[(index + 1) % availableEntries.length];
+    const next = availableEntries[(currentIndex + 1) % availableEntries.length];
     if (!next?.item.url) return;
     if (next.item.mediaType === "image") {
       const img = new Image();
       img.decoding = "async";
       img.src = next.item.url;
+      if (typeof img.decode === "function") void img.decode().catch(() => undefined);
       return;
     }
     const video = document.createElement("video");
-    video.preload = "metadata";
+    video.preload = "auto";
     video.muted = true;
     video.src = next.item.url;
-  }, [active, availableEntries, index]);
+    video.load();
+  }, [active, availableEntries, currentIndex]);
 
-  return { current, epoch, complete, fail, markStarted };
+  return {
+    current,
+    epoch,
+    complete,
+    fail,
+    markStarted,
+    elapsedMs: syncPosition?.elapsedMs ?? 0,
+    durationMs: current ? adEntryDurationMs(current) : 0,
+  };
 }
 
 function AdMedia({
   entry,
   epoch,
+  startOffsetMs,
   onStarted,
   onCompleted,
   onFailed,
 }: {
   entry: AdEntry;
   epoch: number;
+  startOffsetMs?: number;
   onStarted: () => void;
   onCompleted: () => void;
   onFailed: (errorCode: string) => void;
@@ -307,6 +361,13 @@ function AdMedia({
         playsInline
         preload="auto"
         aria-label={entry.item.title}
+        onLoadedMetadata={(event) => {
+          const offsetSeconds = Math.max(0, Number(startOffsetMs ?? 0)) / 1000;
+          const duration = Number(event.currentTarget.duration);
+          if (offsetSeconds > .05 && Number.isFinite(duration) && duration > .2) {
+            event.currentTarget.currentTime = Math.min(offsetSeconds, Math.max(0, duration - .12));
+          }
+        }}
         onPlaying={onStarted}
         onEnded={onCompleted}
         onError={() => onFailed("VIDEO_PLAYBACK_ERROR")}
@@ -322,6 +383,77 @@ function AdMedia({
       draggable={false}
       onLoad={onStarted}
       onError={() => onFailed("IMAGE_LOAD_ERROR")}
+    />
+  );
+}
+
+type BufferedSnapshot = { entry: AdEntry; epoch: number; startOffsetMs: number };
+
+function BufferedAdMedia({
+  entry,
+  epoch,
+  startOffsetMs,
+  onStarted,
+  onCompleted,
+  onFailed,
+}: {
+  entry: AdEntry;
+  epoch: number;
+  startOffsetMs: number;
+  onStarted: () => void;
+  onCompleted: () => void;
+  onFailed: (errorCode: string) => void;
+}) {
+  const [visible, setVisible] = useState<BufferedSnapshot>({ entry, epoch, startOffsetMs });
+
+  useEffect(() => {
+    if (visible.entry.key === entry.key && visible.epoch === epoch) return;
+    let cancelled = false;
+    const next = { entry, epoch, startOffsetMs };
+    const commit = () => { if (!cancelled) setVisible(next); };
+
+    if (entry.item.mediaType === "image") {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => {
+        if (typeof image.decode === "function") void image.decode().catch(() => undefined).finally(commit);
+        else commit();
+      };
+      image.onerror = () => { if (!cancelled) onFailed("IMAGE_PRELOAD_ERROR"); };
+      image.src = entry.item.url;
+      if (image.complete && image.naturalWidth > 0) {
+        if (typeof image.decode === "function") void image.decode().catch(() => undefined).finally(commit);
+        else commit();
+      }
+      return () => { cancelled = true; };
+    }
+
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.oncanplay = commit;
+    video.onerror = () => { if (!cancelled) onFailed("VIDEO_PRELOAD_ERROR"); };
+    video.src = entry.item.url;
+    video.load();
+    return () => {
+      cancelled = true;
+      video.oncanplay = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [entry, epoch, onFailed, startOffsetMs, visible.entry.key, visible.epoch]);
+
+  const isCurrent = visible.entry.key === entry.key && visible.epoch === epoch;
+  return (
+    <AdMedia
+      entry={visible.entry}
+      epoch={visible.epoch}
+      startOffsetMs={visible.startOffsetMs}
+      onStarted={isCurrent ? onStarted : () => undefined}
+      onCompleted={isCurrent ? onCompleted : () => undefined}
+      onFailed={isCurrent ? onFailed : () => undefined}
     />
   );
 }
@@ -359,6 +491,7 @@ function KioskAdvertisingRuntime() {
   const { stationId = "" } = useParams();
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState<number | null>(null);
   const [scene, setScene] = useState(() => sceneNow());
   const [authRequired, setAuthRequired] = useState(() => kioskAuthRequiredNow());
   const [overlayOpen, setOverlayOpen] = useState(() => interactionOverlayOpen());
@@ -377,13 +510,18 @@ function KioskAdvertisingRuntime() {
   const load = useCallback(async () => {
     if (!stationId) return;
     const token = readKioskToken();
+    const requestStartedMs = Date.now();
     try {
       const { data, transportError } = await invokeKioskEdgeProxy<PlaylistResponse>(
         "/api/kiosk/ads-playlist",
         { action: "playlist", stationId },
         adsPlaylistHeaders(token),
       );
+      const responseReceivedMs = Date.now();
       if (!transportError && data?.ok && Array.isArray(data.campaigns)) {
+        if (Number.isFinite(Number(data.serverTimeMs))) {
+          setServerClockOffsetMs(estimateServerClockOffsetMs(Number(data.serverTimeMs), requestStartedMs, responseReceivedMs));
+        }
         setPlaylist(data);
         cachePlaylist(stationId, data);
         return;
@@ -464,8 +602,9 @@ function KioskAdvertisingRuntime() {
   });
   const splitActive = surface.splitActive;
   const saverActive = surface.saverActive;
-  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version);
-  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version);
+  const timelineEpochMs = Number(playlist.timelineEpochMs ?? 0) || 0;
+  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
+  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
 
   useEffect(() => {
     if (!splitActive || !split.current) return;
@@ -504,9 +643,10 @@ function KioskAdvertisingRuntime() {
     <>
       {splitActive && split.current && (
         <aside className="kiosk-ad-split" aria-label={`${copy.sponsored}: ${split.current.campaignName}`}>
-          <AdMedia
+          <BufferedAdMedia
             entry={split.current}
             epoch={split.epoch}
+            startOffsetMs={split.elapsedMs}
             onStarted={split.markStarted}
             onCompleted={split.complete}
             onFailed={split.fail}
@@ -526,9 +666,10 @@ function KioskAdvertisingRuntime() {
           onKeyDown={authRequired ? undefined : markActivity}
         >
           {saver.current ? (
-            <AdMedia
+            <BufferedAdMedia
               entry={saver.current}
               epoch={saver.epoch}
+              startOffsetMs={saver.elapsedMs}
               onStarted={saver.markStarted}
               onCompleted={saver.complete}
               onFailed={saver.fail}
