@@ -1,5 +1,5 @@
-release=ads-delivery-recovery
-source_commit=703decf67504a466ac63b19e9933fc512e134ef3
-triggered_at=2026-08-14T03:16:24.023Z
+release=ads-ultra-sync-force-deploy
+source_commit=cc00b21d491b57287c77e7d70d63741a94bd2ca1
+triggered_at=2026-08-15T04:02:00Z
 requested_by=gaetan
-reason=restore-canonical-staging-kiosk-advertising-engine-from-main
+reason=force-production-deploy-of-ads-ultra-sync-clock
