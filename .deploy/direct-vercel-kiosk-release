@@ -1,5 +1,5 @@
-release=p0-home-terminal-qr-payment-guard
-source_commit=afdc6dd2b86af4ae0c71642a3483a9aeb92f025f
-triggered_at=2026-08-15T23:01:30Z
+release=p0-home-terminal-qr-payment-guard-scene
+source_commit=635ee03c277838063b152912eaf8e94faea52888
+triggered_at=2026-08-15T23:03:20Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-home-terminal-qr-no-timeout
+reason=force-prebuilt-production-release-activated-physical-home-payment-guard
