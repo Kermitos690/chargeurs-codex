@@ -1,8 +1,10 @@
-// ChargeNow rental callback — provider-confirmed release + battery-first return reconciliation.
-// A verified status=1 callback uniquely matched by trade number can close the kiosk release phase
-// when the exact paid slot/battery was reserved before payment and exactly one C3 command was sent.
-// This avoids indefinite "release in progress" when the supplier omits battery/slot identity.
+// ChargeNow rental callback — supplier notifications plus battery-first return
+// reconciliation. A callback alone is never physical release proof: the cabinet
+// event/snapshot reconciler owns the transition to an active rental. Return
+// settlement requires an exact physical BATTERY_IN for the contractual battery;
+// the observed return slot is independent from the departure/ejection slot.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { classifyRentalCandidates, selectPhysicalReturnEvidence } from "../_shared/returnCorrelation.ts";
 
 const encoder = new TextEncoder();
 const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
@@ -146,82 +148,12 @@ async function appendExactEvent(
   throw new Error("ORCHESTRATOR_VERSION_CONFLICT");
 }
 
-async function confirmProviderRelease(
-  client: ReturnType<typeof db>,
-  session: Record<string, unknown>,
-  callbackKey: string,
-  occurredAt: string,
-) {
-  if (["ejected", "active_rental", "battery_taken", "battery_returned", "completed"].includes(String(session.state))) return true;
-  if (session.state !== "ejecting") return false;
-
-  const slotNum = Number(session.selected_slot_num);
-  const batteryId = String(session.battery_id ?? "").trim();
-  const stationId = String(session.station_id ?? "").trim();
-  if (!stationId || !Number.isInteger(slotNum) || slotNum < 1 || !batteryId) throw new Error("RELEASE_IDENTITY_INCOMPLETE");
-
-  const { data: releaseAttempt, error: attemptError } = await client.from("hardware_release_attempts")
-    .select("id,command_sent_at,selected_slot_num,expected_battery_id,result")
-    .eq("rental_session_id", session.id).maybeSingle();
-  if (attemptError) throw attemptError;
-  if (!releaseAttempt?.command_sent_at) throw new Error("EJECT_COMMAND_NOT_CONFIRMED_SENT");
-  if (Number(releaseAttempt.selected_slot_num) !== slotNum || String(releaseAttempt.expected_battery_id ?? "") !== batteryId) {
-    throw new Error("RELEASE_RESERVATION_MISMATCH");
-  }
-
-  const { error: releaseAttemptError } = await client.from("hardware_release_attempts").update({
-    result: "single_release",
-    released_slot_nums: [slotNum],
-    released_battery_ids: [batteryId],
-    reconciled_at: occurredAt,
-    updated_at: new Date().toISOString(),
-  }).eq("id", releaseAttempt.id).in("result", ["prepared", "command_sent", "pending", "single_release"]);
-  if (releaseAttemptError) throw releaseAttemptError;
-
-  const metadata = {
-    source: "verified_chargenow_release_callback",
-    providerCallbackKey: callbackKey,
-    tradeNo: session.apifox_trade_no ?? null,
-    slotNum,
-    batteryId,
-    provider_identity_fallback: true,
-    duplicate_hardware_command: false,
-  };
-  await appendExactEvent(client, session, {
-    eventType: "battery_released", fromStates: ["release_requested"], targetState: "released",
-    key: `battery_released:provider_callback:${callbackKey}`, occurredAt, stationId, batteryId, metadata,
-  });
-  await appendExactEvent(client, session, {
-    eventType: "rental_activated", fromStates: ["released"], targetState: "active",
-    key: `rental_activated:provider_callback:${callbackKey}`, occurredAt, stationId, batteryId, metadata,
-  });
-
-  const now = new Date().toISOString();
-  const { error: sessionError } = await client.from("rental_sessions").update({
-    state: "ejected",
-    ejected_at: session.ejected_at ?? occurredAt,
-    started_at: session.started_at ?? occurredAt,
-    chargenow_status: "ejected_provider_confirmed",
-    failure_code: null,
-    failure_message: null,
-    updated_at: now,
-  }).eq("id", session.id).eq("state", "ejecting");
-  if (sessionError) throw sessionError;
-  await client.from("station_slot_reservations").update({
-    state: "released", released_at: occurredAt, release_reason: "provider_release_confirmed", updated_at: now,
-  }).eq("rental_session_id", session.id).eq("state", "reserved");
-  await client.from("batteries").update({ station_id: null, slot_num: null, status: "out_of_station", updated_at: now }).eq("battery_id", batteryId);
-  await audit(client, "rental.release.confirmed_from_verified_provider_callback", String(session.id), metadata);
-  return true;
-}
-
 async function physicalReturnTime(
   client: ReturnType<typeof db>,
   session: Record<string, unknown>,
   stationId: string,
   batteryId: string,
-  slotNum: number,
-): Promise<{ receivedAt: string; externalEventId: string | null } | null> {
+): Promise<{ receivedAt: string; externalEventId: string | null; returnedSlotNum: number } | null> {
   const startedAt = String(session.started_at ?? session.ejected_at ?? "");
   if (!startedAt || !Number.isFinite(Date.parse(startedAt))) return null;
   const { data, error } = await client.from("cabinet_events")
@@ -232,21 +164,23 @@ async function physicalReturnTime(
     .order("received_at", { ascending: true })
     .limit(50);
   if (error) throw error;
-  for (const row of data ?? []) {
+
+  const candidates = (data ?? []).map((row) => {
     const body = flatten(row.payload);
-    const observedBattery = firstString(body, ["returnBatteryId", "batteryId", "batterySN", "batterySn"]);
-    const observedSlot = firstInt(body, ["returnSlot", "slotNum", "slot", "slotId"]);
-    if (observedBattery === batteryId && (observedSlot == null || observedSlot === slotNum)) {
-      return { receivedAt: String(row.received_at), externalEventId: typeof row.external_event_id === "string" ? row.external_event_id : null };
-    }
-  }
-  return null;
+    return {
+      receivedAt: String(row.received_at ?? ""),
+      externalEventId: typeof row.external_event_id === "string" ? row.external_event_id : null,
+      batteryId: firstString(body, ["returnBatteryId", "batteryId", "batterySN", "batterySn"]),
+      slotNum: firstInt(body, ["returnSlot", "slotNum", "slot", "slotId"]),
+    };
+  });
+  return selectPhysicalReturnEvidence(candidates, batteryId);
 }
 
 async function appendReturnDetected(client: ReturnType<typeof db>, session: Record<string, unknown>, args: { eventId: string; occurredAt: string; stationId: string; batteryId: string; slotNum: number; providerTradeNo: string | null; physicalEventId: string | null }) {
   const idempotencyKey = `return_detected:provider:${args.eventId}`;
   const metadata = {
-    source: args.physicalEventId ? "battery_in_identity" : "verified_chargenow_return_callback",
+    source: "battery_in_identity",
     providerTradeNo: args.providerTradeNo,
     canonicalTradeNo: session.apifox_trade_no ?? null,
     returnStationId: args.stationId,
@@ -284,17 +218,23 @@ Deno.serve(async (req) => {
     await logApi(client, "/rent/callback:received", 200, safe);
 
     let sessions: Record<string, unknown>[] = [];
-    if (parsed.status === "2" && parsed.batteryId) sessions = await uniqueActiveRentalByBattery(client, parsed.batteryId) as Record<string, unknown>[];
-    if (sessions.length !== 1 && parsed.tradeNo) sessions = await sessionsByTrade(client, parsed.tradeNo) as Record<string, unknown>[];
+    if (parsed.status === "2" && parsed.batteryId) {
+      sessions = await uniqueActiveRentalByBattery(client, parsed.batteryId) as Record<string, unknown>[];
+      if (classifyRentalCandidates(sessions.length) === "ambiguous") {
+        await incident(client, null, "RETURN_IDENTITY_AMBIGUOUS", "Plusieurs locations actives correspondent à la batterie physique; aucune transition financière n'a été appliquée.", { battery_id: parsed.batteryId, match_count: sessions.length, provider_trade_no: parsed.tradeNo || null });
+        return json({ received: true, ignored: true, settlement_triggered: false, reason: "AMBIGUOUS_RENTAL" }, 202);
+      }
+    }
+    if (sessions.length === 0 && parsed.tradeNo) sessions = await sessionsByTrade(client, parsed.tradeNo) as Record<string, unknown>[];
     if (!sessions.length) {
       await audit(client, "chargenow.callback.unmatched", null, { status: parsed.status, battery_id: parsed.batteryId, trade_no_fingerprint: parsed.tradeNo ? parsed.tradeNo.slice(-8) : null });
       return json({ received: true, unmatched: true }, 202);
     }
     if (sessions.length !== 1) {
       await incident(client, null, "RETURN_IDENTITY_AMBIGUOUS", "Plusieurs locations correspondent à la même preuve fournisseur; aucune transition n'a été appliquée.", { battery_id: parsed.batteryId, match_count: sessions.length });
-      return json({ received: true, ignored: true, reason: "AMBIGUOUS_RENTAL" }, 202);
+      return json({ received: true, ignored: true, settlement_triggered: false, reason: "AMBIGUOUS_RENTAL" }, 202);
     }
-    let session = sessions[0];
+    const session = sessions[0];
     if (!await verifyCallback(req, String(session.id))) {
       await logApi(client, "/rent/callback:rejected", 401, safe, "INVALID_CALLBACK_AUTH");
       return json({ ok: false, error: "INVALID_CALLBACK_AUTH" }, 401);
@@ -306,9 +246,14 @@ Deno.serve(async (req) => {
     if (callbackError) throw callbackError;
 
     if (parsed.status === "1") {
-      const releasedAt = new Date().toISOString();
-      const confirmed = await confirmProviderRelease(client, session, callbackKey, releasedAt);
-      return json({ received: true, provider_release_confirmed: true, state: confirmed ? "ejected" : session.state, kiosk_release_complete: confirmed }, confirmed ? 200 : 202);
+      await incident(
+        client,
+        session,
+        "RELEASE_PROVIDER_NOTIFICATION_ONLY",
+        "Le fournisseur a signalé une sortie, mais cette notification ne prouve ni le slot ni la batterie physiquement sortie; la location reste en réconciliation.",
+        { tradeNo: parsed.tradeNo, battery_id: parsed.batteryId, station_id: parsed.stationId, slot_num: parsed.slotNum },
+      );
+      return json({ received: true, provider_release_confirmed: false, state: session.state, requires_physical_reconciliation: true }, 202);
     }
     if (parsed.status === "0") {
       await incident(client, session, "CHARGENOW_RELEASE_FAILURE_EVIDENCE", "ChargeNow a signalé un échec de sortie; aucune seconde commande d'éjection n'est envoyée automatiquement.", { tradeNo: parsed.tradeNo, currentState: session.state, automatic_retry_allowed: false });
@@ -316,64 +261,68 @@ Deno.serve(async (req) => {
     }
     if (parsed.status !== "2") return json({ received: true, ignored: true, reason: "UNKNOWN_STATUS" }, 202);
 
-    if (session.state === "ejecting") {
-      const { data: releaseEvidence } = await client.from("chargenow_callbacks")
-        .select("idempotency_key,created_at")
-        .eq("trade_no", canonicalTradeNo || parsed.tradeNo)
-        .eq("status", "1").eq("processed", true)
-        .order("created_at", { ascending: true }).limit(1).maybeSingle();
-      if (releaseEvidence) {
-        await confirmProviderRelease(client, session, String(releaseEvidence.idempotency_key), String(releaseEvidence.created_at));
-        const { data: refreshed, error: refreshError } = await client.from("rental_sessions").select(SESSION_FIELDS).eq("id", session.id).single();
-        if (refreshError) throw refreshError;
-        session = refreshed as Record<string, unknown>;
-      }
-    }
-
-    const batteryId = parsed.batteryId ?? (typeof session.battery_id === "string" ? session.battery_id : null);
-    const stationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
-    const slotNum = parsed.slotNum ?? Number(session.selected_slot_num);
+    const contractualBatteryId = typeof session.battery_id === "string" ? session.battery_id.trim() : "";
+    const returnStationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
     const eventId = parsed.eventId ?? `trade-${canonicalTradeNo || parsed.tradeNo || session.id}-return`;
-    if (!batteryId || !stationId || !Number.isInteger(slotNum) || slotNum < 1) {
-      await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le retour fournisseur ne peut pas être corrélé à l'identité réservée de la location.", { tradeNo: parsed.tradeNo });
+    if (!contractualBatteryId || !returnStationId) {
+      await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le retour fournisseur ne peut pas être corrélé à l'identité contractuelle de la location.", { tradeNo: parsed.tradeNo });
       return json({ received: true, settlement_triggered: false, reason: "RETURN_IDENTITY_INCOMPLETE" }, 202);
     }
-    if (parsed.batteryId && String(session.battery_id ?? "") !== parsed.batteryId) {
-      await incident(client, session, "RETURN_BATTERY_MISMATCH", "La batterie entrée ne correspond pas à la batterie de la location active.", { expectedBattery: session.battery_id ?? null, observedBattery: parsed.batteryId });
+    if (parsed.batteryId && contractualBatteryId !== parsed.batteryId) {
+      await incident(client, session, "RETURN_BATTERY_MISMATCH", "La batterie entrée ne correspond pas à la batterie contractuelle de la location active.", { expectedBattery: contractualBatteryId, observedBattery: parsed.batteryId });
       return json({ received: true, settlement_triggered: false, reason: "RETURN_BATTERY_MISMATCH" }, 202);
     }
     if (session.returned_at) return json({ received: true, duplicate: true, state: session.state, settlement_status: session.settlement_status ?? null });
 
-    const physical = await physicalReturnTime(client, session, stationId, batteryId, slotNum);
-    const returnedAt = physical?.receivedAt ?? new Date().toISOString();
-    await appendReturnDetected(client, session, { eventId, occurredAt: returnedAt, stationId, batteryId, slotNum, providerTradeNo: parsed.tradeNo || null, physicalEventId: physical?.externalEventId ?? null });
+    const physical = await physicalReturnTime(client, session, returnStationId, contractualBatteryId);
+    if (!physical) {
+      await incident(client, session, "RETURN_PHYSICAL_EVIDENCE_MISSING", "Aucun BATTERY_IN physique corrélé à la batterie contractuelle n'est disponible; aucun règlement financier n'est déclenché.", {
+        battery_id: contractualBatteryId,
+        return_station_id: returnStationId,
+        provider_trade_no: parsed.tradeNo || null,
+        canonical_trade_no: canonicalTradeNo || null,
+      });
+      await audit(client, "rental.return.awaiting_physical_evidence", String(session.id), {
+        battery_id: contractualBatteryId,
+        return_station_id: returnStationId,
+        provider_trade_no: parsed.tradeNo || null,
+        canonical_trade_no: canonicalTradeNo || null,
+        settlement_triggered: false,
+      });
+      return json({ received: true, state: session.state, physical_reconciliation_required: true, settlement_triggered: false, reason: "RETURN_PHYSICAL_EVIDENCE_MISSING" }, 202);
+    }
+
+    const returnedAt = physical.receivedAt;
+    const returnedSlotNum = physical.returnedSlotNum;
+    await appendReturnDetected(client, session, { eventId, occurredAt: returnedAt, stationId: returnStationId, batteryId: contractualBatteryId, slotNum: returnedSlotNum, providerTradeNo: parsed.tradeNo || null, physicalEventId: physical.externalEventId });
     const { error: updateError } = await client.from("rental_sessions").update({
       state: "battery_returned",
       returned_at: returnedAt,
-      return_station_id: stationId,
-      returned_slot_num: slotNum,
-      return_external_event_id: physical?.externalEventId ? `battery-in:${physical.externalEventId}` : `provider-return:${eventId}`,
+      return_station_id: returnStationId,
+      returned_slot_num: returnedSlotNum,
+      return_external_event_id: physical.externalEventId ? `battery-in:${physical.externalEventId}` : `battery-in:correlated:${eventId}`,
       chargenow_order_id: canonicalTradeNo || parsed.tradeNo || null,
     }).eq("id", session.id).is("returned_at", null);
     if (updateError) throw updateError;
-    await client.from("batteries").update({ station_id: stationId, slot_num: slotNum, status: "in_station", updated_at: new Date().toISOString() }).eq("battery_id", batteryId);
+    await client.from("batteries").update({ station_id: returnStationId, slot_num: returnedSlotNum, status: "in_station", updated_at: new Date().toISOString() }).eq("battery_id", contractualBatteryId);
 
     const settlement = await triggerSettlement(String(session.id), returnedAt);
-    await audit(client, "rental.return.correlated_from_verified_provider_callback", String(session.id), {
-      battery_id: batteryId,
-      return_station_id: stationId,
-      returned_slot_num: slotNum,
+    await audit(client, "rental.return.correlated_from_physical_battery_in", String(session.id), {
+      battery_id: contractualBatteryId,
+      return_station_id: returnStationId,
+      selected_slot_num: session.selected_slot_num ?? null,
+      returned_slot_num: returnedSlotNum,
       started_at: session.started_at ?? session.ejected_at ?? null,
       returned_at: returnedAt,
-      physical_event_id: physical?.externalEventId ?? null,
+      physical_event_id: physical.externalEventId,
       provider_trade_no: parsed.tradeNo || null,
       canonical_trade_no: canonicalTradeNo || null,
-      provider_identity_fallback: !parsed.batteryId || !parsed.stationId || parsed.slotNum == null,
+      provider_order_mismatch_controlled: Boolean(parsed.tradeNo && canonicalTradeNo && parsed.tradeNo !== canonicalTradeNo),
       settlement_ok: settlement.ok,
     });
-    if (!settlement.ok) await incident(client, session, "SETTLEMENT_RETRY_REQUIRED", "Le retour est enregistré mais le règlement financier doit être réconcilié.", { settlement_status: settlement.status, battery_id: batteryId });
+    if (!settlement.ok) await incident(client, session, "SETTLEMENT_RETRY_REQUIRED", "Le retour physique est enregistré mais le règlement financier doit être réconcilié.", { settlement_status: settlement.status, battery_id: contractualBatteryId });
 
-    return json({ received: true, state: "battery_returned", settlement_triggered: true, settlement_ok: settlement.ok, returnedAt, startedAt: session.started_at ?? session.ejected_at ?? null }, settlement.ok ? 200 : 202);
+    return json({ received: true, state: "battery_returned", settlement_triggered: true, settlement_ok: settlement.ok, returnedAt, returnedSlotNum, startedAt: session.started_at ?? session.ejected_at ?? null }, settlement.ok ? 200 : 202);
   } catch (error) {
     console.error("chargenow-rent-callback", error instanceof Error ? error.message : "CALLBACK_INTERNAL_ERROR");
     return json({ ok: false, error: "CALLBACK_INTERNAL_ERROR" }, 500);
