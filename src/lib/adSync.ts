@@ -23,6 +23,18 @@ const MAX_DURATION_MS = 300_000;
 const DEFAULT_IMAGE_MS = 8_000;
 const DEFAULT_VIDEO_MS = 10_000;
 
+let authoritativeAdsClockOffsetMs: number | null = null;
+
+export function setAuthoritativeAdsClockOffsetMs(offsetMs: number | null): void {
+  authoritativeAdsClockOffsetMs = offsetMs !== null && Number.isFinite(offsetMs)
+    ? Math.round(offsetMs)
+    : null;
+}
+
+export function getAuthoritativeAdsClockOffsetMs(): number | null {
+  return authoritativeAdsClockOffsetMs;
+}
+
 export function adEntryDurationMs(entry: TimedAdEntry): number {
   const rawSeconds = entry.item.mediaType === "video"
     ? Number(entry.item.mediaDurationSeconds) || DEFAULT_VIDEO_MS / 1_000
@@ -40,7 +52,14 @@ export function resolveAdSyncPosition(
   const cycleMs = durations.reduce((sum, value) => sum + value, 0);
   if (cycleMs <= 0) return null;
 
-  const rawPhase = (sharedNowMs - epochMs) % cycleMs;
+  // Once the dedicated fleet clock has a stable sample, it is authoritative for
+  // every Ads render. This immediately corrects a kiosk even if its earlier
+  // playlist request used a noisier RTT estimate.
+  const effectiveSharedNowMs = authoritativeAdsClockOffsetMs !== null
+    ? Date.now() + authoritativeAdsClockOffsetMs
+    : sharedNowMs;
+
+  const rawPhase = (effectiveSharedNowMs - epochMs) % cycleMs;
   const phaseMs = rawPhase < 0 ? rawPhase + cycleMs : rawPhase;
   let cursor = 0;
   for (let index = 0; index < durations.length; index += 1) {
@@ -65,6 +84,7 @@ export function estimateServerClockOffsetMs(
   requestStartedMs: number,
   responseReceivedMs: number,
 ): number {
+  if (authoritativeAdsClockOffsetMs !== null) return authoritativeAdsClockOffsetMs;
   if (![serverNowMs, requestStartedMs, responseReceivedMs].every(Number.isFinite)) return 0;
 
   // Playlist-clock fallback. The dedicated Ads clock below is preferred because
