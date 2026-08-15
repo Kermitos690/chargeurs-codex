@@ -2,26 +2,21 @@ import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
 import { KioskV3OwnedHome } from "@/components/kiosk/KioskV3OwnedHome";
-import { KioskAdvertisingLayer } from "@/components/kiosk/KioskAdvertisingLayer";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-v3-owned-home.css";
 import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-atmosphere-canonical.css";
-import "./kiosk-p0-home-clean.css";
+import "./kiosk-p0-home-balanced.css";
 
 /**
  * P0 recovery entry: one visible owner at a time.
  *
  * - KioskPremiumGateV2 owns boot, auth-aware state and the transaction machine.
  * - KioskV3OwnedHome is the only home presentation and disappears when V2 leaves home.
- * - KioskAdvertisingLayer is a fail-safe paid-media surface only; it never owns
- *   rental, payment, return, inventory or hardware state.
  * - KioskV3AuthGuard remains the only security blocking overlay and stays last.
  *
- * All legacy presentation directors, cinematic/touch/recovery overlays, duplicate
- * journey chrome and WebView-failsafe styling are deliberately excluded from this
- * entry during recovery. They were independent DOM observers/painters and could
- * race the canonical surface during cold boot or service-worker activation.
+ * Advertising and all other nonessential presentation layers stay excluded during
+ * physical recovery so the customer runtime cannot regain a second visual owner.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
@@ -46,7 +41,6 @@ export default function KioskPremiumGateV3() {
         <KioskPremiumGateV2 />
       </div>
       <KioskV3OwnedHome />
-      <KioskAdvertisingLayer />
       <KioskV3AuthGuard />
     </div>
   );
