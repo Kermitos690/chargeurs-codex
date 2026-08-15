@@ -2,6 +2,7 @@ import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
 import { KioskAdvertisingSynchronizedLayer } from "@/components/kiosk/KioskAdvertisingSynchronizedLayer";
+import { KioskPaymentTimeoutGuard } from "@/components/kiosk/KioskPaymentTimeoutGuard";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-premium-home-canonical.css";
 import "./kiosk-pricing-explainer.css";
@@ -11,7 +12,7 @@ import "./kiosk-home-physical-viewport-lock.css";
 /** Single-owner Premium kiosk runtime. */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "premium-field-reference-physical-lock-2026-1280x720";
+    document.documentElement.dataset.kioskVersion = "premium-field-reference-physical-lock-payment-guard-2026-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
@@ -27,9 +28,10 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-physical-lock-2026">
+    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-physical-lock-payment-guard-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
+      <KioskPaymentTimeoutGuard />
       <KioskV3AuthGuard />
     </div>
   );
