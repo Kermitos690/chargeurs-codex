@@ -29,7 +29,7 @@ final class DocumentStartCredentialInjector {
                 allowedOrigins(config.baseUrl())
             );
             return true;
-        } catch (IllegalArgumentException | UnsupportedOperationException | RuntimeException error) {
+        } catch (RuntimeException error) {
             // Legacy industrial WebViews keep the existing two-load fallback in
             // MainActivity. No credential is exposed if document-start support
             // is unavailable or rejected by the vendor WebView.
