@@ -218,6 +218,15 @@ public final class MainActivity extends Activity {
             showStartupError("NATIVE_BRIDGE_UNAVAILABLE", error);
             return;
         }
+        // When the device WebView supports DOCUMENT_START_SCRIPT, credentials
+        // are present before the kiosk's first React/module script can issue a
+        // protected request. Legacy vendor WebViews keep the existing two-load
+        // fallback below instead of weakening the auth boundary.
+        credentialsInjected = DocumentStartCredentialInjector.install(
+            webView,
+            config,
+            BuildConfig.VERSION_NAME
+        );
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
             Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_SHORT).show()
