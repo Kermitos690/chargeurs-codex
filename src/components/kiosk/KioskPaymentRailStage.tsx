@@ -111,6 +111,7 @@ export function KioskPaymentRailStage(props: Props) {
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [readerGraceExpired, setReaderGraceExpired] = useState(!nativeBridge);
+  const [readerProbeGeneration, setReaderProbeGeneration] = useState(0);
   const confirmedRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
@@ -138,7 +139,7 @@ export function KioskPaymentRailStage(props: Props) {
     setReaderGraceExpired(false);
     const timeout = window.setTimeout(() => setReaderGraceExpired(true), READER_GRACE_MS);
     return () => window.clearTimeout(timeout);
-  }, [nativeBridge, inProgress, rentalSessionId]);
+  }, [nativeBridge, inProgress, rentalSessionId, readerProbeGeneration]);
 
   const model = useMemo(() => buildChargeursPresentationModel({
     width: window.innerWidth,
@@ -234,6 +235,7 @@ export function KioskPaymentRailStage(props: Props) {
   const retryReader = () => {
     setNativeError(null);
     setReaderGraceExpired(false);
+    setReaderProbeGeneration((generation) => generation + 1);
     const next = parseProjection(native?.refreshPaymentReader?.());
     if (next) setReader(next);
   };
