@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { estimateServerClockOffsetMs, resolveAdSyncPosition } from "./adSync";
+import {
+  estimateNetworkClockSample,
+  estimateServerClockOffsetMs,
+  resolveAdSyncPosition,
+  selectStableClockOffsetMs,
+} from "./adSync";
 
 const entries = [
   { item: { mediaType: "image" as const, imageDurationSeconds: 8 } },
@@ -19,18 +24,35 @@ describe("network advertising clock", () => {
     expect(position?.remainingMs).toBeGreaterThan(0);
   });
 
-  it("compensates half of the observed request round-trip time", () => {
+  it("keeps the playlist midpoint estimate as a safe fallback", () => {
     const serverNow = 2_000_000;
     expect(estimateServerClockOffsetMs(serverNow, 999_000, 1_001_000)).toBe(1_000_000);
     expect(estimateServerClockOffsetMs(serverNow, 998_000, 1_002_000)).toBe(1_000_000);
   });
 
-  it("normalizes different Android clocks when their RTT is equivalent", () => {
-    const serverNow = 5_000_000;
-    const offsetA = estimateServerClockOffsetMs(serverNow, 3_999_000, 4_001_000);
-    const offsetB = estimateServerClockOffsetMs(serverNow, 3_969_000, 3_971_000);
+  it("calculates an NTP-style offset while removing server processing time", () => {
+    // Client clock is exactly 1,000,000 ms behind the server.
+    // Network is 120 ms outbound + 80 ms inbound, server work is 20 ms.
+    const sample = estimateNetworkClockSample(1_000_000, 2_000_120, 2_000_140, 1_000_220);
+    expect(sample).toEqual({ offsetMs: 1_000_020, rttMs: 200 });
+  });
 
-    expect(4_000_000 + offsetA).toBe(serverNow);
-    expect(3_970_000 + offsetB).toBe(serverNow);
+  it("rejects slow outliers and uses the median of the lowest-latency samples", () => {
+    const selected = selectStableClockOffsetMs([
+      { offsetMs: 1_000_010, rttMs: 80 },
+      { offsetMs: 999_995, rttMs: 70 },
+      { offsetMs: 1_000_005, rttMs: 90 },
+      { offsetMs: 1_004_000, rttMs: 900 },
+      { offsetMs: 995_000, rttMs: 1_100 },
+    ]);
+    expect(selected).toBe(1_000_005);
+  });
+
+  it("normalizes different Android clocks onto the same shared time", () => {
+    const a = estimateNetworkClockSample(4_000_000, 5_000_050, 5_000_060, 4_000_110);
+    const b = estimateNetworkClockSample(3_970_000, 5_000_040, 5_000_050, 3_970_100);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(Math.abs((4_000_055 + Number(a?.offsetMs)) - (3_970_050 + Number(b?.offsetMs)))).toBeLessThanOrEqual(15);
   });
 });
