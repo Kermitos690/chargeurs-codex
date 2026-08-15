@@ -1,0 +1,31 @@
+name: Android auth candidate
+
+on:
+  push:
+    branches:
+      - a0/native-auth-pre-react
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Validate staging wrapper
+        working-directory: android-kiosk
+        run: ./gradlew test lint assembleStaging --stacktrace
+      - name: Publish staging APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: chargeurs-kiosk-1.0.18-rc1-staging
+          path: android-kiosk/app/build/outputs/apk/staging/*.apk
+          if-no-files-found: error
