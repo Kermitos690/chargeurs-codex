@@ -489,8 +489,9 @@ export default function Kiosk() {
   const hourlyCents = quote && !quote.tiered ? hourlyRateCents(quote.price_per_period_cents, quote.period_minutes) : null;
   const tierDuration = (minutes: number) => minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`;
   const tierSummary = quote?.tiered ? (quote.tiers ?? []).map((tier) => `${tierDuration(tier.upper_minutes)} ${fmtCents(tier.total_cents, quote.currency)}`).join(" · ") : null;
+  const pricingFromLabel = lang === "de" ? "Ab" : lang === "en" ? "From" : "Dès";
   const pricingHeadline = quote?.tiered && quote.tiers?.[0]
-    ? `Dès ${fmtCents(quote.tiers[0].total_cents, quote.currency)} / ${tierDuration(quote.tiers[0].upper_minutes)}`
+    ? `${pricingFromLabel} ${fmtCents(quote.tiers[0].total_cents, quote.currency)} / ${tierDuration(quote.tiers[0].upper_minutes)}`
     : hourlyCents != null ? `${fmtCents(hourlyCents, quote?.currency)} / ${t("kiosk.hour")}` : "—";
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
