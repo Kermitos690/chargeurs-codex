@@ -9,6 +9,8 @@ import { Loader2, LogOut, LayoutDashboard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ACCOUNT_NAV_ITEMS } from "./accountNavigation";
 
+const MEMBERSHIP_INTENT_KEY = "chargeurs:membership-intent";
+
 function AccountNavigation({ mobile = false }: { mobile?: boolean }) {
   return (
     <nav
@@ -43,7 +45,23 @@ export default function AccountLayout() {
   const nav = useNavigate();
 
   useEffect(() => {
-    if (!loading && !user) nav("/compte/login", { replace: true });
+    if (!loading && !user) {
+      try {
+        if (window.location.pathname === "/compte/pass") {
+          sessionStorage.setItem(MEMBERSHIP_INTENT_KEY, "1");
+        }
+      } catch { /* navigation still works without sessionStorage */ }
+      nav("/compte/login", { replace: true });
+    }
+  }, [loading, user, nav]);
+
+  useEffect(() => {
+    if (loading || !user || window.location.pathname !== "/compte") return;
+    try {
+      if (sessionStorage.getItem(MEMBERSHIP_INTENT_KEY) !== "1") return;
+      sessionStorage.removeItem(MEMBERSHIP_INTENT_KEY);
+      nav("/compte/pass", { replace: true });
+    } catch { /* ordinary account landing remains available */ }
   }, [loading, user, nav]);
 
   if (loading || !user) {
