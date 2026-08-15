@@ -1,6 +1,5 @@
 package ch.chargeurs.kiosk;
 
-import android.net.Uri;
 import android.webkit.WebView;
 
 import androidx.webkit.WebViewCompat;
@@ -8,6 +7,8 @@ import androidx.webkit.WebViewFeature;
 
 import org.json.JSONObject;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.Set;
 
@@ -50,12 +51,16 @@ final class DocumentStartCredentialInjector {
     static Set<String> allowedOrigins(String baseUrl) {
         String normalized = KioskConfigValidator.normalizeBaseUrl(baseUrl);
         if (normalized == null) throw new IllegalArgumentException("INVALID_KIOSK_BASE_URL");
-        Uri uri = Uri.parse(normalized);
-        String scheme = uri.getScheme();
-        String host = uri.getHost();
-        if (scheme == null || host == null) throw new IllegalArgumentException("INVALID_KIOSK_BASE_URL");
-        StringBuilder origin = new StringBuilder(scheme).append("://").append(host);
-        if (uri.getPort() >= 0) origin.append(':').append(uri.getPort());
-        return Collections.singleton(origin.toString());
+        try {
+            URI uri = new URI(normalized);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null) throw new IllegalArgumentException("INVALID_KIOSK_BASE_URL");
+            StringBuilder origin = new StringBuilder(scheme).append("://").append(host);
+            if (uri.getPort() >= 0) origin.append(':').append(uri.getPort());
+            return Collections.singleton(origin.toString());
+        } catch (URISyntaxException error) {
+            throw new IllegalArgumentException("INVALID_KIOSK_BASE_URL", error);
+        }
     }
 }
