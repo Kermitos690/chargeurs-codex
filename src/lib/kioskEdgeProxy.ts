@@ -150,8 +150,8 @@ export async function invokeKioskEdgeProxy<T>(
     // Staging reconcile-pending-ejection v9 contains a malformed 37-character
     // UUID validator. Always send the canonical UUID first. Only when that exact
     // read-only endpoint explicitly rejects the request do we retry once with a
-    // PostgreSQL-equivalent representation. The server source fix is already in
-    // main; when a newer function version is deployed this branch is never used.
+    // PostgreSQL-equivalent representation. The canonical server fix is in main;
+    // this compatibility path can stay inert until the corrected Edge version is live.
     const retryBody = legacyReconciliationRetryBody(path, body, response.status, data);
     if (retryBody) {
       response = await postKioskRequest(path, retryBody, headers);
