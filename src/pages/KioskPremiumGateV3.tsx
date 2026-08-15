@@ -12,23 +12,41 @@ import "./kiosk-home-physical-viewport-lock.css";
 /** Single-owner Premium kiosk runtime. */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "premium-field-reference-physical-lock-payment-guard-2026-1280x720";
-    document.documentElement.classList.add("kiosk-v3");
+    const root = document.documentElement;
+    root.dataset.kioskVersion = "premium-field-reference-physical-lock-payment-guard-scene-2026-1280x720";
+    root.classList.add("kiosk-v3");
+
+    // The physical WebView Home lock is scene-scoped. Derive that scene from
+    // the actual rendered owner instead of relying on a stale/optional callback.
+    const syncHomeScene = () => {
+      const homeVisible = Boolean(document.querySelector(".kv3-product-layer > .ck2-home"));
+      if (homeVisible) {
+        root.dataset.kioskScene = "home";
+      } else if (root.dataset.kioskScene === "home") {
+        delete root.dataset.kioskScene;
+      }
+    };
+
+    syncHomeScene();
+    const sceneObserver = new MutationObserver(syncHomeScene);
+    sceneObserver.observe(document.body, { childList: true, subtree: true });
+
     return () => {
-      delete document.documentElement.dataset.kioskVersion;
-      delete document.documentElement.dataset.kioskScene;
-      delete document.documentElement.dataset.kioskLastScene;
-      delete document.documentElement.dataset.kioskReturnStage;
-      delete document.documentElement.dataset.kioskAdsSplit;
-      delete document.documentElement.dataset.kioskHelpContext;
-      delete document.documentElement.dataset.kioskAuth;
-      document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
-      document.documentElement.classList.remove("kiosk-v3");
+      sceneObserver.disconnect();
+      delete root.dataset.kioskVersion;
+      delete root.dataset.kioskScene;
+      delete root.dataset.kioskLastScene;
+      delete root.dataset.kioskReturnStage;
+      delete root.dataset.kioskAdsSplit;
+      delete root.dataset.kioskHelpContext;
+      delete root.dataset.kioskAuth;
+      root.style.removeProperty("--kiosk-ad-split-ratio");
+      root.classList.remove("kiosk-v3");
     };
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-physical-lock-payment-guard-2026">
+    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-physical-lock-payment-guard-scene-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
       <KioskPaymentTimeoutGuard />
