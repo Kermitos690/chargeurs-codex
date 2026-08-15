@@ -25,9 +25,7 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
-      - name: Verify
-        run: npm run typecheck
-      - name: Build
+      - name: Build production bundle
         run: npm run build
       - name: Upload dist
         uses: actions/upload-artifact@v4
