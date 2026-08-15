@@ -25,11 +25,20 @@ import {
 } from "@/lib/kioskEdgeProxy";
 import "./kiosk-premium-v2.css";
 
+type PricingTier = {
+  upper_minutes: number;
+  total_cents: number;
+};
+
 type SegmentPrice = {
   segment: "guest" | "member";
   currency: string;
   hourly_cents: number | null;
   daily_cap_cents: number;
+  tiered?: boolean;
+  tiers?: PricingTier[];
+  starting_cents?: number;
+  total_cap_cents?: number;
 };
 
 type CustomerOptions = {
@@ -103,10 +112,12 @@ type Copy = {
   memberScan: string;
   memberError: string;
   retry: string;
-  eyebrow: string;
-  line1: string;
-  line2: string;
-  accent: string;
+  homeTitle: string;
+  homeSubtitle: string;
+  priceFrom: string;
+  priceUpTo: string;
+  priceTotalCap: string;
+  pricingUnavailable: string;
   perHour: string;
   dailyCap: string;
   expressKicker: string;
@@ -128,8 +139,8 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "COMMENCER UNE LOCATION", connectedCtaSub: "Choisissez ensuite votre batterie sur cette borne.",
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "PLUS DE", line2: "BATTERIE ?", accent: "RÉGLÉ.", perHour: "/ heure", dailyCap: "Plafond journalier",
-    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Choisissez une batterie, payez sur votre téléphone et partez immédiatement.",
+    homeTitle: "Besoin d’une batterie ?", homeSubtitle: "Choisissez votre parcours", priceFrom: "Dès", priceUpTo: "jusqu’à", priceTotalCap: "plafond total", pricingUnavailable: "Tarif en cours de chargement", perHour: "/ heure", dailyCap: "Plafond journalier",
+    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Consultez le tarif, choisissez votre batterie, payez et partez.",
     clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Connectez votre compte par QR et profitez automatiquement de votre tarif membre.",
     cabinetTitle: "Batteries disponibles", cabinetSub: "Sélection automatique de la meilleure batterie", secure: "Connexion sécurisée",
   },
@@ -140,8 +151,8 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "START A RENTAL", connectedCtaSub: "Choose your powerbank next on this kiosk.",
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "OUT OF", line2: "BATTERY?", accent: "SOLVED.", perHour: "/ hour", dailyCap: "Daily cap",
-    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "Choose a powerbank, pay on your phone and leave immediately.",
+    homeTitle: "Need a battery?", homeSubtitle: "Choose your journey", priceFrom: "From", priceUpTo: "up to", priceTotalCap: "total cap", pricingUnavailable: "Loading price", perHour: "/ hour", dailyCap: "Daily cap",
+    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "See the price first, choose a powerbank, pay and go.",
     clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Connect your account by QR and your member rate is applied automatically.",
     cabinetTitle: "Batteries available", cabinetSub: "Best battery selected automatically", secure: "Secure connection",
   },
@@ -152,15 +163,53 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "MIETE STARTEN", connectedCtaSub: "Wählen Sie anschließend Ihre Powerbank an dieser Station.",
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "AKKU", line2: "LEER?", accent: "GELÖST.", perHour: "/ Stunde", dailyCap: "Tageslimit",
-    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Powerbank wählen, am Smartphone bezahlen und sofort los.",
+    homeTitle: "Akku leer?", homeSubtitle: "Wähle deinen Weg", priceFrom: "Ab", priceUpTo: "bis", priceTotalCap: "Gesamtlimit", pricingUnavailable: "Preis wird geladen", perHour: "/ Stunde", dailyCap: "Tageslimit",
+    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Preis ansehen, Powerbank wählen, bezahlen und los.",
     clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Konto per QR verbinden und den Kundentarif automatisch nutzen.",
     cabinetTitle: "Verfügbare Batterien", cabinetSub: "Beste Batterie wird automatisch gewählt", secure: "Sichere Verbindung",
   },
 };
 
 const KIOSK_RESUMABLE_STATES = new Set(["created", "checkout_created", "payment_pending", "payment_succeeded", "ejecting"]);
-const money = (cents: number | null | undefined, currency = "CHF") => cents == null ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
+const money = (cents: number | null | undefined, currency = "CHF") => cents == null || !Number.isFinite(Number(cents)) ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
+
+function durationLabel(minutes: number, lang: "fr" | "en" | "de") {
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return lang === "de" ? `${days} Tag${days > 1 ? "e" : ""}` : lang === "en" ? `${days} day${days > 1 ? "s" : ""}` : `${days} jour${days > 1 ? "s" : ""}`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return lang === "de" ? `${hours} Std.` : `${hours} h`;
+  }
+  return `${minutes} min`;
+}
+
+function sortedPricingTiers(price: SegmentPrice | null | undefined) {
+  if (!Array.isArray(price?.tiers)) return [];
+  return price.tiers
+    .filter((tier) => Number.isFinite(tier.upper_minutes) && tier.upper_minutes > 0 && Number.isFinite(tier.total_cents) && tier.total_cents > 0)
+    .sort((a, b) => a.upper_minutes - b.upper_minutes);
+}
+
+function hasUsableGuestPricing(price: SegmentPrice | null | undefined) {
+  const tiers = sortedPricingTiers(price);
+  if (price?.tiered === true) {
+    const hasDayTier = tiers.some((tier) => tier.upper_minutes === 1440);
+    return tiers.length >= 2 && hasDayTier && Number(price.total_cap_cents ?? 0) > 0;
+  }
+  return Number(price?.hourly_cents ?? 0) > 0 && Number(price?.daily_cap_cents ?? 0) > 0;
+}
+
+function hasUsableMemberPricing(price: SegmentPrice | null | undefined) {
+  if (!price) return false;
+  // Product decision 2026-08-15: the retired CHF 0.75/h + CHF 9/day contract
+  // must never be offered while A2 converges the new member contract.
+  if (Number(price.hourly_cents) === 75 && Number(price.daily_cap_cents) === 900) return false;
+  const tiers = sortedPricingTiers(price);
+  if (price.tiered === true) return tiers.length > 0;
+  return Number(price.hourly_cents ?? 0) > 0 && Number(price.daily_cap_cents ?? 0) > 0;
+}
 
 export default function KioskPremiumGateV2() {
   const { stationId = "" } = useParams();
@@ -175,6 +224,7 @@ export default function KioskPremiumGateV2() {
   const [refreshing, setRefreshing] = useState(false);
   const [seconds, setSeconds] = useState(35);
   const [journeyProtected, setJourneyProtected] = useState(false);
+  const memberPricingReady = Boolean(options?.memberAvailable && hasUsableMemberPricing(options?.member));
 
   const loadOptions = useCallback(async () => {
     const token = readKioskToken();
@@ -296,7 +346,7 @@ export default function KioskPremiumGateV2() {
 
   const startMember = async () => {
     const token = readKioskToken();
-    if (!token || !stationId || !options?.memberAvailable) return;
+    if (!token || !stationId || !memberPricingReady) return;
     setPairingError(null);
     setPairing(null);
     setConnectedInfo(null);
@@ -427,8 +477,25 @@ export default function KioskPremiumGateV2() {
   }
 
   const guestCurrency = options?.guest?.currency ?? "CHF";
-  const guestHourly = money(options?.guest?.hourly_cents, guestCurrency);
-  const guestCap = money(options?.guest?.daily_cap_cents, guestCurrency);
+  const guestTiers = sortedPricingTiers(options?.guest);
+  const firstGuestTier = guestTiers[0];
+  const dayGuestTier = guestTiers.find((tier) => tier.upper_minutes === 1440) ?? guestTiers[guestTiers.length - 1];
+  const guestTieredReady = options?.guest?.tiered === true && Boolean(firstGuestTier && dayGuestTier);
+  const guestHourlyReady = Number(options?.guest?.hourly_cents ?? 0) > 0 && Number(options?.guest?.daily_cap_cents ?? 0) > 0;
+  const guestPricingReady = hasUsableGuestPricing(options?.guest);
+  const guestPrimaryPrice = guestTieredReady && firstGuestTier
+    ? `${copy.priceFrom} ${money(firstGuestTier.total_cents, guestCurrency)} / ${durationLabel(firstGuestTier.upper_minutes, lang)}`
+    : guestHourlyReady
+      ? `${money(options?.guest?.hourly_cents, guestCurrency)} ${copy.perHour}`
+      : copy.pricingUnavailable;
+  const guestSecondaryPrice = guestTieredReady && dayGuestTier
+    ? `${copy.priceUpTo} ${money(dayGuestTier.total_cents, guestCurrency)} / ${durationLabel(dayGuestTier.upper_minutes, lang)}`
+    : guestHourlyReady
+      ? `${copy.dailyCap} ${money(options?.guest?.daily_cap_cents, guestCurrency)}`
+      : "";
+  const guestTotalCap = Number(options?.guest?.total_cap_cents ?? 0) > 0
+    ? `${copy.priceTotalCap} ${money(options?.guest?.total_cap_cents, guestCurrency)}`
+    : "";
   return (
     <div className="ck2-shell ck2-home">
       <div className="ck2-ambient ck2-ambient-a" aria-hidden="true" /><div className="ck2-ambient ck2-ambient-b" aria-hidden="true" />
@@ -442,16 +509,21 @@ export default function KioskPremiumGateV2() {
       </header>
       <main className="ck2-home-grid">
         <section className="ck2-hero-copy">
-          <span className="ck2-eyebrow">{copy.eyebrow}</span>
-          <h1><span>{copy.line1}</span><span>{copy.line2}</span><strong>{copy.accent}</strong></h1>
-          <div className="ck2-price-row"><span className="ck2-price-icon"><Zap /></span><strong>{guestHourly}</strong><span>{copy.perHour}</span><i /><span>{copy.dailyCap}</span><strong>{guestCap}</strong></div>
+          <span className="ck2-eyebrow">{copy.homeSubtitle}</span>
+          <h1 className="ck2-home-title">{copy.homeTitle}</h1>
+          <div className={`ck2-price-row ${guestPricingReady ? "" : "ck2-price-row--loading"}`} aria-live="polite">
+            <span className="ck2-price-icon"><Zap /></span>
+            <strong>{guestPrimaryPrice}</strong>
+            {guestSecondaryPrice && <><i /><span>{guestSecondaryPrice}</span></>}
+            {guestTotalCap && <strong className="ck2-price-total-cap">{guestTotalCap}</strong>}
+          </div>
           <div className="ck2-choice-grid">
-            <button type="button" className="ck2-choice ck2-choice-express" onClick={chooseGuest} disabled={!options?.guest}><span className="ck2-choice-icon"><Zap /></span><span className="ck2-choice-kicker">{copy.expressKicker}</span><strong>{copy.expressTitle}</strong><small>{copy.expressBody}</small><span className="ck2-arrow">→</span></button>
-            <button type="button" className="ck2-choice ck2-choice-member" onClick={() => void startMember()} disabled={!options?.memberAvailable}><span className="ck2-choice-icon"><UserRound /></span><span className="ck2-choice-kicker">{copy.clientKicker}</span><strong>{copy.clientTitle}</strong><small>{copy.clientBody}</small><span className="ck2-arrow">→</span></button>
+            <button type="button" className="ck2-choice ck2-choice-express" onClick={chooseGuest} disabled={!guestPricingReady}><span className="ck2-choice-icon"><Zap /></span><span className="ck2-choice-kicker">{copy.expressKicker}</span><strong>{copy.expressTitle}</strong><small>{copy.expressBody}</small><span className="ck2-arrow">→</span></button>
+            <button type="button" className="ck2-choice ck2-choice-member" onClick={() => void startMember()} disabled={!memberPricingReady}><span className="ck2-choice-icon"><UserRound /></span><span className="ck2-choice-kicker">{copy.clientKicker}</span><strong>{copy.clientTitle}</strong><small>{copy.clientBody}</small><span className="ck2-arrow">→</span></button>
           </div>
         </section>
         <section className="ck2-device-stage" aria-label="Chargeurs.ch">
-          <div className="ck2-device-glow" aria-hidden="true" /><div className="ck2-device"><div className="ck2-device-screen"><BrandLogo size="sm" /><strong>{copy.cabinetTitle}</strong><span>{copy.cabinetSub}</span></div><div className="ck2-device-divider" /><div className="ck2-device-brand"><BrandLogo size="sm" /></div><div className="ck2-device-slots">{[1,2,3,4].map((slot)=><div className={`ck2-device-slot ${slot===1||slot===3?"is-ready":""}`} key={slot}><span /><i>{slot}</i></div>)}</div></div><div className="ck2-device-shadow" aria-hidden="true" />
+          <div className="ck2-device-glow" aria-hidden="true" /><div className="ck2-device"><div className="ck2-device-screen"><BrandLogo size="sm" /><strong>{copy.cabinetTitle}</strong><span>{copy.cabinetSub}</span></div><div className="ck2-device-divider" /><div className="ck2-device-brand"><BrandLogo size="sm" /></div><div className="ck2-device-slots">{[1,3,2,4].map((slot)=><div className={`ck2-device-slot ${slot===1||slot===3?"is-ready":""}`} key={slot}><span /><i>{slot}</i></div>)}</div></div><div className="ck2-device-shadow" aria-hidden="true" />
         </section>
       </main>
     </div>
