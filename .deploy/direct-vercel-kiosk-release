@@ -1,5 +1,5 @@
-release=p0-physical-home-viewport-lock
-source_commit=0e721256589f3888eab2026ecf026b93f573eeff
-triggered_at=2026-08-15T22:57:10Z
+release=p0-home-terminal-qr-payment-guard
+source_commit=afdc6dd2b86af4ae0c71642a3483a9aeb92f025f
+triggered_at=2026-08-15T23:01:30Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-physical-home-lock
+reason=force-prebuilt-production-release-home-terminal-qr-no-timeout
