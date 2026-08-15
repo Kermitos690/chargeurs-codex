@@ -21,8 +21,6 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     background:transparent !important;
   }
 
-  /* The approved reference is not a left-heavy split. The whole composition is
-     centred inside the usable 1280×720 canvas. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
     position:absolute !important;
     z-index:10 !important;
@@ -72,7 +70,7 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     line-height:.94 !important;
     letter-spacing:-.052em !important;
     font-weight:920 !important;
-    text-transform:uppercase !important;
+    text-transform:none !important;
     text-shadow:0 18px 44px rgba(0,0,0,.36) !important;
     white-space:nowrap !important;
   }
@@ -132,7 +130,6 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 42px rgba(129,255,73,.18),inset 0 1px rgba(255,255,255,.05) !important;
   }
 
-  /* Large green lightning from the approved reference. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::before {
     content:"" !important;
     position:absolute !important;
@@ -159,8 +156,6 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     z-index:2 !important;
   }
 
-  /* Critical correction: cabinet must be the large right-hand anchor from the
-     approved photograph, not the reduced 248×412 version. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage {
     position:relative !important;
     width:340px !important;
@@ -190,9 +185,6 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     justify-content:center !important;
   }
 
-  /* With an active paid partner rail, remove the decorative cabinet and centre
-     the decision surface inside the remaining usable width instead of shrinking
-     the whole Home toward the left edge. */
   html.kiosk-v3[data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-home-grid {
     right:calc((var(--kiosk-ad-split-ratio,.35) * 100vw) + 28px) !important;
     grid-template-columns:minmax(0,760px) !important;
@@ -207,20 +199,22 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
   }
 }
 
-/* Exact copy requested by the user. */
+/* Exact French title requested by the owner. */
 html[lang^="fr"].kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title {
   font-size:0 !important;
+  text-transform:none !important;
 }
 html[lang^="fr"].kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title::after {
-  content:"BESOIN DE BATTERIE ?" !important;
+  content:"Besoin de batterie ?" !important;
   display:block !important;
   font-size:58px !important;
   line-height:.94 !important;
   letter-spacing:-.052em !important;
   font-weight:920 !important;
   white-space:nowrap !important;
+  text-transform:none !important;
 }
 
 @media (max-width:1179px), (max-height:649px) {
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title { text-transform:uppercase !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title { text-transform:none !important; }
 }
