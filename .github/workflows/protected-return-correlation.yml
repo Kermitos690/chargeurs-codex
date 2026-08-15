@@ -1,11 +1,16 @@
-name: Protected Return Correlation
+name: Protected Release and Return Correlation
 
 on:
   pull_request:
     paths:
+      - "supabase/functions/eject-after-payment/**"
+      - "supabase/functions/reconcile-pending-ejection/**"
+      - "supabase/functions/cabinet-event-push/**"
       - "supabase/functions/chargenow-rent-callback/**"
       - "supabase/functions/_shared/returnCorrelation.ts"
       - "supabase/functions/tests/chargenow_return_correlation_contract.test.ts"
+      - "supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts"
+      - "supabase/functions/tests/rental_lifecycle_safety_contract.test.ts"
       - ".github/workflows/protected-return-correlation.yml"
   workflow_dispatch:
 
@@ -13,14 +18,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: protected-return-correlation-${{ github.event.pull_request.number || github.ref }}
+  group: protected-release-return-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  return-correlation-contract:
-    name: Return correlation contract
+  protected-core-contract:
+    name: Protected Core release/return contract
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,5 +35,18 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Run Protected Core return tests
-        run: deno test --allow-read supabase/functions/tests/chargenow_return_correlation_contract.test.ts
+      - name: Typecheck Protected Core functions
+        run: |
+          deno check \
+            supabase/functions/eject-after-payment/index.ts \
+            supabase/functions/reconcile-pending-ejection/index.ts \
+            supabase/functions/cabinet-event-push/index.ts \
+            supabase/functions/chargenow-rent-callback/index.ts \
+            supabase/functions/_shared/returnCorrelation.ts
+
+      - name: Run Protected Core contract tests
+        run: |
+          deno test --allow-read \
+            supabase/functions/tests/chargenow_return_correlation_contract.test.ts \
+            supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts \
+            supabase/functions/tests/rental_lifecycle_safety_contract.test.ts
