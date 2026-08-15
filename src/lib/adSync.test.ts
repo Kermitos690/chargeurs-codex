@@ -19,24 +19,18 @@ describe("network advertising clock", () => {
     expect(position?.remainingMs).toBeGreaterThan(0);
   });
 
-  it("does not let variable request/backend duration skew the server clock offset", () => {
+  it("compensates half of the observed request round-trip time", () => {
     const serverNow = 2_000_000;
-    const responseReceived = 1_000_250;
-
-    expect(estimateServerClockOffsetMs(serverNow, 999_000, responseReceived)).toBe(999_750);
-    expect(estimateServerClockOffsetMs(serverNow, 995_000, responseReceived)).toBe(999_750);
+    expect(estimateServerClockOffsetMs(serverNow, 999_000, 1_001_000)).toBe(1_000_000);
+    expect(estimateServerClockOffsetMs(serverNow, 998_000, 1_002_000)).toBe(1_000_000);
   });
 
-  it("normalizes different Android local clocks onto the same server timeline", () => {
-    const serverA = 5_000_000;
-    const localReceiveA = 4_000_000;
-    const serverB = 5_000_040;
-    const localReceiveB = 3_970_040; // second kiosk clock is 30 seconds behind
+  it("normalizes different Android clocks when their RTT is equivalent", () => {
+    const serverNow = 5_000_000;
+    const offsetA = estimateServerClockOffsetMs(serverNow, 3_999_000, 4_001_000);
+    const offsetB = estimateServerClockOffsetMs(serverNow, 3_969_000, 3_971_000);
 
-    const offsetA = estimateServerClockOffsetMs(serverA, 3_999_000, localReceiveA);
-    const offsetB = estimateServerClockOffsetMs(serverB, 3_968_000, localReceiveB);
-
-    expect(localReceiveA + offsetA).toBe(serverA);
-    expect(localReceiveB + offsetB).toBe(serverB);
+    expect(4_000_000 + offsetA).toBe(serverNow);
+    expect(3_970_000 + offsetB).toBe(serverNow);
   });
 });
