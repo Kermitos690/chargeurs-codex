@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
     const [targetResult, itemResult] = await Promise.all([
       db.from("advertising_campaign_stations").select("campaign_id,station_id").in("campaign_id", campaignIds),
       db.from("advertising_campaign_items")
-        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,width,height,duration_seconds,poster_storage_path,active,updated_at)")
+        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,qr_url,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,width,height,duration_seconds,poster_storage_path,active,updated_at)")
         .in("campaign_id", campaignIds)
         .eq("enabled", true)
         .order("sort_order", { ascending: true }),
@@ -150,6 +150,7 @@ Deno.serve(async (req) => {
         imageDurationSeconds: row.image_duration_seconds ?? 8,
         mediaDurationSeconds: asset.duration_seconds ?? null,
         sortOrder: row.sort_order,
+        qrUrl: row.qr_url ?? null,
       };
       if (!itemsByCampaign.has(row.campaign_id)) itemsByCampaign.set(row.campaign_id, []);
       itemsByCampaign.get(row.campaign_id)?.push(item);
@@ -171,7 +172,7 @@ Deno.serve(async (req) => {
       .filter((campaign) => campaign.items.length > 0);
 
     const versionSeed = payload
-      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`)
+      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}:${item.qrUrl ?? ""}`).join(",")}`)
       .join("|");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionSeed || "empty"));
     const version = Array.from(new Uint8Array(digest))
