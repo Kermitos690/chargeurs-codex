@@ -51,8 +51,8 @@ export default function AdminInventory() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: response, error } = await supabase.functions.invoke<Snapshot>("inventory-admin", { body: { action: "snapshot" } });
-      if (error || !response?.ok) throw new Error(response?.error ?? error?.message ?? "INVENTORY_ADMIN_FAILED");
+      const { data: response, error } = await supabase.functions.invoke<Snapshot>("inventory-catalog", { body: { action: "snapshot" } });
+      if (error || !response?.ok) throw new Error(response?.error ?? error?.message ?? "INVENTORY_CATALOG_FAILED");
       setData(response);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Impossible de charger le catalogue matériel.");
