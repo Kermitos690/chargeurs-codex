@@ -1,0 +1,38 @@
+name: Rollback static build
+
+on:
+  push:
+    branches:
+      - rollback-static-8bdc61d
+    paths:
+      - .github/workflows/rollback-static-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-known-good:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout known-good rollback branch
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Verify
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-rollback-8bdc61d-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
