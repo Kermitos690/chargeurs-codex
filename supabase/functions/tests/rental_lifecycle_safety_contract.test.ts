@@ -30,10 +30,13 @@ Deno.test("customer ejection is blocked until the supplier proves a single-slot 
   assert(cabinetEventSource.includes("AWAITING_COMPLETE_PHYSICAL_RECONCILIATION"));
 });
 
-Deno.test("ChargeNow return callbacks never fall back to the reserved battery identity", () => {
+Deno.test("ChargeNow return settlement requires contractual BATTERY_IN evidence", () => {
   assert(callbackSource.includes("RETURN_IDENTITY_INCOMPLETE"));
-  assertEquals(callbackSource.includes('parsed.batteryId ?? (typeof session.battery_id'), false);
-  assertEquals(callbackSource.includes("provider_identity_fallback: false"), true);
+  assert(callbackSource.includes("RETURN_PHYSICAL_EVIDENCE_MISSING"));
+  assert(callbackSource.includes("contractualBatteryId"));
+  assert(callbackSource.includes("returnedSlotNum"));
+  assertEquals(callbackSource.includes("physical?.receivedAt ?? new Date().toISOString()"), false);
+  assertEquals(callbackSource.includes("observedSlot === slotNum"), false);
 });
 
 Deno.test("legacy BATTERY_IN events cannot select the latest station rental", () => {
