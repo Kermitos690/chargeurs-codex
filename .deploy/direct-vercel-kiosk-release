@@ -1,5 +1,5 @@
-release=p0-home-final-reference-terminal-retry-prod
-source_commit=849349832288fe907413fa4fe89a895c61235554
-triggered_at=2026-08-15T22:55:00Z
+release=p0-physical-home-viewport-lock
+source_commit=0e721256589f3888eab2026ecf026b93f573eeff
+triggered_at=2026-08-15T22:57:10Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-final-p0-runtime
+reason=force-prebuilt-production-release-physical-home-lock
