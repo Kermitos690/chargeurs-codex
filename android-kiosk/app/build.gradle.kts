@@ -37,8 +37,8 @@ android {
         // Field recovery RC. Changing the native version deliberately triggers
         // MainActivity.shouldResetWebRuntime() once after installation, clearing
         // obsolete WebView storage/cache before the current kiosk shell loads.
-        versionCode = 117
-        versionName = "1.0.17-rc1"
+        versionCode = 118
+        versionName = "1.0.18-rc1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -130,5 +130,6 @@ android {
 }
 
 dependencies {
+    implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
 }
