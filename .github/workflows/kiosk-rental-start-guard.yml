@@ -1,0 +1,27 @@
+name: Kiosk Rental Start Guard
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/Kiosk.tsx"
+      - "src/lib/kioskRentalGuard.ts"
+      - "src/test/kioskRentalGuard.test.ts"
+      - ".github/workflows/kiosk-rental-start-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Quote-required rental-start contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run src/test/kioskRentalGuard.test.ts
