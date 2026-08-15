@@ -6,6 +6,7 @@ import "./kiosk-production-edge-states.css";
 import "./kiosk-v3-owned-home.css";
 import "./kiosk-v4-canonical-1280x720.css";
 import "./kiosk-home-atmosphere-canonical.css";
+import "./kiosk-p0-home-clean.css";
 
 /**
  * P0 recovery entry: one visible owner at a time.
