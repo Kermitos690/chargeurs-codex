@@ -1,5 +1,5 @@
 release=p0-home-exact-reference-payment-choice-prod
 source_commit=d44b1402de40761ec02b622fe521955523c6a5d7
-triggered_at=2026-08-15T21:45:00Z
+triggered_at=2026-08-15T21:49:00Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-bypass-vercel-build-rate-limit
+reason=force-prebuilt-production-release-via-merged-pr
