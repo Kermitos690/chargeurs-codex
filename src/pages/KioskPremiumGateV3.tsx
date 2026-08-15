@@ -5,6 +5,7 @@ import { KioskAdvertisingSynchronizedLayer } from "@/components/kiosk/KioskAdver
 import "./kiosk-production-edge-states.css";
 import "./kiosk-premium-home-canonical.css";
 import "./kiosk-pricing-explainer.css";
+import "./kiosk-home-reference-lock.css";
 
 /**
  * Single-owner Premium kiosk runtime.
@@ -15,7 +16,7 @@ import "./kiosk-pricing-explainer.css";
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "premium-single-owner-pricing-explainer-2026-1280x720";
+    document.documentElement.dataset.kioskVersion = "premium-field-reference-home-2026-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
@@ -31,7 +32,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="premium-single-owner-pricing-explainer-2026">
+    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-home-2026">
       <div className="kv3-product-layer">
         <KioskPremiumGateV2 />
       </div>
