@@ -8,11 +8,27 @@ const headers = {
   "Access-Control-Expose-Headers": "x-correlation-id",
 };
 
+type Tier = { upper_minutes: number; total_cents: number };
+
+function normalizedTiers(snapshot: Record<string, unknown>): Tier[] {
+  if (!Array.isArray(snapshot.tiers)) return [];
+  return snapshot.tiers
+    .map((raw) => {
+      const row = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+      return { upper_minutes: Number(row.upper_minutes), total_cents: Number(row.total_cents) };
+    })
+    .filter((row) => Number.isInteger(row.upper_minutes) && row.upper_minutes > 0 && Number.isInteger(row.total_cents) && row.total_cents > 0)
+    .sort((a, b) => a.upper_minutes - b.upper_minutes);
+}
+
 function hourlyCents(snapshot: Record<string, unknown>): number | null {
+  // Linear member tariffs keep an hourly projection. Tiered guest tariffs must
+  // never be flattened into a misleading CHF/hour number.
+  if (snapshot.tiered === true) return null;
   const cents = Number(snapshot.price_per_period_cents);
   const minutes = Number(snapshot.period_minutes);
   if (!Number.isFinite(cents) || !Number.isFinite(minutes) || cents < 0 || minutes <= 0) return null;
-  return Math.round((cents * 60) / minutes);
+  return Math.round(cents * 60 / minutes);
 }
 
 Deno.serve(async (req) => {
@@ -33,7 +49,8 @@ Deno.serve(async (req) => {
     const kiosk = await verifyKioskDevice(req, db, stationId);
     if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
 
-    const { data: station, error: stationError } = await db.from("stations")
+    const { data: station, error: stationError } = await db
+      .from("stations")
       .select("station_id,currency,status")
       .eq("station_id", stationId)
       .maybeSingle();
@@ -49,18 +66,29 @@ Deno.serve(async (req) => {
         p_end: null,
         p_rental_state: "quote",
         p_return_state: "normal",
-        p_currency: station.currency ?? null,
+        // The resolved pricing profile owns currency. Do not force a stale
+        // station-level field into the pricing engine.
+        p_currency: null,
       });
       if (error || !data) return null;
       const snapshot = data as Record<string, unknown>;
+      const tiers = normalizedTiers(snapshot);
       return {
         segment,
         currency: String(snapshot.currency ?? station.currency ?? "CHF"),
+        tiered: snapshot.tiered === true,
+        tiers,
+        starting_cents: Number(snapshot.final_cents ?? tiers[0]?.total_cents ?? 0),
         hourly_cents: hourlyCents(snapshot),
         period_minutes: Number(snapshot.period_minutes ?? 0),
         price_per_period_cents: Number(snapshot.price_per_period_cents ?? 0),
         daily_cap_cents: Number(snapshot.daily_cap_cents ?? 0),
+        total_cap_cents: Number(snapshot.total_cap_cents ?? 0),
+        deposit_cents: Number(snapshot.deposit_cents ?? 0),
+        unreturned_after_minutes: Number(snapshot.unreturned_after_minutes ?? 0),
+        unreturned_fee_cents: Number(snapshot.unreturned_fee_cents ?? 0),
         profile_name: String(snapshot.profile_name ?? ""),
+        pricing_rules_version: Number(snapshot.pricing_rules_version ?? 0),
       };
     };
 
@@ -76,29 +104,25 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle(),
     ]);
+
     if (!guest) return reply({ ok: false, error: "GUEST_PRICING_NOT_CONFIGURED" }, 409);
     if (planResult.error) throw planResult.error;
 
-    const plan = planResult.data ? {
-      id: planResult.data.id,
-      code: planResult.data.code,
-      name: planResult.data.name,
-      currency: planResult.data.currency,
-      annual_fee_cents: Number(planResult.data.annual_fee_cents ?? 0),
-      renewal_credit_cents: Number(planResult.data.renewal_credit_cents ?? 0),
-      hourly_cents: Number(planResult.data.hourly_cents ?? member?.hourly_cents ?? 0),
-      daily_cap_cents: Number(planResult.data.daily_cap_cents ?? member?.daily_cap_cents ?? 0),
-      valid_from: planResult.data.valid_from,
-      valid_to: planResult.data.valid_to,
+    const p = planResult.data;
+    const membershipPlan = p ? {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      currency: p.currency,
+      annual_fee_cents: Number(p.annual_fee_cents ?? 0),
+      renewal_credit_cents: Number(p.renewal_credit_cents ?? 0),
+      hourly_cents: Number(p.hourly_cents ?? member?.hourly_cents ?? 0),
+      daily_cap_cents: Number(p.daily_cap_cents ?? member?.daily_cap_cents ?? 0),
+      valid_from: p.valid_from,
+      valid_to: p.valid_to,
     } : null;
 
-    return reply({
-      ok: true,
-      guest,
-      member,
-      memberAvailable: Boolean(member),
-      membershipPlan: plan,
-    });
+    return reply({ ok: true, guest, member, memberAvailable: Boolean(member), membershipPlan });
   } catch (error) {
     console.error("kiosk-customer-options", error instanceof Error ? error.message : "UNKNOWN_ERROR");
     return reply({ ok: false, error: "CUSTOMER_OPTIONS_FAILED" }, 500);

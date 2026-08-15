@@ -1,0 +1,360 @@
+/* Chargeurs.ch — pricing explainer screens, native 1280×720 first. */
+html.kiosk-v3 .ck2-pricing-screen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  color: #f7fbff;
+  background:
+    radial-gradient(52% 70% at 82% 40%, rgba(38, 126, 255, .16), transparent 68%),
+    radial-gradient(42% 55% at 7% 98%, rgba(91, 226, 140, .07), transparent 72%),
+    linear-gradient(135deg, #010409 0%, #050b14 44%, #071324 75%, #02050a 100%);
+}
+
+html.kiosk-v3 .ck2-pricing-screen .ck2-topbar {
+  height: 70px;
+  padding: 0 44px;
+}
+
+html.kiosk-v3 .ck2-pricing-main {
+  position: relative;
+  z-index: 10;
+  height: calc(100dvh - 70px);
+  padding: 28px 46px 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(350px, .8fr);
+  gap: 34px;
+  align-items: stretch;
+}
+
+html.kiosk-v3 .ck2-pricing-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+html.kiosk-v3 .ck2-pricing-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(171, 204, 237, .72);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+html.kiosk-v3 .ck2-pricing-kicker svg { width: 16px; height: 16px; }
+
+html.kiosk-v3 .ck2-pricing-copy h1 {
+  margin: 10px 0 0;
+  max-width: 760px;
+  font-size: clamp(42px, 4.4vw, 62px);
+  line-height: .98;
+  letter-spacing: -.045em;
+  font-weight: 900;
+  text-wrap: balance;
+}
+
+html.kiosk-v3 .ck2-pricing-lead {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: rgba(202, 221, 240, .70);
+  font-size: 14px;
+  line-height: 1.48;
+}
+
+html.kiosk-v3 .ck2-tier-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+html.kiosk-v3 .ck2-tier-card {
+  min-height: 112px;
+  padding: 16px 14px;
+  border: 1px solid rgba(142, 181, 222, .15);
+  border-radius: 15px;
+  background: linear-gradient(150deg, rgba(8, 18, 31, .88), rgba(3, 9, 17, .97));
+  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 16px 34px rgba(0,0,0,.20);
+}
+
+html.kiosk-v3 .ck2-tier-card span {
+  display: block;
+  color: rgba(177, 202, 228, .61);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+html.kiosk-v3 .ck2-tier-card strong {
+  display: block;
+  margin-top: 9px;
+  color: #fff;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: -.035em;
+  font-weight: 900;
+}
+
+html.kiosk-v3 .ck2-tier-card small {
+  display: block;
+  margin-top: 7px;
+  color: rgba(180, 205, 230, .55);
+  font-size: 11px;
+}
+
+html.kiosk-v3 .ck2-pricing-note {
+  margin-top: 13px;
+  min-height: 72px;
+  padding: 13px 15px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid rgba(238, 196, 97, .19);
+  border-radius: 14px;
+  background: rgba(71, 51, 16, .13);
+}
+
+html.kiosk-v3 .ck2-pricing-note svg {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: #f4d47b;
+}
+
+html.kiosk-v3 .ck2-pricing-note strong {
+  display: block;
+  color: #fff6d6;
+  font-size: 13px;
+}
+
+html.kiosk-v3 .ck2-pricing-note p {
+  margin: 4px 0 0;
+  color: rgba(239, 226, 190, .72);
+  font-size: 11.5px;
+  line-height: 1.42;
+}
+
+html.kiosk-v3 .ck2-pricing-actions {
+  margin-top: auto;
+  padding-top: 14px;
+  display: flex;
+  gap: 10px;
+}
+
+html.kiosk-v3 .ck2-pricing-primary,
+html.kiosk-v3 .ck2-pricing-secondary {
+  min-height: 52px;
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 13px;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+html.kiosk-v3 .ck2-pricing-primary {
+  min-width: 280px;
+  border: 1px solid rgba(144, 236, 117, .42);
+  color: #071108;
+  background: linear-gradient(135deg, #9bf07d, #74d95d);
+  box-shadow: 0 16px 32px rgba(79, 210, 90, .15);
+}
+
+html.kiosk-v3 .ck2-pricing-primary--blue {
+  border-color: rgba(92, 173, 255, .44);
+  color: #f8fcff;
+  background: linear-gradient(135deg, #277fe5, #195dbb);
+  box-shadow: 0 16px 32px rgba(39, 127, 229, .17);
+}
+
+html.kiosk-v3 .ck2-pricing-primary:disabled {
+  opacity: .38;
+  filter: saturate(.45);
+}
+
+html.kiosk-v3 .ck2-pricing-secondary {
+  border: 1px solid rgba(147, 181, 218, .18);
+  color: rgba(229, 240, 251, .82);
+  background: rgba(5, 12, 21, .66);
+}
+
+html.kiosk-v3 .ck2-pricing-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html.kiosk-v3 .ck2-summary-card,
+html.kiosk-v3 .ck2-plus-card,
+html.kiosk-v3 .ck2-plus-qr-card {
+  border: 1px solid rgba(137, 177, 219, .16);
+  border-radius: 18px;
+  background: linear-gradient(150deg, rgba(8, 18, 32, .91), rgba(3, 9, 17, .98));
+  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 22px 45px rgba(0,0,0,.23);
+}
+
+html.kiosk-v3 .ck2-summary-card { padding: 18px; }
+html.kiosk-v3 .ck2-summary-card > span,
+html.kiosk-v3 .ck2-plus-card > span {
+  color: rgba(176, 202, 228, .58);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+html.kiosk-v3 .ck2-summary-card > strong {
+  display: block;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+html.kiosk-v3 .ck2-summary-card p {
+  margin: 8px 0 0;
+  color: rgba(188, 211, 235, .62);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+html.kiosk-v3 .ck2-plus-card {
+  padding: 18px;
+  border-color: rgba(83, 164, 255, .25);
+  background:
+    radial-gradient(80% 120% at 0 0, rgba(45, 124, 232, .17), transparent 63%),
+    linear-gradient(150deg, rgba(7, 22, 44, .96), rgba(3, 9, 18, .99));
+}
+
+html.kiosk-v3 .ck2-plus-card h2 {
+  margin: 7px 0 0;
+  font-size: 29px;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+html.kiosk-v3 .ck2-plus-card p {
+  margin: 8px 0 0;
+  color: rgba(194, 215, 237, .66);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+html.kiosk-v3 .ck2-plus-saving {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(117, 228, 140, .20);
+  border-radius: 12px;
+  background: rgba(41, 126, 62, .10);
+}
+
+html.kiosk-v3 .ck2-plus-saving strong {
+  color: #9cedaa;
+  font-size: 17px;
+}
+
+html.kiosk-v3 .ck2-plus-saving small {
+  display: block;
+  margin-top: 3px;
+  color: rgba(199, 231, 205, .66);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+html.kiosk-v3 .ck2-plus-metrics {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+html.kiosk-v3 .ck2-plus-metric {
+  min-height: 70px;
+  padding: 10px 11px;
+  border: 1px solid rgba(126, 169, 214, .12);
+  border-radius: 11px;
+  background: rgba(1, 7, 14, .40);
+}
+
+html.kiosk-v3 .ck2-plus-metric span {
+  display: block;
+  color: rgba(171, 198, 226, .55);
+  font-size: 9px;
+  font-weight: 760;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+html.kiosk-v3 .ck2-plus-metric strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 18px;
+  letter-spacing: -.025em;
+}
+
+html.kiosk-v3 .ck2-plus-qr-card {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 126px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+html.kiosk-v3 .ck2-plus-qr {
+  width: 126px;
+  height: 126px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: #fff;
+}
+
+html.kiosk-v3 .ck2-plus-qr-card strong {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+html.kiosk-v3 .ck2-plus-qr-card p {
+  margin: 6px 0 0;
+  color: rgba(190, 211, 233, .62);
+  font-size: 11px;
+  line-height: 1.38;
+}
+
+html.kiosk-v3 .ck2-pricing-back {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(145, 178, 217, .16);
+  border-radius: 12px;
+  color: rgba(232, 241, 251, .80);
+  background: rgba(4, 11, 20, .74);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+html.kiosk-v3 .ck2-pricing-back svg { width: 17px; height: 17px; }
+
+@media (max-width: 980px), (max-height: 600px) {
+  html.kiosk-v3 .ck2-pricing-main { padding: 20px 28px 22px; gap: 22px; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); }
+  html.kiosk-v3 .ck2-tier-card { min-height: 96px; padding: 13px 11px; }
+  html.kiosk-v3 .ck2-tier-card strong { font-size: 21px; }
+  html.kiosk-v3 .ck2-pricing-copy h1 { font-size: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3 .ck2-pricing-screen * { transition: none !important; animation: none !important; }
+}
