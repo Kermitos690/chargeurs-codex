@@ -65,6 +65,34 @@ function notifyKioskAuthenticationRejected(path: KioskProxyPath, status: number)
   }));
 }
 
+function cachedAdvertisingPlaylistFallback(
+  path: KioskProxyPath,
+  body: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (path !== "/api/kiosk/ads-playlist" || body.action !== "playlist") return null;
+  const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
+  if (!stationId) return null;
+  try {
+    const raw = localStorage.getItem(`chargeurs:ads:playlist:${stationId}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as Record<string, unknown>;
+    if (cached.ok !== true || !Array.isArray(cached.campaigns)) return null;
+    // This is strictly the kiosk's already-cached public Ads projection. It does
+    // not bypass server authorization or expose any new campaign/rental data.
+    // A fresh local timestamp is supplied only so the Ads layer enters its
+    // synchronized mode; the dedicated public Ads clock is authoritative.
+    return {
+      ...cached,
+      ok: true,
+      stationId,
+      serverTimeMs: Date.now(),
+      timelineEpochMs: Number(cached.timelineEpochMs ?? 0) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function invokeKioskEdgeProxy<T>(
   path: KioskProxyPath,
   body: Record<string, unknown>,
@@ -92,6 +120,19 @@ export async function invokeKioskEdgeProxy<T>(
     }
 
     notifyKioskAuthenticationRejected(path, response.status);
+
+    if ((response.status === 401 || response.status === 403) && path === "/api/kiosk/ads-playlist") {
+      const cached = cachedAdvertisingPlaylistFallback(path, body);
+      if (cached) {
+        return {
+          data: cached as T,
+          transportError: false,
+          status: response.status,
+          authError: true,
+        };
+      }
+    }
+
     return {
       data,
       transportError: !response.ok && data === null,
