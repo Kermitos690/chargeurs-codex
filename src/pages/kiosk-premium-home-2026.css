@@ -1,0 +1,371 @@
+/*
+ * Chargeurs.ch — Premium Home 2026
+ *
+ * Single-owner presentation for the existing ck2 Home DOM.
+ * No overlay, no duplicate Home component, no hidden callback mirror.
+ * Pricing, pairing, rental and hardware state remain owned by KioskPremiumGateV2.
+ */
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home {
+  --home-bg: #03070d;
+  --home-panel: rgba(8, 14, 23, .86);
+  --home-panel-strong: rgba(7, 12, 20, .96);
+  --home-line: rgba(160, 186, 218, .14);
+  --home-text: #f5f8fc;
+  --home-muted: #95a4b7;
+  --home-express: #8eea72;
+  --home-express-soft: rgba(115, 222, 91, .14);
+  --home-client: #5ea6ff;
+  --home-client-soft: rgba(69, 139, 239, .16);
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  color: var(--home-text) !important;
+  background:
+    radial-gradient(58% 78% at 78% 48%, rgba(48, 108, 188, .13), transparent 66%),
+    radial-gradient(42% 55% at 10% 100%, rgba(75, 167, 105, .055), transparent 74%),
+    linear-gradient(132deg, #02050a 0%, #050a12 46%, #07111d 72%, #02050a 100%) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -2 !important;
+  pointer-events: none !important;
+  opacity: .72 !important;
+  background:
+    linear-gradient(118deg, transparent 0 42%, rgba(153, 194, 239, .028) 49%, transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,.012), transparent 18%) !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 90 !important;
+  pointer-events: none !important;
+  box-shadow: inset 0 0 88px rgba(0,0,0,.52) !important;
+  background: none !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient {
+  pointer-events: none !important;
+  filter: blur(90px) !important;
+  opacity: .36 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-a {
+  width: 34vw !important;
+  height: 34vw !important;
+  right: 2vw !important;
+  top: 9vh !important;
+  background: rgba(51, 119, 219, .12) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-b {
+  width: 27vw !important;
+  height: 20vw !important;
+  left: -4vw !important;
+  bottom: -8vh !important;
+  background: rgba(86, 188, 105, .055) !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar {
+  position: relative !important;
+  z-index: 45 !important;
+  height: 72px !important;
+  padding: 0 46px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border-bottom: 1px solid rgba(162, 188, 220, .08) !important;
+  background: linear-gradient(180deg, rgba(2, 5, 10, .54), rgba(2, 5, 10, .08)) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-top-actions { gap: 8px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill,
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language {
+  min-height: 42px !important;
+  border: 1px solid rgba(148, 177, 213, .14) !important;
+  border-radius: 12px !important;
+  background: rgba(5, 11, 19, .72) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 10px 24px rgba(0,0,0,.16) !important;
+  backdrop-filter: blur(16px) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill {
+  padding: 0 14px !important;
+  gap: 7px !important;
+  color: rgba(227, 236, 246, .76) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill:active { transform: translateY(1px) scale(.98) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language { padding: 3px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language button {
+  min-width: 40px !important;
+  height: 34px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
+  position: relative !important;
+  z-index: 10 !important;
+  width: 100% !important;
+  height: calc(100dvh - 72px) !important;
+  padding: 38px 48px 34px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.18fr) minmax(330px, .82fr) !important;
+  gap: 46px !important;
+  align-items: center !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy {
+  width: 100% !important;
+  max-width: 760px !important;
+  align-self: center !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow {
+  color: rgba(170, 192, 218, .62) !important;
+  font-size: 10px !important;
+  font-weight: 760 !important;
+  letter-spacing: .22em !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow::before {
+  width: 30px !important;
+  height: 1px !important;
+  background: linear-gradient(90deg, var(--home-express), var(--home-client)) !important;
+  box-shadow: none !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 {
+  margin: 12px 0 0 !important;
+  color: #f4f7fb !important;
+  font-size: clamp(54px, 5.8vw, 84px) !important;
+  line-height: .88 !important;
+  letter-spacing: -.057em !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 18px 46px rgba(0,0,0,.38) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 > strong {
+  background: linear-gradient(96deg, #f8fbff 4%, #acd7ff 40%, #5ca7f9 76%, #7f91ff 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row {
+  width: max-content !important;
+  max-width: 100% !important;
+  min-height: 44px !important;
+  margin-top: 20px !important;
+  padding: 6px 11px !important;
+  gap: 10px !important;
+  border: 1px solid rgba(147, 177, 213, .13) !important;
+  border-radius: 12px !important;
+  background: rgba(4, 10, 18, .70) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.022), 0 10px 24px rgba(0,0,0,.14) !important;
+  color: rgba(189, 207, 228, .60) !important;
+  font-size: 13px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon {
+  width: 30px !important;
+  height: 30px !important;
+  border: 1px solid rgba(93, 164, 244, .20) !important;
+  border-radius: 9px !important;
+  background: rgba(54, 117, 196, .09) !important;
+  color: #8bc7ff !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid {
+  margin-top: 22px !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+  max-width: 760px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice {
+  all: unset;
+  box-sizing: border-box !important;
+  position: relative !important;
+  min-width: 0 !important;
+  height: 226px !important;
+  padding: 25px 24px 22px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  overflow: hidden !important;
+  color: #f7f9fc !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  border-radius: 18px !important;
+  transform: translateZ(0) !important;
+  transition: transform .14s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 3px !important;
+  pointer-events: none !important;
+  opacity: .86 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  opacity: 1 !important;
+  background: linear-gradient(118deg, rgba(255,255,255,.035), transparent 28% 72%, rgba(255,255,255,.012)) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express {
+  border: 1px solid rgba(133, 222, 110, .32) !important;
+  background:
+    radial-gradient(80% 110% at 0% 0%, rgba(105, 207, 82, .12), transparent 58%),
+    linear-gradient(148deg, rgba(8, 22, 16, .96), rgba(5, 11, 14, .98)) !important;
+  box-shadow: 0 22px 48px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.025) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::before {
+  background: var(--home-express) !important;
+  box-shadow: 0 0 18px rgba(142,234,114,.24) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member {
+  border: 1px solid rgba(91, 159, 240, .34) !important;
+  background:
+    radial-gradient(80% 110% at 0% 0%, rgba(66, 130, 215, .14), transparent 60%),
+    linear-gradient(148deg, rgba(8, 18, 34, .97), rgba(4, 10, 17, .99)) !important;
+  box-shadow: 0 22px 48px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.025) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member::before {
+  background: var(--home-client) !important;
+  box-shadow: 0 0 18px rgba(94,166,255,.24) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:active:not(:disabled) { transform: translateY(2px) scale(.988) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:focus-visible {
+  outline: 2px solid rgba(231, 241, 252, .72) !important;
+  outline-offset: 3px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:disabled {
+  cursor: default !important;
+  opacity: .40 !important;
+  filter: saturate(.52) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon {
+  position: relative !important;
+  z-index: 2 !important;
+  width: 40px !important;
+  height: 40px !important;
+  flex: 0 0 40px !important;
+  margin: 0 0 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 11px !important;
+  background: rgba(255,255,255,.018) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon svg { width: 19px !important; height: 19px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express .ck2-choice-icon {
+  color: var(--home-express) !important;
+  border: 1px solid rgba(142,234,114,.30) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member .ck2-choice-icon {
+  color: var(--home-client) !important;
+  border: 1px solid rgba(94,166,255,.30) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-kicker {
+  position: relative !important;
+  z-index: 2 !important;
+  color: rgba(197, 214, 232, .56) !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  letter-spacing: .17em !important;
+  text-transform: uppercase !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > strong {
+  position: relative !important;
+  z-index: 2 !important;
+  margin-top: 7px !important;
+  color: #fff !important;
+  font-size: 30px !important;
+  line-height: .98 !important;
+  letter-spacing: -.038em !important;
+  font-weight: 800 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > small {
+  position: relative !important;
+  z-index: 2 !important;
+  display: block !important;
+  max-width: 86% !important;
+  margin-top: 10px !important;
+  color: rgba(193, 208, 226, .66) !important;
+  font-size: 13px !important;
+  line-height: 1.38 !important;
+  font-weight: 500 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-arrow {
+  position: absolute !important;
+  z-index: 3 !important;
+  right: 18px !important;
+  bottom: 18px !important;
+  width: 42px !important;
+  height: 42px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(213, 228, 245, .14) !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.025) !important;
+  color: rgba(239, 246, 253, .84) !important;
+  font-size: 20px !important;
+  font-weight: 500 !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage {
+  position: relative !important;
+  width: min(36vw, 450px) !important;
+  height: min(72vh, 560px) !important;
+  justify-self: end !important;
+  perspective: 1200px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-glow {
+  inset: 9% -6% 1% 0 !important;
+  background: radial-gradient(ellipse, rgba(56, 124, 211, .16), transparent 68%) !important;
+  filter: blur(34px) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device {
+  inset: 3% 5% 8% 13% !important;
+  border: 1px solid rgba(158, 186, 219, .16) !important;
+  border-radius: 22px 22px 18px 18px !important;
+  background: linear-gradient(106deg, #19222d 0%, #080d14 17%, #111923 57%, #020509 96%) !important;
+  box-shadow: inset 10px 0 24px rgba(255,255,255,.025), inset -18px 0 32px rgba(0,0,0,.62), 0 34px 64px rgba(0,0,0,.48), 0 0 42px rgba(47,110,190,.06) !important;
+  transform: rotateY(-6deg) rotateX(1deg) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen {
+  border-radius: 12px !important;
+  border: 1px solid rgba(98, 151, 215, .14) !important;
+  background: linear-gradient(150deg, #07101a, #02060b) !important;
+  box-shadow: inset 0 0 24px rgba(34,89,173,.055) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot { border-radius: 10px !important; }
+
+@media (min-width: 1200px) and (max-width: 1320px) and (min-height: 680px) and (max-height: 760px) {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar { height: 68px !important; padding: 0 42px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
+    height: calc(100dvh - 68px) !important;
+    padding: 30px 44px 28px !important;
+    grid-template-columns: 742px 382px !important;
+    gap: 56px !important;
+  }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 { font-size: 66px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid { margin-top: 20px !important; gap: 16px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice { height: 220px !important; padding: 24px 23px 21px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage { width: 370px !important; height: 520px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice,
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill { transition: none !important; }
+}
