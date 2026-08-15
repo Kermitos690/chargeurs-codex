@@ -6,17 +6,12 @@ import "./kiosk-production-edge-states.css";
 import "./kiosk-premium-home-canonical.css";
 import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
+import "./kiosk-field-reference-v2.css";
 
-/**
- * Single-owner Premium kiosk runtime.
- *
- * KioskPremiumGateV2 owns Home, pricing explanations, customer pairing and
- * transaction entry. Advertising stays isolated from the rental machine and the
- * auth guard remains the only security blocking overlay.
- */
+/** Single-owner Premium kiosk runtime. */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
-    document.documentElement.dataset.kioskVersion = "premium-field-reference-home-2026-1280x720";
+    document.documentElement.dataset.kioskVersion = "premium-field-reference-v2-2026-1280x720";
     document.documentElement.classList.add("kiosk-v3");
     return () => {
       delete document.documentElement.dataset.kioskVersion;
@@ -32,10 +27,8 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-home-2026">
-      <div className="kv3-product-layer">
-        <KioskPremiumGateV2 />
-      </div>
+    <div className="kv3-runtime" data-presentation-owner="premium-field-reference-v2-2026">
+      <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
       <KioskV3AuthGuard />
     </div>
