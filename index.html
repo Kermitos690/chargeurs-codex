@@ -25,7 +25,11 @@
 
           var sourceWidth = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1280);
           var sourceHeight = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 720);
-          var scale = Math.min(sourceWidth / 1280, sourceHeight / 720);
+          // Width is the stable hardware axis on the fixed landscape kiosk.
+          // Android system/navigation bars may transiently change innerHeight
+          // during cold boot/fullscreen handoff; using min(width,height) caused
+          // the whole UI to visibly grow/shrink as those bars settled.
+          var scale = sourceWidth / 1280;
           if (!Number.isFinite(scale) || scale <= 0) scale = 1;
           scale = Math.max(0.25, Math.min(2, scale));
           var fixedScale = scale.toFixed(6);
