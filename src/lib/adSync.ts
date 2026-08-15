@@ -1,3 +1,4 @@
+// Deploy marker: force Vercel to publish the merged Ads ultra-sync runtime.
 export type TimedAdEntry = {
   item: {
     mediaType: "image" | "video";
