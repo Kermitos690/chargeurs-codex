@@ -1,5 +1,6 @@
 // Read-only physical release reconciler. It never sends or retries an eject command.
-// Multi-release anomalies are recorded but never globally quarantine/block the station.
+// A multi-release is terminal for that rental: it must never be silently
+// accepted just because the selected battery also happened to leave.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
@@ -11,6 +12,10 @@ const headers = {
 };
 const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}[0-9a-f]$/i.test(v);
 const trustworthy = (s: any) => Boolean(s && s.confidence !== "low" && Array.isArray(s.conflicts) && s.conflicts.length === 0);
+// ChargeNow can emit two physical events several seconds after the HTTP answer.
+// Do not accept an early one-slot snapshot before that supplier event window has
+// closed; the kiosk keeps polling this read-only endpoint while it waits.
+const PHYSICAL_OBSERVATION_WINDOW_MS = 30_000;
 function classify(pre: any, post: any, selected: number) {
   const pm = new Map((post.slots ?? []).map((s: any) => [Number(s.slot_num), s]));
   const released = (pre.slots ?? [])
@@ -72,7 +77,7 @@ async function recordAnomaly(d: any, session: any, delta: any, kind: "multi" | "
     type: kind === "multi" ? "multi_battery_release" : "unexpected_battery_release",
     severity: kind === "multi" ? "critical" : "high",
     message: kind === "multi"
-      ? "Plusieurs batteries ont été observées sorties après une seule commande. La location sélectionnée continue si son identité est confirmée; la borne n'est pas bloquée."
+      ? "Plusieurs batteries ont été observées sorties après une seule commande. La location est bloquée pour revue manuelle; aucune activation ou capture automatique n'est autorisée."
       : "Une sortie physique ne correspond pas à la batterie sélectionnée. La borne reste disponible; cette location requiert une réconciliation.",
     data: { rental_session_id: session.id, station_id: session.station_id, code, ...details },
     resolved: false,
@@ -116,6 +121,10 @@ Deno.serve(async (req) => {
     if (ae) throw ae;
     if (!attempt?.pre_snapshot) return json({ ok: true, state: "ejecting", confirmed: false, reason: "RELEASE_BASELINE_MISSING" }, 202);
     if (!attempt.command_sent_at) return json({ ok: true, state: "ejecting", confirmed: false, reason: "EJECT_COMMAND_NOT_YET_OBSERVED" }, 202);
+    const commandAtMs = Date.parse(String(attempt.command_sent_at));
+    if (!Number.isFinite(commandAtMs) || Date.now() - commandAtMs < PHYSICAL_OBSERVATION_WINDOW_MS) {
+      return json({ ok: true, state: "ejecting", confirmed: false, reason: "AWAITING_PHYSICAL_OBSERVATION_WINDOW" }, 202);
+    }
 
     const cabinetId = String(session.cabinet_id ?? stationId).trim() || stationId;
     const live = await readCabinetSnapshot(cabinetId);
@@ -137,17 +146,15 @@ Deno.serve(async (req) => {
 
     const selectedReleased = delta.released_slot_nums.includes(slot) && delta.released_battery_ids.includes(bid);
     if (delta.result === "multi_release") {
-      await recordAnomaly(d, session, delta, "multi", post);
-      if (!selectedReleased) {
-        await d.from("rental_sessions").update({
-          state: "needs_support",
-          failure_code: "MULTI_RELEASE_SELECTED_IDENTITY_MISSING",
-          failure_message: "Plusieurs sorties ont été observées mais la batterie sélectionnée n'est pas confirmée.",
-          chargenow_status: "multi_release_selected_identity_missing",
-          updated_at: now,
-        }).eq("id", session.id).eq("state", "ejecting");
-        return json({ ok: false, state: "needs_support", confirmed: false, error: "MULTI_RELEASE_SELECTED_IDENTITY_MISSING", stationQuarantined: false, releasedSlotNums: delta.released_slot_nums }, 202);
-      }
+      const anomaly = await recordAnomaly(d, session, delta, "multi", post);
+      await d.from("rental_sessions").update({
+        state: "needs_support",
+        failure_code: anomaly.code,
+        failure_message: "Plusieurs batteries sont sorties pour une seule location. Aucune activation ni capture automatique n'est autorisée.",
+        chargenow_status: "multi_release_detected",
+        updated_at: now,
+      }).eq("id", session.id).eq("state", "ejecting");
+      return json({ ok: false, state: "needs_support", confirmed: false, error: anomaly.code, stationQuarantined: false, releasedSlotNums: delta.released_slot_nums }, 202);
     } else if (delta.result === "unexpected_release") {
       const anomaly = await recordAnomaly(d, session, delta, "unexpected", post);
       await d.from("rental_sessions").update({
@@ -179,9 +186,9 @@ Deno.serve(async (req) => {
       cabinetId,
       slotNum: slot,
       tradeNo,
-      source: delta.result === "multi_release" ? "four_source_multi_release_selected_identity" : "four_source_physical_consensus",
+      source: "four_source_physical_consensus",
       providerCallbackRequired: false,
-      multi_release_observed: delta.result === "multi_release",
+      multi_release_observed: false,
       releasedSlotNums: delta.released_slot_nums,
       releasedBatteryIds: delta.released_battery_ids,
     };
@@ -191,19 +198,19 @@ Deno.serve(async (req) => {
       state: "ejected",
       ejected_at: session.ejected_at ?? now,
       started_at: session.started_at ?? now,
-      chargenow_status: delta.result === "multi_release" ? "ejected_multi_release_observed" : "ejected",
+      chargenow_status: "ejected",
       failure_code: null,
       failure_message: null,
       updated_at: now,
     }).eq("id", session.id).eq("state", "ejecting").select("id");
     if (ue) throw ue;
     if (updated?.length) {
-      await d.from("station_slot_reservations").update({ state: "released", released_at: now, release_reason: delta.result === "multi_release" ? "selected_release_confirmed_multi_observed" : "physical_ejection_confirmed", updated_at: now }).eq("rental_session_id", session.id).eq("state", "reserved");
+      await d.from("station_slot_reservations").update({ state: "released", released_at: now, release_reason: "physical_ejection_confirmed", updated_at: now }).eq("rental_session_id", session.id).eq("state", "reserved");
       for (const releasedBatteryId of delta.released_battery_ids) {
         await d.from("batteries").update({ station_id: null, slot_num: null, status: "out_of_station", updated_at: now }).eq("battery_id", releasedBatteryId);
       }
     }
-    return json({ ok: true, state: updated?.length ? "ejected" : "ejecting", confirmed: Boolean(updated?.length), slotNum: slot, stationQuarantined: false, anomalyRecorded: delta.result === "multi_release" });
+    return json({ ok: true, state: updated?.length ? "ejected" : "ejecting", confirmed: Boolean(updated?.length), slotNum: slot, stationQuarantined: false, anomalyRecorded: false });
   } catch (e) {
     console.error("reconcile-pending-ejection", e instanceof Error ? e.message : "RECONCILIATION_UNAVAILABLE");
     return json({ ok: false, error: "RECONCILIATION_UNAVAILABLE" }, 503);
