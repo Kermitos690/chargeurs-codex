@@ -87,6 +87,14 @@ Deno.test("v2 explicit not-returned fee is additive before caps", () => {
   assertEquals(result.final_cents, 1010);
 });
 
+Deno.test("v2 active threshold starts exactly at configured minute", () => {
+  const result = price(4320);
+  assertEquals(result.duration_cents, 2370);
+  assertEquals(result.additional_fees_cents, 620);
+  assertEquals(result.subtotal_cents, 2990);
+  assertEquals(result.final_cents, 2990);
+});
+
 Deno.test("v2 active threshold remains capped by the immutable total cap", () => {
   const result = price(4321);
   assertEquals(result.additional_fees_cents, 620);
