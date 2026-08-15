@@ -4,7 +4,9 @@ const KIOSK_QUOTE_RPC_PATH = "/rest/v1/rpc/kiosk_quote";
 
 const PREMIUM_GUEST = {
   currency: "CHF",
-  depositCents: 0,
+  // The deposit is a separate authorization/guarantee. It is not part of the
+  // rental total cap and must match the server-owned current pricing profile.
+  depositCents: 3_000,
   totalCapCents: 2_990,
   tiers: [
     { upperMinutes: 30, totalCents: 190 },
