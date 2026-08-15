@@ -61,6 +61,12 @@ export function estimateServerClockOffsetMs(
   responseReceivedMs: number,
 ): number {
   if (![serverNowMs, requestStartedMs, responseReceivedMs].every(Number.isFinite)) return 0;
-  const midpoint = requestStartedMs + Math.max(0, responseReceivedMs - requestStartedMs) / 2;
-  return Math.round(serverNowMs - midpoint);
+
+  // `serverNowMs` is generated immediately before the playlist response leaves
+  // the Edge Function. Anchoring it to the client receive timestamp removes the
+  // variable backend/database processing time that made midpoint-based offsets
+  // differ from kiosk to kiosk. The remaining error is only downstream network
+  // latency, so independently started kiosks converge on the same wall-clock
+  // carousel phase instead of inheriting their local Android clock or request RTT.
+  return Math.round(serverNowMs - responseReceivedMs);
 }
