@@ -177,13 +177,21 @@ Deno.serve(async (req) => {
 
     if (action === "set_campaign_items") {
       const campaignId = safeText(body.campaignId, 64);
-      const rawItems = Array.isArray(body.items) ? body.items.slice(0, 100) : [];
-      const items = rawItems.map((item: Record<string, unknown>, index: number) => ({
-        campaign_id: campaignId, asset_id: safeText(item.assetId, 64), sort_order: index,
-        image_duration_seconds: item.imageDurationSeconds == null ? null : Math.min(300, Math.max(2, Math.round(safeNumber(item.imageDurationSeconds, 8)))),
-        enabled: item.enabled !== false, updated_at: new Date().toISOString(),
-      })).filter((item: { asset_id: string }) => Boolean(item.asset_id));
       if (!campaignId) return json({ ok: false, error: "MISSING_CAMPAIGN" }, 400);
+      const rawItems = Array.isArray(body.items) ? body.items.slice(0, 100) : [];
+      for (const item of rawItems) {
+        const rawQr = safeText((item as Record<string, unknown>).qrUrl, 1000);
+        if (rawQr && !safeHttpsUrl(rawQr)) return json({ ok: false, error: "INVALID_ITEM_QR_URL" }, 400);
+      }
+      const items = rawItems.map((item: Record<string, unknown>, index: number) => ({
+        campaign_id: campaignId,
+        asset_id: safeText(item.assetId, 64),
+        sort_order: index,
+        image_duration_seconds: item.imageDurationSeconds == null ? null : Math.min(300, Math.max(2, Math.round(safeNumber(item.imageDurationSeconds, 8)))),
+        qr_url: safeHttpsUrl(item.qrUrl),
+        enabled: item.enabled !== false,
+        updated_at: new Date().toISOString(),
+      })).filter((item: { asset_id: string }) => Boolean(item.asset_id));
       const assetIds = [...new Set(items.map((item: { asset_id: string }) => item.asset_id))];
       if (assetIds.length) {
         const { data: assets, error: assetsError } = await db.from("advertising_assets").select("id").in("id", assetIds).eq("active", true);
