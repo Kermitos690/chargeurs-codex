@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { useI18n } from "@/i18n/i18n";
 import Kiosk from "./Kiosk";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -25,11 +26,22 @@ import {
 } from "@/lib/kioskEdgeProxy";
 import "./kiosk-premium-v2.css";
 
+type PricingTier = {
+  upper_minutes: number;
+  total_cents: number;
+};
+
 type SegmentPrice = {
   segment: "guest" | "member";
   currency: string;
   hourly_cents: number | null;
   daily_cap_cents: number;
+  tiered?: boolean;
+  tiers?: PricingTier[];
+  starting_cents?: number | null;
+  total_cap_cents?: number | null;
+  subsequent_period_minutes?: number | null;
+  subsequent_period_cents?: number | null;
 };
 
 type CustomerOptions = {
@@ -103,12 +115,14 @@ type Copy = {
   memberScan: string;
   memberError: string;
   retry: string;
-  eyebrow: string;
-  line1: string;
-  line2: string;
-  accent: string;
+  homeSubtitle: string;
+  homeTitle: string;
   perHour: string;
   dailyCap: string;
+  from: string;
+  upTo: string;
+  totalCapLabel: string;
+  pricingUnavailable: string;
   expressKicker: string;
   expressTitle: string;
   expressBody: string;
@@ -128,10 +142,10 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "COMMENCER UNE LOCATION", connectedCtaSub: "Choisissez ensuite votre batterie sur cette borne.",
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "PLUS DE", line2: "BATTERIE ?", accent: "RÉGLÉ.", perHour: "/ heure", dailyCap: "Plafond journalier",
-    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Choisissez une batterie, payez sur votre téléphone et partez immédiatement.",
-    clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Connectez votre compte par QR et profitez automatiquement de votre tarif membre.",
-    cabinetTitle: "Batteries disponibles", cabinetSub: "Sélection automatique de la meilleure batterie", secure: "Connexion sécurisée",
+    homeSubtitle: "CHOISISSEZ VOTRE PARCOURS", homeTitle: "Besoin d’une batterie ?", perHour: "/ heure", dailyCap: "Plafond journalier", from: "Dès", upTo: "jusqu’à", totalCapLabel: "maximum", pricingUnavailable: "Tarif en cours de chargement",
+    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Consultez le tarif, choisissez une batterie, payez et partez.",
+    clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Connectez votre compte et profitez automatiquement de vos avantages Client Chargeurs.",
+    cabinetTitle: "Batteries disponibles", cabinetSub: "Sélection automatique de la meilleure batterie", secure: "Paiement sécurisé",
   },
   en: {
     refresh: "Refresh", help: "Help", cancel: "Cancel", returnHome: "Back home",
@@ -140,10 +154,10 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "START A RENTAL", connectedCtaSub: "Choose your powerbank next on this kiosk.",
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "OUT OF", line2: "BATTERY?", accent: "SOLVED.", perHour: "/ hour", dailyCap: "Daily cap",
-    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "Choose a powerbank, pay on your phone and leave immediately.",
-    clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Connect your account by QR and your member rate is applied automatically.",
-    cabinetTitle: "Batteries available", cabinetSub: "Best battery selected automatically", secure: "Secure connection",
+    homeSubtitle: "CHOOSE YOUR JOURNEY", homeTitle: "Need a battery?", perHour: "/ hour", dailyCap: "Daily cap", from: "From", upTo: "up to", totalCapLabel: "maximum", pricingUnavailable: "Loading price",
+    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "See the price first, choose a powerbank, pay and go.",
+    clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Connect your account and automatically use your active member benefits.",
+    cabinetTitle: "Batteries available", cabinetSub: "Best battery selected automatically", secure: "Secure payment",
   },
   de: {
     refresh: "Aktualisieren", help: "Hilfe", cancel: "Abbrechen", returnHome: "Zur Startseite",
@@ -152,15 +166,26 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     connectedCta: "MIETE STARTEN", connectedCtaSub: "Wählen Sie anschließend Ihre Powerbank an dieser Station.",
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
-    eyebrow: "POWER WHEN YOU NEED IT", line1: "AKKU", line2: "LEER?", accent: "GELÖST.", perHour: "/ Stunde", dailyCap: "Tageslimit",
-    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Powerbank wählen, am Smartphone bezahlen und sofort los.",
-    clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Konto per QR verbinden und den Kundentarif automatisch nutzen.",
-    cabinetTitle: "Verfügbare Batterien", cabinetSub: "Beste Batterie wird automatisch gewählt", secure: "Sichere Verbindung",
+    homeSubtitle: "WÄHLE DEINEN WEG", homeTitle: "Akku leer?", perHour: "/ Stunde", dailyCap: "Tageslimit", from: "Ab", upTo: "bis", totalCapLabel: "Maximum", pricingUnavailable: "Preis wird geladen",
+    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Preis zuerst ansehen, Powerbank wählen, bezahlen und los.",
+    clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Konto verbinden und automatisch die aktiven Kundenvorteile nutzen.",
+    cabinetTitle: "Verfügbare Batterien", cabinetSub: "Beste Batterie wird automatisch gewählt", secure: "Sicher bezahlen",
   },
 };
 
 const KIOSK_RESUMABLE_STATES = new Set(["created", "checkout_created", "payment_pending", "payment_succeeded", "ejecting"]);
-const money = (cents: number | null | undefined, currency = "CHF") => cents == null ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
+const money = (cents: number | null | undefined, currency = "CHF") => cents == null || !Number.isFinite(Number(cents)) ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
+
+function durationLabel(minutes: number, lang: "fr" | "en" | "de") {
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    if (lang === "de") return `${days} Tag${days > 1 ? "e" : ""}`;
+    if (lang === "en") return `${days} day${days > 1 ? "s" : ""}`;
+    return `${days} jour${days > 1 ? "s" : ""}`;
+  }
+  if (minutes % 60 === 0) return `${minutes / 60} h`;
+  return `${minutes} min`;
+}
 
 export default function KioskPremiumGateV2() {
   const { stationId = "" } = useParams();
@@ -178,9 +203,13 @@ export default function KioskPremiumGateV2() {
 
   const loadOptions = useCallback(async () => {
     const token = readKioskToken();
-    if (!token || !stationId) return;
+    if (!token || !stationId) {
+      setOptions(null);
+      return;
+    }
     const { data } = await invokeKioskEdgeProxy<CustomerOptions>("/api/kiosk/customer-options", { stationId }, { "X-Kiosk-Token": token });
     if (data?.ok) setOptions(data);
+    else setOptions(null);
   }, [stationId]);
 
   const refreshOptions = useCallback(async () => {
@@ -426,34 +455,98 @@ export default function KioskPremiumGateV2() {
     );
   }
 
-  const guestCurrency = options?.guest?.currency ?? "CHF";
-  const guestHourly = money(options?.guest?.hourly_cents, guestCurrency);
-  const guestCap = money(options?.guest?.daily_cap_cents, guestCurrency);
+  const guest = options?.guest ?? null;
+  const guestCurrency = guest?.currency ?? "CHF";
+  const tiers = Array.isArray(guest?.tiers)
+    ? guest.tiers.filter((tier) => Number(tier.upper_minutes) > 0 && Number(tier.total_cents) > 0).sort((a, b) => a.upper_minutes - b.upper_minutes)
+    : [];
+  const firstTier = tiers[0];
+  const dayTier = tiers.find((tier) => tier.upper_minutes === 1440) ?? tiers[tiers.length - 1];
+  const tieredPricingReady = guest?.tiered === true && Boolean(firstTier && dayTier);
+  const legacyPricingReady = guest?.hourly_cents != null && Number(guest.hourly_cents) > 0;
+  const pricingReady = Boolean(guest && (tieredPricingReady || legacyPricingReady));
+
+  const primaryPrice = tieredPricingReady && firstTier
+    ? `${copy.from} ${money(firstTier.total_cents, guestCurrency)} / ${durationLabel(firstTier.upper_minutes, lang)}`
+    : legacyPricingReady
+      ? `${money(guest?.hourly_cents, guestCurrency)} ${copy.perHour}`
+      : copy.pricingUnavailable;
+  const secondaryPrice = tieredPricingReady && dayTier
+    ? `${copy.upTo} ${money(dayTier.total_cents, guestCurrency)} / ${durationLabel(dayTier.upper_minutes, lang)}`
+    : legacyPricingReady && Number(guest?.daily_cap_cents ?? 0) > 0
+      ? `${copy.dailyCap} ${money(guest?.daily_cap_cents, guestCurrency)}`
+      : "";
+  const capPrice = Number(guest?.total_cap_cents ?? 0) > 0
+    ? `${copy.totalCapLabel} ${money(guest?.total_cap_cents, guestCurrency)}`
+    : "";
+
   return (
     <div className="ck2-shell ck2-home">
-      <div className="ck2-ambient ck2-ambient-a" aria-hidden="true" /><div className="ck2-ambient ck2-ambient-b" aria-hidden="true" />
+      <div className="ck2-ambient ck2-ambient-a" aria-hidden="true" />
+      <div className="ck2-ambient ck2-ambient-b" aria-hidden="true" />
       <header className="ck2-topbar">
         <BrandLogo size="md" />
         <div className="ck2-top-actions">
-          <button type="button" className="ck2-pill" onClick={() => void refreshOptions()} disabled={refreshing}><RefreshCw className={refreshing ? "ck2-spin-small" : ""} /> {copy.refresh}</button>
-          <button type="button" className="ck2-pill" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}><HelpCircle /> {copy.help}</button>
+          <button type="button" className="ck2-pill" onClick={() => void refreshOptions()} disabled={refreshing} aria-label={copy.refresh} title={copy.refresh}>
+            <RefreshCw className={refreshing ? "ck2-spin-small" : ""} />
+          </button>
+          <button type="button" className="ck2-pill" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))} aria-label={copy.help} title={copy.help}>
+            <HelpCircle />
+          </button>
           <div className="ck2-language"><LanguageSwitcher /></div>
         </div>
       </header>
+
       <main className="ck2-home-grid">
         <section className="ck2-hero-copy">
-          <span className="ck2-eyebrow">{copy.eyebrow}</span>
-          <h1><span>{copy.line1}</span><span>{copy.line2}</span><strong>{copy.accent}</strong></h1>
-          <div className="ck2-price-row"><span className="ck2-price-icon"><Zap /></span><strong>{guestHourly}</strong><span>{copy.perHour}</span><i /><span>{copy.dailyCap}</span><strong>{guestCap}</strong></div>
+          <div className="ck2-home-heading">
+            <span className="ck2-eyebrow">{copy.homeSubtitle}</span>
+            <h1>{copy.homeTitle}</h1>
+          </div>
+
+          <div className={`ck2-price-row ${pricingReady ? "is-ready" : "is-loading"}`} aria-label={[primaryPrice, secondaryPrice, capPrice].filter(Boolean).join(" · ")}>
+            <span className="ck2-price-icon"><Zap /></span>
+            <strong>{primaryPrice}</strong>
+            {secondaryPrice && <><i /><span>{secondaryPrice}</span></>}
+            {capPrice && <strong className="ck2-price-cap">{capPrice}</strong>}
+          </div>
+
           <div className="ck2-choice-grid">
-            <button type="button" className="ck2-choice ck2-choice-express" onClick={chooseGuest} disabled={!options?.guest}><span className="ck2-choice-icon"><Zap /></span><span className="ck2-choice-kicker">{copy.expressKicker}</span><strong>{copy.expressTitle}</strong><small>{copy.expressBody}</small><span className="ck2-arrow">→</span></button>
-            <button type="button" className="ck2-choice ck2-choice-member" onClick={() => void startMember()} disabled={!options?.memberAvailable}><span className="ck2-choice-icon"><UserRound /></span><span className="ck2-choice-kicker">{copy.clientKicker}</span><strong>{copy.clientTitle}</strong><small>{copy.clientBody}</small><span className="ck2-arrow">→</span></button>
+            <button type="button" className="ck2-choice ck2-choice-express" onClick={chooseGuest} disabled={!pricingReady}>
+              <span className="ck2-choice-icon"><Zap /></span>
+              <span className="ck2-choice-kicker">{copy.expressKicker}</span>
+              <strong>{copy.expressTitle}</strong>
+              <small>{copy.expressBody}</small>
+              <span className="ck2-arrow">→</span>
+            </button>
+            <button type="button" className="ck2-choice ck2-choice-member" onClick={() => void startMember()} disabled={!options?.memberAvailable}>
+              <span className="ck2-choice-icon"><UserRound /></span>
+              <span className="ck2-choice-kicker">{copy.clientKicker}</span>
+              <strong>{copy.clientTitle}</strong>
+              <small>{copy.clientBody}</small>
+              <span className="ck2-arrow">→</span>
+            </button>
           </div>
         </section>
-        <section className="ck2-device-stage" aria-label="Chargeurs.ch">
-          <div className="ck2-device-glow" aria-hidden="true" /><div className="ck2-device"><div className="ck2-device-screen"><BrandLogo size="sm" /><strong>{copy.cabinetTitle}</strong><span>{copy.cabinetSub}</span></div><div className="ck2-device-divider" /><div className="ck2-device-brand"><BrandLogo size="sm" /></div><div className="ck2-device-slots">{[1,2,3,4].map((slot)=><div className={`ck2-device-slot ${slot===1||slot===3?"is-ready":""}`} key={slot}><span /><i>{slot}</i></div>)}</div></div><div className="ck2-device-shadow" aria-hidden="true" />
+
+        <section className="ck2-device-stage" aria-label={copy.cabinetTitle}>
+          <div className="ck2-device-glow" aria-hidden="true" />
+          <div className="ck2-device">
+            <div className="ck2-device-screen"><BrandLogo size="sm" /><strong>{copy.cabinetTitle}</strong><span>{copy.cabinetSub}</span></div>
+            <div className="ck2-device-divider" />
+            <div className="ck2-device-brand"><BrandLogo size="sm" /></div>
+            <div className="ck2-device-slots">
+              {[1, 3, 2, 4].map((slot) => <div className={`ck2-device-slot ${slot === 1 || slot === 3 ? "is-ready" : ""}`} key={slot}><span /><i>{slot}</i></div>)}
+            </div>
+          </div>
+          <div className="ck2-device-shadow" aria-hidden="true" />
         </section>
       </main>
+
+      <footer className="ck2-home-payments" aria-label={copy.secure}>
+        <span>{copy.secure}</span>
+        <KioskPaymentMarks cardLabel="" />
+      </footer>
     </div>
   );
 }
