@@ -33,6 +33,7 @@ type KioskProxyPath =
   | "/api/kiosk/customer-options"
   | "/api/kiosk/customer-pairing-create"
   | "/api/kiosk/customer-pairing-status"
+  | "/api/kiosk/ads-clock"
   | "/api/kiosk/ads-playlist";
 
 function customerPairingPayload(path: KioskProxyPath, body: Record<string, unknown>): Record<string, unknown> {
