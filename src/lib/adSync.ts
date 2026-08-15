@@ -1,4 +1,5 @@
 // Deploy marker: force Vercel to publish the merged Ads ultra-sync runtime.
+// Refresh marker: re-trigger production publish after Vercel build-rate-limit cleared.
 export type TimedAdEntry = {
   item: {
     mediaType: "image" | "video";
