@@ -1,5 +1,5 @@
-release=kiosk-p1-recovery
-source_commit=95f64818d12461542ad1bdab5bc8cd08cc765e47
-validated_parent=86223191941272fae2b9fd8fdf2474192bbefa36
-requested_by=agent-4
-attempt=4
+release=p0-single-owner-premium-home-2026
+source_commit=161174b11710763206d35fad4754976eccb2aecf
+requested_by=chatgpt-a4
+attempt=5
+requested_at=2026-08-15T04:13:00Z
