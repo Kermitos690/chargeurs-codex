@@ -62,11 +62,11 @@ export function estimateServerClockOffsetMs(
 ): number {
   if (![serverNowMs, requestStartedMs, responseReceivedMs].every(Number.isFinite)) return 0;
 
-  // `serverNowMs` is generated immediately before the playlist response leaves
-  // the Edge Function. Anchoring it to the client receive timestamp removes the
-  // variable backend/database processing time that made midpoint-based offsets
-  // differ from kiosk to kiosk. The remaining error is only downstream network
-  // latency, so independently started kiosks converge on the same wall-clock
-  // carousel phase instead of inheriting their local Android clock or request RTT.
-  return Math.round(serverNowMs - responseReceivedMs);
+  // The physical kiosk tests showed meaningful and stable transport latency on
+  // some Android units. Using the request midpoint compensates the one-way share
+  // of that RTT and was the configuration that kept the fleet within roughly a
+  // sub-second boundary. The server timestamp remains authoritative; this only
+  // estimates the local-to-server clock offset used for Ads playback.
+  const midpoint = requestStartedMs + Math.max(0, responseReceivedMs - requestStartedMs) / 2;
+  return Math.round(serverNowMs - midpoint);
 }
