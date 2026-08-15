@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   estimateNetworkClockSample,
   estimateServerClockOffsetMs,
   resolveAdSyncPosition,
   selectStableClockOffsetMs,
+  setAuthoritativeAdsClockOffsetMs,
 } from "./adSync";
 
 const entries = [
@@ -12,6 +13,8 @@ const entries = [
   { item: { mediaType: "image" as const, imageDurationSeconds: 8 } },
   { item: { mediaType: "image" as const, imageDurationSeconds: 8 } },
 ];
+
+afterEach(() => setAuthoritativeAdsClockOffsetMs(null));
 
 describe("network advertising clock", () => {
   it("selects the same media from the same shared wall-clock regardless of kiosk boot time", () => {
@@ -31,8 +34,6 @@ describe("network advertising clock", () => {
   });
 
   it("calculates an NTP-style offset while removing server processing time", () => {
-    // Client clock is exactly 1,000,000 ms behind the server.
-    // Network is 120 ms outbound + 80 ms inbound, server work is 20 ms.
     const sample = estimateNetworkClockSample(1_000_000, 2_000_120, 2_000_140, 1_000_220);
     expect(sample).toEqual({ offsetMs: 1_000_020, rttMs: 200 });
   });
@@ -54,5 +55,10 @@ describe("network advertising clock", () => {
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(Math.abs((4_000_055 + Number(a?.offsetMs)) - (3_970_050 + Number(b?.offsetMs)))).toBeLessThanOrEqual(15);
+  });
+
+  it("makes the dedicated fleet clock override a noisier playlist estimate", () => {
+    setAuthoritativeAdsClockOffsetMs(1_234);
+    expect(estimateServerClockOffsetMs(9_000, 1_000, 6_000)).toBe(1_234);
   });
 });
