@@ -1,51 +1,58 @@
-/* Chargeurs.ch — field-approved Home lock, 1280×720.
-   Visual target: compact centred composition, Express green energy, Client blue,
-   partner rail isolated at right. This file styles the existing single-owner DOM only. */
+/* Chargeurs.ch — exact field-reference Home lock, 1280×720.
+   Source of truth: user-approved kiosk photograph.
+   Goal: centred composition, large readable decision cards and a large cabinet visual.
+   This file only overrides presentation; payment/ejection logic is untouched. */
 
 html.kiosk-v3 .kv3-product-layer > .ck2-home {
   --ref-green:#8dff58;
   --ref-blue:#27aaff;
 }
 
-/* Exact field composition — same geometry on every 1280×720 kiosk. */
 @media (min-width:1180px) and (min-height:650px) {
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar {
     position:absolute !important;
     z-index:45 !important;
-    top:22px !important;
-    left:44px !important;
-    right:44px !important;
-    height:54px !important;
+    top:24px !important;
+    left:46px !important;
+    right:46px !important;
+    height:52px !important;
     padding:0 !important;
     border:0 !important;
     background:transparent !important;
   }
+
+  /* The approved reference is not a left-heavy split. The whole composition is
+     centred inside the usable 1280×720 canvas. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
     position:absolute !important;
     z-index:10 !important;
     left:48px !important;
     right:48px !important;
-    top:103px !important;
-    bottom:72px !important;
+    top:104px !important;
+    bottom:70px !important;
     width:auto !important;
     height:auto !important;
     padding:0 !important;
     display:grid !important;
-    grid-template-columns:minmax(0,790px) minmax(300px,322px) !important;
-    gap:42px !important;
+    grid-template-columns:minmax(0,760px) 340px !important;
+    gap:36px !important;
     align-items:stretch !important;
-    justify-content:space-between !important;
+    justify-content:center !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy {
-    width:100% !important;
-    max-width:790px !important;
+    width:760px !important;
+    max-width:760px !important;
+    min-width:0 !important;
     min-height:0 !important;
     display:grid !important;
-    grid-template-rows:112px 48px minmax(0,1fr) !important;
+    grid-template-rows:118px 46px minmax(0,1fr) !important;
     gap:14px !important;
     align-content:stretch !important;
     align-self:stretch !important;
+    justify-self:end !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow {
     align-self:end !important;
     margin:0 0 8px !important;
@@ -55,101 +62,163 @@ html.kiosk-v3 .kv3-product-layer > .ck2-home {
     letter-spacing:.18em !important;
     text-transform:uppercase !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title {
     align-self:start !important;
     margin:0 !important;
-    max-width:720px !important;
+    max-width:760px !important;
     color:#f7f9fd !important;
-    font-size:56px !important;
-    line-height:.96 !important;
-    letter-spacing:-.055em !important;
+    font-size:58px !important;
+    line-height:.94 !important;
+    letter-spacing:-.052em !important;
     font-weight:920 !important;
     text-transform:uppercase !important;
     text-shadow:0 18px 44px rgba(0,0,0,.36) !important;
+    white-space:nowrap !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row {
     align-self:center !important;
     margin:0 !important;
     min-height:46px !important;
     height:46px !important;
+    padding:6px 14px !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid {
     margin:0 !important;
     min-height:0 !important;
     display:grid !important;
     grid-template-columns:repeat(2,minmax(0,1fr)) !important;
-    gap:20px !important;
+    gap:22px !important;
+    align-items:stretch !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice {
     height:100% !important;
     min-height:0 !important;
-    padding:27px 27px 25px !important;
+    padding:28px 28px 26px !important;
     border-radius:22px !important;
     justify-content:center !important;
   }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express {
-    border-color:rgba(145,255,88,.62) !important;
-    background:radial-gradient(circle at 13% 9%,rgba(130,255,72,.19),transparent 44%),linear-gradient(148deg,rgba(5,29,17,.97),rgba(2,11,12,.99)) !important;
-    box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 38px rgba(129,255,73,.13),inset 0 1px rgba(255,255,255,.045) !important;
+
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon {
+    width:56px !important;
+    height:56px !important;
+    flex:0 0 56px !important;
+    margin-bottom:18px !important;
+    border-radius:999px !important;
   }
-  /* Large green lightning from the approved field reference. */
+
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon svg {
+    width:27px !important;
+    height:27px !important;
+  }
+
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > strong {
+    font-size:34px !important;
+    line-height:1 !important;
+  }
+
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > small {
+    max-width:86% !important;
+    font-size:15px !important;
+    line-height:1.34 !important;
+  }
+
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express {
+    border-color:rgba(145,255,88,.78) !important;
+    background:radial-gradient(circle at 13% 9%,rgba(130,255,72,.22),transparent 44%),linear-gradient(148deg,rgba(5,29,17,.98),rgba(2,11,12,.99)) !important;
+    box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 42px rgba(129,255,73,.18),inset 0 1px rgba(255,255,255,.05) !important;
+  }
+
+  /* Large green lightning from the approved reference. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::before {
     content:"" !important;
     position:absolute !important;
     z-index:0 !important;
-    width:148px !important;
-    height:205px !important;
-    right:28px !important;
+    width:176px !important;
+    height:252px !important;
+    right:18px !important;
     top:50% !important;
-    transform:translateY(-50%) rotate(5deg) !important;
-    background:rgba(126,255,78,.12) !important;
+    transform:translateY(-50%) rotate(4deg) !important;
+    background:rgba(126,255,78,.13) !important;
     clip-path:polygon(55% 0,18% 52%,44% 52%,27% 100%,84% 39%,57% 39%) !important;
-    filter:drop-shadow(0 0 24px rgba(126,255,78,.30)) !important;
+    filter:drop-shadow(0 0 28px rgba(126,255,78,.34)) !important;
     pointer-events:none !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member {
-    border-color:rgba(61,168,255,.62) !important;
-    background:radial-gradient(circle at 13% 9%,rgba(47,142,255,.20),transparent 44%),linear-gradient(148deg,rgba(5,25,55,.97),rgba(2,10,24,.99)) !important;
-    box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 38px rgba(50,148,255,.13),inset 0 1px rgba(255,255,255,.045) !important;
+    border-color:rgba(61,168,255,.76) !important;
+    background:radial-gradient(circle at 13% 9%,rgba(47,142,255,.22),transparent 44%),linear-gradient(148deg,rgba(5,25,55,.98),rgba(2,10,24,.99)) !important;
+    box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 42px rgba(50,148,255,.16),inset 0 1px rgba(255,255,255,.05) !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > * {
     position:relative !important;
     z-index:2 !important;
   }
+
+  /* Critical correction: cabinet must be the large right-hand anchor from the
+     approved photograph, not the reduced 248×412 version. */
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage {
     position:relative !important;
-    width:322px !important;
+    width:340px !important;
     height:100% !important;
-    justify-self:end !important;
+    justify-self:start !important;
     align-self:stretch !important;
     display:grid !important;
     place-items:center !important;
+    overflow:visible !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device {
-    width:248px !important;
-    height:412px !important;
-    transform:rotateY(-8deg) rotateX(1deg) !important;
+    width:326px !important;
+    height:500px !important;
+    max-height:100% !important;
+    transform:rotateY(-5deg) rotateX(.5deg) translateY(3px) !important;
+    transform-origin:center center !important;
+    filter:drop-shadow(0 24px 46px rgba(0,0,0,.36)) !important;
   }
+
   html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-payments {
     position:absolute !important;
     left:48px !important;
     right:48px !important;
     bottom:18px !important;
     min-height:34px !important;
+    justify-content:center !important;
+  }
+
+  /* With an active paid partner rail, remove the decorative cabinet and centre
+     the decision surface inside the remaining usable width instead of shrinking
+     the whole Home toward the left edge. */
+  html.kiosk-v3[data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-home-grid {
+    right:calc((var(--kiosk-ad-split-ratio,.35) * 100vw) + 28px) !important;
+    grid-template-columns:minmax(0,760px) !important;
+    gap:0 !important;
+    justify-content:center !important;
+  }
+  html.kiosk-v3[data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-device-stage {
+    display:none !important;
+  }
+  html.kiosk-v3[data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-hero-copy {
+    justify-self:center !important;
   }
 }
 
-/* Copy correction requested from the field reference. Keep other languages untouched. */
+/* Exact copy requested by the user. */
 html[lang^="fr"].kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title {
   font-size:0 !important;
 }
 html[lang^="fr"].kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title::after {
   content:"BESOIN DE BATTERIE ?" !important;
   display:block !important;
-  font-size:56px !important;
-  line-height:.96 !important;
-  letter-spacing:-.055em !important;
+  font-size:58px !important;
+  line-height:.94 !important;
+  letter-spacing:-.052em !important;
   font-weight:920 !important;
+  white-space:nowrap !important;
 }
 
 @media (max-width:1179px), (max-height:649px) {
