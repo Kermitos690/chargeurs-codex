@@ -1,0 +1,138 @@
+/* Chargeurs.ch — canonical Premium Home / one visual owner.
+   1280×720 first. No overlay, no duplicate Home, no callback mirror. */
+
+html.kiosk-v3 .kv3-product-layer > .ck2-home {
+  --home-express: #91ee76;
+  --home-client: #55a7ff;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  isolation: isolate !important;
+  color: #f7fbff !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  background:
+    radial-gradient(50% 72% at 82% 44%, rgba(31,116,237,.18), transparent 68%),
+    radial-gradient(42% 54% at 8% 98%, rgba(83,210,130,.07), transparent 74%),
+    linear-gradient(135deg,#010409 0%,#050b14 45%,#071324 75%,#02050a 100%) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home::before {
+  content:"" !important; position:absolute !important; inset:0 !important; z-index:-2 !important; pointer-events:none !important;
+  background:linear-gradient(112deg,transparent 0 44%,rgba(145,194,245,.035) 50%,transparent 59%) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home::after {
+  content:"" !important; position:absolute !important; inset:0 !important; z-index:80 !important; pointer-events:none !important;
+  box-shadow:inset 0 0 84px rgba(0,0,0,.48) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient { position:absolute !important; pointer-events:none !important; border-radius:999px !important; filter:blur(92px) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-a { width:35vw !important; height:35vw !important; right:0 !important; top:7vh !important; opacity:.34 !important; background:rgba(43,116,238,.18) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-b { width:27vw !important; height:21vw !important; left:-6vw !important; bottom:-10vh !important; opacity:.28 !important; background:rgba(72,211,135,.13) !important; }
+
+/* Navigation */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar {
+  position:relative !important; z-index:40 !important; height:70px !important; padding:0 44px !important;
+  display:flex !important; align-items:center !important; justify-content:space-between !important;
+  border-bottom:1px solid rgba(151,184,222,.075) !important;
+  background:linear-gradient(180deg,rgba(1,5,10,.56),rgba(1,5,10,.05)) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-top-actions { display:flex !important; align-items:center !important; gap:8px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill,
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language {
+  min-height:42px !important; border:1px solid rgba(145,178,217,.16) !important; border-radius:12px !important;
+  background:rgba(4,11,20,.74) !important; box-shadow:inset 0 1px rgba(255,255,255,.03),0 10px 25px rgba(0,0,0,.18) !important; backdrop-filter:blur(16px) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill { padding:0 14px !important; display:inline-flex !important; align-items:center !important; gap:7px !important; color:rgba(232,241,251,.80) !important; font-size:13px !important; font-weight:720 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill svg { width:17px !important; height:17px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill:active { transform:translateY(1px) scale(.985) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language { padding:3px !important; display:flex !important; align-items:center !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language button { min-width:40px !important; height:34px !important; border-radius:9px !important; font-size:12px !important; }
+
+/* Composition */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
+  position:relative !important; z-index:10 !important; width:100% !important; height:calc(100dvh - 70px) !important;
+  padding:32px 46px 30px !important; display:grid !important; grid-template-columns:minmax(0,1.24fr) minmax(340px,.76fr) !important; gap:48px !important; align-items:center !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy { width:100% !important; max-width:770px !important; align-self:center !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow { display:inline-flex !important; align-items:center !important; gap:11px !important; color:rgba(159,195,230,.72) !important; font-size:11px !important; line-height:1 !important; font-weight:800 !important; letter-spacing:.18em !important; text-transform:uppercase !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow::before { content:"" !important; width:30px !important; height:1px !important; background:linear-gradient(90deg,var(--home-express),var(--home-client)) !important; box-shadow:0 0 10px rgba(80,174,255,.16) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title { margin:16px 0 0 !important; max-width:10.5ch !important; color:#f7faff !important; font-size:clamp(58px,6.1vw,86px) !important; line-height:.94 !important; letter-spacing:-.058em !important; font-weight:900 !important; text-transform:none !important; text-wrap:balance !important; text-shadow:0 18px 48px rgba(0,0,0,.42) !important; }
+
+/* Pricing summary — tier-aware only; no fake 0.00/hour. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row {
+  width:fit-content !important; max-width:100% !important; min-height:46px !important; margin-top:22px !important; padding:7px 12px !important;
+  display:flex !important; align-items:center !important; flex-wrap:wrap !important; gap:9px 11px !important;
+  border:1px solid rgba(136,173,215,.16) !important; border-radius:13px !important; background:rgba(3,10,19,.76) !important;
+  box-shadow:inset 0 1px rgba(255,255,255,.025),0 12px 28px rgba(0,0,0,.17) !important; color:rgba(191,211,233,.68) !important; font-size:13px !important; backdrop-filter:blur(16px) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row strong { color:#f9fcff !important; font-size:14px !important; font-weight:820 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row i { width:1px !important; height:18px !important; background:rgba(255,255,255,.13) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon { width:31px !important; height:31px !important; flex:0 0 31px !important; display:grid !important; place-items:center !important; border:1px solid rgba(83,168,255,.24) !important; border-radius:9px !important; background:rgba(39,117,206,.11) !important; color:#86c9ff !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon svg { width:16px !important; height:16px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-total-cap { padding:5px 8px !important; border-radius:8px !important; background:rgba(85,167,255,.075) !important; color:#bfe0ff !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row--loading { border-color:rgba(240,190,87,.20) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row--loading strong { color:#f0d89a !important; }
+
+/* Two adult, balanced actions */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid { margin-top:22px !important; display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:16px !important; max-width:770px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice {
+  all:unset; box-sizing:border-box !important; position:relative !important; height:218px !important; min-width:0 !important; padding:24px 24px 21px !important;
+  display:flex !important; flex-direction:column !important; align-items:flex-start !important; justify-content:flex-start !important; overflow:hidden !important;
+  color:#f8fbff !important; text-align:left !important; cursor:pointer !important; border-radius:17px !important; transform:translateZ(0) !important;
+  transition:transform .14s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease !important; -webkit-tap-highlight-color:transparent !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::before { content:"" !important; position:absolute !important; left:0 !important; top:0 !important; bottom:0 !important; width:3px !important; opacity:.92 !important; pointer-events:none !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::after { content:"" !important; position:absolute !important; inset:0 !important; pointer-events:none !important; background:linear-gradient(118deg,rgba(255,255,255,.038),transparent 28% 72%,rgba(255,255,255,.014)) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express { border:1px solid rgba(139,236,115,.38) !important; background:radial-gradient(84% 110% at 0 0,rgba(111,218,86,.14),transparent 58%),linear-gradient(148deg,rgba(7,24,17,.97),rgba(3,10,13,.99)) !important; box-shadow:0 23px 50px rgba(0,0,0,.27),0 0 28px rgba(108,232,91,.045),inset 0 1px rgba(255,255,255,.03) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::before { background:var(--home-express) !important; box-shadow:0 0 19px rgba(145,238,118,.28) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member { border:1px solid rgba(83,163,255,.40) !important; background:radial-gradient(84% 110% at 0 0,rgba(57,134,232,.16),transparent 60%),linear-gradient(148deg,rgba(6,21,42,.98),rgba(3,9,18,.99)) !important; box-shadow:0 23px 50px rgba(0,0,0,.27),0 0 28px rgba(64,148,255,.05),inset 0 1px rgba(255,255,255,.03) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member::before { background:var(--home-client) !important; box-shadow:0 0 19px rgba(85,167,255,.30) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:active:not(:disabled) { transform:translateY(2px) scale(.988) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:focus-visible { outline:2px solid rgba(236,246,255,.72) !important; outline-offset:3px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:disabled { cursor:default !important; opacity:.34 !important; filter:saturate(.45) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon { position:relative !important; z-index:2 !important; width:41px !important; height:41px !important; flex:0 0 41px !important; margin:0 0 17px !important; display:grid !important; place-items:center !important; border-radius:11px !important; background:rgba(255,255,255,.018) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon svg { width:19px !important; height:19px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express .ck2-choice-icon { color:var(--home-express) !important; border:1px solid rgba(145,238,118,.32) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member .ck2-choice-icon { color:var(--home-client) !important; border:1px solid rgba(85,167,255,.33) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-kicker { position:relative !important; z-index:2 !important; color:rgba(196,215,235,.58) !important; font-size:10px !important; line-height:1 !important; font-weight:820 !important; letter-spacing:.16em !important; text-transform:uppercase !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > strong { position:relative !important; z-index:2 !important; margin-top:7px !important; color:#fff !important; font-size:31px !important; line-height:.98 !important; letter-spacing:-.04em !important; font-weight:820 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > small { position:relative !important; z-index:2 !important; display:block !important; max-width:84% !important; margin-top:10px !important; color:rgba(197,216,235,.69) !important; font-size:13px !important; line-height:1.38 !important; font-weight:520 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-arrow { position:absolute !important; z-index:3 !important; right:18px !important; bottom:18px !important; width:41px !important; height:41px !important; display:grid !important; place-items:center !important; border:1px solid rgba(213,229,246,.15) !important; border-radius:11px !important; background:rgba(255,255,255,.026) !important; color:rgba(241,248,255,.86) !important; font-size:20px !important; }
+
+/* Station: stronger physical depth, still WebView-safe CSS. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage { position:relative !important; width:min(37vw,470px) !important; height:min(73vh,565px) !important; justify-self:end !important; perspective:1200px !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-glow { position:absolute !important; inset:7% -5% 2% 0 !important; border-radius:50% !important; background:radial-gradient(ellipse,rgba(47,128,239,.22),transparent 67%) !important; filter:blur(34px) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device { position:absolute !important; inset:2% 7% 8% 11% !important; padding:5.7% 6.2% !important; border:1px solid rgba(154,195,237,.25) !important; border-radius:25px 25px 20px 20px !important; background:linear-gradient(106deg,#263345 0%,#09111d 16%,#15243a 59%,#02060c 97%) !important; box-shadow:inset 13px 0 28px rgba(255,255,255,.04),inset -20px 0 36px rgba(0,0,0,.66),0 37px 68px rgba(0,0,0,.54),0 0 46px rgba(42,125,246,.12) !important; transform:rotateY(-7deg) rotateX(1.2deg) !important; transform-style:preserve-3d !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device::after { content:"" !important; position:absolute !important; top:22px !important; right:-14px !important; bottom:25px !important; width:18px !important; border-radius:0 12px 12px 0 !important; background:linear-gradient(90deg,#111d2c,#02050a) !important; opacity:.85 !important; transform:translateZ(-8px) skewY(-5deg) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen { height:29% !important; display:flex !important; flex-direction:column !important; align-items:center !important; justify-content:center !important; gap:5px !important; border:1px solid rgba(76,155,244,.24) !important; border-radius:14px !important; background:radial-gradient(circle at 50% 18%,rgba(45,124,237,.10),transparent 58%),linear-gradient(155deg,#081426,#02070e) !important; box-shadow:inset 0 0 30px rgba(41,112,219,.08) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen > strong { margin-top:7px !important; color:#eaf5ff !important; font-size:15px !important; font-weight:820 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen > span { max-width:88% !important; color:rgba(167,195,226,.56) !important; font-size:10px !important; text-align:center !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-divider { height:1px !important; margin:6.2% 2% 4% !important; background:linear-gradient(90deg,transparent,rgba(99,158,224,.20),transparent) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-brand { height:7% !important; display:flex !important; align-items:center !important; justify-content:center !important; opacity:.80 !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slots { height:48% !important; margin-top:3% !important; display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)) !important; grid-template-rows:repeat(2,minmax(0,1fr)) !important; gap:6% !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot { position:relative !important; border:1px solid rgba(105,151,202,.21) !important; border-radius:12px !important; background:linear-gradient(150deg,#0c1521,#02060b) !important; box-shadow:inset 0 4px 14px rgba(255,255,255,.018),inset 0 -13px 22px rgba(0,0,0,.55),0 9px 18px rgba(0,0,0,.18) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot > span { position:absolute !important; left:19% !important; right:19% !important; top:19% !important; height:4px !important; border-radius:999px !important; background:#218fff !important; box-shadow:0 0 13px rgba(33,143,255,.82) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot.is-ready > span { background:#4de7b3 !important; box-shadow:0 0 13px rgba(77,231,179,.68) !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot > i { position:absolute !important; left:10% !important; bottom:9% !important; color:rgba(151,180,212,.62) !important; font-size:9px !important; font-style:normal !important; }
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-shadow { position:absolute !important; left:14% !important; right:0 !important; bottom:0 !important; height:13% !important; border-radius:50% !important; background:radial-gradient(ellipse,rgba(35,120,239,.24),rgba(25,72,143,.08) 48%,transparent 74%) !important; filter:blur(14px) !important; }
+
+@media (min-width:1200px) and (max-width:1320px) and (min-height:680px) and (max-height:760px) {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar { height:68px !important; padding:0 42px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid { height:calc(100dvh - 68px) !important; padding:28px 44px 27px !important; grid-template-columns:748px 380px !important; gap:58px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title { max-width:10ch !important; font-size:69px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row { margin-top:20px !important; max-width:748px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid { margin-top:20px !important; gap:16px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice { height:216px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage { width:374px !important; height:523px !important; }
+}
+
+@media (max-height:660px) {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid { padding-top:22px !important; padding-bottom:22px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title { font-size:58px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice { height:190px !important; }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice,
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill { transition:none !important; }
+}
