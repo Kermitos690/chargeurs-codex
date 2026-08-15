@@ -1,371 +1,66 @@
-/*
- * Chargeurs.ch — Premium Home 2026
- *
- * Single-owner presentation for the existing ck2 Home DOM.
- * No overlay, no duplicate Home component, no hidden callback mirror.
- * Pricing, pairing, rental and hardware state remain owned by KioskPremiumGateV2.
- */
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home {
-  --home-bg: #03070d;
-  --home-panel: rgba(8, 14, 23, .86);
-  --home-panel-strong: rgba(7, 12, 20, .96);
-  --home-line: rgba(160, 186, 218, .14);
-  --home-text: #f5f8fc;
-  --home-muted: #95a4b7;
-  --home-express: #8eea72;
-  --home-express-soft: rgba(115, 222, 91, .14);
-  --home-client: #5ea6ff;
-  --home-client-soft: rgba(69, 139, 239, .16);
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  height: 100dvh !important;
-  overflow: hidden !important;
-  isolation: isolate !important;
-  color: var(--home-text) !important;
-  background:
-    radial-gradient(58% 78% at 78% 48%, rgba(48, 108, 188, .13), transparent 66%),
-    radial-gradient(42% 55% at 10% 100%, rgba(75, 167, 105, .055), transparent 74%),
-    linear-gradient(132deg, #02050a 0%, #050a12 46%, #07111d 72%, #02050a 100%) !important;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home::before {
-  content: "" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: -2 !important;
-  pointer-events: none !important;
-  opacity: .72 !important;
-  background:
-    linear-gradient(118deg, transparent 0 42%, rgba(153, 194, 239, .028) 49%, transparent 58%),
-    linear-gradient(180deg, rgba(255,255,255,.012), transparent 18%) !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home::after {
-  content: "" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 90 !important;
-  pointer-events: none !important;
-  box-shadow: inset 0 0 88px rgba(0,0,0,.52) !important;
-  background: none !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient {
-  pointer-events: none !important;
-  filter: blur(90px) !important;
-  opacity: .36 !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-a {
-  width: 34vw !important;
-  height: 34vw !important;
-  right: 2vw !important;
-  top: 9vh !important;
-  background: rgba(51, 119, 219, .12) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-b {
-  width: 27vw !important;
-  height: 20vw !important;
-  left: -4vw !important;
-  bottom: -8vh !important;
-  background: rgba(86, 188, 105, .055) !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar {
-  position: relative !important;
-  z-index: 45 !important;
-  height: 72px !important;
-  padding: 0 46px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  border-bottom: 1px solid rgba(162, 188, 220, .08) !important;
-  background: linear-gradient(180deg, rgba(2, 5, 10, .54), rgba(2, 5, 10, .08)) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-top-actions { gap: 8px !important; }
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill,
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language {
-  min-height: 42px !important;
-  border: 1px solid rgba(148, 177, 213, .14) !important;
-  border-radius: 12px !important;
-  background: rgba(5, 11, 19, .72) !important;
-  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 10px 24px rgba(0,0,0,.16) !important;
-  backdrop-filter: blur(16px) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill {
-  padding: 0 14px !important;
-  gap: 7px !important;
-  color: rgba(227, 236, 246, .76) !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill:active { transform: translateY(1px) scale(.98) !important; }
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language { padding: 3px !important; }
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language button {
-  min-width: 40px !important;
-  height: 34px !important;
-  border-radius: 9px !important;
-  font-size: 12px !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
-  position: relative !important;
-  z-index: 10 !important;
-  width: 100% !important;
-  height: calc(100dvh - 72px) !important;
-  padding: 38px 48px 34px !important;
-  display: grid !important;
-  grid-template-columns: minmax(0, 1.18fr) minmax(330px, .82fr) !important;
-  gap: 46px !important;
-  align-items: center !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy {
-  width: 100% !important;
-  max-width: 760px !important;
-  align-self: center !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow {
-  color: rgba(170, 192, 218, .62) !important;
-  font-size: 10px !important;
-  font-weight: 760 !important;
-  letter-spacing: .22em !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow::before {
-  width: 30px !important;
-  height: 1px !important;
-  background: linear-gradient(90deg, var(--home-express), var(--home-client)) !important;
-  box-shadow: none !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 {
-  margin: 12px 0 0 !important;
-  color: #f4f7fb !important;
-  font-size: clamp(54px, 5.8vw, 84px) !important;
-  line-height: .88 !important;
-  letter-spacing: -.057em !important;
-  font-weight: 900 !important;
-  text-transform: uppercase !important;
-  text-shadow: 0 18px 46px rgba(0,0,0,.38) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 > strong {
-  background: linear-gradient(96deg, #f8fbff 4%, #acd7ff 40%, #5ca7f9 76%, #7f91ff 100%) !important;
-  -webkit-background-clip: text !important;
-  background-clip: text !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row {
-  width: max-content !important;
-  max-width: 100% !important;
-  min-height: 44px !important;
-  margin-top: 20px !important;
-  padding: 6px 11px !important;
-  gap: 10px !important;
-  border: 1px solid rgba(147, 177, 213, .13) !important;
-  border-radius: 12px !important;
-  background: rgba(4, 10, 18, .70) !important;
-  box-shadow: inset 0 1px rgba(255,255,255,.022), 0 10px 24px rgba(0,0,0,.14) !important;
-  color: rgba(189, 207, 228, .60) !important;
-  font-size: 13px !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon {
-  width: 30px !important;
-  height: 30px !important;
-  border: 1px solid rgba(93, 164, 244, .20) !important;
-  border-radius: 9px !important;
-  background: rgba(54, 117, 196, .09) !important;
-  color: #8bc7ff !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid {
-  margin-top: 22px !important;
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 16px !important;
-  max-width: 760px !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice {
-  all: unset;
-  box-sizing: border-box !important;
-  position: relative !important;
-  min-width: 0 !important;
-  height: 226px !important;
-  padding: 25px 24px 22px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  justify-content: flex-start !important;
-  overflow: hidden !important;
-  color: #f7f9fc !important;
-  text-align: left !important;
-  cursor: pointer !important;
-  border-radius: 18px !important;
-  transform: translateZ(0) !important;
-  transition: transform .14s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease !important;
-  -webkit-tap-highlight-color: transparent !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::before {
-  content: "" !important;
-  position: absolute !important;
-  left: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  width: 3px !important;
-  pointer-events: none !important;
-  opacity: .86 !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::after {
-  content: "" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  pointer-events: none !important;
-  opacity: 1 !important;
-  background: linear-gradient(118deg, rgba(255,255,255,.035), transparent 28% 72%, rgba(255,255,255,.012)) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express {
-  border: 1px solid rgba(133, 222, 110, .32) !important;
-  background:
-    radial-gradient(80% 110% at 0% 0%, rgba(105, 207, 82, .12), transparent 58%),
-    linear-gradient(148deg, rgba(8, 22, 16, .96), rgba(5, 11, 14, .98)) !important;
-  box-shadow: 0 22px 48px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.025) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::before {
-  background: var(--home-express) !important;
-  box-shadow: 0 0 18px rgba(142,234,114,.24) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member {
-  border: 1px solid rgba(91, 159, 240, .34) !important;
-  background:
-    radial-gradient(80% 110% at 0% 0%, rgba(66, 130, 215, .14), transparent 60%),
-    linear-gradient(148deg, rgba(8, 18, 34, .97), rgba(4, 10, 17, .99)) !important;
-  box-shadow: 0 22px 48px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.025) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member::before {
-  background: var(--home-client) !important;
-  box-shadow: 0 0 18px rgba(94,166,255,.24) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:active:not(:disabled) { transform: translateY(2px) scale(.988) !important; }
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:focus-visible {
-  outline: 2px solid rgba(231, 241, 252, .72) !important;
-  outline-offset: 3px !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:disabled {
-  cursor: default !important;
-  opacity: .40 !important;
-  filter: saturate(.52) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon {
-  position: relative !important;
-  z-index: 2 !important;
-  width: 40px !important;
-  height: 40px !important;
-  flex: 0 0 40px !important;
-  margin: 0 0 18px !important;
-  display: grid !important;
-  place-items: center !important;
-  border-radius: 11px !important;
-  background: rgba(255,255,255,.018) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon svg { width: 19px !important; height: 19px !important; }
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express .ck2-choice-icon {
-  color: var(--home-express) !important;
-  border: 1px solid rgba(142,234,114,.30) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member .ck2-choice-icon {
-  color: var(--home-client) !important;
-  border: 1px solid rgba(94,166,255,.30) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-kicker {
-  position: relative !important;
-  z-index: 2 !important;
-  color: rgba(197, 214, 232, .56) !important;
-  font-size: 10px !important;
-  line-height: 1 !important;
-  font-weight: 800 !important;
-  letter-spacing: .17em !important;
-  text-transform: uppercase !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > strong {
-  position: relative !important;
-  z-index: 2 !important;
-  margin-top: 7px !important;
-  color: #fff !important;
-  font-size: 30px !important;
-  line-height: .98 !important;
-  letter-spacing: -.038em !important;
-  font-weight: 800 !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice > small {
-  position: relative !important;
-  z-index: 2 !important;
-  display: block !important;
-  max-width: 86% !important;
-  margin-top: 10px !important;
-  color: rgba(193, 208, 226, .66) !important;
-  font-size: 13px !important;
-  line-height: 1.38 !important;
-  font-weight: 500 !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-arrow {
-  position: absolute !important;
-  z-index: 3 !important;
-  right: 18px !important;
-  bottom: 18px !important;
-  width: 42px !important;
-  height: 42px !important;
-  display: grid !important;
-  place-items: center !important;
-  border: 1px solid rgba(213, 228, 245, .14) !important;
-  border-radius: 12px !important;
-  background: rgba(255,255,255,.025) !important;
-  color: rgba(239, 246, 253, .84) !important;
-  font-size: 20px !important;
-  font-weight: 500 !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage {
-  position: relative !important;
-  width: min(36vw, 450px) !important;
-  height: min(72vh, 560px) !important;
-  justify-self: end !important;
-  perspective: 1200px !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-glow {
-  inset: 9% -6% 1% 0 !important;
-  background: radial-gradient(ellipse, rgba(56, 124, 211, .16), transparent 68%) !important;
-  filter: blur(34px) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device {
-  inset: 3% 5% 8% 13% !important;
-  border: 1px solid rgba(158, 186, 219, .16) !important;
-  border-radius: 22px 22px 18px 18px !important;
-  background: linear-gradient(106deg, #19222d 0%, #080d14 17%, #111923 57%, #020509 96%) !important;
-  box-shadow: inset 10px 0 24px rgba(255,255,255,.025), inset -18px 0 32px rgba(0,0,0,.62), 0 34px 64px rgba(0,0,0,.48), 0 0 42px rgba(47,110,190,.06) !important;
-  transform: rotateY(-6deg) rotateX(1deg) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen {
-  border-radius: 12px !important;
-  border: 1px solid rgba(98, 151, 215, .14) !important;
-  background: linear-gradient(150deg, #07101a, #02060b) !important;
-  box-shadow: inset 0 0 24px rgba(34,89,173,.055) !important;
-}
-html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot { border-radius: 10px !important; }
-
-@media (min-width: 1200px) and (max-width: 1320px) and (min-height: 680px) and (max-height: 760px) {
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar { height: 68px !important; padding: 0 42px !important; }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid {
-    height: calc(100dvh - 68px) !important;
-    padding: 30px 44px 28px !important;
-    grid-template-columns: 742px 382px !important;
-    gap: 56px !important;
-  }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy h1 { font-size: 66px !important; }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid { margin-top: 20px !important; gap: 16px !important; }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice { height: 220px !important; padding: 24px 23px 21px !important; }
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage { width: 370px !important; height: 520px !important; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice,
-  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill { transition: none !important; }
-}
+/* Chargeurs.ch — recovered Premium Home, single owner. No overlay, no hidden Home, no proxy clicks. Target: physical 1280×720 kiosk. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home{--home-bg:#020611;--home-panel:rgba(5,15,31,.92);--home-line:rgba(103,166,230,.22);--home-text:#f6f9ff;--home-muted:#9bb4cf;--home-blue:#27aaff;--home-cyan:#4edcff;--home-green:#8dff58;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;overflow:hidden!important;isolation:isolate!important;color:var(--home-text)!important;background:radial-gradient(circle at 78% 39%,rgba(28,126,255,.15),transparent 31%),radial-gradient(circle at 13% 79%,rgba(106,255,61,.055),transparent 30%),linear-gradient(142deg,#020611 0%,#061429 56%,#020712 100%)!important;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home::before{content:""!important;position:absolute!important;inset:0!important;z-index:-2!important;pointer-events:none!important;background:linear-gradient(116deg,transparent 0 42%,rgba(133,192,255,.035) 49%,transparent 58%),linear-gradient(180deg,rgba(255,255,255,.012),transparent 20%)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home::after{content:""!important;position:absolute!important;inset:0!important;z-index:90!important;pointer-events:none!important;box-shadow:inset 0 0 82px rgba(0,0,0,.47)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient{pointer-events:none!important;filter:blur(82px)!important;opacity:.36!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-a{width:34vw!important;height:34vw!important;right:0!important;top:8vh!important;background:rgba(34,123,245,.13)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-b{width:28vw!important;height:22vw!important;left:-4vw!important;bottom:-7vh!important;background:rgba(111,226,92,.06)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-topbar{position:absolute!important;z-index:45!important;top:22px!important;left:44px!important;right:44px!important;height:54px!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;border:0!important;background:transparent!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-top-actions{display:flex!important;align-items:center!important;gap:10px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill{width:46px!important;height:46px!important;min-width:46px!important;min-height:46px!important;padding:0!important;display:grid!important;place-items:center!important;border:1px solid rgba(112,170,232,.26)!important;border-radius:14px!important;color:rgba(226,239,252,.82)!important;background:rgba(2,9,20,.82)!important;box-shadow:inset 0 1px rgba(255,255,255,.03),0 12px 28px rgba(0,0,0,.18)!important;backdrop-filter:blur(16px)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill svg{width:20px!important;height:20px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill:active:not(:disabled){transform:translateY(1px) scale(.97)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language{min-height:46px!important;padding:3px!important;border:1px solid rgba(112,170,232,.23)!important;border-radius:15px!important;background:rgba(2,9,20,.82)!important;box-shadow:inset 0 1px rgba(255,255,255,.03),0 12px 28px rgba(0,0,0,.18)!important;backdrop-filter:blur(16px)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-language button{min-width:42px!important;height:38px!important;border-radius:11px!important;font-size:12px!important;font-weight:800!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid{position:absolute!important;z-index:10!important;left:48px!important;right:48px!important;top:103px!important;bottom:72px!important;padding:0!important;display:grid!important;grid-template-columns:minmax(0,790px) minmax(300px,322px)!important;gap:42px!important;align-items:stretch!important;justify-content:space-between!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-hero-copy{width:100%!important;max-width:790px!important;min-height:0!important;display:grid!important;grid-template-rows:112px 48px minmax(0,1fr)!important;gap:14px!important;align-content:stretch!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-heading{display:flex!important;flex-direction:column!important;justify-content:center!important;min-width:0!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow{margin:0 0 8px!important;display:flex!important;align-items:center!important;gap:10px!important;color:#38bfff!important;font-size:11px!important;line-height:1!important;font-weight:900!important;letter-spacing:.18em!important;text-transform:uppercase!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-eyebrow::before{content:""!important;width:34px!important;height:1px!important;background:linear-gradient(90deg,var(--home-green),var(--home-blue))!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-heading h1{margin:0!important;max-width:720px!important;color:#f7f9fd!important;font-size:56px!important;line-height:.96!important;letter-spacing:-.055em!important;font-weight:920!important;text-transform:none!important;text-shadow:0 18px 44px rgba(0,0,0,.36)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row{width:max-content!important;max-width:100%!important;min-height:46px!important;height:46px!important;margin:0!important;padding:6px 14px!important;display:flex!important;align-items:center!important;gap:11px!important;overflow:hidden!important;border:1px solid rgba(104,168,231,.24)!important;border-radius:15px!important;background:rgba(2,10,22,.82)!important;box-shadow:inset 0 1px rgba(255,255,255,.025),0 12px 25px rgba(0,0,0,.15)!important;color:rgba(191,211,233,.70)!important;font-size:13px!important;white-space:nowrap!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row.is-loading{color:rgba(197,214,233,.62)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row>strong{color:#f8fbff!important;font-size:15px!important;font-weight:850!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row .ck2-price-cap{color:#b9ddff!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-row>i{width:1px!important;height:20px!important;background:rgba(130,173,218,.22)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon{width:30px!important;height:30px!important;display:grid!important;place-items:center!important;border:1px solid rgba(72,177,255,.24)!important;border-radius:9px!important;color:#75caff!important;background:rgba(45,126,210,.10)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-price-icon svg{width:16px!important;height:16px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-grid{margin:0!important;min-height:0!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:20px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice{all:unset;box-sizing:border-box!important;position:relative!important;min-width:0!important;height:100%!important;min-height:0!important;padding:27px 27px 25px!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;overflow:hidden!important;text-align:left!important;color:#f7f9fc!important;cursor:pointer!important;border-radius:22px!important;transform:translateZ(0)!important;transition:transform .15s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease!important;-webkit-tap-highlight-color:transparent!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::before{content:""!important;position:absolute!important;inset:0!important;pointer-events:none!important;background:linear-gradient(118deg,rgba(255,255,255,.05),transparent 30% 70%,rgba(255,255,255,.018))!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice::after{content:""!important;position:absolute!important;left:0!important;top:0!important;bottom:0!important;width:3px!important;pointer-events:none!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express{border:1px solid rgba(145,255,88,.58)!important;background:radial-gradient(circle at 12% 8%,rgba(130,255,72,.16),transparent 43%),linear-gradient(148deg,rgba(5,29,17,.97),rgba(2,11,12,.99))!important;box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 30px rgba(129,255,73,.08),inset 0 1px rgba(255,255,255,.045)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express::after{background:var(--home-green)!important;box-shadow:0 0 18px rgba(141,255,88,.32)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member{border:1px solid rgba(61,168,255,.60)!important;background:radial-gradient(circle at 12% 8%,rgba(47,142,255,.18),transparent 44%),linear-gradient(148deg,rgba(5,25,55,.97),rgba(2,10,24,.99))!important;box-shadow:0 24px 52px rgba(0,0,0,.30),0 0 30px rgba(50,148,255,.09),inset 0 1px rgba(255,255,255,.045)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member::after{background:var(--home-blue)!important;box-shadow:0 0 18px rgba(39,170,255,.30)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:active:not(:disabled){transform:translateY(2px) scale(.987)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:focus-visible{outline:2px solid rgba(232,244,255,.82)!important;outline-offset:3px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice:disabled{cursor:default!important;opacity:.44!important;filter:saturate(.56)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon{position:relative!important;z-index:2!important;width:48px!important;height:48px!important;margin-bottom:16px!important;display:grid!important;place-items:center!important;border-radius:15px!important;background:rgba(255,255,255,.018)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-express .ck2-choice-icon{border:1px solid rgba(141,255,88,.34)!important;color:var(--home-green)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member .ck2-choice-icon{border:1px solid rgba(39,170,255,.34)!important;color:#61bfff!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon svg{width:23px!important;height:23px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-kicker{position:relative!important;z-index:2!important;color:rgba(196,216,237,.62)!important;font-size:11px!important;line-height:1!important;font-weight:850!important;letter-spacing:.15em!important;text-transform:uppercase!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice>strong{position:relative!important;z-index:2!important;margin-top:7px!important;color:#f8fbff!important;font-size:31px!important;line-height:1!important;letter-spacing:-.035em!important;font-weight:900!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice>small{position:relative!important;z-index:2!important;margin-top:12px!important;max-width:88%!important;color:rgba(218,233,248,.74)!important;font-size:15px!important;line-height:1.34!important;font-weight:560!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-arrow{position:absolute!important;z-index:3!important;right:22px!important;bottom:21px!important;width:44px!important;height:44px!important;display:grid!important;place-items:center!important;border:1px solid currentColor!important;border-radius:13px!important;background:rgba(3,10,18,.54)!important;font-size:21px!important;font-weight:700!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-stage{position:relative!important;width:322px!important;height:100%!important;display:grid!important;place-items:center!important;perspective:1200px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-glow{position:absolute!important;width:116%!important;height:90%!important;border-radius:50%!important;background:radial-gradient(ellipse,rgba(36,139,255,.25),transparent 64%)!important;filter:blur(30px)!important;opacity:.9!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device{position:relative!important;z-index:2!important;width:248px!important;height:412px!important;min-height:0!important;padding:29px 24px 25px!important;display:flex!important;flex-direction:column!important;border:1px solid rgba(133,195,255,.40)!important;border-radius:30px!important;background:linear-gradient(105deg,#263344 0%,#0a111d 18%,#16243a 62%,#02060c 100%)!important;box-shadow:inset 12px 0 26px rgba(255,255,255,.05),inset -22px 0 34px rgba(0,0,0,.66),0 32px 58px rgba(0,0,0,.55),0 0 36px rgba(40,135,255,.22)!important;transform:rotateY(-8deg) rotateX(1deg)!important;transform-style:preserve-3d!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device::before{content:""!important;position:absolute!important;right:-16px!important;top:24px!important;bottom:25px!important;width:22px!important;border-radius:0 17px 17px 0!important;background:linear-gradient(90deg,#111b2a,#02050a)!important;transform:skewY(-6deg) translateZ(-1px)!important;opacity:.88!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device::after{content:""!important;position:absolute!important;left:22px!important;right:8px!important;bottom:-15px!important;height:20px!important;border-radius:4px 4px 14px 14px!important;background:linear-gradient(180deg,#142338,#02050a)!important;transform:skewX(-14deg) translateZ(-2px)!important;box-shadow:0 9px 20px rgba(0,0,0,.45)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen{height:108px!important;padding:14px 12px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:7px!important;text-align:center!important;border:1px solid rgba(60,157,255,.34)!important;border-radius:18px!important;background:linear-gradient(160deg,#071427,#020711)!important;box-shadow:inset 0 0 28px rgba(24,117,255,.08)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen strong{color:#f4f9ff!important;font-size:13px!important;font-weight:850!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-screen>span{max-width:180px!important;color:rgba(128,176,224,.62)!important;font-size:9px!important;line-height:1.25!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-divider{height:1px!important;margin:15px 4px 11px!important;background:linear-gradient(90deg,transparent,rgba(97,162,226,.22),transparent)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-brand{height:29px!important;display:flex!important;align-items:center!important;justify-content:center!important;opacity:.93!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slots{flex:1!important;min-height:0!important;margin-top:8px!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:repeat(2,minmax(0,1fr))!important;gap:13px!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot{position:relative!important;overflow:hidden!important;border:1px solid rgba(102,151,202,.23)!important;border-radius:14px!important;background:linear-gradient(150deg,#0d1725,#02060c)!important;box-shadow:inset 0 -16px 26px rgba(0,0,0,.50)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot>span{position:absolute!important;left:18px!important;right:18px!important;top:17px!important;height:4px!important;border-radius:999px!important;background:#238bdf!important;box-shadow:0 0 10px rgba(35,139,223,.48)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot.is-ready>span{background:#42dcff!important;box-shadow:0 0 14px rgba(66,220,255,.92)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-slot>i{position:absolute!important;left:11px!important;bottom:9px!important;color:rgba(171,202,232,.74)!important;font-size:10px!important;font-style:normal!important;font-weight:800!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device-shadow{position:absolute!important;z-index:1!important;bottom:6px!important;width:300px!important;height:44px!important;border:1px solid rgba(50,163,255,.16)!important;border-radius:50%!important;background:radial-gradient(ellipse,rgba(43,147,255,.31),rgba(21,73,151,.08) 50%,transparent 74%)!important;filter:blur(5px)!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-payments{position:absolute!important;z-index:35!important;left:48px!important;right:48px!important;bottom:17px!important;height:38px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:18px!important;color:rgba(166,190,216,.58)!important;font-size:11px!important;font-weight:760!important;letter-spacing:.05em!important}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-payments>div,html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-payments>section{max-height:34px!important}
+@media(max-width:1100px),(max-height:620px){html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-grid{left:30px!important;right:30px!important;gap:28px!important;grid-template-columns:minmax(0,1fr) 280px!important}html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-heading h1{font-size:48px!important}html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-device{transform:scale(.90) rotateY(-7deg)!important}}
+@media(prefers-reduced-motion:reduce){html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice,html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-pill{transition:none!important}}
