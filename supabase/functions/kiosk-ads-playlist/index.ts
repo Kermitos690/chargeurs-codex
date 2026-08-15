@@ -25,16 +25,10 @@ Deno.serve(async (req) => {
     if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) return reply({ ok: false, error: "INVALID_STATION" }, 400);
 
     const action = typeof body.action === "string" ? body.action : "playlist";
-    if (action !== "playlist" && action !== "impression") {
-      return reply({ ok: false, error: "UNKNOWN_ACTION" }, 400);
-    }
+    if (action !== "playlist" && action !== "impression") return reply({ ok: false, error: "UNKNOWN_ACTION" }, 400);
 
     const db = adminClient();
 
-    // Paid advertising availability is deliberately independent from the rental
-    // credential. A known station may read only its already-active/scheduled,
-    // station-targeted public media projection even when rental auth is missing.
-    // Mutating/billing-grade impression telemetry remains station-authenticated.
     if (action === "impression") {
       const kiosk = await verifyKioskDevice(req, db, stationId);
       if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
@@ -43,31 +37,18 @@ Deno.serve(async (req) => {
       const assetId = typeof body.assetId === "string" ? body.assetId : "";
       const displayMode = body.displayMode === "screensaver" ? "screensaver" : body.displayMode === "split" ? "split" : "";
       const durationMs = Math.min(24 * 3600_000, Math.max(0, Math.round(Number(body.durationMs ?? 0))));
-      const explicitPlaybackStatus = typeof body.playbackStatus === "string" && PLAYBACK_STATUSES.has(body.playbackStatus)
-        ? body.playbackStatus
-        : null;
+      const explicitPlaybackStatus = typeof body.playbackStatus === "string" && PLAYBACK_STATUSES.has(body.playbackStatus) ? body.playbackStatus : null;
       const playbackStatus = explicitPlaybackStatus ?? "interrupted";
       const started = body.started === true || (body.started === undefined && durationMs >= IMPRESSION_THRESHOLD_MS);
-      if (!campaignId || !assetId || !displayMode) {
-        return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
-      }
+      if (!campaignId || !assetId || !displayMode) return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
 
       const { data: item, error: itemError } = await db.from("advertising_campaign_items")
-        .select("id")
-        .eq("campaign_id", campaignId)
-        .eq("asset_id", assetId)
-        .eq("enabled", true)
-        .maybeSingle();
+        .select("id").eq("campaign_id", campaignId).eq("asset_id", assetId).eq("enabled", true).maybeSingle();
       if (itemError) throw itemError;
       if (!item) return reply({ ok: false, error: "CAMPAIGN_ASSET_MISMATCH" }, 409);
 
       if (!started || durationMs < IMPRESSION_THRESHOLD_MS) {
-        return reply({
-          ok: true,
-          recorded: false,
-          reason: !started ? "MEDIA_NOT_STARTED" : "BELOW_IMPRESSION_THRESHOLD",
-          thresholdMs: IMPRESSION_THRESHOLD_MS,
-        });
+        return reply({ ok: true, recorded: false, reason: !started ? "MEDIA_NOT_STARTED" : "BELOW_IMPRESSION_THRESHOLD", thresholdMs: IMPRESSION_THRESHOLD_MS });
       }
 
       const completed = playbackStatus === "completed";
@@ -87,10 +68,7 @@ Deno.serve(async (req) => {
       return reply({ ok: true, recorded: true, thresholdMs: IMPRESSION_THRESHOLD_MS });
     }
 
-    const { data: station, error: stationError } = await db.from("stations")
-      .select("station_id")
-      .eq("station_id", stationId)
-      .maybeSingle();
+    const { data: station, error: stationError } = await db.from("stations").select("station_id").eq("station_id", stationId).maybeSingle();
     if (stationError) throw stationError;
     if (!station) return reply({ ok: false, error: "STATION_NOT_FOUND" }, 404);
 
@@ -110,18 +88,14 @@ Deno.serve(async (req) => {
       if (ends !== null && Number.isFinite(ends) && ends <= nowMs) return false;
       return true;
     });
-    if (!candidates.length) {
-      return reply({ ok: true, stationId, version: "empty", serverTimeMs: Date.now(), timelineEpochMs: 0, campaigns: [] });
-    }
+    if (!candidates.length) return reply({ ok: true, stationId, version: "empty", serverTimeMs: Date.now(), timelineEpochMs: 0, campaigns: [] });
 
     const campaignIds = candidates.map((campaign) => campaign.id);
     const [targetResult, itemResult] = await Promise.all([
       db.from("advertising_campaign_stations").select("campaign_id,station_id").in("campaign_id", campaignIds),
       db.from("advertising_campaign_items")
-        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,width,height,duration_seconds,poster_storage_path,active,updated_at)")
-        .in("campaign_id", campaignIds)
-        .eq("enabled", true)
-        .order("sort_order", { ascending: true }),
+        .select("id,campaign_id,asset_id,sort_order,image_duration_seconds,qr_url,enabled,asset:advertising_assets(id,title,storage_path,media_type,mime_type,width,height,duration_seconds,poster_storage_path,active,updated_at)")
+        .in("campaign_id", campaignIds).eq("enabled", true).order("sort_order", { ascending: true }),
     ]);
     if (targetResult.error || itemResult.error) throw targetResult.error ?? itemResult.error;
 
@@ -150,37 +124,36 @@ Deno.serve(async (req) => {
         imageDurationSeconds: row.image_duration_seconds ?? 8,
         mediaDurationSeconds: asset.duration_seconds ?? null,
         sortOrder: row.sort_order,
+        qrUrl: row.qr_url ?? null,
       };
       if (!itemsByCampaign.has(row.campaign_id)) itemsByCampaign.set(row.campaign_id, []);
       itemsByCampaign.get(row.campaign_id)?.push(item);
     }
 
+    // Keep the existing kiosk player contract (QR lives at AdCampaign level) while
+    // resolving QR per media. Each item becomes a one-item projection with its own
+    // effective QR: media QR first, campaign QR as fallback. The original campaign
+    // id is preserved for impression validation and reporting.
     const payload = candidates
       .filter((campaign) => campaign.all_stations || targets.get(campaign.id)?.has(stationId))
-      .map((campaign) => ({
+      .flatMap((campaign) => (itemsByCampaign.get(campaign.id) ?? []).map((item) => ({
         id: campaign.id,
         name: campaign.name,
         modes: campaign.display_modes,
         idleAfterSeconds: campaign.idle_after_seconds,
         splitRatio: Number(campaign.split_ratio),
         priority: campaign.priority,
-        qrUrl: campaign.qr_url ?? null,
+        qrUrl: (item.qrUrl as string | null) ?? campaign.qr_url ?? null,
         updatedAt: campaign.updated_at,
-        items: itemsByCampaign.get(campaign.id) ?? [],
-      }))
-      .filter((campaign) => campaign.items.length > 0);
+        items: [item],
+      })));
 
     const versionSeed = payload
-      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}`).join(",")}`)
+      .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}:${item.qrUrl ?? ""}`).join(",")}`)
       .join("|");
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(versionSeed || "empty"));
-    const version = Array.from(new Uint8Array(digest))
-      .slice(0, 8)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
+    const version = Array.from(new Uint8Array(digest)).slice(0, 8).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
-    // Kiosks use this server clock only to choose the same deterministic media
-    // position. It does not grant any authority over rental/payment state.
     return reply({ ok: true, stationId, version, serverTimeMs: Date.now(), timelineEpochMs: 0, campaigns: payload });
   } catch (error) {
     console.error("kiosk-ads-playlist", error instanceof Error ? error.message : "UNKNOWN_ERROR");
