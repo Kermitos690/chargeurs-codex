@@ -47,6 +47,7 @@ type CampaignItem = {
   asset_id: string;
   sort_order: number;
   image_duration_seconds: number | null;
+  qr_url: string | null;
   enabled: boolean;
 };
 
@@ -82,7 +83,7 @@ type EditState = {
   qrUrl: string;
   priority: number;
   stationIds: string[];
-  playlist: Array<{ assetId: string; imageDurationSeconds: number; enabled: boolean }>;
+  playlist: Array<{ assetId: string; imageDurationSeconds: number; qrUrl: string; enabled: boolean }>;
 };
 
 type MediaMeta = { width?: number; height?: number; durationSeconds?: number };
@@ -144,6 +145,7 @@ function createEdit(campaign: Campaign, items: CampaignItem[], targets: Campaign
     playlist: items.filter((item) => item.campaign_id === campaign.id).sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
       assetId: item.asset_id,
       imageDurationSeconds: item.image_duration_seconds ?? 8,
+      qrUrl: item.qr_url ?? "",
       enabled: item.enabled,
     })),
   };
@@ -252,7 +254,9 @@ export default function AdminAdvertising() {
     if (!selected || !edit || !canWrite) return;
     if (!edit.name.trim()) { toast.error("Le nom de campagne est obligatoire."); return; }
     if (!edit.displayModes.length) { toast.error("Choisissez au moins un mode d’affichage."); return; }
-    if (!validHttpsUrl(edit.qrUrl)) { toast.error("Le lien QR doit être une adresse HTTPS valide."); return; }
+    if (!validHttpsUrl(edit.qrUrl)) { toast.error("Le lien QR de campagne doit être une adresse HTTPS valide."); return; }
+    const invalidItemQr = edit.playlist.find((row) => !validHttpsUrl(row.qrUrl));
+    if (invalidItemQr) { toast.error("Chaque QR de média doit être une adresse HTTPS valide."); return; }
     const startsAt = toIso(edit.startsAt);
     const endsAt = toIso(edit.endsAt);
     if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) { toast.error("La date de fin doit être après le début."); return; }
@@ -266,14 +270,19 @@ export default function AdminAdvertising() {
       });
       await invoke({
         action: "set_campaign_items", campaignId: selected.id,
-        items: edit.playlist.map((row) => ({ assetId: row.assetId, imageDurationSeconds: row.imageDurationSeconds, enabled: row.enabled })),
+        items: edit.playlist.map((row) => ({
+          assetId: row.assetId,
+          imageDurationSeconds: row.imageDurationSeconds,
+          qrUrl: row.qrUrl.trim() || null,
+          enabled: row.enabled,
+        })),
       });
       await invoke({
         action: "set_campaign_stations", campaignId: selected.id,
         allStations: edit.allStations, stationIds: edit.allStations ? [] : edit.stationIds,
       });
       await load(true);
-      toast.success("Campagne publiée dans la configuration des bornes.");
+      toast.success("Campagne et QR par média publiés dans la configuration des bornes.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Enregistrement impossible.");
     } finally {
@@ -347,7 +356,7 @@ export default function AdminAdvertising() {
 
   const addAsset = () => {
     if (!edit || !assetToAdd || edit.playlist.some((row) => row.assetId === assetToAdd)) return;
-    setEdit({ ...edit, playlist: [...edit.playlist, { assetId: assetToAdd, imageDurationSeconds: 8, enabled: true }] });
+    setEdit({ ...edit, playlist: [...edit.playlist, { assetId: assetToAdd, imageDurationSeconds: 8, qrUrl: "", enabled: true }] });
     setAssetToAdd("");
   };
 
@@ -390,7 +399,7 @@ export default function AdminAdvertising() {
                   <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                     {campaign.display_modes.includes("split") && <span className="rounded-full bg-muted px-2 py-1">Accueil</span>}
                     {campaign.display_modes.includes("screensaver") && <span className="rounded-full bg-muted px-2 py-1">Veille</span>}
-                    {campaign.qr_url && <span className="rounded-full bg-muted px-2 py-1">QR</span>}
+                    {campaign.qr_url && <span className="rounded-full bg-muted px-2 py-1">QR défaut</span>}
                     <span className="rounded-full bg-muted px-2 py-1">{campaign.all_stations ? "Toutes bornes" : "Ciblée"}</span>
                   </div>
                 </button>
@@ -417,7 +426,7 @@ export default function AdminAdvertising() {
                   <Field label="État"><select value={edit.status} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, status: event.target.value as CampaignStatus })} className="ad-input"><option value="draft">Brouillon</option><option value="scheduled">Planifiée</option><option value="active">Active</option><option value="paused">En pause</option><option value="archived">Archivée</option></select></Field>
                   <Field label="Début (facultatif)"><input type="datetime-local" value={edit.startsAt} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, startsAt: event.target.value })} className="ad-input" /></Field>
                   <Field label="Fin (facultatif)"><input type="datetime-local" value={edit.endsAt} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, endsAt: event.target.value })} className="ad-input" /></Field>
-                  <div className="lg:col-span-2"><Field label="Lien du QR publicitaire (facultatif)"><input type="url" inputMode="url" value={edit.qrUrl} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, qrUrl: event.target.value })} placeholder="https://partenaire.ch/offre" className="ad-input" /></Field><p className="mt-2 text-xs text-muted-foreground">Le QR apparaît automatiquement sur l’accueil et en plein écran pour cette campagne. HTTPS uniquement.</p></div>
+                  <div className="lg:col-span-2"><Field label="QR par défaut de la campagne (facultatif)"><input type="url" inputMode="url" value={edit.qrUrl} disabled={!canWrite} onChange={(event) => setEdit({ ...edit, qrUrl: event.target.value })} placeholder="https://partenaire.ch" className="ad-input" /></Field><p className="mt-2 text-xs text-muted-foreground">Utilisé uniquement lorsqu’un média de la playlist n’a pas son propre QR. Chaque image ou vidéo peut donc renvoyer vers une offre différente.</p></div>
                 </div>
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -433,17 +442,21 @@ export default function AdminAdvertising() {
               </section>
 
               <section className="glass liquid-border rounded-2xl p-5 sm:p-6">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-xl font-bold">Playlist</h2><p className="mt-1 text-sm text-muted-foreground">L’ordre ci-dessous est exactement l’ordre de diffusion. Les visuels paysage sont adaptés automatiquement au rail d’accueil.</p></div><span className="rounded-full bg-muted px-3 py-1 text-xs font-bold">{edit.playlist.length} média{edit.playlist.length > 1 ? "s" : ""}</span></div>
-                <div className="mt-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-display text-xl font-bold">Playlist / carrousel</h2><p className="mt-1 text-sm text-muted-foreground">L’ordre ci-dessous est l’ordre de diffusion. Chaque média peut avoir sa propre durée et son propre QR.</p></div><span className="rounded-full bg-muted px-3 py-1 text-xs font-bold">{edit.playlist.length} média{edit.playlist.length > 1 ? "s" : ""}</span></div>
+                <div className="mt-4 space-y-3">
                   {edit.playlist.map((row, index) => {
                     const asset = assets.find((candidate) => candidate.id === row.assetId);
                     if (!asset) return null;
                     return (
-                      <div key={row.assetId} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-background/35 p-3">
-                        <Preview asset={asset} compact />
-                        <div className="min-w-0 flex-1"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"}</span><span>{dimensionsLabel(asset)}</span><span>#{index + 1}</span></div></div>
-                        {asset.media_type === "image" && <label className="flex items-center gap-2 text-xs text-muted-foreground">Durée <input type="number" min="2" max="300" value={row.imageDurationSeconds} disabled={!canWrite} onChange={(event) => { const playlist = [...edit.playlist]; playlist[index] = { ...row, imageDurationSeconds: Number(event.target.value) }; setEdit({ ...edit, playlist }); }} className="w-16 rounded-lg border border-border bg-background px-2 py-1.5 text-foreground" /> s</label>}
-                        <div className="flex gap-1"><Button size="icon" variant="ghost" disabled={!canWrite || index === 0} onClick={() => movePlaylist(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite || index === edit.playlist.length - 1} onClick={() => movePlaylist(index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite} onClick={() => setEdit({ ...edit, playlist: edit.playlist.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 className="h-4 w-4" /></Button></div>
+                      <div key={row.assetId} className="rounded-xl border border-border bg-background/35 p-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Preview asset={asset} compact />
+                          <div className="min-w-0 flex-1"><div className="truncate font-semibold">{asset.title}</div><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><span>{asset.media_type === "video" ? "Vidéo" : "Image"}</span><span>{dimensionsLabel(asset)}</span><span>#{index + 1}</span>{row.qrUrl ? <span className="font-semibold text-primary">QR dédié</span> : edit.qrUrl ? <span>QR campagne</span> : <span>Sans QR</span>}</div></div>
+                          {asset.media_type === "image" && <label className="flex items-center gap-2 text-xs text-muted-foreground">Durée <input type="number" min="2" max="300" value={row.imageDurationSeconds} disabled={!canWrite} onChange={(event) => { const playlist = [...edit.playlist]; playlist[index] = { ...row, imageDurationSeconds: Number(event.target.value) }; setEdit({ ...edit, playlist }); }} className="w-16 rounded-lg border border-border bg-background px-2 py-1.5 text-foreground" /> s</label>}
+                          <div className="flex gap-1"><Button size="icon" variant="ghost" disabled={!canWrite || index === 0} onClick={() => movePlaylist(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite || index === edit.playlist.length - 1} onClick={() => movePlaylist(index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button size="icon" variant="ghost" disabled={!canWrite} onClick={() => setEdit({ ...edit, playlist: edit.playlist.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 className="h-4 w-4" /></Button></div>
+                        </div>
+                        <label className="mt-3 block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-muted-foreground">QR de ce média (facultatif)</span><input type="url" inputMode="url" value={row.qrUrl} disabled={!canWrite} onChange={(event) => { const playlist = [...edit.playlist]; playlist[index] = { ...row, qrUrl: event.target.value }; setEdit({ ...edit, playlist }); }} placeholder={edit.qrUrl || "https://partenaire.ch/offre-specifique"} className="ad-input" /></label>
+                        <p className="mt-1 text-xs text-muted-foreground">S’il est vide, le QR par défaut de la campagne est utilisé. HTTPS uniquement.</p>
                       </div>
                     );
                   })}
