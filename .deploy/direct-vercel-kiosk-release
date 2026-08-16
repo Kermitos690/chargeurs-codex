@@ -1,5 +1,5 @@
-release=p0-home-terminal-qr-payment-guard-scene
-source_commit=635ee03c277838063b152912eaf8e94faea52888
-triggered_at=2026-08-15T23:03:20Z
+release=p0-home-terminal-qr-payment-guard-scene-retry
+source_commit=91feb3fa2b9162f3696acba5a175583ec6d8b16c
+triggered_at=2026-08-16T21:54:30Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-activated-physical-home-payment-guard
+reason=retry-production-release-after-vercel-daily-quota-reset
