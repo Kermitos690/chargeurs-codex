@@ -2,39 +2,51 @@ import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
 import { KioskPaymentTimeoutGuard } from "@/components/kiosk/KioskPaymentTimeoutGuard";
+import { KioskSystemFooter } from "@/components/kiosk/KioskSystemFooter";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
+import "./kiosk-p0-core-scenes.css";
 
 /**
  * Single-owner Premium kiosk runtime.
- * Home visual authority: kiosk-home-reference-lock.css only.
- * Business journey / pricing / Terminal-QR behavior stays owned by KioskPremiumGateV2 + Kiosk.
  *
- * P0 field lock: Advertising is intentionally not mounted while the exact Home
- * reference is being physically qualified. This prevents a cached/configured
- * split campaign from reserving or covering the right side of the approved
- * 1280×720 Home. Advertising remains isolated and can be re-enabled after the
- * Home is physically accepted; no rental/payment/hardware behavior is changed.
+ * P0 presentation ownership:
+ * - Home reference: kiosk-home-reference-lock.css + the deliberately scoped
+ *   critical-scene refinements in kiosk-p0-core-scenes.css.
+ * - Connected member / pricing / payment: kiosk-p0-core-scenes.css.
+ * - One shared operational footer owns payment trust, backend commercial values,
+ *   station identity, local clock and connectivity state.
+ *
+ * Business journey / pricing authority / Terminal-QR / rental and hardware
+ * behavior remain owned by KioskPremiumGateV2 + Kiosk. Advertising stays
+ * intentionally unmounted during this physical P0 qualification.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "neon-reference-home-single-owner-2026-1280x720";
+    root.dataset.kioskVersion = "p0-core-scenes-system-footer-2026-1280x720";
     root.classList.add("kiosk-v3");
 
-    const syncHomeScene = () => {
-      const homeVisible = Boolean(document.querySelector(".kv3-product-layer > .ck2-home"));
-      if (homeVisible) {
-        root.dataset.kioskScene = "home";
-      } else if (root.dataset.kioskScene === "home") {
-        delete root.dataset.kioskScene;
-      }
+    const syncScene = () => {
+      let scene = "";
+      if (document.querySelector(".kv3-product-layer > .ck2-home")) scene = "home";
+      else if (document.querySelector(".kv3-product-layer > .ck2-connected")) scene = "connected";
+      else if (document.querySelector(".kv3-product-layer > .ck2-member")) scene = "member";
+      else if (document.querySelector(".kv3-product-layer .kiosk-qr-stage")) scene = "payment";
+      else if (document.querySelector(".kv3-product-layer .kiosk-payment-rail-stage")) scene = "payment-choice";
+      else if (document.querySelector(".kv3-product-layer .kiosk-pricing-stage")) scene = "pricing";
+      else if (document.querySelector(".kv3-product-layer .kiosk-idle-stage")) scene = "selection";
+      else if (document.querySelector(".kv3-product-layer .kiosk-ready-stage")) scene = "success";
+      else if (document.querySelector(".kv3-product-layer .kiosk-release-stage")) scene = "release";
+
+      if (scene) root.dataset.kioskScene = scene;
+      else delete root.dataset.kioskScene;
     };
 
-    syncHomeScene();
-    const sceneObserver = new MutationObserver(syncHomeScene);
-    sceneObserver.observe(document.body, { childList: true, subtree: true });
+    syncScene();
+    const sceneObserver = new MutationObserver(syncScene);
+    sceneObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
 
     return () => {
       sceneObserver.disconnect();
@@ -51,8 +63,9 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="neon-reference-home-single-owner-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-core-scenes-system-footer-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
+      <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
       <KioskV3AuthGuard />
     </div>
