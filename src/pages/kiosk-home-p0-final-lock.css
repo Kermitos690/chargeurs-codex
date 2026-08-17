@@ -1,0 +1,192 @@
+/*
+ * Chargeurs.ch — P0 final Home presentation lock.
+ * Scope: presentation only. No rental, pricing, payment, return or hardware semantics.
+ *
+ * Goals:
+ * - physical 1280×720 Home remains one coherent scene;
+ * - French golden headline is BESOIN DE BATTERIE ?;
+ * - Express + Client remain visible when a paid split ad is active;
+ * - ad split becomes a real structural rail instead of overlaying the Client card;
+ * - no legacy cabinet / duplicate Home rails can reappear.
+ */
+
+/* Golden headline. The underlying React copy is intentionally left untouched by
+   this presentation-only lock so no business-stage component is forked. */
+html[lang^="fr"].kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-home-title {
+  font-size: 0 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  text-transform: uppercase !important;
+}
+
+html[lang^="fr"].kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-home-title::after {
+  content: "BESOIN DE BATTERIE ?" !important;
+  display: inline-block !important;
+  color: #f8fbff !important;
+  font-size: 39px !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.035em !important;
+  font-weight: 900 !important;
+  text-shadow: 0 10px 32px rgba(0,0,0,.34) !important;
+}
+
+/* Remove every legacy Home visual that could create a second UI authority. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-device-stage,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-home-grid,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-hero-copy,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-price-row,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .kv3-atmosphere-home,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .kv3-home-stage,
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .kv3-station-hero {
+  display: none !important;
+}
+
+/* Canonical physical panel. */
+@media (width:1280px) and (height:720px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+    top: 80px !important;
+    width: 1072px !important;
+    height: 554px !important;
+    grid-template-rows: 88px minmax(0,1fr) !important;
+    gap: 18px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-card {
+    border-radius: 26px !important;
+    padding: 30px 32px 74px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-card > strong {
+    font-size: 31px !important;
+  }
+}
+
+/*
+ * Split advertising is a structural right rail. The product scene yields exactly
+ * the rail width instead of letting the advertisement cover the Client choice.
+ */
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+  left: 28px !important;
+  right: calc((var(--kiosk-ad-split-ratio, .35) * 100vw) + 24px) !important;
+  width: auto !important;
+  transform: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-heading {
+  align-items: flex-start !important;
+  text-align: left !important;
+  padding-left: 2px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-heading p {
+  text-align: left !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-choice-grid {
+  grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  gap: 16px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-card {
+  padding: 24px 24px 68px !important;
+  border-radius: 22px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-choice-icon {
+  width: 48px !important;
+  height: 48px !important;
+  margin: 14px 0 12px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-card > strong {
+  font-size: 25px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-card > small {
+  margin-top: 8px !important;
+  font-size: 12px !important;
+  line-height: 1.32 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-rate {
+  padding-top: 12px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-rate b {
+  font-size: 17px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-footer {
+  left: 0 !important;
+  right: calc((var(--kiosk-ad-split-ratio, .35) * 100vw) + 12px) !important;
+  width: auto !important;
+  padding: 0 20px !important;
+  gap: 16px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-payments {
+  gap: 10px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .kiosk-payment-marks {
+  gap: 5px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .kiosk-payment-mark {
+  min-width: 38px !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  padding: 0 5px !important;
+  font-size: 8px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-commercial {
+  gap: 11px !important;
+  font-size: 9px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-commercial strong {
+  font-size: 11px !important;
+}
+
+/* Exact split geometry on the physical 1280×720 validation panel. */
+@media (width:1280px) and (height:720px) {
+  html[lang^="fr"].kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-home-title::after {
+    font-size: 34px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+    top: 78px !important;
+    bottom: 78px !important;
+    height: auto !important;
+    grid-template-rows: 82px minmax(0,1fr) !important;
+    gap: 14px !important;
+  }
+}
+
+/* Physical Android WebView compact-landscape fallback. */
+@media (orientation:landscape) and (max-height:649px) {
+  html[lang^="fr"].kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-home-title::after {
+    font-size: 31px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+    top: 66px !important;
+    bottom: 62px !important;
+    height: auto !important;
+    grid-template-rows: 68px minmax(0,1fr) !important;
+    gap: 12px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-card {
+    padding: 18px 20px 60px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-card > strong {
+    font-size: 24px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-card > small {
+    font-size: 11px !important;
+  }
+}
