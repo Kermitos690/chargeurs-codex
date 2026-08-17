@@ -2,10 +2,12 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 
+const RUNTIME_RESET_SENTINEL = "P0_CLEAR_WEB_RUNTIME_V1";
+
 const headers = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
-  "Access-Control-Expose-Headers": "x-correlation-id",
+  "Access-Control-Expose-Headers": "x-correlation-id, x-chargeurs-runtime-reset",
 };
 
 type Tier = { upper_minutes: number; total_cents: number };
@@ -34,9 +36,21 @@ function hourlyCents(snapshot: Record<string, unknown>): number | null {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers });
   const correlationId = crypto.randomUUID();
-  const reply = (body: Record<string, unknown>, status = 200) => new Response(
+  const reply = (
+    body: Record<string, unknown>,
+    status = 200,
+    extraHeaders: Record<string, string> = {},
+  ) => new Response(
     JSON.stringify({ ...body, correlationId }),
-    { status, headers: { ...headers, "Content-Type": "application/json", "X-Correlation-Id": correlationId } },
+    {
+      status,
+      headers: {
+        ...headers,
+        ...extraHeaders,
+        "Content-Type": "application/json",
+        "X-Correlation-Id": correlationId,
+      },
+    },
   );
   if (req.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
@@ -58,6 +72,26 @@ Deno.serve(async (req) => {
     if (!station) return reply({ ok: false, error: "STATION_NOT_FOUND" }, 404);
 
     const now = new Date().toISOString();
+
+    // Operational one-shot recovery for stale native WebView/PWA shells. The
+    // command is station + kiosk-device bound and must already be authenticated
+    // by the normal kiosk token before this branch is reachable. It deliberately
+    // reuses the existing non-hardware `reload_shell` command type and requires a
+    // private result_detail sentinel, so ordinary reload commands are unaffected.
+    const { data: runtimeResetCommand, error: runtimeResetLookupError } = await db
+      .from("kiosk_remote_commands")
+      .select("id")
+      .eq("kiosk_device_id", kiosk.device.id)
+      .eq("station_id", stationId)
+      .eq("command_type", "reload_shell")
+      .eq("state", "queued")
+      .eq("result_detail", RUNTIME_RESET_SENTINEL)
+      .gt("expires_at", now)
+      .order("requested_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (runtimeResetLookupError) throw runtimeResetLookupError;
+
     const quote = async (segment: "guest" | "member") => {
       const { data, error } = await db.rpc("compute_customer_pricing_snapshot", {
         p_station: stationId,
@@ -122,7 +156,38 @@ Deno.serve(async (req) => {
       valid_to: p.valid_to,
     } : null;
 
-    return reply({ ok: true, guest, member, memberAvailable: Boolean(member), membershipPlan });
+    let runtimeResetDelivered = false;
+    if (runtimeResetCommand?.id) {
+      const deliveredAt = new Date().toISOString();
+      const { data: claimed, error: claimError } = await db
+        .from("kiosk_remote_commands")
+        .update({
+          state: "completed",
+          delivered_at: deliveredAt,
+          completed_at: deliveredAt,
+          result_code: "CLEAR_SITE_DATA_SENT",
+          result_detail: `${RUNTIME_RESET_SENTINEL}_SENT`,
+        })
+        .eq("id", runtimeResetCommand.id)
+        .eq("state", "queued")
+        .select("id")
+        .maybeSingle();
+      if (claimError) throw claimError;
+      runtimeResetDelivered = Boolean(claimed?.id);
+    }
+
+    const runtimeResetHeaders = runtimeResetDelivered ? {
+      // Clear only web-origin state. The Android SecureConfigStore containing the
+      // station binding/token is outside WebView storage and remains untouched.
+      "Clear-Site-Data": "\"cache\", \"storage\"",
+      "X-Chargeurs-Runtime-Reset": RUNTIME_RESET_SENTINEL,
+    } : {};
+
+    return reply(
+      { ok: true, guest, member, memberAvailable: Boolean(member), membershipPlan },
+      200,
+      runtimeResetHeaders,
+    );
   } catch (error) {
     console.error("kiosk-customer-options", error instanceof Error ? error.message : "UNKNOWN_ERROR");
     return reply({ ok: false, error: "CUSTOMER_OPTIONS_FAILED" }, 500);
