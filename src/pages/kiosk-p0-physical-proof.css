@@ -1,0 +1,47 @@
+/*
+ * Temporary physical-proof lock for DTA21277 P0 qualification.
+ *
+ * This file exists only to close two field-proven presentation regressions that
+ * were caused by higher-specificity legacy Home rules. It MUST remain tiny and
+ * is intended to be folded back into the owning styles once physical validation
+ * passes. No business, pricing, payment or hardware behavior lives here.
+ */
+
+/* The reference Home still owns an obsolete footer rule with higher specificity.
+   Match that selector exactly so the single shared KioskSystemFooter is the only
+   footer that can paint. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-footer {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Standing-distance readability on the physical 1280×720 panel. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-rate b {
+  font-size: 34px !important;
+  line-height: 1.04 !important;
+  font-weight: 930 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-card > strong {
+  font-size: 36px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-card > small {
+  font-size: 17px !important;
+  line-height: 1.38 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-member:disabled .ck2-reference-rate b {
+  font-size: 23px !important;
+}
+
+/* Keep the right-side living ribbon visibly present instead of disappearing
+   behind the cyan card on the physical panel. */
+html.kiosk-v3 .kv3-product-layer > .ck2-home::after {
+  width: 320px !important;
+  right: -36px !important;
+  opacity: .94 !important;
+  filter: drop-shadow(0 0 18px rgba(64,220,246,.52)) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-ambient-b {
+  opacity: 1 !important;
+}
