@@ -2,6 +2,9 @@ name: Chargeurs.ch Android Kiosk Build
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "android-kiosk/**"
   pull_request:
     paths:
       - "android-kiosk/**"
