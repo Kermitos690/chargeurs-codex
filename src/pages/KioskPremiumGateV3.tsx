@@ -7,6 +7,7 @@ import "./kiosk-production-edge-states.css";
 import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
 import "./kiosk-p0-core-scenes.css";
+import "./kiosk-p0-physical-proof.css";
 
 /**
  * Single-owner Premium kiosk runtime.
@@ -15,6 +16,10 @@ import "./kiosk-p0-core-scenes.css";
  * - Home reference: kiosk-home-reference-lock.css + the deliberately scoped
  *   critical-scene refinements in kiosk-p0-core-scenes.css.
  * - Connected member / pricing / payment: kiosk-p0-core-scenes.css.
+ * - kiosk-p0-physical-proof.css is a deliberately tiny, last-imported field
+ *   proof lock that neutralises one higher-specificity legacy Home footer rule
+ *   and strengthens physical-distance readability. It must be folded back into
+ *   the owners after physical validation.
  * - One shared operational footer owns payment trust, backend commercial values,
  *   station identity, local clock and connectivity state.
  *
@@ -25,7 +30,7 @@ import "./kiosk-p0-core-scenes.css";
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-core-scenes-system-footer-2026-1280x720";
+    root.dataset.kioskVersion = "p0-physical-proof-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -63,7 +68,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-core-scenes-system-footer-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-physical-proof-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
