@@ -1,7 +1,6 @@
 import { useLayoutEffect } from "react";
 import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
-import { KioskAdvertisingSynchronizedLayer } from "@/components/kiosk/KioskAdvertisingSynchronizedLayer";
 import { KioskPaymentTimeoutGuard } from "@/components/kiosk/KioskPaymentTimeoutGuard";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-pricing-explainer.css";
@@ -11,6 +10,12 @@ import "./kiosk-home-reference-lock.css";
  * Single-owner Premium kiosk runtime.
  * Home visual authority: kiosk-home-reference-lock.css only.
  * Business journey / pricing / Terminal-QR behavior stays owned by KioskPremiumGateV2 + Kiosk.
+ *
+ * P0 field lock: Advertising is intentionally not mounted while the exact Home
+ * reference is being physically qualified. This prevents a cached/configured
+ * split campaign from reserving or covering the right side of the approved
+ * 1280×720 Home. Advertising remains isolated and can be re-enabled after the
+ * Home is physically accepted; no rental/payment/hardware behavior is changed.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
@@ -48,7 +53,6 @@ export default function KioskPremiumGateV3() {
   return (
     <div className="kv3-runtime" data-presentation-owner="neon-reference-home-single-owner-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
-      <KioskAdvertisingSynchronizedLayer />
       <KioskPaymentTimeoutGuard />
       <KioskV3AuthGuard />
     </div>
