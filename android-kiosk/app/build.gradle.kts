@@ -34,11 +34,11 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Field recovery RC. Changing the native version deliberately triggers
+        // P0 runtime-refresh RC. Changing the native version deliberately triggers
         // MainActivity.shouldResetWebRuntime() once after installation, clearing
         // obsolete WebView storage/cache before the current kiosk shell loads.
-        versionCode = 118
-        versionName = "1.0.18-rc1"
+        versionCode = 119
+        versionName = "1.0.19-rc1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
