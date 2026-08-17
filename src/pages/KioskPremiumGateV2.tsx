@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { useI18n } from "@/i18n/i18n";
 import Kiosk from "./Kiosk";
 import { readKioskToken } from "@/lib/kioskFetch";
@@ -178,15 +179,15 @@ type Copy = {
 
 const COPY: Record<"fr" | "en" | "de", Copy> = {
   fr: {
-    refresh: "Actualiser", help: "Aide", cancel: "Annuler", returnHome: "Retour accueil", back: "Retour",
+    refresh: "Actualiser", help: "FAQ / Aide", cancel: "Annuler", returnHome: "Retour accueil", back: "Retour",
     connectedKicker: "PASS RECONNU", connectedTitle: "CONNEXION RÉUSSIE", connectedSubtitle: "Vos avantages Client Chargeurs actifs sont chargés depuis votre compte.",
     connectedBenefits: "Vos avantages actifs", connectedRate: "Tarif membre", connectedCap: "Plafond journalier", connectedMinutes: "Minutes incluses", connectedWallet: "Pass Wallet", connectedWalletLocal: "Pass compte actif",
     connectedCta: "COMMENCER UNE LOCATION", connectedCtaSub: "Choisissez ensuite votre batterie sur cette borne.",
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
-    homeTitle: "Besoin d’une batterie ?", homeSubtitle: "Choisissez votre parcours", priceFrom: "Dès", priceUpTo: "jusqu’à", priceTotalCap: "plafond total", pricingUnavailable: "Tarif en cours de chargement", perHour: "/ heure", dailyCap: "Plafond journalier",
-    expressKicker: "SANS COMPTE", expressTitle: "EXPRESS", expressBody: "Consultez le tarif, choisissez votre batterie, payez et partez.",
-    clientKicker: "AVEC COMPTE", clientTitle: "CLIENT CHARGEURS", clientBody: "Découvrez Chargeurs+ ou connectez votre Pass pour profiter de votre tarif membre.",
+    homeTitle: "Comment souhaitez-vous louer ?", homeSubtitle: "Deux parcours simples. Choisissez celui qui vous convient.", priceFrom: "Dès", priceUpTo: "jusqu’à", priceTotalCap: "plafond total", pricingUnavailable: "Tarif en cours de chargement", perHour: "/ heure", dailyCap: "Plafond journalier",
+    expressKicker: "SANS COMPTE", expressTitle: "Location express", expressBody: "Louez tout de suite. Paiement sur votre téléphone.",
+    clientKicker: "CLIENT CHARGEURS", clientTitle: "Tarif client", clientBody: "Connectez votre compte avec l’app et profitez du meilleur tarif.",
     cabinetTitle: "Batteries disponibles", cabinetSub: "Sélection automatique de la meilleure batterie", secure: "Connexion sécurisée",
     expressPricingKicker: "EXPRESS · SANS COMPTE", expressPricingTitle: "Vous connaissez le prix avant de louer.", expressPricingLead: "Le prix monte uniquement lorsque vous franchissez un palier. Le montant exact est recalculé au retour à partir du tarif serveur affiché ici.",
     guaranteeTitle: "Garantie séparée du prix de location", guaranteeBody: "Selon le moyen de paiement, la garantie est réservée temporairement ou débitée puis régularisée. Elle n’est pas le prix de votre location.", guaranteePending: "Le montant de la garantie sera confirmé avant le paiement.",
@@ -196,15 +197,15 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     alreadyMember: "J’AI DÉJÀ UN PASS", becomePlus: "DEVENIR CHARGEURS+", becomePlusBody: "Scannez avec votre téléphone pour créer/ouvrir votre compte puis activer le Pass Chargeurs+.", expressInstead: "Continuer sans compte", memberUnavailable: "La connexion membre est momentanément indisponible, mais vous pouvez consulter l’offre Chargeurs+.",
   },
   en: {
-    refresh: "Refresh", help: "Help", cancel: "Cancel", returnHome: "Back home", back: "Back",
+    refresh: "Refresh", help: "FAQ / Help", cancel: "Cancel", returnHome: "Back home", back: "Back",
     connectedKicker: "PASS RECOGNISED", connectedTitle: "CONNECTION SUCCESSFUL", connectedSubtitle: "Your active Chargeurs member benefits are loaded from your account.",
     connectedBenefits: "Your active benefits", connectedRate: "Member rate", connectedCap: "Daily cap", connectedMinutes: "Included minutes", connectedWallet: "Wallet Pass", connectedWalletLocal: "Account Pass active",
     connectedCta: "START A RENTAL", connectedCtaSub: "Choose your powerbank next on this kiosk.",
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
-    homeTitle: "Need a battery?", homeSubtitle: "Choose your journey", priceFrom: "From", priceUpTo: "up to", priceTotalCap: "total cap", pricingUnavailable: "Loading price", perHour: "/ hour", dailyCap: "Daily cap",
-    expressKicker: "NO ACCOUNT", expressTitle: "EXPRESS", expressBody: "See the price first, choose a powerbank, pay and go.",
-    clientKicker: "WITH ACCOUNT", clientTitle: "CHARGEURS MEMBER", clientBody: "Discover Chargeurs+ or connect your Pass to use your member price.",
+    homeTitle: "How would you like to rent?", homeSubtitle: "Two simple journeys. Choose the one that suits you.", priceFrom: "From", priceUpTo: "up to", priceTotalCap: "total cap", pricingUnavailable: "Loading price", perHour: "/ hour", dailyCap: "Daily cap",
+    expressKicker: "NO ACCOUNT", expressTitle: "Express rental", expressBody: "Rent now. Pay on your phone.",
+    clientKicker: "CHARGEURS MEMBER", clientTitle: "Member rate", clientBody: "Connect your account in the app and enjoy your best available rate.",
     cabinetTitle: "Batteries available", cabinetSub: "Best battery selected automatically", secure: "Secure connection",
     expressPricingKicker: "EXPRESS · NO ACCOUNT", expressPricingTitle: "Know the price before you rent.", expressPricingLead: "The price only increases when you cross a tier. The exact amount is recalculated on return from the server tariff shown here.",
     guaranteeTitle: "Guarantee separate from rental price", guaranteeBody: "Depending on the payment method, the guarantee is temporarily authorised or charged then adjusted. It is not your rental price.", guaranteePending: "The guarantee amount will be confirmed before payment.",
@@ -214,15 +215,15 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     alreadyMember: "I ALREADY HAVE A PASS", becomePlus: "GET CHARGEURS+", becomePlusBody: "Scan with your phone to create/open your account and activate Chargeurs+.", expressInstead: "Continue without account", memberUnavailable: "Member connection is temporarily unavailable, but you can still review the Chargeurs+ offer.",
   },
   de: {
-    refresh: "Aktualisieren", help: "Hilfe", cancel: "Abbrechen", returnHome: "Zur Startseite", back: "Zurück",
+    refresh: "Aktualisieren", help: "FAQ / Hilfe", cancel: "Abbrechen", returnHome: "Zur Startseite", back: "Zurück",
     connectedKicker: "PASS ERKANNT", connectedTitle: "VERBINDUNG ERFOLGREICH", connectedSubtitle: "Ihre aktiven Chargeurs-Kundenvorteile werden aus Ihrem Konto geladen.",
     connectedBenefits: "Ihre aktiven Vorteile", connectedRate: "Kundentarif", connectedCap: "Tageslimit", connectedMinutes: "Inklusive Minuten", connectedWallet: "Wallet Pass", connectedWalletLocal: "Konto-Pass aktiv",
     connectedCta: "MIETE STARTEN", connectedCtaSub: "Wählen Sie anschließend Ihre Powerbank an dieser Station.",
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
-    homeTitle: "Akku leer?", homeSubtitle: "Wähle deinen Weg", priceFrom: "Ab", priceUpTo: "bis", priceTotalCap: "Gesamtlimit", pricingUnavailable: "Preis wird geladen", perHour: "/ Stunde", dailyCap: "Tageslimit",
-    expressKicker: "OHNE KONTO", expressTitle: "EXPRESS", expressBody: "Preis ansehen, Powerbank wählen, bezahlen und los.",
-    clientKicker: "MIT KONTO", clientTitle: "CHARGEURS KUNDE", clientBody: "Chargeurs+ entdecken oder den Pass verbinden und den Kundentarif nutzen.",
+    homeTitle: "Wie möchten Sie mieten?", homeSubtitle: "Zwei einfache Wege. Wählen Sie den passenden.", priceFrom: "Ab", priceUpTo: "bis", priceTotalCap: "Gesamtlimit", pricingUnavailable: "Preis wird geladen", perHour: "/ Stunde", dailyCap: "Tageslimit",
+    expressKicker: "OHNE KONTO", expressTitle: "Express-Miete", expressBody: "Sofort mieten. Auf dem Smartphone bezahlen.",
+    clientKicker: "CHARGEURS KUNDE", clientTitle: "Kundentarif", clientBody: "Konto mit der App verbinden und den besten verfügbaren Tarif nutzen.",
     cabinetTitle: "Verfügbare Batterien", cabinetSub: "Beste Batterie wird automatisch gewählt", secure: "Sichere Verbindung",
     expressPricingKicker: "EXPRESS · OHNE KONTO", expressPricingTitle: "Sie kennen den Preis vor der Miete.", expressPricingLead: "Der Preis steigt nur beim Überschreiten einer Stufe. Der genaue Betrag wird bei der Rückgabe anhand des hier gezeigten Servertarifs berechnet.",
     guaranteeTitle: "Garantie getrennt vom Mietpreis", guaranteeBody: "Je nach Zahlungsmittel wird die Garantie vorübergehend reserviert oder belastet und danach angepasst. Sie ist nicht der Mietpreis.", guaranteePending: "Der Garantiebetrag wird vor der Zahlung bestätigt.",
@@ -510,16 +511,24 @@ export default function KioskPremiumGateV2() {
     : guestHourlyReady
       ? `${money(options?.guest?.hourly_cents, guestCurrency)} ${copy.perHour}`
       : copy.pricingUnavailable;
-  const guestSecondaryPrice = guestTieredReady && dayGuestTier
-    ? `${copy.priceUpTo} ${money(dayGuestTier.total_cents, guestCurrency)} / ${durationLabel(dayGuestTier.upper_minutes, lang)}`
-    : guestHourlyReady
-      ? `${copy.dailyCap} ${money(options?.guest?.daily_cap_cents, guestCurrency)}`
-      : "";
   const guestTotalCapCents = Number(options?.guest?.total_cap_cents ?? 0);
-  const guestTotalCap = guestTotalCapCents > 0 ? `${copy.priceTotalCap} ${money(guestTotalCapCents, guestCurrency)}` : "";
   const guestDepositCents = Number(options?.guest?.deposit_cents ?? 0);
   const membershipPlan = options?.membershipPlan ?? null;
   const membershipCurrency = membershipPlan?.currency ?? options?.member?.currency ?? "CHF";
+  const memberTiers = sortedPricingTiers(options?.member);
+  const firstMemberTier = memberTiers[0];
+  const memberHomePrice = memberPricingReady && options?.member?.tiered === true && firstMemberTier
+    ? `${copy.priceFrom} ${money(firstMemberTier.total_cents, options?.member?.currency ?? "CHF")} / ${durationLabel(firstMemberTier.upper_minutes, lang)}`
+    : memberPricingReady && Number(options?.member?.hourly_cents ?? 0) > 0
+      ? `${money(options?.member?.hourly_cents, options?.member?.currency ?? "CHF")} ${copy.perHour}`
+      : Number(membershipPlan?.hourly_cents ?? 0) > 0
+        ? `${money(membershipPlan?.hourly_cents, membershipCurrency)} ${copy.perHour}`
+        : lang === "fr" ? "Connectez-vous pour voir votre tarif" : lang === "de" ? "Anmelden, um Ihren Tarif zu sehen" : "Connect to see your rate";
+  const footerDailyCapCents = guestTieredReady && dayGuestTier
+    ? dayGuestTier.total_cents
+    : Number(options?.guest?.daily_cap_cents ?? 0);
+  const footerDailyCap = footerDailyCapCents > 0 ? money(footerDailyCapCents, guestCurrency) : "—";
+  const footerDeposit = guestDepositCents > 0 ? money(guestDepositCents, guestCurrency) : "—";
   const memberSaving = useMemo(() => bestMemberSaving(options?.guest, membershipPlan), [options?.guest, membershipPlan]);
   const membershipUrl = useMemo(() => {
     const url = new URL("/compte/pass", window.location.origin);
@@ -668,35 +677,77 @@ export default function KioskPremiumGateV2() {
     );
   }
 
+  const expressCta = lang === "fr" ? "Continuer sans compte" : lang === "de" ? "Ohne Konto fortfahren" : "Continue without account";
+  const clientCta = lang === "fr" ? "Se connecter avec l’app" : lang === "de" ? "Mit der App anmelden" : "Connect with the app";
+  const tariffLabel = lang === "fr" ? "Tarif" : lang === "de" ? "Tarif" : "Rate";
+  const memberTariffLabel = lang === "fr" ? "Tarif client" : lang === "de" ? "Kundentarif" : "Member rate";
+  const secureStripeLabel = lang === "fr" ? "Paiement sécurisé par Stripe" : lang === "de" ? "Sichere Zahlung mit Stripe" : "Secure payment by Stripe";
+  const depositLabel = lang === "fr" ? "Caution" : lang === "de" ? "Garantie" : "Deposit";
+
   return (
     <div className="ck2-shell ck2-home">
-      <div className="ck2-ambient ck2-ambient-a" aria-hidden="true" /><div className="ck2-ambient ck2-ambient-b" aria-hidden="true" />
-      <header className="ck2-topbar">
+      <div className="ck2-ambient ck2-ambient-a" aria-hidden="true" />
+      <div className="ck2-ambient ck2-ambient-b" aria-hidden="true" />
+
+      <header className="ck2-topbar ck2-reference-topbar">
         <BrandLogo size="md" />
         <div className="ck2-top-actions">
-          <button type="button" className="ck2-pill" onClick={() => void refreshOptions()} disabled={refreshing}><RefreshCw className={refreshing ? "ck2-spin-small" : ""} /> {copy.refresh}</button>
-          <button type="button" className="ck2-pill" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}><HelpCircle /> {copy.help}</button>
+          <button type="button" className="ck2-pill ck2-reference-util" onClick={() => void refreshOptions()} disabled={refreshing}>
+            <RefreshCw className={refreshing ? "ck2-spin-small" : ""} />
+            <span>{copy.refresh}</span>
+          </button>
+          <button type="button" className="ck2-pill ck2-reference-util" onClick={() => window.dispatchEvent(new CustomEvent("chargeurs:open-kiosk-help"))}>
+            <HelpCircle />
+            <span>{copy.help}</span>
+          </button>
           <div className="ck2-language"><LanguageSwitcher /></div>
         </div>
       </header>
-      <main className="ck2-home-grid">
-        <section className="ck2-hero-copy">
-          <span className="ck2-eyebrow">{copy.homeSubtitle}</span>
+
+      <main className="ck2-reference-home-main">
+        <section className="ck2-reference-heading">
           <h1 className="ck2-home-title">{copy.homeTitle}</h1>
-          <div className={`ck2-price-row ${guestPricingReady ? "" : "ck2-price-row--loading"}`} aria-live="polite">
-            <span className="ck2-price-icon"><Zap /></span><strong>{guestPrimaryPrice}</strong>
-            {guestSecondaryPrice && <><i /><span>{guestSecondaryPrice}</span></>}
-            {guestTotalCap && <strong className="ck2-price-total-cap">{guestTotalCap}</strong>}
-          </div>
-          <div className="ck2-choice-grid">
-            <button type="button" className="ck2-choice ck2-choice-express" onClick={openGuestPricing} disabled={!guestPricingReady}><span className="ck2-choice-icon"><Zap /></span><span className="ck2-choice-kicker">{copy.expressKicker}</span><strong>{copy.expressTitle}</strong><small>{copy.expressBody}</small><span className="ck2-arrow">→</span></button>
-            <button type="button" className="ck2-choice ck2-choice-member" onClick={openMemberPricing} disabled={!memberOfferReady}><span className="ck2-choice-icon"><UserRound /></span><span className="ck2-choice-kicker">{copy.clientKicker}</span><strong>{copy.clientTitle}</strong><small>{copy.clientBody}</small><span className="ck2-arrow">→</span></button>
-          </div>
+          <p>{copy.homeSubtitle}</p>
         </section>
-        <section className="ck2-device-stage" aria-label="Chargeurs.ch">
-          <div className="ck2-device-glow" aria-hidden="true" /><div className="ck2-device"><div className="ck2-device-screen"><BrandLogo size="sm" /><strong>{copy.cabinetTitle}</strong><span>{copy.cabinetSub}</span></div><div className="ck2-device-divider" /><div className="ck2-device-brand"><BrandLogo size="sm" /></div><div className="ck2-device-slots">{[1,3,2,4].map((slot)=><div className={`ck2-device-slot ${slot===1||slot===3?"is-ready":""}`} key={slot}><span /><i>{slot}</i></div>)}</div></div><div className="ck2-device-shadow" aria-hidden="true" />
+
+        <section className="ck2-choice-grid ck2-reference-choice-grid" aria-label={copy.homeTitle}>
+          <button type="button" className="ck2-choice ck2-choice-express ck2-reference-card" onClick={openGuestPricing} disabled={!guestPricingReady}>
+            <span className="ck2-choice-kicker">{copy.expressKicker}</span>
+            <span className="ck2-choice-icon"><Zap /></span>
+            <strong>{copy.expressTitle}</strong>
+            <small>{copy.expressBody}</small>
+            <span className="ck2-reference-rate">
+              <em>{tariffLabel}</em>
+              <b>{guestPrimaryPrice}</b>
+            </span>
+            <span className="ck2-reference-cta">{expressCta}<i>›</i></span>
+          </button>
+
+          <button type="button" className="ck2-choice ck2-choice-member ck2-reference-card" onClick={openMemberPricing} disabled={!memberOfferReady}>
+            <span className="ck2-choice-kicker">{copy.clientKicker}</span>
+            <span className="ck2-choice-icon"><UserRound /></span>
+            <strong>{copy.clientTitle}</strong>
+            <small>{copy.clientBody}</small>
+            <span className="ck2-reference-rate">
+              <em>{memberTariffLabel}</em>
+              <b>{memberHomePrice}</b>
+            </span>
+            <span className="ck2-reference-cta">{clientCta}<i>›</i></span>
+          </button>
         </section>
       </main>
+
+      <footer className="ck2-home-payments ck2-reference-footer" aria-label={secureStripeLabel}>
+        <div className="ck2-reference-payments">
+          <span className="ck2-reference-stripe"><ShieldCheck />{secureStripeLabel}</span>
+          <KioskPaymentMarks cardLabel="" />
+        </div>
+        <div className="ck2-reference-commercial">
+          <span>{copy.dailyCap}<strong>{footerDailyCap}</strong></span>
+          <i />
+          <span>{depositLabel}<strong>{footerDeposit}</strong></span>
+        </div>
+      </footer>
     </div>
   );
 }
