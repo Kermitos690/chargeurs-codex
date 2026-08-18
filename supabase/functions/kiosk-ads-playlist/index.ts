@@ -175,20 +175,34 @@ Deno.serve(async (req) => {
       itemsByCampaign.get(row.campaign_id)?.push(item);
     }
 
-    const payload = candidates
-      .filter((campaign) => campaign.all_stations || targets.get(campaign.id)?.has(stationId))
-      .map((campaign) => ({
-        id: campaign.id,
-        name: campaign.name,
-        modes: campaign.display_modes,
-        idleAfterSeconds: campaign.idle_after_seconds,
-        splitRatio: Number(campaign.split_ratio),
-        priority: campaign.priority,
-        qrUrl: campaign.qr_url ?? null,
-        updatedAt: campaign.updated_at,
-        items: itemsByCampaign.get(campaign.id) ?? [],
-      }))
-      .filter((campaign) => campaign.items.length > 0);
+    const supabaseUrl = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
+    const targetedCampaigns = candidates.filter((campaign) => campaign.all_stations || targets.get(campaign.id)?.has(stationId));
+
+    // The current kiosk player consumes one campaign-level qrUrl per entry. To
+    // preserve its proven synchronized playback while restoring the canonical
+    // per-media QR contract, project each active media item as a one-item campaign
+    // slice. The media item retains its canonical destination/CTA data; qrUrl is
+    // a station-bound tracking URL that records the scan and then redirects.
+    const payload = targetedCampaigns.flatMap((campaign) => {
+      const items = itemsByCampaign.get(campaign.id) ?? [];
+      return items.map((item) => {
+        const destination = typeof item.qrDestinationUrl === "string" ? item.qrDestinationUrl.trim() : "";
+        const trackedQrUrl = destination && supabaseUrl
+          ? `${supabaseUrl}/functions/v1/ads-qr-redirect?c=${encodeURIComponent(campaign.id)}&a=${encodeURIComponent(String(item.assetId))}&s=${encodeURIComponent(stationId)}`
+          : (campaign.qr_url ?? null);
+        return {
+          id: campaign.id,
+          name: campaign.name,
+          modes: campaign.display_modes,
+          idleAfterSeconds: campaign.idle_after_seconds,
+          splitRatio: Number(campaign.split_ratio),
+          priority: campaign.priority,
+          qrUrl: trackedQrUrl,
+          updatedAt: campaign.updated_at,
+          items: [item],
+        };
+      });
+    });
 
     const versionSeed = payload
       .map((campaign) => `${campaign.id}:${campaign.updatedAt}:${campaign.qrUrl ?? ""}:${campaign.items.map((item) => `${item.assetId}:${item.sortOrder}:${item.imageDurationSeconds}:${item.qrDestinationUrl ?? ""}:${item.ctaLabel ?? ""}:${item.transitionStyle ?? ""}`).join(",")}`)
