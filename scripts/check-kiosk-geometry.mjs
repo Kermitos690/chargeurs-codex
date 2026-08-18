@@ -45,6 +45,7 @@ const requiredContracts = [
   'box-sizing: border-box',
   'height: var(--p0-pricing-h)',
   'height: min(var(--p0-selection-h), 100%)',
+  '[data-kiosk-scene="starting"]',
 ];
 for (const marker of requiredContracts) {
   if (!css.includes(marker)) failures.push(`missing geometry contract marker: ${marker}`);
@@ -56,17 +57,25 @@ const requiredTransactionMarkers = [
   '.kiosk-pricing-card p.mt-7',
   'grid-template-columns: repeat(3,minmax(0,1fr))',
   '.kiosk-qr-stage .kiosk-payment-mark',
+  '.kiosk-slot-grid > .kiosk-slot-card:nth-child(2)',
+  '[data-kiosk-scene="starting"]',
+  '@keyframes p0StartingPulse',
 ];
 for (const marker of requiredTransactionMarkers) {
   if (!transactionCss.includes(marker)) failures.push(`missing transaction readability marker: ${marker}`);
 }
 
-const readabilityImport = 'import "./kiosk-p0-transaction-readability.css";';
-const geometryImport = 'import "./kiosk-1280-geometry-contract.css";';
-const readabilityIndex = runtime.indexOf(readabilityImport);
-const geometryIndex = runtime.indexOf(geometryImport);
-if (readabilityIndex < 0) failures.push('transaction readability stylesheet is not imported');
-if (geometryIndex < 0) failures.push('geometry contract stylesheet is not imported');
+const runtimeMarkers = [
+  'import "./kiosk-p0-transaction-readability.css";',
+  'import "./kiosk-1280-geometry-contract.css";',
+  'scene = "starting"',
+  'p0-deterministic-transaction-v2-2026-1280x720',
+];
+for (const marker of runtimeMarkers) {
+  if (!runtime.includes(marker)) failures.push(`missing runtime marker: ${marker}`);
+}
+const readabilityIndex = runtime.indexOf('import "./kiosk-p0-transaction-readability.css";');
+const geometryIndex = runtime.indexOf('import "./kiosk-1280-geometry-contract.css";');
 if (readabilityIndex >= 0 && geometryIndex >= 0 && readabilityIndex > geometryIndex) {
   failures.push('geometry contract must remain the final framing authority');
 }
@@ -78,4 +87,7 @@ if (failures.length) {
 }
 
 console.log('[kiosk-geometry] PASS');
-console.log(JSON.stringify({ canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection, transactionReadability: true }));
+console.log(JSON.stringify({
+  canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection,
+  transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
+}));
