@@ -6,10 +6,16 @@ const cssPath = path.join(root, 'src/pages/kiosk-1280-geometry-contract.css');
 const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readability.css');
 const adsPath = path.join(root, 'src/components/kiosk/kiosk-advertising-p0-safe.css');
 const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
+const adsSyncPath = path.join(root, 'src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx');
+const adsPartnerBridgePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPartnerBridge.tsx');
+const adsPartnerCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-partner-panel.css');
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
 const adsCss = fs.readFileSync(adsPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
+const adsSync = fs.readFileSync(adsSyncPath, 'utf8');
+const adsPartnerBridge = fs.readFileSync(adsPartnerBridgePath, 'utf8');
+const adsPartnerCss = fs.readFileSync(adsPartnerCssPath, 'utf8');
 
 function pxVar(name) {
   const match = css.match(new RegExp(`${name}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`));
@@ -100,6 +106,41 @@ if (geometryIndex >= 0 && adsIndex >= 0 && adsIndex < geometryIndex) {
   failures.push('advertising safety contract must load after base geometry');
 }
 
+const partnerRuntimeMarkers = [
+  'import { KioskAdvertisingPartnerBridge } from "./KioskAdvertisingPartnerBridge";',
+  '<KioskAdvertisingLayer />',
+  '<KioskAdvertisingPartnerBridge />',
+];
+for (const marker of partnerRuntimeMarkers) {
+  if (!adsSync.includes(marker)) failures.push(`missing partner Ads runtime marker: ${marker}`);
+}
+
+const partnerBoundaryMarkers = [
+  'class AdvertisingPartnerBoundary',
+  'static getDerivedStateFromError',
+  '<AdvertisingPartnerBoundary>',
+  '<KioskAdvertisingPartnerBridgeRuntime />',
+  'data.hasPartnerQr',
+];
+for (const marker of partnerBoundaryMarkers) {
+  if (!adsPartnerBridge.includes(marker)) failures.push(`missing partner Ads isolation marker: ${marker}`);
+}
+
+const partnerCssMarkers = [
+  '.kiosk-ad-split[data-has-partner-qr="true"] > .kiosk-ad-qr',
+  '.kiosk-ad-screensaver[data-has-partner-qr="true"] > .kiosk-ad-qr',
+  'display: none !important',
+  '.kiosk-ad-partner-panel--split',
+  '.kiosk-ad-partner-panel--screensaver',
+];
+for (const marker of partnerCssMarkers) {
+  if (!adsPartnerCss.includes(marker)) failures.push(`missing partner Ads presentation marker: ${marker}`);
+}
+
+if (runtime.includes('KioskAdvertisingPartnerBridge')) {
+  failures.push('partner QR bridge must never mount in the global kiosk runtime');
+}
+
 if (failures.length) {
   console.error('[kiosk-geometry] FAIL');
   for (const failure of failures) console.error(` - ${failure}`);
@@ -111,4 +152,5 @@ console.log(JSON.stringify({
   canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection,
   transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
+  partnerQrIsolated: true, partnerQrSingleOwner: true,
 }));
