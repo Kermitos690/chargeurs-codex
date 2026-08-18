@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "android-kiosk/**"
+      - ".github/workflows/android-kiosk-ci.yml"
   pull_request:
     paths:
       - "android-kiosk/**"
@@ -26,6 +27,40 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+
+      - name: Restore canonical STAGING signer
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chargeurs-kiosk-staging-debug-keystore-v1
+
+      - name: Verify canonical STAGING signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Chargeurs STAGING TEST,O=Chargeurs.ch,C=CH" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey | tee /tmp/staging-keytool.txt
+          actual="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          expected="b37d4cda37c8623259dfc7aa408328b8f2d04911082c46073b6e1b429ba805a3"
+          test "$actual" = "$expected" || {
+            echo "Canonical STAGING signer mismatch; refusing non-updatable APK" >&2
+            exit 24
+          }
+          printf '%s' "$actual" > /tmp/canonical_staging_signer_sha256
+
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build staging APK
@@ -35,6 +70,10 @@ jobs:
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
+          CHARGEURS_STAGING_KEYSTORE_PATH: /home/runner/.android/debug.keystore
+          CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
+          CHARGEURS_STAGING_KEY_ALIAS: androiddebugkey
+          CHARGEURS_STAGING_KEY_PASSWORD: android
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
       - name: Prepare artifact
@@ -46,7 +85,11 @@ jobs:
           test -s "$apk"
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
           test -n "$apksigner_path"
-          "$apksigner_path" verify --verbose "$apk"
+          "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
+          cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
+          canonical_digest="$(cat /tmp/canonical_staging_signer_sha256)"
+          test "$cert_digest" = "$canonical_digest"
+
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           test -n "$aapt_path"
           version_name="$($aapt_path dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
@@ -55,6 +98,7 @@ jobs:
           artifact_name="Chargeurs_CH_Kiosk_${version_name}.apk"
           cp "$apk" "dist/$artifact_name"
           sha256sum "dist/$artifact_name" > dist/SHA256SUMS.txt
+          printf 'signerCertificateSha256=%s\n' "$cert_digest" > dist/SIGNER.txt
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
