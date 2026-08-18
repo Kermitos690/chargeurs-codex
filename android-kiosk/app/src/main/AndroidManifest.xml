@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Stripe Terminal v2 USB discovery on the DTA21269 Android lane requires
+         fine location permission at runtime. The permission is used by the SDK
+         only; WebView geolocation remains disabled and denied. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <queries>
@@ -13,6 +17,7 @@
     </queries>
 
     <application
+        android:name=".ChargeursKioskApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
