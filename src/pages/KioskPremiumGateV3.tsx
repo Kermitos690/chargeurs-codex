@@ -8,30 +8,17 @@ import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
 import "./kiosk-p0-core-scenes.css";
 import "./kiosk-p0-physical-proof.css";
-import "./kiosk-p0-confirmation-proof.css";
+import "./kiosk-p0-confirmation-polish.css";
 
 /**
  * Single-owner Premium kiosk runtime.
- *
- * P0 presentation ownership:
- * - Home reference: kiosk-home-reference-lock.css + the deliberately scoped
- *   critical-scene refinements in kiosk-p0-core-scenes.css.
- * - Connected member / pricing / payment: kiosk-p0-core-scenes.css.
- * - kiosk-p0-physical-proof.css is the field-proof authority for physical
- *   Home/selection regressions already proven on DTA21277.
- * - kiosk-p0-confirmation-proof.css is temporarily scoped only to the physical
- *   rental-confirmation (`pricing`) scene and must be folded back after PASS.
- * - One shared operational footer owns payment trust, backend commercial values,
- *   station identity, local clock and connectivity state.
- *
- * Business journey / pricing authority / Terminal-QR / rental and hardware
- * behavior remain owned by KioskPremiumGateV2 + Kiosk. Advertising stays
- * intentionally unmounted during this physical P0 qualification.
+ * Physical proof authority remains scene-scoped; confirmation has one stylesheet
+ * only, replaced rather than stacked after DTA21277 evidence.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-confirmation-physical-proof-2026-1280x720";
+    root.dataset.kioskVersion = "p0-confirmation-readability-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -69,7 +56,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-confirmation-physical-proof-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-confirmation-readability-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />

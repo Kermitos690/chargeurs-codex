@@ -1,0 +1,143 @@
+/* P0 physical readability polish for the existing rental-confirmation scene.
+   Presentation only: no pricing, payment, rental, slot, return or hardware logic. */
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-inactivity-control {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
+  width: min(1080px, calc(100% - 72px)) !important;
+  max-width: 1080px !important;
+  grid-template-rows: 58px 336px 84px !important;
+  gap: 14px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 {
+  font-size: 45px !important;
+  line-height: .98 !important;
+  letter-spacing: -.042em !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card {
+  height: 336px !important;
+  min-height: 336px !important;
+  max-height: 336px !important;
+  grid-template-columns: 238px minmax(0,1fr) !important;
+  gap: 20px !important;
+  padding: 20px !important;
+  border-radius: 28px !important;
+}
+
+/* One clear selected-battery module, without the nested-frame prototype look. */
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child {
+  padding: 22px 16px !important;
+  gap: 14px !important;
+  border: 0 !important;
+  border-radius: 22px !important;
+  background:
+    radial-gradient(circle at 50% 26%, rgba(80,209,255,.14), transparent 46%),
+    linear-gradient(155deg, rgba(8,31,55,.86), rgba(4,15,29,.90)) !important;
+  box-shadow: inset 0 0 0 1px rgba(91,196,247,.16), inset 0 1px rgba(255,255,255,.04) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child > .text-xl {
+  color: rgba(216,235,250,.78) !important;
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  letter-spacing: .055em !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child > .grid {
+  width: 144px !important;
+  height: 144px !important;
+  min-width: 144px !important;
+  min-height: 144px !important;
+  border: 1px solid rgba(104,222,255,.72) !important;
+  border-radius: 27px !important;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(111,232,255,.18), transparent 45%),
+    linear-gradient(160deg, rgba(10,57,90,.90), rgba(3,20,39,.98)) !important;
+  box-shadow: 0 0 0 3px rgba(65,198,255,.06), 0 0 38px rgba(51,199,255,.19), inset 0 1px rgba(255,255,255,.07) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child > .grid span {
+  font-size: 82px !important;
+  font-weight: 950 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child {
+  padding: 13px 13px 12px !important;
+  gap: 13px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child > .font-display {
+  color: #ffffff !important;
+  font-size: 54px !important;
+  line-height: .96 !important;
+  letter-spacing: -.043em !important;
+  font-weight: 950 !important;
+}
+
+/* The backend tier summary is intentionally allowed to wrap into two calm lines.
+   This is more readable on the physical panel than a compressed single sentence. */
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.text-xl {
+  min-height: 90px !important;
+  padding: 15px 18px !important;
+  align-items: center !important;
+  border-color: rgba(96,191,246,.25) !important;
+  background: linear-gradient(145deg, rgba(15,61,98,.38), rgba(5,22,41,.72)) !important;
+  color: #effaff !important;
+  font-size: 22px !important;
+  line-height: 1.48 !important;
+  font-weight: 880 !important;
+  letter-spacing: .005em !important;
+  word-spacing: .10em !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.mt-7 {
+  min-height: 62px !important;
+  padding: 14px 18px !important;
+  border-color: rgba(255,209,116,.30) !important;
+  background: linear-gradient(145deg, rgba(83,60,19,.30), rgba(28,23,17,.58)) !important;
+  color: #ffebbb !important;
+  font-size: 19px !important;
+  line-height: 1.30 !important;
+  font-weight: 840 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 {
+  width: min(780px,100%) !important;
+  height: 84px !important;
+  min-height: 84px !important;
+  grid-template-columns: 190px minmax(0,1fr) !important;
+  gap: 14px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button:first-child {
+  min-height: 60px !important;
+  height: 60px !important;
+  color: #e6f0fa !important;
+  font-size: 18px !important;
+  font-weight: 850 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button:last-child {
+  min-height: 72px !important;
+  height: 72px !important;
+  border: 1px solid rgba(120,247,74,.78) !important;
+  background: linear-gradient(135deg,#63da37 0%,#7bea49 48%,#91f45f 100%) !important;
+  color: #061507 !important;
+  font-size: 24px !important;
+  font-weight: 950 !important;
+  letter-spacing: -.020em !important;
+  text-shadow: none !important;
+  box-shadow: 0 18px 42px rgba(78,211,49,.25),0 0 30px rgba(112,239,66,.17),inset 0 1px rgba(255,255,255,.32) !important;
+}
+
+@media (width: 1280px) and (height: 720px) {
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
+    width: 1080px !important;
+    grid-template-rows: 58px 336px 84px !important;
+  }
+}
