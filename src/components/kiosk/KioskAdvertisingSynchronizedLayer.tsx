@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { KioskAdvertisingLayer } from "./KioskAdvertisingLayer";
-import { KioskAdvertisingPartnerData } from "./KioskAdvertisingPartnerData";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import {
   estimateNetworkClockSample,
@@ -141,10 +140,5 @@ export function KioskAdvertisingSynchronizedLayer() {
     };
   }, [synchronizeClock]);
 
-  return (
-    <>
-      <KioskAdvertisingLayer />
-      <KioskAdvertisingPartnerData />
-    </>
-  );
+  return <KioskAdvertisingLayer />;
 }
