@@ -4,9 +4,11 @@ import path from 'node:path';
 const root = process.cwd();
 const cssPath = path.join(root, 'src/pages/kiosk-1280-geometry-contract.css');
 const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readability.css');
+const adsPath = path.join(root, 'src/components/kiosk/kiosk-advertising-p0-safe.css');
 const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
+const adsCss = fs.readFileSync(adsPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
 
 function pxVar(name) {
@@ -65,19 +67,37 @@ for (const marker of requiredTransactionMarkers) {
   if (!transactionCss.includes(marker)) failures.push(`missing transaction readability marker: ${marker}`);
 }
 
+const requiredAdsMarkers = [
+  'bottom: 62px !important',
+  'html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-ad-split',
+  '.ck2-reference-home-main',
+  '--p0-ads-rail-width',
+  'z-index: 210 !important',
+];
+for (const marker of requiredAdsMarkers) {
+  if (!adsCss.includes(marker)) failures.push(`missing advertising safety marker: ${marker}`);
+}
+
 const runtimeMarkers = [
   'import "./kiosk-p0-transaction-readability.css";',
   'import "./kiosk-1280-geometry-contract.css";',
+  'import "@/components/kiosk/kiosk-advertising-p0-safe.css";',
+  'KioskAdvertisingSynchronizedLayer',
+  '<KioskAdvertisingSynchronizedLayer />',
   'scene = "starting"',
-  'p0-deterministic-transaction-v2-2026-1280x720',
+  'p0-deterministic-transaction-v2-ads-restored-2026-1280x720',
 ];
 for (const marker of runtimeMarkers) {
   if (!runtime.includes(marker)) failures.push(`missing runtime marker: ${marker}`);
 }
 const readabilityIndex = runtime.indexOf('import "./kiosk-p0-transaction-readability.css";');
 const geometryIndex = runtime.indexOf('import "./kiosk-1280-geometry-contract.css";');
+const adsIndex = runtime.indexOf('import "@/components/kiosk/kiosk-advertising-p0-safe.css";');
 if (readabilityIndex >= 0 && geometryIndex >= 0 && readabilityIndex > geometryIndex) {
-  failures.push('geometry contract must remain the final framing authority');
+  failures.push('geometry contract must remain after transaction readability');
+}
+if (geometryIndex >= 0 && adsIndex >= 0 && adsIndex < geometryIndex) {
+  failures.push('advertising safety contract must load after base geometry');
 }
 
 if (failures.length) {
@@ -90,4 +110,5 @@ console.log('[kiosk-geometry] PASS');
 console.log(JSON.stringify({
   canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection,
   transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
+  advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
 }));
