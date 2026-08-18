@@ -3,7 +3,11 @@ import path from 'node:path';
 
 const root = process.cwd();
 const cssPath = path.join(root, 'src/pages/kiosk-1280-geometry-contract.css');
+const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readability.css');
+const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
 const css = fs.readFileSync(cssPath, 'utf8');
+const transactionCss = fs.readFileSync(transactionPath, 'utf8');
+const runtime = fs.readFileSync(runtimePath, 'utf8');
 
 function pxVar(name) {
   const match = css.match(new RegExp(`${name}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`));
@@ -46,6 +50,27 @@ for (const marker of requiredContracts) {
   if (!css.includes(marker)) failures.push(`missing geometry contract marker: ${marker}`);
 }
 
+const requiredTransactionMarkers = [
+  '.kiosk-pricing-card p.text-xl',
+  'visibility: visible !important',
+  '.kiosk-pricing-card p.mt-7',
+  'grid-template-columns: repeat(3,minmax(0,1fr))',
+  '.kiosk-qr-stage .kiosk-payment-mark',
+];
+for (const marker of requiredTransactionMarkers) {
+  if (!transactionCss.includes(marker)) failures.push(`missing transaction readability marker: ${marker}`);
+}
+
+const readabilityImport = 'import "./kiosk-p0-transaction-readability.css";';
+const geometryImport = 'import "./kiosk-1280-geometry-contract.css";';
+const readabilityIndex = runtime.indexOf(readabilityImport);
+const geometryIndex = runtime.indexOf(geometryImport);
+if (readabilityIndex < 0) failures.push('transaction readability stylesheet is not imported');
+if (geometryIndex < 0) failures.push('geometry contract stylesheet is not imported');
+if (readabilityIndex >= 0 && geometryIndex >= 0 && readabilityIndex > geometryIndex) {
+  failures.push('geometry contract must remain the final framing authority');
+}
+
 if (failures.length) {
   console.error('[kiosk-geometry] FAIL');
   for (const failure of failures) console.error(` - ${failure}`);
@@ -53,4 +78,4 @@ if (failures.length) {
 }
 
 console.log('[kiosk-geometry] PASS');
-console.log(JSON.stringify({ canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection }));
+console.log(JSON.stringify({ canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection, transactionReadability: true }));
