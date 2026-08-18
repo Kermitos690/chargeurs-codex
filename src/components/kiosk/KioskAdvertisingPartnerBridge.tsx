@@ -129,74 +129,90 @@ function KioskAdvertisingPartnerBridgeRuntime() {
     }
 
     const clearMarkedTarget = () => {
-      if (markedTargetRef.current) {
-        delete markedTargetRef.current.dataset.hasPartnerQr;
+      try {
+        if (markedTargetRef.current) {
+          delete markedTargetRef.current.dataset.hasPartnerQr;
+          markedTargetRef.current = null;
+        }
+      } catch {
         markedTargetRef.current = null;
       }
     };
 
+    const disablePartnerPanel = () => {
+      clearMarkedTarget();
+      setBridge(null);
+    };
+
     const detect = () => {
-      const surface = currentSurface();
-      const cached = readCachedPlaylist(stationId);
-      if (!surface || !cached) {
-        clearMarkedTarget();
-        setBridge(null);
-        return;
-      }
-
-      const media = currentMedia(surface.target);
-      const mediaUrl = normalizeUrl(media.url);
-      let matchedCampaign: CachedCampaign | null = null;
-      let matchedItem: CachedItem | null = null;
-
-      for (const campaign of cached.campaigns ?? []) {
-        for (const item of campaign.items ?? []) {
-          const urlMatches = Boolean(media.url && item.url && normalizeUrl(item.url) === mediaUrl);
-          const titleMatches = Boolean(media.title && item.title && media.title === item.title);
-          if (urlMatches || titleMatches) {
-            matchedCampaign = campaign;
-            matchedItem = item;
-            break;
-          }
+      try {
+        const surface = currentSurface();
+        const cached = readCachedPlaylist(stationId);
+        if (!surface || !cached) {
+          disablePartnerPanel();
+          return;
         }
-        if (matchedCampaign) break;
+
+        const media = currentMedia(surface.target);
+        const mediaUrl = normalizeUrl(media.url);
+        let matchedCampaign: CachedCampaign | null = null;
+        let matchedItem: CachedItem | null = null;
+
+        for (const campaign of cached.campaigns ?? []) {
+          for (const item of campaign.items ?? []) {
+            const urlMatches = Boolean(media.url && item.url && normalizeUrl(item.url) === mediaUrl);
+            const titleMatches = Boolean(media.title && item.title && media.title === item.title);
+            if (urlMatches || titleMatches) {
+              matchedCampaign = campaign;
+              matchedItem = item;
+              break;
+            }
+          }
+          if (matchedCampaign) break;
+        }
+
+        const qrUrl = validTrackedQr(matchedCampaign?.qrUrl);
+        if (!matchedCampaign || !matchedItem || !qrUrl) {
+          disablePartnerPanel();
+          return;
+        }
+
+        if (markedTargetRef.current && markedTargetRef.current !== surface.target) {
+          delete markedTargetRef.current.dataset.hasPartnerQr;
+        }
+        surface.target.dataset.hasPartnerQr = "true";
+        markedTargetRef.current = surface.target;
+
+        const next: BridgeState = {
+          key: `${surface.mode}:${matchedCampaign.id ?? "campaign"}:${matchedItem.id ?? matchedItem.assetId ?? "item"}:${qrUrl}`,
+          target: surface.target,
+          mode: surface.mode,
+          qrUrl,
+          campaignName: matchedCampaign.name || "Partenaire",
+          destinationUrl: matchedItem.qrDestinationUrl ?? null,
+          ctaLabel: matchedItem.ctaLabel ?? null,
+        };
+
+        setBridge((previous) => previous?.key === next.key && previous.target === next.target ? previous : next);
+      } catch (error) {
+        console.error("Chargeurs partner QR bridge disabled after async Ads error", error instanceof Error ? error.message : "UNKNOWN_ERROR");
+        disablePartnerPanel();
       }
-
-      const qrUrl = validTrackedQr(matchedCampaign?.qrUrl);
-      if (!matchedCampaign || !matchedItem || !qrUrl) {
-        clearMarkedTarget();
-        setBridge(null);
-        return;
-      }
-
-      if (markedTargetRef.current && markedTargetRef.current !== surface.target) {
-        delete markedTargetRef.current.dataset.hasPartnerQr;
-      }
-      surface.target.dataset.hasPartnerQr = "true";
-      markedTargetRef.current = surface.target;
-
-      const next: BridgeState = {
-        key: `${surface.mode}:${matchedCampaign.id ?? "campaign"}:${matchedItem.id ?? matchedItem.assetId ?? "item"}:${qrUrl}`,
-        target: surface.target,
-        mode: surface.mode,
-        qrUrl,
-        campaignName: matchedCampaign.name || "Partenaire",
-        destinationUrl: matchedItem.qrDestinationUrl ?? null,
-        ctaLabel: matchedItem.ctaLabel ?? null,
-      };
-
-      setBridge((previous) => previous?.key === next.key && previous.target === next.target ? previous : next);
     };
 
     detect();
-    const observer = new MutationObserver(detect);
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["src", "class", "style"],
-    });
-    const timer = window.setInterval(detect, 500);
+    const observer = new MutationObserver(() => detect());
+    try {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "class", "style"],
+      });
+    } catch {
+      disablePartnerPanel();
+    }
+    const timer = window.setInterval(() => detect(), 500);
 
     return () => {
       observer.disconnect();
