@@ -1,8 +1,10 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
+import { adEntryDurationMs, estimateServerClockOffsetMs, resolveAdSyncPosition } from "@/lib/adSync";
 import { useI18n } from "@/i18n/i18n";
 import "./kiosk-advertising.css";
 import "./kiosk-advertising-failsafe.css";
@@ -15,6 +17,8 @@ type AdItem = {
   mimeType: string;
   url: string;
   posterUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
   imageDurationSeconds?: number | null;
   mediaDurationSeconds?: number | null;
   sortOrder: number;
@@ -27,6 +31,7 @@ type AdCampaign = {
   idleAfterSeconds: number;
   splitRatio: number;
   priority: number;
+  qrUrl?: string | null;
   updatedAt: string;
   items: AdItem[];
 };
@@ -35,6 +40,8 @@ type PlaylistResponse = {
   ok?: boolean;
   stationId?: string;
   version?: string;
+  serverTimeMs?: number;
+  timelineEpochMs?: number;
   campaigns?: AdCampaign[];
   error?: string;
 };
@@ -44,6 +51,7 @@ type AdEntry = {
   campaignId: string;
   campaignName: string;
   splitRatio: number;
+  qrUrl?: string | null;
   item: AdItem;
 };
 
@@ -57,10 +65,44 @@ function sceneNow(): string {
   return document.documentElement.dataset.kioskScene ?? (document.querySelector(".ck2-home") ? "home" : "other");
 }
 
+function kioskAuthRequiredNow(): boolean {
+  return document.documentElement.dataset.kioskAuth === "required";
+}
+
 function interactionOverlayOpen(): boolean {
   return Boolean(document.querySelector(
     '[role="dialog"][aria-modal="true"], .kiosk-offers-modal, .fixed.inset-0[class*="z-[120]"], .fixed.inset-0[class*="z-[250]"]',
   ));
+}
+
+export function adsPlaylistHeaders(token: string | null): Record<string, string> {
+  return token ? { "X-Kiosk-Token": token } : {};
+}
+
+export function resolveAdvertisingSurface(input: {
+  authRequired: boolean;
+  scene: string;
+  overlayOpen: boolean;
+  screensaver: boolean;
+  splitCount: number;
+  saverCount: number;
+}): { splitActive: boolean; saverActive: boolean } {
+  if (input.overlayOpen) return { splitActive: false, saverActive: false };
+
+  // Rental authentication is not an Advertising availability gate. When the
+  // rental rail is unavailable, prefer a paid fullscreen screensaver campaign;
+  // if none exists, keep a configured split campaign visible next to the safe
+  // activation panel. No rental/payment action is enabled by this decision.
+  if (input.authRequired) {
+    if (input.saverCount > 0) return { splitActive: false, saverActive: true };
+    return { splitActive: input.splitCount > 0, saverActive: false };
+  }
+
+  const safeHome = input.scene === "home";
+  return {
+    splitActive: safeHome && !input.screensaver && input.splitCount > 0,
+    saverActive: safeHome && input.screensaver && input.saverCount > 0,
+  };
 }
 
 function flattenCampaigns(campaigns: AdCampaign[], mode: DisplayMode): AdEntry[] {
@@ -71,9 +113,20 @@ function flattenCampaigns(campaigns: AdCampaign[], mode: DisplayMode): AdEntry[]
       campaignId: campaign.id,
       campaignName: campaign.name,
       splitRatio: Math.min(.5, Math.max(.2, Number(campaign.splitRatio) || .35)),
+      qrUrl: campaign.qrUrl ?? null,
       item,
     }));
   });
+}
+
+function splitMediaLayout(item: AdItem): "cover" | "adaptive" {
+  const width = Number(item.width ?? 0);
+  const height = Number(item.height ?? 0);
+  if (item.mediaType !== "image" || width <= 0 || height <= 0) return "cover";
+  // The integrated Home rail is portrait-ish. Wide creative is preserved in a
+  // foreground contain layer over a blurred full-bleed copy instead of losing
+  // most of the artwork to a hard center crop.
+  return width / height > 1.15 ? "adaptive" : "cover";
 }
 
 function loadCached(stationId: string): PlaylistResponse | null {
@@ -129,7 +182,15 @@ async function reportPlayback(
   }
 }
 
-function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, stationId: string, playlistVersion?: string) {
+export function useAdRotation(
+  entries: AdEntry[],
+  active: boolean,
+  mode: DisplayMode,
+  stationId: string,
+  playlistVersion?: string,
+  sharedClockOffsetMs: number | null = null,
+  timelineEpochMs = 0,
+) {
   const [index, setIndex] = useState(0);
   const [epoch, setEpoch] = useState(0);
   const [blockedKeys, setBlockedKeys] = useState<Set<string>>(() => new Set());
@@ -156,7 +217,13 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     setIndex(0);
   }, [availableEntries.length, index]);
 
-  const current = availableEntries.length ? availableEntries[index % availableEntries.length] : null;
+  const synchronized = sharedClockOffsetMs !== null && Number.isFinite(sharedClockOffsetMs);
+  const sharedNowMs = Date.now() + (synchronized ? Number(sharedClockOffsetMs) : 0);
+  const syncPosition = synchronized
+    ? resolveAdSyncPosition(availableEntries, sharedNowMs, timelineEpochMs)
+    : null;
+  const currentIndex = syncPosition?.index ?? (availableEntries.length ? index % availableEntries.length : 0);
+  const current = availableEntries.length ? availableEntries[currentIndex] : null;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -167,6 +234,16 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
 
   const finish = useCallback((status: PlaybackStatus, errorCode?: string) => {
     if (!current) return;
+
+    if (status === "completed" && synchronized) {
+      const position = resolveAdSyncPosition(
+        availableEntries,
+        Date.now() + Number(sharedClockOffsetMs),
+        timelineEpochMs,
+      );
+      if (position?.index === currentIndex && position.remainingMs > 60) return;
+    }
+
     statusRef.current = status;
     errorCodeRef.current = errorCode ?? null;
     clearTimer();
@@ -180,10 +257,14 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
       return;
     }
 
+    if (synchronized) {
+      setEpoch((value) => value + 1);
+      return;
+    }
+
     setIndex((value) => availableEntries.length ? (value + 1) % availableEntries.length : 0);
-    // Forces a fresh media element even for a one-item playlist.
     setEpoch((value) => value + 1);
-  }, [availableEntries.length, clearTimer, current]);
+  }, [availableEntries, clearTimer, current, currentIndex, sharedClockOffsetMs, synchronized, timelineEpochMs]);
 
   const complete = useCallback(() => finish("completed"), [finish]);
   const fail = useCallback((errorCode: string) => finish("failed", errorCode), [finish]);
@@ -192,12 +273,7 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     if (!active || !current || startedRef.current) return;
     startedRef.current = true;
     startedAtRef.current = Date.now();
-
-    if (current.item.mediaType === "image") {
-      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
-      timerRef.current = window.setTimeout(complete, seconds * 1000);
-    }
-  }, [active, complete, current]);
+  }, [active, current]);
 
   useEffect(() => {
     if (!active || !current) return;
@@ -206,6 +282,18 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
     startedAtRef.current = 0;
     statusRef.current = "interrupted";
     errorCodeRef.current = null;
+
+    if (synchronized) {
+      const position = resolveAdSyncPosition(
+        availableEntries,
+        Date.now() + Number(sharedClockOffsetMs),
+        timelineEpochMs,
+      );
+      if (position) timerRef.current = window.setTimeout(complete, position.remainingMs + 8);
+    } else if (current.item.mediaType === "image") {
+      const seconds = Math.min(300, Math.max(2, Number(current.item.imageDurationSeconds) || 8));
+      timerRef.current = window.setTimeout(complete, seconds * 1000);
+    }
 
     return () => {
       clearTimer();
@@ -221,36 +309,48 @@ function useAdRotation(entries: AdEntry[], active: boolean, mode: DisplayMode, s
         errorCodeRef.current,
       );
     };
-  }, [active, clearTimer, current, epoch, mode, playlistVersion, stationId]);
+  }, [active, availableEntries, clearTimer, complete, current, epoch, mode, playlistVersion, sharedClockOffsetMs, stationId, synchronized, timelineEpochMs]);
 
   useEffect(() => {
     if (!active || availableEntries.length < 2) return;
-    const next = availableEntries[(index + 1) % availableEntries.length];
+    const next = availableEntries[(currentIndex + 1) % availableEntries.length];
     if (!next?.item.url) return;
     if (next.item.mediaType === "image") {
       const img = new Image();
       img.decoding = "async";
       img.src = next.item.url;
+      if (typeof img.decode === "function") void img.decode().catch(() => undefined);
       return;
     }
     const video = document.createElement("video");
-    video.preload = "metadata";
+    video.preload = "auto";
     video.muted = true;
     video.src = next.item.url;
-  }, [active, availableEntries, index]);
+    video.load();
+  }, [active, availableEntries, currentIndex]);
 
-  return { current, epoch, complete, fail, markStarted };
+  return {
+    current,
+    epoch,
+    complete,
+    fail,
+    markStarted,
+    elapsedMs: syncPosition?.elapsedMs ?? 0,
+    durationMs: current ? adEntryDurationMs(current) : 0,
+  };
 }
 
 function AdMedia({
   entry,
   epoch,
+  startOffsetMs,
   onStarted,
   onCompleted,
   onFailed,
 }: {
   entry: AdEntry;
   epoch: number;
+  startOffsetMs?: number;
   onStarted: () => void;
   onCompleted: () => void;
   onFailed: (errorCode: string) => void;
@@ -267,6 +367,13 @@ function AdMedia({
         playsInline
         preload="auto"
         aria-label={entry.item.title}
+        onLoadedMetadata={(event) => {
+          const offsetSeconds = Math.max(0, Number(startOffsetMs ?? 0)) / 1000;
+          const duration = Number(event.currentTarget.duration);
+          if (offsetSeconds > .05 && Number.isFinite(duration) && duration > .2) {
+            event.currentTarget.currentTime = Math.min(offsetSeconds, Math.max(0, duration - .12));
+          }
+        }}
         onPlaying={onStarted}
         onEnded={onCompleted}
         onError={() => onFailed("VIDEO_PLAYBACK_ERROR")}
@@ -283,6 +390,86 @@ function AdMedia({
       onLoad={onStarted}
       onError={() => onFailed("IMAGE_LOAD_ERROR")}
     />
+  );
+}
+
+type BufferedSnapshot = { entry: AdEntry; epoch: number; startOffsetMs: number };
+
+function BufferedAdMedia({
+  entry,
+  epoch,
+  startOffsetMs,
+  onStarted,
+  onCompleted,
+  onFailed,
+}: {
+  entry: AdEntry;
+  epoch: number;
+  startOffsetMs: number;
+  onStarted: () => void;
+  onCompleted: () => void;
+  onFailed: (errorCode: string) => void;
+}) {
+  const [visible, setVisible] = useState<BufferedSnapshot>({ entry, epoch, startOffsetMs });
+
+  useEffect(() => {
+    if (visible.entry.key === entry.key && visible.epoch === epoch) return;
+    let cancelled = false;
+    const next = { entry, epoch, startOffsetMs };
+    const commit = () => { if (!cancelled) setVisible(next); };
+
+    if (entry.item.mediaType === "image") {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => {
+        if (typeof image.decode === "function") void image.decode().catch(() => undefined).finally(commit);
+        else commit();
+      };
+      image.onerror = () => { if (!cancelled) onFailed("IMAGE_PRELOAD_ERROR"); };
+      image.src = entry.item.url;
+      if (image.complete && image.naturalWidth > 0) {
+        if (typeof image.decode === "function") void image.decode().catch(() => undefined).finally(commit);
+        else commit();
+      }
+      return () => { cancelled = true; };
+    }
+
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.oncanplay = commit;
+    video.onerror = () => { if (!cancelled) onFailed("VIDEO_PRELOAD_ERROR"); };
+    video.src = entry.item.url;
+    video.load();
+    return () => {
+      cancelled = true;
+      video.oncanplay = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [entry, epoch, onFailed, startOffsetMs, visible.entry.key, visible.epoch]);
+
+  const isCurrent = visible.entry.key === entry.key && visible.epoch === epoch;
+  return (
+    <AdMedia
+      entry={visible.entry}
+      epoch={visible.epoch}
+      startOffsetMs={visible.startOffsetMs}
+      onStarted={isCurrent ? onStarted : () => undefined}
+      onCompleted={isCurrent ? onCompleted : () => undefined}
+      onFailed={isCurrent ? onFailed : () => undefined}
+    />
+  );
+}
+
+function AdvertisingQr({ url, label, mode }: { url: string; label: string; mode: DisplayMode }) {
+  return (
+    <div className={`kiosk-ad-qr kiosk-ad-qr--${mode}`} aria-label={label}>
+      <span className="kiosk-ad-qr__code"><QRCodeSVG value={url} level="M" marginSize={1} /></span>
+      <strong>{label}</strong>
+    </div>
   );
 }
 
@@ -319,7 +506,9 @@ function KioskAdvertisingRuntime() {
   const { stationId = "" } = useParams();
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState<number | null>(null);
   const [scene, setScene] = useState(() => sceneNow());
+  const [authRequired, setAuthRequired] = useState(() => kioskAuthRequiredNow());
   const [overlayOpen, setOverlayOpen] = useState(() => interactionOverlayOpen());
   const [screensaver, setScreensaver] = useState(false);
   const lastActivityRef = useRef(Date.now());
@@ -336,14 +525,18 @@ function KioskAdvertisingRuntime() {
   const load = useCallback(async () => {
     if (!stationId) return;
     const token = readKioskToken();
-    if (!token) return;
+    const requestStartedMs = Date.now();
     try {
       const { data, transportError } = await invokeKioskEdgeProxy<PlaylistResponse>(
         "/api/kiosk/ads-playlist",
         { action: "playlist", stationId },
-        { "X-Kiosk-Token": token },
+        adsPlaylistHeaders(token),
       );
+      const responseReceivedMs = Date.now();
       if (!transportError && data?.ok && Array.isArray(data.campaigns)) {
+        if (Number.isFinite(Number(data.serverTimeMs))) {
+          setServerClockOffsetMs(estimateServerClockOffsetMs(Number(data.serverTimeMs), requestStartedMs, responseReceivedMs));
+        }
         setPlaylist(data);
         cachePlaylist(stationId, data);
         return;
@@ -366,11 +559,12 @@ function KioskAdvertisingRuntime() {
   useEffect(() => {
     const detect = () => {
       setScene(sceneNow());
+      setAuthRequired(kioskAuthRequiredNow());
       setOverlayOpen(interactionOverlayOpen());
     };
     detect();
     const htmlObserver = new MutationObserver(detect);
-    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-kiosk-scene"] });
+    htmlObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-kiosk-scene", "data-kiosk-auth"] });
     const bodyObserver = new MutationObserver(detect);
     bodyObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "role", "aria-modal"] });
     const timer = window.setInterval(detect, 750);
@@ -398,6 +592,10 @@ function KioskAdvertisingRuntime() {
   }, [markActivity]);
 
   useEffect(() => {
+    if (authRequired) {
+      setScreensaver(false);
+      return;
+    }
     if (scene !== "home" || overlayOpen || saverEntries.length === 0) {
       setScreensaver(false);
       lastActivityRef.current = Date.now();
@@ -407,18 +605,27 @@ function KioskAdvertisingRuntime() {
       if (Date.now() - lastActivityRef.current >= idleAfterSeconds * 1000) setScreensaver(true);
     }, 500);
     return () => window.clearInterval(timer);
-  }, [idleAfterSeconds, overlayOpen, saverEntries.length, scene]);
+  }, [authRequired, idleAfterSeconds, overlayOpen, saverEntries.length, scene]);
 
-  const safeHome = scene === "home" && !overlayOpen;
-  const splitActive = safeHome && !screensaver && splitEntries.length > 0;
-  const saverActive = safeHome && screensaver && saverEntries.length > 0;
-  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version);
-  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version);
+  const surface = resolveAdvertisingSurface({
+    authRequired,
+    scene,
+    overlayOpen,
+    screensaver,
+    splitCount: splitEntries.length,
+    saverCount: saverEntries.length,
+  });
+  const splitActive = surface.splitActive;
+  const saverActive = surface.saverActive;
+  const timelineEpochMs = Number(playlist.timelineEpochMs ?? 0) || 0;
+  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
+  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
 
   useEffect(() => {
     if (!splitActive || !split.current) return;
+    const displayRatio = Math.min(.46, Math.max(.32, split.current.splitRatio));
     document.documentElement.dataset.kioskAdsSplit = "true";
-    document.documentElement.style.setProperty("--kiosk-ad-split-ratio", String(split.current.splitRatio));
+    document.documentElement.style.setProperty("--kiosk-ad-split-ratio", String(displayRatio));
     return () => {
       delete document.documentElement.dataset.kioskAdsSplit;
       document.documentElement.style.removeProperty("--kiosk-ad-split-ratio");
@@ -426,33 +633,71 @@ function KioskAdvertisingRuntime() {
   }, [split.current, splitActive]);
 
   const copy = lang === "de"
-    ? { sponsored: "Partner", touch: "Bildschirm berühren, um eine Powerbank zu mieten", muted: "Video ohne Ton" }
+    ? {
+        sponsored: "Partner",
+        touch: "Bildschirm berühren, um eine Powerbank zu mieten",
+        muted: "Video ohne Ton",
+        unavailable: "Vermietung vorübergehend nicht verfügbar · Dienst wird reaktiviert",
+        scan: "QR scannen",
+      }
     : lang === "en"
-      ? { sponsored: "Partner", touch: "Touch the screen to rent a powerbank", muted: "Video muted" }
-      : { sponsored: "Partenaire", touch: "Touchez l’écran pour louer une batterie", muted: "Vidéo sans son" };
+      ? {
+          sponsored: "Partner",
+          touch: "Touch the screen to rent a powerbank",
+          muted: "Video muted",
+          unavailable: "Rental temporarily unavailable · service is being restored",
+          scan: "Scan QR",
+        }
+      : {
+          sponsored: "Partenaire",
+          touch: "Touchez l’écran pour louer une batterie",
+          muted: "Vidéo sans son",
+          unavailable: "Location momentanément indisponible · service en cours de réactivation",
+          scan: "Scanner le QR",
+        };
+
+  const saverLabel = authRequired ? copy.unavailable : copy.touch;
+  const splitLayout = split.current ? splitMediaLayout(split.current.item) : "cover";
 
   return (
     <>
       {splitActive && split.current && (
-        <aside className="kiosk-ad-split" aria-label={`${copy.sponsored}: ${split.current.campaignName}`}>
-          <AdMedia
+        <aside
+          className="kiosk-ad-split"
+          data-media-layout={splitLayout}
+          aria-label={`${copy.sponsored}: ${split.current.campaignName}`}
+        >
+          {splitLayout === "adaptive" && split.current.item.mediaType === "image" && (
+            <img className="kiosk-ad-media-backdrop" src={split.current.item.url} alt="" aria-hidden draggable={false} />
+          )}
+          <BufferedAdMedia
             entry={split.current}
             epoch={split.epoch}
+            startOffsetMs={split.elapsedMs}
             onStarted={split.markStarted}
             onCompleted={split.complete}
             onFailed={split.fail}
           />
           <div className="kiosk-ad-split-badge"><Megaphone /> {copy.sponsored}</div>
+          {split.current.qrUrl && <AdvertisingQr url={split.current.qrUrl} label={copy.scan} mode="split" />}
           {split.current.item.mediaType === "video" && <div className="kiosk-ad-muted"><VolumeX /> {copy.muted}</div>}
         </aside>
       )}
 
       {saverActive && (
-        <div className="kiosk-ad-screensaver" role="button" tabIndex={0} aria-label={copy.touch} onClick={markActivity} onKeyDown={markActivity}>
+        <div
+          className="kiosk-ad-screensaver"
+          role={authRequired ? "region" : "button"}
+          tabIndex={authRequired ? undefined : 0}
+          aria-label={saverLabel}
+          onClick={authRequired ? undefined : markActivity}
+          onKeyDown={authRequired ? undefined : markActivity}
+        >
           {saver.current ? (
-            <AdMedia
+            <BufferedAdMedia
               entry={saver.current}
               epoch={saver.epoch}
+              startOffsetMs={saver.elapsedMs}
               onStarted={saver.markStarted}
               onCompleted={saver.complete}
               onFailed={saver.fail}
@@ -462,7 +707,11 @@ function KioskAdvertisingRuntime() {
           )}
           <div className="kiosk-ad-screensaver-shade" aria-hidden />
           <div className="kiosk-ad-screensaver-brand"><Zap /> Chargeurs.ch</div>
-          <div className="kiosk-ad-screensaver-cta"><span>{copy.touch}</span><b>→</b></div>
+          <div className={`kiosk-ad-screensaver-cta${authRequired ? " kiosk-ad-screensaver-cta--unavailable" : ""}`}>
+            <span>{saverLabel}</span>
+            {!authRequired && <b>→</b>}
+          </div>
+          {saver.current?.qrUrl && <AdvertisingQr url={saver.current.qrUrl} label={copy.scan} mode="screensaver" />}
           {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
         </div>
       )}

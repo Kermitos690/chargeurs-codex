@@ -1,6 +1,7 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { computeFinalPricingFromSnapshot, type FrozenReturnState } from "../_shared/pricingSnapshot.ts";
 
 const STRIPE_API_VERSION = "2025-09-30.clover" as any;
 const LOCK_TTL_MINUTES = 10;
@@ -8,7 +9,7 @@ const headers = { ...corsHeaders, "Content-Type": "application/json" };
 const db = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
 
-type ReturnState = "normal" | "not_returned";
+type ReturnState = FrozenReturnState;
 type Session = Record<string, any>;
 type Strategy = "manual_capture" | "prepaid_refund";
 
@@ -23,30 +24,6 @@ async function audit(client: any, action: string, target: string, data: Record<s
 async function logApi(client: any, entry: Record<string, unknown>) { try { await client.from("api_logs").insert(entry); } catch {} }
 async function incident(client: any, s: Session, code: string, message: string, details: Record<string, unknown> = {}) { try { await client.from("system_incidents").insert({ type: "payment_settlement", severity: code === "SUPPLEMENTAL_PAYMENT_REQUIRED" ? "warning" : "high", message, data: { rental_session_id: s.id, station_id: s.station_id, code, ...details }, resolved: false }); } catch {} await audit(client, "settlement.incident.opened", String(s.id), { code, ...details }); }
 async function fail(client: any, s: Session, code: string, message: string, details: Record<string, unknown> = {}) { await client.from("rental_sessions").update({ settlement_status: "failed", settlement_error: code, settlement_locked_at: null, failure_code: code, failure_message: message }).eq("id", s.id); await incident(client, s, code, message, { retryable: true, ...details }); }
-
-function pricing(snapshot: Record<string, any>, currency: string, start: string, end: string, returnState: ReturnState) {
-  const int = (k: string, positive = false) => { const v = snapshot[k]; if (!Number.isInteger(v) || v < 0 || (positive && v <= 0)) throw new Error(`PRICING_SNAPSHOT_INVALID_${k.toUpperCase()}`); return Number(v); };
-  if (Number(snapshot.pricing_rules_version) !== 1) throw new Error("PRICING_SNAPSHOT_VERSION_UNSUPPORTED");
-  if (String(snapshot.currency ?? "").toUpperCase() !== currency.toUpperCase()) throw new Error("PRICING_SNAPSHOT_CURRENCY_MISMATCH");
-  const period = int("period_minutes", true), per = int("price_per_period_cents"), included = int("included_minutes"), grace = int("grace_minutes"), initial = int("initial_fee_cents"), dailyCap = int("daily_cap_cents"), totalCap = int("total_cap_cents"), maxAmount = int("max_amount_cents"), minAmount = int("min_amount_cents"), nonReturnFee = int("unreturned_fee_cents"), nonReturnAfter = int("unreturned_after_minutes"), deposit = int("deposit_cents");
-  const startMs = Date.parse(start), endMs = Date.parse(end); if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) throw new Error("PRICING_DATE_INVALID");
-  const totalMinutes = Math.max(0, Math.ceil((endMs - startMs) / 60000));
-  const billable = totalMinutes <= included + grace ? 0 : totalMinutes - included;
-  const billedPeriods = billable > 0 ? Math.ceil(billable / period) : 0;
-  const durationCents = billedPeriods * per;
-  const nonReturn = returnState === "not_returned" || (nonReturnAfter > 0 && totalMinutes > nonReturnAfter);
-  const extra = nonReturn ? Math.max(0, nonReturnFee - initial - durationCents) : 0;
-  const subtotal = initial + durationCents + extra;
-  let capped = subtotal; const caps: any[] = [];
-  if (!nonReturn && dailyCap > 0) { const cap = dailyCap * Math.max(1, Math.ceil(totalMinutes / 1440)); if (capped > cap) { capped = cap; caps.push({ type: "daily", value: cap }); } }
-  if (!nonReturn && totalCap > 0 && capped > totalCap) { capped = totalCap; caps.push({ type: "total", value: totalCap }); }
-  if (maxAmount > 0 && capped > maxAmount) { capped = maxAmount; caps.push({ type: "max", value: maxAmount }); }
-  if (minAmount > 0 && capped < minAmount) { capped = minAmount; caps.push({ type: "min", value: minAmount }); }
-  if (snapshot.rounding === "up_5") capped = Math.ceil(capped / 5) * 5; if (snapshot.rounding === "up_10") capped = Math.ceil(capped / 10) * 10;
-  const taxPercent = Number(snapshot.tax_percent ?? 0); if (!Number.isFinite(taxPercent) || taxPercent < 0) throw new Error("PRICING_SNAPSHOT_INVALID_TAX_PERCENT");
-  const tax = Math.round(capped * taxPercent / 100), final = capped + tax;
-  return { profile_id: snapshot.profile_id, profile_name: snapshot.profile_name, profile_version: snapshot.profile_version, source: "rental_snapshot", pricing_rules_version: 1, currency: currency.toUpperCase(), start, end, rental_state: "active", return_state: returnState, total_minutes: totalMinutes, billed_periods: billedPeriods, period_minutes: period, price_per_period_cents: per, initial_fee_cents: initial, duration_cents: durationCents, additional_fees_cents: extra, subtotal_cents: subtotal, caps_applied: caps, tax_percent: taxPercent, tax_cents: tax, final_cents: final, amount: final / 100, deposit_cents: deposit, computed_at: new Date().toISOString() };
-}
 async function orchState(client: any, id: string) { const { data, error } = await client.from("rental_orchestrator_snapshots").select("state,version").eq("rental_id", id).maybeSingle(); if (error) throw error; return data; }
 async function appendEvent(client: any, s: Session, type: string, resultingState: string, key: string, metadata: Record<string, unknown>, finalChf: number | null = null) {
   for (let i = 0; i < 3; i++) {
@@ -77,8 +54,8 @@ Deno.serve(async (req) => {
     const returnState: ReturnState = body.returnState === "not_returned" ? "not_returned" : "normal"; const finalAt = typeof body.finalAt === "string" && Number.isFinite(Date.parse(body.finalAt)) ? body.finalAt : new Date().toISOString();
     const { data: existing, error: readError } = await client.from("rental_sessions").select("*").eq("id", rentalId).maybeSingle(); if (readError) throw readError; if (!existing) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404); if (existing.settlement_status === "settled") return json({ ok: true, idempotent: true, settlement_status: "settled", final_amount_cents: existing.final_amount_cents });
     const s = await claim(client, rentalId); if (!s) return json({ ok: true, already_in_progress: true }, 202);
-    const snapshot = s.pricing_snapshot as Record<string, any> | null, hash = typeof s.pricing_snapshot_hash === "string" ? s.pricing_snapshot_hash : ""; if (!snapshot || !hash) { await fail(client, s, "PRICING_SNAPSHOT_MISSING", "Le snapshot tarifaire immuable de la location est absent."); return json({ ok: false, error: "PRICING_SNAPSHOT_MISSING" }, 409); } if (await snapshotHash(snapshot) !== hash) { await fail(client, s, "PRICING_SNAPSHOT_HASH_MISMATCH", "Le snapshot tarifaire de la location ne correspond plus à son empreinte d'origine."); return json({ ok: false, error: "PRICING_SNAPSHOT_HASH_MISMATCH" }, 409); }
-    const start = s.started_at ?? s.ejected_at ?? s.created_at, end = returnState === "normal" ? s.returned_at ?? finalAt : finalAt; const p = pricing(snapshot, String(s.currency ?? "CHF"), start, end, returnState), finalCents = cents(p.final_cents), deposit = cents(s.deposit_amount_cents ?? snapshot.deposit_cents ?? 0), pi = String(s.stripe_payment_intent_id ?? ""); if (!pi) { await fail(client, s, "PAYMENT_INTENT_MISSING", "Le paiement initial est introuvable."); return json({ ok: false, error: "PAYMENT_INTENT_MISSING" }, 409); }
+    const snapshot = s.pricing_snapshot as Record<string, unknown> | null, hash = typeof s.pricing_snapshot_hash === "string" ? s.pricing_snapshot_hash : ""; if (!snapshot || !hash) { await fail(client, s, "PRICING_SNAPSHOT_MISSING", "Le snapshot tarifaire immuable de la location est absent."); return json({ ok: false, error: "PRICING_SNAPSHOT_MISSING" }, 409); } if (await snapshotHash(snapshot) !== hash) { await fail(client, s, "PRICING_SNAPSHOT_HASH_MISMATCH", "Le snapshot tarifaire de la location ne correspond plus à son empreinte d'origine."); return json({ ok: false, error: "PRICING_SNAPSHOT_HASH_MISMATCH" }, 409); }
+    const start = s.started_at ?? s.ejected_at ?? s.created_at, end = returnState === "normal" ? s.returned_at ?? finalAt : finalAt; const p = computeFinalPricingFromSnapshot({ snapshot, expectedCurrency: String(s.currency ?? "CHF"), startAt: start, endAt: end, returnState }), finalCents = cents(p.final_cents), deposit = cents(s.deposit_amount_cents ?? snapshot.deposit_cents ?? 0), pi = String(s.stripe_payment_intent_id ?? ""); if (!pi) { await fail(client, s, "PAYMENT_INTENT_MISSING", "Le paiement initial est introuvable."); return json({ ok: false, error: "PAYMENT_INTENT_MISSING" }, 409); }
     await appendEvent(client, s, "pricing_finalized", "pricing_finalized", `pricing_finalized:${s.id}:${returnState}:${finalCents}`, { returnState, finalAmountCents: finalCents, pricingSnapshot: p }, finalCents / 100);
     await client.from("rental_sessions").update({ final_amount_cents: finalCents }).eq("id", s.id);
     const stripe = new Stripe(secret, { apiVersion: STRIPE_API_VERSION, httpClient: Stripe.createFetchHttpClient() }); let intent = await stripe.paymentIntents.retrieve(pi); const method = await paymentMethodType(stripe, intent), strat = strategy(s, intent, method), capturedBefore = Math.max(cents(s.captured_amount_cents), cents(intent.amount_received)), refundedBefore = cents(s.refunded_amount_cents), steps = plan(strat, finalCents, deposit, cents(intent.amount_capturable), capturedBefore, refundedBefore); let captured = capturedBefore, refunded = refundedBefore, canceled = false, supplementalPI = String(s.stripe_supplemental_payment_intent_id ?? "") || null, supplementalCaptured = 0;

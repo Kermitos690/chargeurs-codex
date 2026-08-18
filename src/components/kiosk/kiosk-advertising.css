@@ -1,17 +1,21 @@
 .kiosk-ad-split {
   position: fixed;
-  top: 11.5vh;
-  right: 2.4vw;
-  bottom: 14.5vh;
+  top: clamp(76px, 10.8vh, 94px);
+  right: 0;
+  bottom: 0;
   z-index: 27;
-  width: clamp(260px, calc(var(--kiosk-ad-split-ratio, .35) * 100vw), 46vw);
+  width: calc(var(--kiosk-ad-split-ratio, .35) * 100vw);
+  min-width: 32vw;
+  max-width: 46vw;
   overflow: hidden;
-  border: 1px solid rgba(165, 243, 252, .22);
-  border-radius: 2rem;
-  background: rgba(2, 8, 23, .78);
-  box-shadow: 0 28px 90px rgba(0, 0, 0, .38), 0 0 50px rgba(34, 211, 238, .08);
+  border: 0;
+  border-left: 1px solid rgba(165, 243, 252, .18);
+  border-radius: 30px 0 0 0;
+  background: #020817;
+  box-shadow: -34px 0 90px rgba(0, 0, 0, .26), -1px 0 34px rgba(34, 211, 238, .07);
   pointer-events: none;
   isolation: isolate;
+  contain: paint;
 }
 
 .kiosk-ad-split::after {
@@ -20,17 +24,48 @@
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(2, 8, 23, .04), transparent 50%, rgba(2, 8, 23, .38));
+  background:
+    linear-gradient(180deg, rgba(2, 8, 23, .05), transparent 48%, rgba(2, 8, 23, .34)),
+    linear-gradient(90deg, rgba(2, 8, 23, .20), transparent 18%);
 }
 
-.kiosk-ad-media {
+.kiosk-ad-media,
+.kiosk-ad-media-backdrop {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.kiosk-ad-media {
+  z-index: 1;
   object-fit: cover;
   object-position: center;
   background: #020817;
+  will-change: opacity, transform;
+}
+
+.kiosk-ad-media-backdrop {
+  z-index: 0;
+  object-fit: cover;
+  object-position: center;
+  filter: blur(24px) saturate(.88) brightness(.58);
+  transform: scale(1.14) translateZ(0);
+  opacity: .88;
+}
+
+/*
+ * Automatic Home adaptation: wide uploads are not brutally cropped into the
+ * portrait-ish rail. The source is preserved over a soft full-bleed extension,
+ * which behaves like a derived split creative without storing another file.
+ */
+.kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media {
+  object-fit: contain;
+  background: transparent;
+  filter: drop-shadow(0 18px 38px rgba(0, 0, 0, .24));
 }
 
 .kiosk-ad-split-badge,
@@ -70,12 +105,52 @@
 }
 
 .kiosk-ad-muted {
-  right: 1rem;
+  left: 1rem;
   bottom: 1rem;
   border-radius: 999px;
   padding: .48rem .75rem;
   font-size: .72rem;
   font-weight: 750;
+}
+
+.kiosk-ad-qr {
+  position: absolute;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .96);
+  color: #020817;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .30);
+}
+
+.kiosk-ad-qr__code {
+  display: block;
+  width: 84px;
+  height: 84px;
+}
+
+.kiosk-ad-qr__code svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kiosk-ad-qr strong {
+  max-width: 96px;
+  color: #020817;
+  font-size: 10px;
+  line-height: 1.05;
+  font-weight: 950;
+  text-align: center;
+}
+
+.kiosk-ad-qr--split {
+  right: 16px;
+  bottom: 16px;
 }
 
 .kiosk-ad-screensaver {
@@ -87,6 +162,9 @@
   background: #020817;
   outline: none;
   touch-action: manipulation;
+  isolation: isolate;
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .kiosk-ad-screensaver-shade {
@@ -162,6 +240,43 @@
   text-transform: uppercase;
 }
 
+.kiosk-ad-qr--screensaver {
+  right: clamp(22px, 3vw, 44px);
+  bottom: clamp(24px, 5vh, 42px);
+  padding: 10px;
+}
+
+.kiosk-ad-qr--screensaver .kiosk-ad-qr__code {
+  width: clamp(96px, 9vw, 126px);
+  height: clamp(96px, 9vw, 126px);
+}
+
+.kiosk-ad-qr--screensaver strong {
+  max-width: 132px;
+  font-size: clamp(10px, .85vw, 13px);
+}
+
+/*
+ * On the canonical Atmosphere Home the paid split surface is a structural right
+ * rail, not a floating picture-in-picture card. It replaces the decorative
+ * station and the decision surface yields exactly the same width to the rail.
+ */
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-station-hero {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-atmosphere-home__body {
+  left: 18vw !important;
+  right: calc((var(--kiosk-ad-split-ratio, .35) * 100vw) + 1.8vw) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-atmosphere-home__payments {
+  left: 18vw !important;
+  right: calc((var(--kiosk-ad-split-ratio, .35) * 100vw) + 1.8vw) !important;
+}
+
 @keyframes kiosk-ad-cta-pulse {
   0%, 100% { transform: translateX(-50%) scale(1); }
   50% { transform: translateX(-50%) scale(1.018); }
@@ -169,11 +284,22 @@
 
 @media (max-width: 1100px), (max-height: 720px) {
   .kiosk-ad-split {
-    top: 12.5vh;
-    right: 1.8vw;
-    bottom: 15.5vh;
-    width: clamp(230px, calc(var(--kiosk-ad-split-ratio, .35) * 100vw), 43vw);
-    border-radius: 1.5rem;
+    top: clamp(70px, 10vh, 84px);
+    width: calc(var(--kiosk-ad-split-ratio, .35) * 100vw);
+    min-width: 32vw;
+    max-width: 44vw;
+    border-radius: 24px 0 0 0;
+  }
+
+  .kiosk-ad-qr__code {
+    width: 74px;
+    height: 74px;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-atmosphere-home__body,
+  html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-atmosphere-home__payments {
+    left: 17.5vw !important;
+    right: calc((var(--kiosk-ad-split-ratio, .35) * 100vw) + 1.4vw) !important;
   }
 }
 

@@ -25,16 +25,17 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
-// STAGING only: CI materializes a persistent test keystore and passes its
-// absolute path explicitly. Local builds keep the normal Android debug signer
-// when this value is absent. This is never used for the production release.
+// Field STAGING builds must keep a durable signing identity so DTA21269 can be
+// upgraded in place. CI may materialize the known staging key into RUNNER_TEMP;
+// local validation builds can still fall back to Android's debug signer.
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
-val stagingSigningReady = stagingStorePath.get().isNotBlank() && file(stagingStorePath.get()).isFile
+val stagingStorePassword = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PASSWORD").orElse("")
+val stagingKeyAlias = providers.environmentVariable("CHARGEURS_STAGING_KEY_ALIAS").orElse("")
+val stagingKeyPassword = providers.environmentVariable("CHARGEURS_STAGING_KEY_PASSWORD").orElse("")
+val stagingSigningReady = listOf(
+    stagingStorePath.get(), stagingStorePassword.get(), stagingKeyAlias.get(), stagingKeyPassword.get(),
+).all { it.isNotBlank() } && file(stagingStorePath.get()).isFile
 
-// Enrollment and WebView navigation remain pinned to the stable STAGING
-// origin. Preview deployments are protected by Vercel SSO and must never be
-// embedded in a field APK; keeping the public origin unchanged also preserves
-// the durable kiosk credential during an in-place update.
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
 val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"
@@ -52,8 +53,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 128
-        versionName = "1.0.28-wisepad-usb-staging-v2"
+        versionCode = 130
+        versionName = "1.0.30-terminal-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -80,11 +81,11 @@ android {
 
     signingConfigs {
         if (stagingSigningReady) {
-            create("stagingTest") {
+            create("stagingPersistent") {
                 storeFile = file(stagingStorePath.get())
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+                storePassword = stagingStorePassword.get()
+                keyAlias = stagingKeyAlias.get()
+                keyPassword = stagingKeyPassword.get()
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -142,12 +143,9 @@ android {
         }
         create("staging") {
             initWith(getByName("debug"))
-            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingTest")
+            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingPersistent")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            // Dedicated field-test lane: DTA21269 uses its attached BBPOS
-            // WisePad 3 over USB. The simulated reader is excluded so the UI
-            // can never represent a simulated reader as physical hardware.
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
             buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
             buildConfigField(
@@ -200,15 +198,12 @@ android {
 }
 
 dependencies {
-    // TEST-ONLY compatibility lane for DTA21269. Stripe 2.22.0 is the first
-    // release where WisePad 3 USB connectivity is GA and predates the modern
-    // offline-mode initialization that fails against this kiosk's broken
-    // Android 11 Keymaster. Never promote this dependency to production.
-    implementation("com.stripe:stripeterminal:2.22.0")
-
-    // Stripe 2.22's legacy BBPOS adapter references ContextCompat directly but
-    // does not package AndroidX Core into this application transitively.
+    // DTA21269 remains on the legacy v2 compatibility lane because the modern
+    // SDK's offline crypto initialization was physically incompatible with its
+    // Android 11 Keymaster. 2.23.4 is the final v2 patch and contains Stripe's
+    // USB timeout and long-uptime reader reconnect fixes.
+    implementation("com.stripe:stripeterminal:2.23.4")
     implementation("androidx.core:core:1.13.1")
-
+    implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
 }

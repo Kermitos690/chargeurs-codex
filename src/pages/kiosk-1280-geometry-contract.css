@@ -1,0 +1,161 @@
+/*
+ * Chargeurs.ch — deterministic physical 1280×720 geometry contract.
+ *
+ * This file owns GEOMETRY ONLY and is imported last. Scene-specific visual design
+ * remains with the Home/core/selection/confirmation owners. The purpose here is
+ * to make physical framing mathematical instead of iterative: canvas → footer →
+ * padded product root → header → main workspace. No pricing/payment/rental/
+ * hardware behavior lives here.
+ */
+
+html.kiosk-v3 {
+  --p0-canvas-w: 1280px;
+  --p0-canvas-h: 720px;
+  --p0-footer-h: 62px;
+  --p0-root-pad-top: 12px;
+  --p0-root-pad-x: 28px;
+  --p0-root-pad-bottom: 10px;
+  --p0-header-h: 48px;
+  --p0-header-gap: 8px;
+  --p0-pricing-h: 506px;
+  --p0-selection-h: 526px;
+}
+
+html.kiosk-v3,
+html.kiosk-v3 *,
+html.kiosk-v3 *::before,
+html.kiosk-v3 *::after {
+  box-sizing: border-box;
+}
+
+html.kiosk-v3 .kv3-runtime {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3 .kv3-product-layer {
+  position: absolute !important;
+  inset: 0 0 var(--p0-footer-h) 0 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer {
+  box-sizing: border-box !important;
+  height: var(--p0-footer-h) !important;
+  min-height: var(--p0-footer-h) !important;
+  max-height: var(--p0-footer-h) !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .kiosk-root {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: var(--p0-root-pad-top) var(--p0-root-pad-x) var(--p0-root-pad-bottom) !important;
+  display: grid !important;
+  grid-template-rows: var(--p0-header-h) minmax(0, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  row-gap: var(--p0-header-gap) !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header {
+  grid-row: 1 !important;
+  width: 100% !important;
+  height: var(--p0-header-h) !important;
+  min-height: var(--p0-header-h) !important;
+  max-height: var(--p0-header-h) !important;
+  margin: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  align-self: stretch !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > main {
+  grid-row: 2 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > main > div {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
+  width: min(1080px, calc(100% - 72px)) !important;
+  height: var(--p0-pricing-h) !important;
+  min-height: var(--p0-pricing-h) !important;
+  max-height: min(var(--p0-pricing-h), 100%) !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  align-self: center !important;
+  align-content: start !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+  height: min(var(--p0-selection-h), 100%) !important;
+  min-height: 0 !important;
+  max-height: min(var(--p0-selection-h), 100%) !important;
+  align-self: center !important;
+  overflow: hidden !important;
+}
+
+/* Every post-selection transaction stage is confined to the same footer-safe workspace. */
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main > div,
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+  width: min(1140px, 100%) !important;
+  max-height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  overflow: hidden !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+  height: 100% !important;
+}
+
+@media (width: 1280px) and (height: 720px) {
+  html.kiosk-v3 .kv3-runtime {
+    width: 1280px !important;
+    height: 720px !important;
+  }
+  html.kiosk-v3 .kv3-product-layer {
+    height: 658px !important;
+    bottom: 62px !important;
+  }
+}

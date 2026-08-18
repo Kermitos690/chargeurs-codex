@@ -102,7 +102,7 @@ export function cityJsonLd(city: { slug: string; name: string; canton: string })
       offers: {
         "@type": "Offer",
         priceCurrency: "CHF",
-        description: "1.50 CHF par heure, facturation par tranche de 30 minutes, plafond journalier de 18 CHF.",
+        description: "1.90 CHF jusqu'à 30 minutes, 3.90 CHF jusqu'à 2 heures, 5.90 CHF jusqu'à 6 heures et 7.90 CHF jusqu'à 24 heures.",
       },
     },
     {
@@ -110,7 +110,7 @@ export function cityJsonLd(city: { slug: string; name: string; canton: string })
       "@type": "FAQPage",
       mainEntity: [
         { "@type": "Question", name: `Où louer une powerbank à ${city.name} ?`, acceptedAnswer: { "@type": "Answer", text: `Chargeurs.ch déploie des bornes de location de batteries externes dans les établissements partenaires de ${city.name}. La disponibilité réelle est affichée sur la carte.` } },
-        { "@type": "Question", name: "Combien coûte la location ?", acceptedAnswer: { "@type": "Answer", text: "Le tarif de référence est de 1.50 CHF par heure, calculé par tranche de 30 minutes, avec un plafond de 18 CHF par jour et une caution initiale de 30 CHF." } },
+        { "@type": "Question", name: "Combien coûte la location ?", acceptedAnswer: { "@type": "Answer", text: "Le tarif est de 1.90 CHF jusqu'à 30 minutes, 3.90 CHF jusqu'à 2 heures, 5.90 CHF jusqu'à 6 heures et 7.90 CHF jusqu'à 24 heures." } },
       ],
     },
   ];

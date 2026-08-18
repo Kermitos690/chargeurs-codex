@@ -7,8 +7,15 @@ on:
   pull_request:
     paths:
       - "src/components/kiosk/KioskAdvertisingLayer.tsx"
+      - "src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx"
       - "src/components/kiosk/kiosk-advertising.css"
+      - "src/components/kiosk/kiosk-advertising-failsafe.css"
+      - "src/lib/adSync.ts"
+      - "src/lib/adSync.test.ts"
+      - "src/test/kioskAdvertisingRotation.test.tsx"
+      - "src/test/kioskAdvertisingAuthIndependence.test.ts"
       - "src/pages/admin/AdminAdvertising.tsx"
+      - "src/pages/admin/AdminOverview.tsx"
       - "src/pages/admin/admin-advertising.css"
       - "src/pages/KioskPremiumGateV3.tsx"
       - "src/pages/admin/adminNav.ts"
@@ -17,7 +24,9 @@ on:
       - "vite.config.ts"
       - "vercel.json"
       - "supabase/functions/ads-admin/**"
+      - "supabase/functions/kiosk-ads-clock/**"
       - "supabase/functions/kiosk-ads-playlist/**"
+      - "supabase/functions/admin-overview-read/**"
       - "supabase/migrations/*ads*"
       - ".github/workflows/chargeurs-ads-check.yml"
 
@@ -38,11 +47,22 @@ jobs:
       - name: Full repository typecheck (baseline diagnostic)
         continue-on-error: true
         run: npm run typecheck
-      - name: Lint Chargeurs Ads frontend changes
+      - name: Advertising availability and synchronization regressions
+        run: >-
+          npx vitest run
+          src/lib/adSync.test.ts
+          src/test/kioskAdvertisingRotation.test.tsx
+          src/test/kioskAdvertisingAuthIndependence.test.ts
+      - name: Lint Chargeurs Ads and Control Center changes
         run: >-
           npx eslint
           src/components/kiosk/KioskAdvertisingLayer.tsx
+          src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx
+          src/lib/adSync.ts
+          src/lib/adSync.test.ts
+          src/test/kioskAdvertisingAuthIndependence.test.ts
           src/pages/admin/AdminAdvertising.tsx
+          src/pages/admin/AdminOverview.tsx
           src/pages/KioskPremiumGateV3.tsx
           src/pages/admin/adminNav.ts
           src/lib/kioskEdgeProxy.ts

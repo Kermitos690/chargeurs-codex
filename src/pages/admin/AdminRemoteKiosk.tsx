@@ -103,9 +103,9 @@ function KioskSimulator({ station, stage, setStage }: { station: Station; stage:
               </h2>
               <div className="mt-[3%] flex items-center gap-[2.5%] text-[clamp(8px,1.25vw,18px)] text-white/70">
                 <Zap className="h-[1.5em] w-[1.5em] text-cyan-300" />
-                <strong className="text-white">1.50 CHF</strong><span>/ heure</span>
+                <strong className="text-white">dès 1.90 CHF</strong><span>/ 30 min</span>
                 <span className="h-5 w-px bg-white/15" />
-                <span>Plafond</span><strong className="text-white">18 CHF/jour</strong>
+                <span>Jusqu'à 24 h</span><strong className="text-white">7.90 CHF</strong>
               </div>
               <div className="mt-[4%] grid grid-cols-2 gap-[2.5%]">
                 <button type="button" onClick={() => setStage("express")} className={cn(card, primary, "group p-[5%] text-left transition-transform active:scale-[0.985]")}>

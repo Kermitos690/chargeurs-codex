@@ -1,6 +1,5 @@
 package ch.chargeurs.kiosk;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -9,7 +8,6 @@ import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -51,7 +49,6 @@ public final class MainActivity extends Activity {
     private static final int WEB_VIEW_LAYER_INDEX = 1;
     private static final String WEB_RUNTIME_PREFS = "chargeurs_web_runtime";
     private static final String WEB_RUNTIME_VERSION = "last_runtime_version";
-    private static final int STRIPE_TERMINAL_PERMISSION_REQUEST = 4701;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private FrameLayout container;
@@ -71,7 +68,6 @@ public final class MainActivity extends Activity {
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
     private CabinetController cabinetController;
-    private SecureConfigStore configStore;
 
     private final Runnable kioskUiReadyTimeout = () -> {
         if (!kioskUiReady && !isFinishing()) {
@@ -96,7 +92,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        configStore = new SecureConfigStore(this);
+        SecureConfigStore configStore = new SecureConfigStore(this);
         config = configStore.load();
         if (config == null || !KioskConfigValidator.matchesPinnedBaseUrl(
             config.baseUrl(), BuildConfig.KIOSK_PUBLIC_BASE_URL
@@ -115,17 +111,10 @@ public final class MainActivity extends Activity {
         KioskVisuals.applyKioskWindow(this);
         registerBackBlocking();
         setContentView(buildRoot());
-        requestStripeTerminalPermissionIfNeeded();
         resetWebRuntimeOnFirstLoad = shouldResetWebRuntime();
         registerConnectivityMonitoring();
         createWebView();
         handler.postDelayed(watchdog, WATCHDOG_INTERVAL_MS);
-    }
-
-    private void requestStripeTerminalPermissionIfNeeded() {
-        if (!BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) return;
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return;
-        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, STRIPE_TERMINAL_PERMISSION_REQUEST);
     }
 
     private FrameLayout buildRoot() {
@@ -229,6 +218,15 @@ public final class MainActivity extends Activity {
             showStartupError("NATIVE_BRIDGE_UNAVAILABLE", error);
             return;
         }
+        // When the device WebView supports DOCUMENT_START_SCRIPT, credentials
+        // are present before the kiosk's first React/module script can issue a
+        // protected request. Legacy vendor WebViews keep the existing two-load
+        // fallback below instead of weakening the auth boundary.
+        credentialsInjected = DocumentStartCredentialInjector.install(
+            webView,
+            config,
+            BuildConfig.VERSION_NAME
+        );
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
             Toast.makeText(this, R.string.download_blocked, Toast.LENGTH_SHORT).show()
@@ -275,7 +273,6 @@ public final class MainActivity extends Activity {
 
                 progress.setVisibility(View.GONE);
                 webView.setVisibility(View.VISIBLE);
-                installOperatorReprovisioningGesture(view);
                 if (splashBrand != null) splashBrand.animate().alpha(0f).setDuration(220L).withEndAction(
                     () -> splashBrand.setVisibility(View.GONE)
                 ).start();
@@ -398,23 +395,6 @@ public final class MainActivity extends Activity {
         });
     }
 
-    /** Installs a native-only operator gesture on the top-left brand. */
-    private void installOperatorReprovisioningGesture(WebView view) {
-        String script = "(function(){"
-            + "if(window.__chargeursOperatorGestureInstalled)return;"
-            + "window.__chargeursOperatorGestureInstalled=true;"
-            + "var taps=0,last=0;"
-            + "document.addEventListener('click',function(event){"
-            + "var node=event.target,header=node&&node.closest?node.closest('header'):null;"
-            + "if(!header||!header.textContent||header.textContent.indexOf('Chargeurs.ch')<0)return;"
-            + "var rect=header.getBoundingClientRect();"
-            + "if(event.clientX>rect.left+Math.min(260,rect.width*.45))return;"
-            + "var now=Date.now();taps=now-last<900?taps+1:1;last=now;"
-            + "if(taps>=5){taps=0;try{window.ChargeursNative&&window.ChargeursNative.requestReprovisioning&&window.ChargeursNative.requestReprovisioning();}catch(_){}}"
-            + "},true);return true;})()";
-        view.evaluateJavascript(script, ignored -> { });
-    }
-
     private void recreateWebView() {
         heartbeatPending = false;
         credentialsInjected = false;
@@ -464,22 +444,6 @@ public final class MainActivity extends Activity {
 
     void restartKioskRuntime() {
         runOnUiThread(this::recreateWebView);
-    }
-
-    void requestReprovisioning() {
-        runOnUiThread(() -> {
-            if (isFinishing()) return;
-            new AlertDialog.Builder(this)
-                .setTitle("Activer cette tablette")
-                .setMessage("Ouvrir l’écran d’activation pour associer cette tablette à une borne ? La liaison actuelle ne sera effacée qu’après confirmation.")
-                .setNegativeButton("Annuler", null)
-                .setPositiveButton("Ouvrir l’activation", (dialog, which) -> {
-                    configStore.clear();
-                    startActivity(new Intent(this, ProvisioningActivity.class));
-                    finish();
-                })
-                .show();
-        });
     }
 
     private void registerConnectivityMonitoring() {

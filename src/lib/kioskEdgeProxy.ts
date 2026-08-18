@@ -1,3 +1,5 @@
+import { legacyReconciliationUuid } from "@/lib/kioskReconciliationId";
+
 /**
  * Invoke kiosk-sensitive Edge Functions through the staging application's own
  * HTTPS origin. Some industrial Android WebViews load the Vercel kiosk page
@@ -33,6 +35,7 @@ type KioskProxyPath =
   | "/api/kiosk/customer-options"
   | "/api/kiosk/customer-pairing-create"
   | "/api/kiosk/customer-pairing-status"
+  | "/api/kiosk/ads-clock"
   | "/api/kiosk/ads-playlist";
 
 function customerPairingPayload(path: KioskProxyPath, body: Record<string, unknown>): Record<string, unknown> {
@@ -64,33 +67,112 @@ function notifyKioskAuthenticationRejected(path: KioskProxyPath, status: number)
   }));
 }
 
+function cachedAdvertisingPlaylistFallback(
+  path: KioskProxyPath,
+  body: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (path !== "/api/kiosk/ads-playlist" || body.action !== "playlist") return null;
+  const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
+  if (!stationId) return null;
+  try {
+    const raw = localStorage.getItem(`chargeurs:ads:playlist:${stationId}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as Record<string, unknown>;
+    if (cached.ok !== true || !Array.isArray(cached.campaigns)) return null;
+    // This is strictly the kiosk's already-cached public Ads projection. It does
+    // not bypass server authorization or expose any new campaign/rental data.
+    // A fresh local timestamp is supplied only so the Ads layer enters its
+    // synchronized mode; the dedicated public Ads clock is authoritative.
+    return {
+      ...cached,
+      ok: true,
+      stationId,
+      serverTimeMs: Date.now(),
+      timelineEpochMs: Number(cached.timelineEpochMs ?? 0) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function requestHeaders(headers: Record<string, string>) {
+  return {
+    "Content-Type": "application/json",
+    apikey: PUBLIC_SUPABASE_KEY,
+    Authorization: `Bearer ${PUBLIC_SUPABASE_KEY}`,
+    ...headers,
+  };
+}
+
+async function postKioskRequest(
+  path: KioskProxyPath,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+) {
+  return fetch(path, {
+    method: "POST",
+    cache: "no-store",
+    headers: requestHeaders(headers),
+    body: JSON.stringify(customerPairingPayload(path, body)),
+  });
+}
+
+async function jsonOrNull<T>(response: Response): Promise<T | null> {
+  try {
+    return await response.json() as T;
+  } catch {
+    return null;
+  }
+}
+
+function legacyReconciliationRetryBody(
+  path: KioskProxyPath,
+  body: Record<string, unknown>,
+  status: number,
+  data: unknown,
+): Record<string, unknown> | null {
+  if (path !== "/api/kiosk/reconcile-pending-ejection" || status !== 400 || !data || typeof data !== "object") return null;
+  if ((data as Record<string, unknown>).error !== "INVALID_RECONCILIATION_REQUEST") return null;
+  const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
+  const legacyId = legacyReconciliationUuid(rentalSessionId);
+  return legacyId ? { ...body, rentalSessionId: legacyId } : null;
+}
+
 export async function invokeKioskEdgeProxy<T>(
   path: KioskProxyPath,
   body: Record<string, unknown>,
   headers: Record<string, string>,
 ): Promise<KioskProxyResult<T>> {
   try {
-    const response = await fetch(path, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: PUBLIC_SUPABASE_KEY,
-        Authorization: `Bearer ${PUBLIC_SUPABASE_KEY}`,
-        ...headers,
-      },
-      body: JSON.stringify(customerPairingPayload(path, body)),
-    });
+    let response = await postKioskRequest(path, body, headers);
+    let data = await jsonOrNull<T>(response);
 
-    let data: T | null = null;
-    try {
-      data = await response.json() as T;
-      notifyKioskFlowComplete(path, data);
-    } catch {
-      // A non-JSON gateway error is treated as a safe request failure below.
+    // Staging reconcile-pending-ejection v9 contains a malformed 37-character
+    // UUID validator. Always send the canonical UUID first. Only when that exact
+    // read-only endpoint explicitly rejects the request do we retry once with a
+    // PostgreSQL-equivalent representation. The canonical server fix is in main;
+    // this compatibility path can stay inert until the corrected Edge version is live.
+    const retryBody = legacyReconciliationRetryBody(path, body, response.status, data);
+    if (retryBody) {
+      response = await postKioskRequest(path, retryBody, headers);
+      data = await jsonOrNull<T>(response);
     }
 
+    if (data !== null) notifyKioskFlowComplete(path, data);
     notifyKioskAuthenticationRejected(path, response.status);
+
+    if ((response.status === 401 || response.status === 403) && path === "/api/kiosk/ads-playlist") {
+      const cached = cachedAdvertisingPlaylistFallback(path, body);
+      if (cached) {
+        return {
+          data: cached as T,
+          transportError: false,
+          status: response.status,
+          authError: true,
+        };
+      }
+    }
+
     return {
       data,
       transportError: !response.ok && data === null,

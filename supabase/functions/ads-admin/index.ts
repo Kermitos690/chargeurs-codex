@@ -27,6 +27,17 @@ function safeIso(value: unknown): string | null {
   const time = Date.parse(value);
   return Number.isFinite(time) ? new Date(time).toISOString() : null;
 }
+function safeHttpsUrl(value: unknown): string | null {
+  const raw = safeText(value, 1000);
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 function safeFilename(name: string): string {
   const cleaned = name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "");
   return (cleaned || "media").slice(-120);
@@ -121,10 +132,12 @@ Deno.serve(async (req) => {
       if (!name) return json({ ok: false, error: "MISSING_NAME" }, 400);
       const startsAt = safeIso(body.startsAt);
       const endsAt = safeIso(body.endsAt);
+      const qrUrl = safeHttpsUrl(body.qrUrl);
+      if (safeText(body.qrUrl, 1000) && !qrUrl) return json({ ok: false, error: "INVALID_QR_URL" }, 400);
       if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return json({ ok: false, error: "INVALID_DATE_RANGE" }, 400);
       const { data, error } = await db.from("advertising_campaigns").insert({
         name, status: "draft", display_modes: safeModes(body.displayModes), all_stations: body.allStations !== false,
-        starts_at: startsAt, ends_at: endsAt,
+        starts_at: startsAt, ends_at: endsAt, qr_url: qrUrl,
         idle_after_seconds: Math.min(900, Math.max(10, Math.round(safeNumber(body.idleAfterSeconds, 45)))),
         split_ratio: Math.min(0.5, Math.max(0.2, safeNumber(body.splitRatio, 0.35))),
         priority: Math.min(10000, Math.max(0, Math.round(safeNumber(body.priority, 100)))), created_by: userId,
@@ -144,6 +157,11 @@ Deno.serve(async (req) => {
       if (body.allStations !== undefined) update.all_stations = Boolean(body.allStations);
       if (body.startsAt !== undefined) update.starts_at = safeIso(body.startsAt);
       if (body.endsAt !== undefined) update.ends_at = safeIso(body.endsAt);
+      if (body.qrUrl !== undefined) {
+        const qrUrl = safeHttpsUrl(body.qrUrl);
+        if (safeText(body.qrUrl, 1000) && !qrUrl) return json({ ok: false, error: "INVALID_QR_URL" }, 400);
+        update.qr_url = qrUrl;
+      }
       if (body.idleAfterSeconds !== undefined) update.idle_after_seconds = Math.min(900, Math.max(10, Math.round(safeNumber(body.idleAfterSeconds, 45))));
       if (body.splitRatio !== undefined) update.split_ratio = Math.min(0.5, Math.max(0.2, safeNumber(body.splitRatio, 0.35)));
       if (body.priority !== undefined) update.priority = Math.min(10000, Math.max(0, Math.round(safeNumber(body.priority, 100))));

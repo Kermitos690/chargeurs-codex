@@ -13,7 +13,7 @@ export default function CityPowerbank() {
   useEffect(() => {
     if (!city) return;
     const title = `Location powerbank à ${city.name} | Recharge natel | Chargeurs.ch`;
-    const description = `Louez une batterie externe à ${city.name} pour recharger votre natel, iPhone ou smartphone. Paiement par QR code, 1.50 CHF/h, plafond 18 CHF/jour.`;
+    const description = `Louez une batterie externe à ${city.name} pour recharger votre natel, iPhone ou smartphone. Paiement par QR code, dès 1.90 CHF, jusqu'à 7.90 CHF pour 24 h.`;
     setPageSeo({
       title,
       description,
@@ -61,9 +61,9 @@ export default function CityPowerbank() {
 
         <section className="grid gap-4 py-10 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Zap, title: "1.50 CHF / heure", text: "Facturation par tranche de 30 minutes." },
-            { icon: ShieldCheck, title: "30 CHF de caution", text: "Autorisation sécurisée avant la location." },
-            { icon: BatteryCharging, title: "18 CHF maximum / jour", text: "Le tarif journalier est plafonné." },
+            { icon: Zap, title: "Dès 1.90 CHF", text: "30 min, 2 h, 6 h ou 24 h : le prix est affiché avant paiement." },
+            { icon: ShieldCheck, title: "Prix affiché avant paiement", text: "Aucune caution n'est configurée pour le pilote." },
+            { icon: BatteryCharging, title: "7.90 CHF jusqu'à 24 h", text: "Le prix est plafonné pour la première période de 24 heures." },
             { icon: Smartphone, title: "Pour natels et smartphones", text: "USB-C, Lightning et principaux appareils." },
           ].map((item) => (
             <article key={item.title} className="glass rounded-2xl p-6">
@@ -83,7 +83,7 @@ export default function CityPowerbank() {
           <ol className="mt-4 grid gap-3 text-muted-foreground sm:grid-cols-2">
             <li className="rounded-xl border border-border p-4">1. Trouvez une borne Chargeurs.ch.</li>
             <li className="rounded-xl border border-border p-4">2. Scannez le QR code avec votre natel.</li>
-            <li className="rounded-xl border border-border p-4">3. Autorisez la caution de 30 CHF.</li>
+            <li className="rounded-xl border border-border p-4">3. Confirmez le prix affiché avant paiement.</li>
             <li className="rounded-xl border border-border p-4">4. Rendez la batterie dans une borne compatible.</li>
           </ol>
         </section>

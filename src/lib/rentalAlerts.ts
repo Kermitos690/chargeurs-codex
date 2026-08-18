@@ -25,16 +25,14 @@ export type RentalAlertPlanInput = {
 const MINUTES_PER_HOUR = 60;
 
 export function buildRentalAlertPlan(input: RentalAlertPlanInput): RentalAlert[] {
-  const capMinutes = Math.ceil(
-    (PUBLIC_PRICING.dailyCapChf / PUBLIC_PRICING.hourlyRateChf) * MINUTES_PER_HOUR,
-  );
+  const capMinutes = 24 * MINUTES_PER_HOUR;
   const nonReturnMinutes = (input.nonReturnWarningAfterHours ?? 48) * MINUTES_PER_HOUR;
 
   return [
     {
       kind: "rental_started",
       title: "Location démarrée",
-      message: `Votre location est active. Tarif : ${PUBLIC_PRICING.hourlyRateChf.toFixed(2)} CHF/h, par tranches de ${PUBLIC_PRICING.incrementMinutes} minutes.`,
+      message: `Votre location est active. Tarif : 1.90 CHF jusqu'à 30 min, 3.90 CHF jusqu'à 2 h, 5.90 CHF jusqu'à 6 h et 7.90 CHF jusqu'à 24 h.`,
       triggerAfterMinutes: 0,
       priority: "info",
     },

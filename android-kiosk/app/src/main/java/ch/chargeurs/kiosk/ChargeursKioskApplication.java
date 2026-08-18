@@ -5,30 +5,20 @@ import android.app.Application;
 import com.stripe.stripeterminal.TerminalApplicationDelegate;
 
 /**
- * Application lifecycle owner for Stripe Terminal.
+ * Process owner for the TEST-only Stripe Terminal USB runtime.
  *
- * Stripe Terminal requires TerminalApplicationDelegate.onCreate() to be called
- * from the process Application. This does not initialize payments or connect a
- * reader by itself; it only wires the SDK lifecycle into the dedicated kiosk
- * process. Physical USB and simulated-reader lanes remain TEST-only behind
- * BuildConfig and are intentionally distinct runtimes.
+ * Calling TerminalApplicationDelegate.onCreate wires Stripe's Android lifecycle
+ * before MainActivity creates the WebView bridge. It does not connect a reader,
+ * create a PaymentIntent, or perform any payment by itself.
  */
 public final class ChargeursKioskApplication extends Application {
     private StripeTerminalReaderRuntime terminalRuntime;
-    private StripeTerminalSimulatedRuntime simulatedRuntime;
 
     synchronized StripeTerminalReaderRuntime terminalRuntime(KioskConfig config) {
         if (terminalRuntime == null || !terminalRuntime.matchesStation(config.stationId())) {
             terminalRuntime = new StripeTerminalReaderRuntime(getApplicationContext(), config);
         }
         return terminalRuntime;
-    }
-
-    synchronized StripeTerminalSimulatedRuntime simulatedTerminalRuntime(KioskConfig config) {
-        if (simulatedRuntime == null || !simulatedRuntime.matchesStation(config.stationId())) {
-            simulatedRuntime = new StripeTerminalSimulatedRuntime(getApplicationContext(), config);
-        }
-        return simulatedRuntime;
     }
 
     @Override

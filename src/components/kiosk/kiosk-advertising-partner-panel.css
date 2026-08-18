@@ -1,0 +1,290 @@
+.kiosk-ad-partner-panel {
+  position: absolute;
+  z-index: 8;
+  overflow: hidden;
+  border: 1px solid rgba(207, 250, 254, .24);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(3, 15, 35, .96), rgba(2, 10, 25, .92)),
+    rgba(2, 8, 23, .94);
+  color: #fff;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, .42),
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    0 0 34px rgba(34, 211, 238, .08);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  pointer-events: none;
+}
+
+.kiosk-ad-partner-panel__brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  padding: 8px 12px 7px;
+  color: rgba(236, 254, 255, .96);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .075em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.kiosk-ad-partner-panel__brand span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kiosk-ad-partner-panel__brand b {
+  flex: 0 0 auto;
+  color: #67e8f9;
+  font-size: 12px;
+}
+
+.kiosk-ad-partner-panel__body {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 11px;
+}
+
+.kiosk-ad-partner-panel__qr {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  place-items: center;
+  overflow: hidden;
+  border: 5px solid #fff;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .32);
+}
+
+.kiosk-ad-partner-panel__qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kiosk-ad-partner-panel__copy {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.kiosk-ad-partner-panel__action {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 950;
+  line-height: 1.05;
+}
+
+.kiosk-ad-partner-panel__action svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: #67e8f9;
+}
+
+.kiosk-ad-partner-panel__copy p {
+  margin: 0;
+  color: rgba(226, 232, 240, .84);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.28;
+}
+
+.kiosk-ad-partner-panel__copy p b {
+  color: #fff;
+  font-weight: 900;
+}
+
+.kiosk-ad-partner-panel__copy small {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, .16);
+  border-radius: 999px;
+  background: rgba(34, 211, 238, .07);
+  padding: 5px 8px;
+  color: rgba(207, 250, 254, .94);
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.kiosk-ad-partner-panel__copy small svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.kiosk-ad-partner-panel__copy small span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The enriched panel is the only visible QR owner when active. */
+.kiosk-ad-split[data-has-partner-qr="true"] > .kiosk-ad-qr,
+.kiosk-ad-screensaver[data-has-partner-qr="true"] > .kiosk-ad-qr {
+  display: none !important;
+}
+
+/* Home rail: media owns the upper canvas; partner data owns a real lower dock. */
+.kiosk-ad-partner-panel--split {
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+}
+
+.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media,
+.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media-backdrop {
+  bottom: 158px;
+  height: auto;
+}
+
+.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media-backdrop {
+  filter: blur(22px) saturate(1.08) brightness(.78);
+  opacity: 1;
+}
+
+.kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+  inset: 8px 6px 158px;
+  width: calc(100% - 12px);
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+  filter: drop-shadow(0 16px 34px rgba(0, 0, 0, .26));
+}
+
+.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-muted {
+  bottom: 170px;
+}
+
+/* Fullscreen: preserve the creative while giving the advertiser a proper data card. */
+.kiosk-ad-partner-panel--screensaver {
+  right: clamp(20px, 2.4vw, 34px);
+  bottom: clamp(82px, 11vh, 106px);
+  width: min(370px, 31vw);
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__brand {
+  padding: 10px 14px 9px;
+  font-size: 11px;
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__body {
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__qr {
+  width: 132px;
+  height: 132px;
+  border-width: 6px;
+  border-radius: 17px;
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__action {
+  font-size: 18px;
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__copy p {
+  font-size: 12.5px;
+}
+
+.kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__copy small {
+  font-size: 10.5px;
+  padding: 6px 9px;
+}
+
+.kiosk-ad-screensaver[data-has-partner-qr="true"] .kiosk-ad-screensaver-cta {
+  left: 37%;
+  bottom: 78px;
+  min-width: min(58vw, 650px);
+}
+
+.kiosk-ad-screensaver[data-has-partner-qr="true"] .kiosk-ad-screensaver-partner {
+  display: none;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  .kiosk-ad-partner-panel--split {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .kiosk-ad-partner-panel__body {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px;
+    padding: 9px;
+  }
+
+  .kiosk-ad-partner-panel__qr {
+    width: 92px;
+    height: 92px;
+  }
+
+  .kiosk-ad-partner-panel__action {
+    font-size: 13.5px;
+  }
+
+  .kiosk-ad-partner-panel__copy p {
+    font-size: 10px;
+  }
+
+  .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media,
+  .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media-backdrop {
+    bottom: 142px;
+  }
+
+  .kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+    inset: 6px 5px 142px;
+    width: calc(100% - 10px);
+  }
+
+  .kiosk-ad-partner-panel--screensaver {
+    right: 18px;
+    bottom: 76px;
+    width: min(350px, 32vw);
+  }
+
+  .kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__body {
+    grid-template-columns: 116px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__qr {
+    width: 116px;
+    height: 116px;
+  }
+
+  .kiosk-ad-screensaver[data-has-partner-qr="true"] .kiosk-ad-screensaver-cta {
+    bottom: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-ad-partner-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

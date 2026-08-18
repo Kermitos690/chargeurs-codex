@@ -7,11 +7,10 @@ import android.hardware.usb.UsbManager;
 import org.json.JSONObject;
 
 /**
- * Non-invasive field probe for the target BBPOS WisePad 3.
+ * Non-invasive probe for the DTA21269 BBPOS WisePad 3 USB attachment.
  *
- * This class never requests, revokes or transfers USB permission. It only
- * inspects Android's USB device inventory so the TEST UI can distinguish
- * READER_PRESENT from QR_ONLY without disturbing the supplier POS owner.
+ * The probe never requests/revokes USB permission and never opens the device;
+ * Stripe Terminal remains the only reader transport owner.
  */
 public final class WisePadUsbProbe {
     public static final int TARGET_VENDOR_ID = 0x15A2;

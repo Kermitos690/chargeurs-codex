@@ -24,10 +24,7 @@ public final class KioskConfig {
     }
 
     public String kioskUrl() {
-        return KioskConfigValidator.kioskUrl(
-            KioskConfigValidator.webBaseUrl(baseUrl),
-            stationId
-        );
+        return KioskConfigValidator.kioskUrl(baseUrl, stationId);
     }
 
     public boolean isValid() {

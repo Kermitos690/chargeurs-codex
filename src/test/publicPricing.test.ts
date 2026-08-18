@@ -3,15 +3,18 @@ import { estimateRentalPrice, PUBLIC_PRICING } from "@/lib/publicPricing";
 
 describe("public Chargeurs.ch pricing", () => {
   it("uses 30 minute increments", () => {
-    expect(estimateRentalPrice(1)).toBe(0.75);
-    expect(estimateRentalPrice(30)).toBe(0.75);
-    expect(estimateRentalPrice(31)).toBe(1.5);
-    expect(estimateRentalPrice(60)).toBe(1.5);
+    expect(estimateRentalPrice(1)).toBe(1.9);
+    expect(estimateRentalPrice(30)).toBe(1.9);
+    expect(estimateRentalPrice(31)).toBe(3.9);
+    expect(estimateRentalPrice(120)).toBe(3.9);
+    expect(estimateRentalPrice(121)).toBe(5.9);
+    expect(estimateRentalPrice(360)).toBe(5.9);
+    expect(estimateRentalPrice(361)).toBe(7.9);
   });
 
   it("applies the daily cap", () => {
-    expect(estimateRentalPrice(12 * 60)).toBe(PUBLIC_PRICING.dailyCap);
-    expect(estimateRentalPrice(20 * 60)).toBe(PUBLIC_PRICING.dailyCap);
+    expect(estimateRentalPrice(24 * 60)).toBe(PUBLIC_PRICING.dailyCap);
+    expect(estimateRentalPrice(24 * 60 + 1)).toBe(15.8);
   });
 
   it("keeps the non-return total coherent", () => {

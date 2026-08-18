@@ -55,18 +55,8 @@ public final class KioskConfigValidator {
         }
     }
 
-    public static String webBaseUrl(String enrolledBaseUrl) {
-        String override = normalizeBaseUrl(BuildConfig.KIOSK_WEB_BASE_URL);
-        if (override != null) return override;
-        return normalizeBaseUrl(enrolledBaseUrl);
-    }
-
-    public static boolean isAllowedUrl(String candidate, String enrolledBaseUrl) {
-        return isAllowedUrlForOrigin(candidate, webBaseUrl(enrolledBaseUrl));
-    }
-
-    static boolean isAllowedUrlForOrigin(String candidate, String allowedOrigin) {
-        String normalizedBase = normalizeBaseUrl(allowedOrigin);
+    public static boolean isAllowedUrl(String candidate, String baseUrl) {
+        String normalizedBase = normalizeBaseUrl(baseUrl);
         if (candidate == null || normalizedBase == null) return false;
         try {
             URI candidateUri = new URI(candidate);

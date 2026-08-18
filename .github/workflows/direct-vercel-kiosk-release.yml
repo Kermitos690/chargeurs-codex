@@ -14,6 +14,9 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_abDGf3iEKUokzMPUB580flN0
+      VERCEL_PROJECT_ID: prj_2LXcZhvgaFe1sJp76xX05S3iQazM
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -24,14 +27,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Verify Vercel credentials
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           test -n "$VERCEL_TOKEN" || { echo "VERCEL_TOKEN is not configured"; exit 21; }
           test -n "$VERCEL_ORG_ID" || { echo "VERCEL_ORG_ID is not configured"; exit 22; }
@@ -46,9 +47,6 @@ jobs:
           npm run build
 
       - name: Link Vercel project
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json

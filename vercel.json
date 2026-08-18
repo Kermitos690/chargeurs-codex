@@ -67,6 +67,10 @@
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/customer-pairing-status"
     },
     {
+      "source": "/api/kiosk/ads-clock",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-ads-clock"
+    },
+    {
       "source": "/api/kiosk/ads-playlist",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-ads-playlist"
     },
