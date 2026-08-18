@@ -33,6 +33,8 @@ jobs:
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
       - name: Prepare artifact
