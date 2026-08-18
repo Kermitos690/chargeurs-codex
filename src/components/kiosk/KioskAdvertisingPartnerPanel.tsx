@@ -21,7 +21,7 @@ function extractPartnerName(campaignName: string) {
     .split("/")
     .map((part) => part.trim())
     .filter(Boolean);
-  const candidate = parts.at(-1) || campaignName.trim() || "Partenaire";
+  const candidate = (parts.length ? parts[parts.length - 1] : "") || campaignName.trim() || "Partenaire";
   const clean = candidate
     .replace(/chargeurs\.ch/gi, "")
     .replace(/[×x\-–—]+$/g, "")
