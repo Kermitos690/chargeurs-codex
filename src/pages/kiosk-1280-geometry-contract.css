@@ -28,7 +28,6 @@ html.kiosk-v3 *::after {
   box-sizing: border-box;
 }
 
-/* The footer owns its own 62px strip. Nothing customer-facing can enter it. */
 html.kiosk-v3 .kv3-runtime {
   position: fixed !important;
   inset: 0 !important;
@@ -56,9 +55,6 @@ html.kiosk-v3 .kiosk-system-footer {
   max-height: var(--p0-footer-h) !important;
 }
 
-/* Downstream transaction shell: exactly one header row and one flexible main row.
-   This replaces the old content-box + calc(100%-54px) combination that could add
-   padding on top of an already-100%-high root and physically shift/crop scenes. */
 html.kiosk-v3 .kv3-product-layer > .kiosk-root {
   position: absolute !important;
   inset: 0 !important;
@@ -110,8 +106,6 @@ html.kiosk-v3 .kv3-product-layer > .kiosk-root > main > div {
   max-height: 100% !important;
 }
 
-/* Confirmation scene has a known 506px budget:
-   58 title + 336 card + 84 CTA + 2×14 gaps = 506. */
 html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
   width: min(1080px, calc(100% - 72px)) !important;
   height: var(--p0-pricing-h) !important;
@@ -124,8 +118,6 @@ html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
   overflow: hidden !important;
 }
 
-/* Selection scene already owns its 2×2 content design; this contract only makes
-   its outer physical height deterministic and border-box inclusive. */
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
   height: min(var(--p0-selection-h), 100%) !important;
   min-height: 0 !important;
@@ -134,23 +126,29 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
   overflow: hidden !important;
 }
 
-/* All later transaction stages are confined to the same main workspace. */
+/* Every post-selection transaction stage is confined to the same footer-safe workspace. */
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main > div,
 html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
 html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
 html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
 html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
   width: min(1140px, 100%) !important;
-  height: 100% !important;
+  max-height: 100% !important;
   min-width: 0 !important;
   min-height: 0 !important;
   max-width: 100% !important;
-  max-height: 100% !important;
-  margin: 0 auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
   overflow: hidden !important;
 }
 
-/* The normal native wrapper is synchronously normalized to 1280×720 in index.html.
-   At the proof viewport we remove any ambiguity from dynamic viewport units. */
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+  height: 100% !important;
+}
+
 @media (width: 1280px) and (height: 720px) {
   html.kiosk-v3 .kv3-runtime {
     width: 1280px !important;
