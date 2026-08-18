@@ -26,7 +26,8 @@ const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-golden-home-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-2026-1280x720";
+    root.dataset.kioskHomeGolden = "true";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -77,6 +78,7 @@ export default function KioskPremiumGateV3() {
       sceneObserver.disconnect();
       langObserver.disconnect();
       delete root.dataset.kioskVersion;
+      delete root.dataset.kioskHomeGolden;
       delete root.dataset.kioskScene;
       delete root.dataset.kioskLastScene;
       delete root.dataset.kioskReturnStage;
@@ -89,7 +91,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-ads-restored-golden-home-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-ads-restored-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
       <KioskSystemFooter />
