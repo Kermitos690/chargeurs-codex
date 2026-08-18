@@ -12,6 +12,7 @@ import "./kiosk-p0-physical-proof.css";
 import "./kiosk-p0-confirmation-polish.css";
 import "./kiosk-p0-transaction-readability.css";
 import "./kiosk-1280-geometry-contract.css";
+import "@/components/kiosk/kiosk-advertising-p0-safe.css";
 
 /**
  * Single-owner Premium kiosk runtime.
