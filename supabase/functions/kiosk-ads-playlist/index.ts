@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
         : null;
       const playbackStatus = explicitPlaybackStatus ?? "interrupted";
       const started = body.started === true || (body.started === undefined && durationMs >= IMPRESSION_THRESHOLD_MS);
+      const completed = playbackStatus === "completed";
       if (!campaignId || !assetId || !displayMode) {
         return reply({ ok: false, error: "INVALID_IMPRESSION" }, 400);
       }
@@ -61,17 +62,28 @@ Deno.serve(async (req) => {
       if (itemError) throw itemError;
       if (!item) return reply({ ok: false, error: "CAMPAIGN_ASSET_MISMATCH" }, 409);
 
-      if (!started || durationMs < IMPRESSION_THRESHOLD_MS) {
+      // Some industrial Android WebViews can display a cached/decode-complete
+      // image without emitting React's img onLoad event. The rotation timer still
+      // produces a trustworthy `completed` signal for the current media. Treat a
+      // completed playback as proof that the media was shown, while assigning
+      // only the minimum auditable duration when the start event was missed.
+      // Failed/interrupted media never gain this fallback.
+      const inferredStartFromCompletion = completed && !started;
+      const effectiveStarted = started || inferredStartFromCompletion;
+      const effectiveDurationMs = inferredStartFromCompletion
+        ? Math.max(IMPRESSION_THRESHOLD_MS, durationMs)
+        : durationMs;
+
+      if (!effectiveStarted || effectiveDurationMs < IMPRESSION_THRESHOLD_MS) {
         return reply({
           ok: true,
           recorded: false,
-          reason: !started ? "MEDIA_NOT_STARTED" : "BELOW_IMPRESSION_THRESHOLD",
+          reason: !effectiveStarted ? "MEDIA_NOT_STARTED" : "BELOW_IMPRESSION_THRESHOLD",
           thresholdMs: IMPRESSION_THRESHOLD_MS,
         });
       }
 
-      const completed = playbackStatus === "completed";
-      const startedAt = new Date(Date.now() - durationMs).toISOString();
+      const startedAt = new Date(Date.now() - effectiveDurationMs).toISOString();
       const { error } = await db.from("advertising_impressions").insert({
         campaign_id: campaignId,
         asset_id: assetId,
@@ -80,11 +92,16 @@ Deno.serve(async (req) => {
         display_mode: displayMode,
         started_at: startedAt,
         completed_at: completed ? new Date().toISOString() : null,
-        duration_ms: durationMs,
+        duration_ms: effectiveDurationMs,
         completed,
       });
       if (error) throw error;
-      return reply({ ok: true, recorded: true, thresholdMs: IMPRESSION_THRESHOLD_MS });
+      return reply({
+        ok: true,
+        recorded: true,
+        thresholdMs: IMPRESSION_THRESHOLD_MS,
+        inferredStartFromCompletion,
+      });
     }
 
     const { data: station, error: stationError } = await db.from("stations")
