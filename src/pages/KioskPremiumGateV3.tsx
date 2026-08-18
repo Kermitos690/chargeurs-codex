@@ -3,6 +3,7 @@ import KioskPremiumGateV2 from "./KioskPremiumGateV2";
 import { KioskV3AuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
 import { KioskPaymentTimeoutGuard } from "@/components/kiosk/KioskPaymentTimeoutGuard";
 import { KioskSystemFooter } from "@/components/kiosk/KioskSystemFooter";
+import { KioskAdvertisingSynchronizedLayer } from "@/components/kiosk/KioskAdvertisingSynchronizedLayer";
 import "./kiosk-production-edge-states.css";
 import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
@@ -11,19 +12,19 @@ import "./kiosk-p0-physical-proof.css";
 import "./kiosk-p0-confirmation-polish.css";
 import "./kiosk-p0-transaction-readability.css";
 import "./kiosk-1280-geometry-contract.css";
+import "@/components/kiosk/kiosk-advertising-p0-safe.css";
 
 /**
  * Single-owner Premium kiosk runtime.
  *
- * Scene files own visual presentation. Transaction readability is applied before
- * the final 1280×720 geometry contract, which owns only physical framing so
- * header/content/CTA/footer dimensions cannot drift per deployment. Business
- * journey, pricing, payment and hardware remain untouched.
+ * Rental/product presentation remains the sole transaction owner. Advertising
+ * is mounted as an isolated fail-safe sibling and may only use the explicitly
+ * safe surfaces enforced by KioskAdvertisingLayer.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -62,8 +63,9 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-ads-restored-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
+      <KioskAdvertisingSynchronizedLayer />
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
       <KioskV3AuthGuard />
