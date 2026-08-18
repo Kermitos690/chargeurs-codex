@@ -38,6 +38,7 @@ android {
         // MainActivity.shouldResetWebRuntime() once after installation, clearing
         // obsolete WebView storage/cache before the current kiosk shell loads.
         // RC 119 is the field recovery build for stale pre-reference Home shells.
+        // This comment-only RC proof commit intentionally triggers Android CI.
         versionCode = 119
         versionName = "1.0.19-rc1"
 
