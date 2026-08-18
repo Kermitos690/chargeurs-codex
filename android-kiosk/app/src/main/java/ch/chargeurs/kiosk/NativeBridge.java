@@ -1,8 +1,12 @@
 package ch.chargeurs.kiosk;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.webkit.JavascriptInterface;
 
 public final class NativeBridge {
+    private static final int STRIPE_LOCATION_PERMISSION_REQUEST = 4701;
+
     private final MainActivity activity;
     private final KioskConfig config;
     private final String devicePublicId;
@@ -10,6 +14,7 @@ public final class NativeBridge {
     private final EjectionAuthorizationVerifier authorizationVerifier;
     private final CommandReplayStore replayStore;
     private final LocalAuditLog auditLog;
+    private final StripeTerminalReaderRuntime terminalRuntime;
 
     public NativeBridge(MainActivity activity, KioskConfig config, CabinetController cabinetController) {
         this.activity = activity;
@@ -23,6 +28,17 @@ public final class NativeBridge {
         );
         this.replayStore = new CommandReplayStore(activity);
         this.auditLog = new LocalAuditLog(activity);
+
+        ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
+        this.terminalRuntime = application.terminalRuntime(config);
+        if (BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED
+            && activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(
+                new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                STRIPE_LOCATION_PERMISSION_REQUEST
+            );
+        }
+        this.terminalRuntime.ensureStarted();
     }
 
     @JavascriptInterface
@@ -32,6 +48,9 @@ public final class NativeBridge {
             "deviceId", devicePublicId,
             "stationId", config.stationId(),
             "hardware", cabinetController.status(),
+            "wisePad", WisePadUsbProbe.snapshot(activity),
+            "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
+            "paymentReader", terminalRuntime.snapshot(),
             "vendorCompatibility", VendorAppCompatibility.inspect(activity)
         ).toString();
     }
@@ -49,6 +68,30 @@ public final class NativeBridge {
         return getHardwareIntegrationStatus();
     }
 
+    /** Canonical secret-free payment reader state consumed by the kiosk UI. */
+    @JavascriptInterface
+    public String getPaymentReaderStatus() {
+        terminalRuntime.ensureStarted();
+        terminalRuntime.refreshPaymentState(false);
+        return terminalRuntime.snapshot().toString();
+    }
+
+    /**
+     * Requests a fresh USB discovery/connect attempt. This does not create a
+     * PaymentIntent and never disconnects a healthy connected reader.
+     */
+    @JavascriptInterface
+    public String refreshPaymentReader() {
+        terminalRuntime.requestReconnect();
+        return terminalRuntime.snapshot().toString();
+    }
+
+    /** Starts the TEST Terminal rail only after a customer explicitly selects it. */
+    @JavascriptInterface
+    public String startTerminalPayment(String rentalSessionId) {
+        return terminalRuntime.startTerminalPayment(rentalSessionId).toString();
+    }
+
     /**
      * Metadata-only provider compatibility state for the hidden diagnostics
      * view. It cannot see or take over another app's network/serial session.
@@ -57,6 +100,9 @@ public final class NativeBridge {
     public String getHardwareIntegrationStatus() {
         return JsonObjects.of(
             "cabinet", cabinetController.status(),
+            "wisePad", WisePadUsbProbe.snapshot(activity),
+            "paymentReader", terminalRuntime.snapshot(),
+            "stripeTerminalUsbTestEnabled", BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED,
             "vendorCompatibility", VendorAppCompatibility.inspect(activity),
             "physicalEjectionEnabled", isPhysicalEjectionEnabled()
         ).toString();

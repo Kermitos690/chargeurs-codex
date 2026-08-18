@@ -8,6 +8,12 @@ val enrollmentUrl = providers.gradleProperty("chargeursEnrollmentUrl")
 val kioskPublicBaseUrl = providers.gradleProperty("chargeursKioskPublicBaseUrl")
     .orElse(providers.environmentVariable("CHARGEURS_KIOSK_PUBLIC_BASE_URL"))
     .orElse("")
+val kioskWebBaseUrl = providers.gradleProperty("chargeursKioskWebBaseUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_KIOSK_WEB_BASE_URL"))
+    .orElse("")
+val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBackendUrl")
+    .orElse(providers.environmentVariable("CHARGEURS_STRIPE_TERMINAL_BACKEND_URL"))
+    .orElse("")
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
@@ -19,8 +25,21 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
+// Field STAGING builds must keep a durable signing identity so DTA21269 can be
+// upgraded in place. CI may materialize the known staging key into RUNNER_TEMP;
+// local validation builds can still fall back to Android's debug signer.
+val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
+val stagingStorePassword = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PASSWORD").orElse("")
+val stagingKeyAlias = providers.environmentVariable("CHARGEURS_STAGING_KEY_ALIAS").orElse("")
+val stagingKeyPassword = providers.environmentVariable("CHARGEURS_STAGING_KEY_PASSWORD").orElse("")
+val stagingSigningReady = listOf(
+    stagingStorePath.get(), stagingStorePassword.get(), stagingKeyAlias.get(), stagingKeyPassword.get(),
+).all { it.isNotBlank() } && file(stagingStorePath.get()).isFile
+
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
     .replace("\\", "\\\\")
@@ -34,20 +53,24 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // P0 runtime-refresh RC. Changing the native version deliberately triggers
-        // MainActivity.shouldResetWebRuntime() once after installation, clearing
-        // obsolete WebView storage/cache before the current kiosk shell loads.
-        // RC 119 is the field recovery build for stale pre-reference Home shells.
-        versionCode = 119
-        versionName = "1.0.19-rc1"
+        versionCode = 130
+        versionName = "1.0.30-terminal-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
         buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(kioskPublicBaseUrl.get()))
+        buildConfigField(
+            "String",
+            "KIOSK_WEB_BASE_URL",
+            quotedBuildConfig(kioskWebBaseUrl.get().ifBlank { kioskPublicBaseUrl.get() }),
+        )
+        buildConfigField("String", "STRIPE_TERMINAL_BACKEND_URL", quotedBuildConfig(terminalBackendUrl.get()))
         buildConfigField("String", "EJECTION_PUBLIC_KEY_BASE64", quotedBuildConfig(ejectionPublicKey.get()))
         buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
         buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "false")
         buildConfigField("String", "BUILD_ENVIRONMENT", "\"staging\"")
+        buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "false")
+        buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
     }
@@ -57,6 +80,18 @@ android {
     }
 
     signingConfigs {
+        if (stagingSigningReady) {
+            create("stagingPersistent") {
+                storeFile = file(stagingStorePath.get())
+                storePassword = stagingStorePassword.get()
+                keyAlias = stagingKeyAlias.get()
+                keyPassword = stagingKeyPassword.get()
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
         if (releaseSigningReady) {
             create("release") {
                 storeFile = file(releaseStorePath.get())
@@ -81,21 +116,53 @@ android {
                 "ENROLLMENT_URL",
                 quotedBuildConfig(enrollmentUrl.get().ifBlank { stagingEnrollmentUrl }),
             )
+            buildConfigField(
+                "String",
+                "STRIPE_TERMINAL_BACKEND_URL",
+                quotedBuildConfig(terminalBackendUrl.get().ifBlank { stagingTerminalBackendUrl }),
+            )
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",
                 quotedBuildConfig(kioskPublicBaseUrl.get().ifBlank { stagingKioskPublicBaseUrl }),
+            )
+            buildConfigField(
+                "String",
+                "KIOSK_WEB_BASE_URL",
+                quotedBuildConfig(
+                    kioskWebBaseUrl.get().ifBlank {
+                        kioskPublicBaseUrl.get().ifBlank { stagingKioskPublicBaseUrl }
+                    },
+                ),
             )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
         }
         create("staging") {
             initWith(getByName("debug"))
+            if (stagingSigningReady) signingConfig = signingConfigs.getByName("stagingPersistent")
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
-            // This artifact remains debug-signed and test-only, but exercises
-            // the real dedicated-device lifecycle (HOME alias + boot receiver).
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
+            buildConfigField(
+                "String",
+                "KIOSK_PUBLIC_BASE_URL",
+                quotedBuildConfig(stagingKioskPublicBaseUrl),
+            )
+            buildConfigField(
+                "String",
+                "KIOSK_WEB_BASE_URL",
+                quotedBuildConfig(kioskWebBaseUrl.get().ifBlank { stagingKioskWebBaseUrl }),
+            )
+            buildConfigField(
+                "String",
+                "STRIPE_TERMINAL_BACKEND_URL",
+                quotedBuildConfig(terminalBackendUrl.get().ifBlank { stagingTerminalBackendUrl }),
+            )
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
@@ -131,6 +198,12 @@ android {
 }
 
 dependencies {
+    // DTA21269 remains on the legacy v2 compatibility lane because the modern
+    // SDK's offline crypto initialization was physically incompatible with its
+    // Android 11 Keymaster. 2.23.4 is the final v2 patch and contains Stripe's
+    // USB timeout and long-uptime reader reconnect fixes.
+    implementation("com.stripe:stripeterminal:2.23.4")
+    implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
 }
