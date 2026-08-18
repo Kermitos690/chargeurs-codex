@@ -14,6 +14,8 @@ import "./kiosk-p0-transaction-readability.css";
 import "./kiosk-1280-geometry-contract.css";
 import "@/components/kiosk/kiosk-advertising-p0-safe.css";
 
+const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
+
 /**
  * Single-owner Premium kiosk runtime.
  *
@@ -25,11 +27,13 @@ export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-2026-1280x720";
+    root.dataset.kioskHomeGolden = "true";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
       let scene = "";
-      if (document.querySelector(".kv3-product-layer > .ck2-home")) scene = "home";
+      const home = document.querySelector<HTMLElement>(".kv3-product-layer > .ck2-home");
+      if (home) scene = "home";
       else if (document.querySelector(".kv3-product-layer > .ck2-connected")) scene = "connected";
       else if (document.querySelector(".kv3-product-layer > .ck2-member")) scene = "member";
       else if (document.querySelector(".kv3-product-layer .kiosk-qr-stage")) scene = "payment";
@@ -42,15 +46,39 @@ export default function KioskPremiumGateV3() {
 
       if (scene) root.dataset.kioskScene = scene;
       else delete root.dataset.kioskScene;
+
+      // Physical P0 golden is authoritative for the French Home. Keep the
+      // product state machine in React; this guard only prevents presentation
+      // regressions such as the DTA21269 proof showing the old question copy.
+      if (home && (root.lang || "fr").toLowerCase().startsWith("fr")) {
+        const title = home.querySelector<HTMLElement>(".ck2-home-title");
+        if (title && title.textContent !== GOLDEN_FR_HOME_TITLE) {
+          title.textContent = GOLDEN_FR_HOME_TITLE;
+        }
+        const choices = home.querySelector<HTMLElement>(".ck2-reference-choice-grid");
+        if (choices && choices.getAttribute("aria-label") !== GOLDEN_FR_HOME_TITLE) {
+          choices.setAttribute("aria-label", GOLDEN_FR_HOME_TITLE);
+        }
+      }
     };
 
     syncScene();
     const sceneObserver = new MutationObserver(syncScene);
-    sceneObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    sceneObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+      attributeFilter: ["class"],
+    });
+    const langObserver = new MutationObserver(syncScene);
+    langObserver.observe(root, { attributes: true, attributeFilter: ["lang"] });
 
     return () => {
       sceneObserver.disconnect();
+      langObserver.disconnect();
       delete root.dataset.kioskVersion;
+      delete root.dataset.kioskHomeGolden;
       delete root.dataset.kioskScene;
       delete root.dataset.kioskLastScene;
       delete root.dataset.kioskReturnStage;
