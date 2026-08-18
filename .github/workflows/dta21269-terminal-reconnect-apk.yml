@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "android-kiosk/**"
+      - ".github/workflows/dta21269-terminal-reconnect-apk.yml"
   pull_request:
     paths:
       - "android-kiosk/**"
@@ -16,7 +17,7 @@ permissions:
 jobs:
   build-staging-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v6
 
@@ -26,6 +27,40 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+
+      - name: Restore canonical STAGING signer
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: chargeurs-kiosk-staging-debug-keystore-v1
+
+      - name: Verify canonical STAGING signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Chargeurs STAGING TEST,O=Chargeurs.ch,C=CH" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey | tee /tmp/staging-keytool.txt
+          actual="$(sed -n 's/^[[:space:]]*SHA256: //p' /tmp/staging-keytool.txt | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          expected="b37d4cda37c8623259dfc7aa408328b8f2d04911082c46073b6e1b429ba805a3"
+          test "$actual" = "$expected" || {
+            echo "Canonical STAGING signer mismatch; refusing non-updatable APK" >&2
+            exit 24
+          }
+          printf '%s' "$actual" > /tmp/canonical_staging_signer_sha256
+
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build staging APK
@@ -35,32 +70,105 @@ jobs:
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
+          CHARGEURS_STAGING_KEYSTORE_PATH: /home/runner/.android/debug.keystore
+          CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
+          CHARGEURS_STAGING_KEY_ALIAS: androiddebugkey
+          CHARGEURS_STAGING_KEY_PASSWORD: android
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Prepare artifact
+      - name: Verify reconnect APK contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          gradle="android-kiosk/app/build.gradle.kts"
+          runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
+          backend="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalBackendClient.java"
+          bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
+          manifest="android-kiosk/app/src/main/AndroidManifest.xml"
+
+          test -s "$apk"
+          grep -F 'versionCode = 130' "$gradle"
+          grep -F 'versionName = "1.0.30-terminal-reconnect"' "$gradle"
+          grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' "$gradle"
+          grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
+          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")' "$gradle"
+          grep -F 'SDK_COMPAT = "2.23.4-test-only"' "$runtime"
+          grep -F 'void requestReconnect()' "$runtime"
+          grep -F 'discoveryGeneration' "$runtime"
+          grep -F 'getPaymentReaderStatus()' "$bridge"
+          grep -F 'refreshPaymentReader()' "$bridge"
+          grep -F 'startTerminalPayment(String rentalSessionId)' "$bridge"
+          grep -F 'static final class ConnectionTokenResult' "$backend"
+          grep -F 'static final class PaymentIntentResult' "$backend"
+          grep -F 'static final class PaymentStateResult' "$backend"
+          grep -F 'android:name=".ChargeursKioskApplication"' "$manifest"
+          grep -F 'android.permission.ACCESS_FINE_LOCATION' "$manifest"
+
+          aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          test -n "$aapt_path"
+          test -n "$apksigner_path"
+
+          badging="$($aapt_path dump badging "$apk")"
+          printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='130'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.30-terminal-reconnect-staging'"
+
+          "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
+          cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
+          canonical_digest="$(cat /tmp/canonical_staging_signer_sha256)"
+          test "$cert_digest" = "$canonical_digest"
+          printf '%s' "$cert_digest" > /tmp/apk_signer_sha256
+
+          : > /tmp/dex_strings.txt
+          while IFS= read -r dex; do
+            unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt
+          done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
+          grep -F 'StripeTerminalReaderRuntime' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
+          grep -F 'WisePadUsbProbe' /tmp/dex_strings.txt
+          grep -F 'ChargeursKioskApplication' /tmp/dex_strings.txt
+          grep -F 'stripe-terminal-backend' /tmp/dex_strings.txt
+
+      - name: Prepare artifact and provenance
         id: artifact
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
-          test -s "$apk"
-          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
-          test -n "$apksigner_path"
-          "$apksigner_path" verify --verbose "$apk"
-          aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
-          test -n "$aapt_path"
-          version_name="$($aapt_path dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
-          test -n "$version_name"
           mkdir -p dist
-          artifact_name="Chargeurs_CH_Kiosk_${version_name}.apk"
-          cp "$apk" "dist/$artifact_name"
-          sha256sum "dist/$artifact_name" > dist/SHA256SUMS.txt
-          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+          name="Chargeurs_CH_Kiosk_1.0.30-terminal-reconnect-staging.apk"
+          cp "$apk" "dist/$name"
+          apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
+          signer_sha="$(cat /tmp/apk_signer_sha256)"
+          printf '%s  %s\n' "$apk_sha" "$name" > dist/SHA256SUMS.txt
+          cat > dist/PROVENANCE.txt <<EOF
+          sha=$GITHUB_SHA
+          package=ch.chargeurs.kiosk.staging
+          versionCode=130
+          versionName=1.0.30-terminal-reconnect-staging
+          environment=STAGING_TEST
+          frontend=https://chargeurs-ch-staging.vercel.app
+          stripeTerminalSdk=2.23.4
+          readerMode=USB_WISEPAD_3
+          simulatedReader=false
+          expectedReader=tmr_GnorJgwc2oWVq3
+          expectedLocation=tml_GnoORA0w9yjeut
+          physicalEjectionEnabled=false
+          paymentMode=TEST_ONLY
+          apkSha256=$apk_sha
+          signerCertificateSha256=$signer_sha
+          physicalReaderProofRequired=true
+          EOF
+          echo "artifact_name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: chargeurs-kiosk-${{ steps.artifact.outputs.artifact_name }}
+          name: dta21269-${{ steps.artifact.outputs.artifact_name }}
           retention-days: 7
           if-no-files-found: error
           path: dist/*
