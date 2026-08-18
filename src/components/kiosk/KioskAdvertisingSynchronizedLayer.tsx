@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { KioskAdvertisingLayer } from "./KioskAdvertisingLayer";
+import { KioskAdvertisingPartnerBridge } from "./KioskAdvertisingPartnerBridge";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import {
   estimateNetworkClockSample,
@@ -67,6 +68,10 @@ function warmCachedAdvertisingMedia() {
  * authoritative Ads clock for every kiosk, including a kiosk temporarily using
  * its cached playlist. Media are also warmed ahead of boundaries so Android
  * decode latency does not become visible as a one-second slide offset.
+ *
+ * The partner QR/data bridge is also mounted here, but under its own error
+ * boundary. A QR/data regression can disable itself without ever propagating to
+ * the kiosk product shell.
  *
  * This wrapper owns no rental, payment, return, inventory or hardware state.
  */
@@ -140,5 +145,10 @@ export function KioskAdvertisingSynchronizedLayer() {
     };
   }, [synchronizeClock]);
 
-  return <KioskAdvertisingLayer />;
+  return (
+    <>
+      <KioskAdvertisingLayer />
+      <KioskAdvertisingPartnerBridge />
+    </>
+  );
 }
