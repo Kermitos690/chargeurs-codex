@@ -43,9 +43,11 @@ const COPY = {
     qrOnlySub: "Préparation du paiement sur votre téléphone…",
     checking: "Connexion au terminal…",
     checkingSub: "Nous vérifions le lecteur de cette borne avant de vous proposer le paiement.",
+    slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
     processing: "Paiement sans contact en cours",
     processingSub: "Suivez les instructions affichées sur le terminal.",
     retry: "Réessayer le lecteur",
+    chooseQr: "Payer par QR code",
   },
   en: {
     eyebrow: "SECURE PAYMENT",
@@ -58,9 +60,11 @@ const COPY = {
     qrOnlySub: "Preparing payment on your phone…",
     checking: "Connecting payment reader…",
     checkingSub: "We are checking this kiosk reader before showing the payment options.",
+    slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
     processing: "Contactless payment in progress",
     processingSub: "Follow the instructions shown on the payment reader.",
     retry: "Retry reader",
+    chooseQr: "Pay by QR code",
   },
   de: {
     eyebrow: "SICHERE ZAHLUNG",
@@ -73,9 +77,11 @@ const COPY = {
     qrOnlySub: "Zahlung auf dem Smartphone wird vorbereitet…",
     checking: "Zahlungsterminal wird verbunden…",
     checkingSub: "Das Terminal dieser Station wird geprüft, bevor die Zahlungsarten angezeigt werden.",
+    slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst die QR-Zahlung.",
     processing: "Kontaktlose Zahlung läuft",
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
     retry: "Leser erneut verbinden",
+    chooseQr: "Per QR-Code bezahlen",
   },
 } as const;
 
@@ -172,26 +178,25 @@ export function KioskPaymentRailStage(props: Props) {
   };
 
   const readerState = model.reader.state;
-  const waitingForReader = nativeBridge
+  const transientReader = nativeBridge
     && model.reader.capability === "QR_ONLY"
     && TRANSIENT_READER_STATES.has(readerState)
-    && !readerGraceExpired
     && !inProgress;
+  const waitingForReader = transientReader && !readerGraceExpired;
+  const readerNeedsDecision = transientReader && readerGraceExpired;
   const confirmedQrOnly = !nativeBridge
     || readerState === "ABSENT"
-    || readerState === "ERROR"
-    || readerGraceExpired;
+    || readerState === "ERROR";
 
   /*
-   * Important field invariant:
-   * - a kiosk with no payment-reader bridge, an explicitly ABSENT/ERROR reader,
-   *   or a reader that never becomes usable inside the bounded grace window
-   *   goes directly to QR;
-   * - a kiosk with a real native reader bridge gets time to complete Stripe USB
-   *   discovery/connect before QR can claim the session.
-   *
-   * This prevents DTA21269 from losing the Terminal rail during the first
-   * DISCOVERING/CONNECTING frames, while DTA21277/DTA22032 still remain QR-only.
+   * Payment-rail invariant:
+   * - only an absent bridge or an explicitly ABSENT/ERROR reader may trigger
+   *   automatic QR fallback;
+   * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING never claim QR merely
+   *   because the bounded reader grace elapsed;
+   * - after the grace window, the customer receives an explicit choice to retry
+   *   the reader or intentionally choose QR. This leaves the rental rail
+   *   UNCLAIMED while the physical WisePad is still recovering.
    */
   useEffect(() => {
     if (
@@ -235,6 +240,7 @@ export function KioskPaymentRailStage(props: Props) {
   const retryReader = () => {
     setNativeError(null);
     setReaderGraceExpired(false);
+    qrAutoStartedRef.current = false;
     setReaderProbeGeneration((generation) => generation + 1);
     const next = parseProjection(native?.refreshPaymentReader?.());
     if (next) setReader(next);
@@ -257,6 +263,20 @@ export function KioskPaymentRailStage(props: Props) {
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.checking}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.checkingSub}</p>
       <Loader2 className="h-7 w-7 animate-spin text-primary" />
+    </div>;
+  }
+
+  if (readerNeedsDecision) {
+    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-6 px-5 text-center" data-payment-capability="READER_RETRY_OR_QR" data-reader-state={readerState} data-native-payment-bridge="true">
+      <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
+      <CreditCard className="h-16 w-16 text-cyan-100" />
+      <h2 className="font-display text-4xl font-black tracking-tight">{copy.checking}</h2>
+      <p className="max-w-3xl text-lg font-medium text-muted-foreground">{copy.slow}</p>
+      <div className="grid w-full max-w-3xl grid-cols-2 gap-4">
+        <Button variant="outline" onClick={retryReader} className="h-16 gap-3 rounded-2xl text-base font-black"><RefreshCw className="h-5 w-5" />{copy.retry}</Button>
+        <Button onClick={chooseQr} disabled={!model.payment.canChooseQr} className="h-16 gap-3 rounded-2xl text-base font-black"><QrCode className="h-5 w-5" />{copy.chooseQr}</Button>
+      </div>
+      {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}
     </div>;
   }
 
