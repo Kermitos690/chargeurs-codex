@@ -23,7 +23,7 @@ import "./kiosk-1280-geometry-contract.css";
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-transaction-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -35,6 +35,7 @@ export default function KioskPremiumGateV3() {
       else if (document.querySelector(".kv3-product-layer .kiosk-payment-rail-stage")) scene = "payment-choice";
       else if (document.querySelector(".kv3-product-layer .kiosk-pricing-stage")) scene = "pricing";
       else if (document.querySelector(".kv3-product-layer .kiosk-idle-stage")) scene = "selection";
+      else if (document.querySelector(".kv3-product-layer .h-20.w-20.animate-spin.text-primary")) scene = "starting";
       else if (document.querySelector(".kv3-product-layer .kiosk-ready-stage")) scene = "success";
       else if (document.querySelector(".kv3-product-layer .kiosk-release-stage")) scene = "release";
 
@@ -61,7 +62,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
