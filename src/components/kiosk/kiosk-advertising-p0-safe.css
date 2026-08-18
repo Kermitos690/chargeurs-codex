@@ -6,24 +6,45 @@
  * Fullscreen screensaver media remains isolated above the complete kiosk.
  */
 html.kiosk-v3[data-kiosk-ads-split="true"] {
-  --p0-ads-rail-width: min(32vw, 360px);
+  /* The physical Home uses a deliberately narrow portrait advertising notch.
+   * Active campaigns can still provide their configured split ratio, but the
+   * P0 shell must not inflate a 25% campaign back into the old 32% landscape-ish
+   * rail. At 1280 px this resolves to 320 px. */
+  --p0-ads-rail-width: min(25vw, 320px);
 }
 
 html.kiosk-v3 .kiosk-ad-split {
   top: 84px !important;
   right: 0 !important;
   bottom: 62px !important;
-  width: var(--p0-ads-rail-width, min(32vw, 360px)) !important;
-  min-width: 300px !important;
-  max-width: 360px !important;
+  width: var(--p0-ads-rail-width, min(25vw, 320px)) !important;
+  min-width: 280px !important;
+  max-width: 320px !important;
   border-radius: 24px 0 0 0 !important;
+}
+
+/*
+ * Landscape source images are intentionally cropped into the portrait Home
+ * notch. The former adaptive/contain treatment preserved the whole 16:9 image
+ * as a horizontal strip and made the advertising slot read as landscape.
+ * Screensaver rendering is untouched.
+ */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media {
+  object-fit: cover !important;
+  object-position: center center !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media-backdrop {
+  display: none !important;
 }
 
 /* Current approved neon Home reserves a real rail instead of letting Ads float
  * over the customer cards. The header and shared footer keep their full width. */
 html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
   left: 34px !important;
-  width: calc(100vw - var(--p0-ads-rail-width, min(32vw, 360px)) - 92px) !important;
+  width: calc(100vw - var(--p0-ads-rail-width, min(25vw, 320px)) - 92px) !important;
   max-width: none !important;
   transform: none !important;
 }
@@ -45,16 +66,16 @@ html.kiosk-v3 .kiosk-system-footer {
 
 @media (max-width: 1100px), (max-height: 720px) {
   html.kiosk-v3[data-kiosk-ads-split="true"] {
-    --p0-ads-rail-width: min(31vw, 340px);
+    --p0-ads-rail-width: min(25vw, 320px);
   }
 
   html.kiosk-v3 .kiosk-ad-split {
-    min-width: 284px !important;
-    max-width: 340px !important;
+    min-width: 280px !important;
+    max-width: 320px !important;
   }
 
   html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
     left: 28px !important;
-    width: calc(100vw - var(--p0-ads-rail-width, min(31vw, 340px)) - 76px) !important;
+    width: calc(100vw - var(--p0-ads-rail-width, min(25vw, 320px)) - 76px) !important;
   }
 }
