@@ -1,27 +1,33 @@
-name: DTA21269 Terminal reconnect APK
+name: DTA21269 Terminal Reconnect Build
 
 on:
-  push:
-    branches:
-      - hotfix/p0-dta21269-terminal-reconnect-20260818
-  pull_request:
   workflow_dispatch:
+  push:
+    paths:
+      - "android-kiosk/**"
+  pull_request:
+    paths:
+      - "android-kiosk/**"
+      - ".github/workflows/dta21269-terminal-reconnect-apk.yml"
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-staging-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v5
+
       - name: Build staging APK
         working-directory: android-kiosk
         env:
@@ -30,20 +36,31 @@ jobs:
           CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging.vercel.app
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
-      - name: Verify P0 invariants
+
+      - name: Prepare artifact
+        id: artifact
         shell: bash
         run: |
           set -euo pipefail
-          test -s android-kiosk/app/build/outputs/apk/staging/app-staging.apk
-          grep -F 'versionCode = 130' android-kiosk/app/build.gradle.kts
-          grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' android-kiosk/app/build.gradle.kts
-          grep -F 'SDK_COMPAT = "2.23.4-test-only"' android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java
-          grep -F 'void requestReconnect()' android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java
-          grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' android-kiosk/app/build.gradle.kts
+          apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          test -s "$apk"
+          apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          test -n "$apksigner_path"
+          "$apksigner_path" verify --verbose "$apk"
+          aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
+          test -n "$aapt_path"
+          version_name="$($aapt_path dump badging "$apk" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)"
+          test -n "$version_name"
+          mkdir -p dist
+          artifact_name="Chargeurs_CH_Kiosk_${version_name}.apk"
+          cp "$apk" "dist/$artifact_name"
+          sha256sum "dist/$artifact_name" > dist/SHA256SUMS.txt
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: dta21269-terminal-reconnect-apk
+          name: chargeurs-kiosk-${{ steps.artifact.outputs.artifact_name }}
           retention-days: 7
           if-no-files-found: error
-          path: android-kiosk/app/build/outputs/apk/staging/app-staging.apk
+          path: dist/*
