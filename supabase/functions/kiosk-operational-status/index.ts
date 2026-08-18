@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
+const PILOT_STATION_ID = "DTA21269";
+const PILOT_FLOW_QUARANTINE = "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
@@ -43,16 +46,36 @@ Deno.serve(async (req) => {
   if (!device.active || device.token_revoked || expired) return json({ ok: false, error: "KIOSK_DEVICE_DISABLED" }, 403);
 
   const [{ data: station }, { data: quarantine }] = await Promise.all([
-    db.from("stations").select("station_id,status,online,rentable_count,returnable_count,total_count,last_sync_at").eq("station_id", stationId).maybeSingle(),
-    db.from("station_hardware_quarantines").select("active,reason_code,created_at,source_rental_session_id").eq("station_id", stationId).eq("active", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("stations")
+      .select("station_id,status,online,rentable_count,returnable_count,total_count,last_sync_at,environment,is_pilot,qualification_mode")
+      .eq("station_id", stationId)
+      .maybeSingle(),
+    db.from("station_hardware_quarantines")
+      .select("active,reason_code,created_at,source_rental_session_id")
+      .eq("station_id", stationId)
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
-  const blocked = Boolean(quarantine?.active);
+  const hardwareBlocked = Boolean(quarantine?.active);
+  const pilotFlowAllowed = Boolean(
+    hardwareBlocked &&
+    stationId === PILOT_STATION_ID &&
+    station?.environment === "staging" &&
+    station?.is_pilot === true &&
+    quarantine?.reason_code === PILOT_FLOW_QUARANTINE,
+  );
+  const blocked = hardwareBlocked && !pilotFlowAllowed;
+
   return json({
     ok: true,
     station: station ?? null,
     blocked,
-    reason_code: blocked ? quarantine?.reason_code ?? "HARDWARE_QUARANTINE" : null,
-    since: blocked ? quarantine?.created_at ?? null : null,
+    hardware_blocked: hardwareBlocked,
+    pilot_flow_allowed: pilotFlowAllowed,
+    reason_code: hardwareBlocked ? quarantine?.reason_code ?? "HARDWARE_QUARANTINE" : null,
+    since: hardwareBlocked ? quarantine?.created_at ?? null : null,
   });
 });

@@ -10,7 +10,9 @@
 //    atomic rental + slot reservation;
 //  - a safe four-slot baseline is persisted atomically for post-ejection delta
 //    reconciliation;
-//  - an active hardware quarantine refuses new rentals before payment.
+//  - active hardware quarantine normally refuses new rentals before payment;
+//  - DTA21269 may traverse the staging pilot journey under one exact supplier
+//    qualification quarantine. The quarantine remains active for release.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
 import { createRentalPublicCode } from "../_shared/rentalPublicCode.ts";
@@ -21,6 +23,8 @@ import { safeReleaseSnapshot } from "../_shared/releaseObservation.ts";
 const RATE_MAX = 6;
 const RATE_WINDOW_SEC = 60;
 const SESSION_TTL_MIN = 20;
+const PILOT_FLOW_STATION_ID = "DTA21269";
+const PILOT_FLOW_QUARANTINE = "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
 
 const rentalCorsHeaders = {
   ...corsHeaders,
@@ -116,7 +120,6 @@ Deno.serve(async (req) => {
 
     const { data: station } = await db.from("stations").select("*").eq("station_id", stationId).maybeSingle();
     if (!station) return refuse(404, "STATION_NOT_FOUND", { station_id: stationId });
-    if (station.status === "maintenance") return refuse(409, "STATION_MAINTENANCE", { station_id: stationId });
 
     const { data: quarantine, error: quarantineError } = await db.from("station_hardware_quarantines")
       .select("reason_code")
@@ -124,10 +127,33 @@ Deno.serve(async (req) => {
       .eq("active", true)
       .maybeSingle();
     if (quarantineError) throw quarantineError;
-    if (quarantine) {
+
+    const pilotFlowAllowed = Boolean(
+      stationId === PILOT_FLOW_STATION_ID &&
+      station.environment === "staging" &&
+      station.is_pilot === true &&
+      quarantine?.reason_code === PILOT_FLOW_QUARANTINE,
+    );
+
+    if (station.status === "maintenance" && !pilotFlowAllowed) {
+      return refuse(409, "STATION_MAINTENANCE", { station_id: stationId });
+    }
+    if (quarantine && !pilotFlowAllowed) {
       return refuse(409, "STATION_HARDWARE_QUARANTINED", {
         station_id: stationId,
         quarantine_reason: quarantine.reason_code,
+      });
+    }
+    if (pilotFlowAllowed) {
+      await auditLog(db, {
+        action: "kiosk.pilot_flow.quarantine_traversal",
+        target: stationId,
+        data: {
+          device_id: device.id,
+          quarantine_reason: quarantine?.reason_code,
+          correlation_id: correlationId,
+          hardware_quarantine_retained: true,
+        },
       });
     }
 
@@ -269,10 +295,12 @@ Deno.serve(async (req) => {
         release_baseline_slot_count: liveSnapshot.slots.length,
         pricing_snapshot_hash: hash,
         duration_ms: Date.now() - startedAt,
+        pilot_flow_allowed: pilotFlowAllowed,
+        hardware_quarantine_retained: Boolean(quarantine),
       },
     });
 
-    return json({ ok: true, session, snapshot: snap, customerSegment });
+    return json({ ok: true, session, snapshot: snap, customerSegment, pilotFlowAllowed });
   } catch (e) {
     await auditLog(db, {
       action: "kiosk.rental.error",
