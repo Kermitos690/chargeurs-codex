@@ -138,6 +138,12 @@
   white-space: nowrap;
 }
 
+/* The enriched panel is the only visible QR owner when active. */
+.kiosk-ad-split[data-has-partner-qr="true"] > .kiosk-ad-qr,
+.kiosk-ad-screensaver[data-has-partner-qr="true"] > .kiosk-ad-qr {
+  display: none !important;
+}
+
 /* Home rail: media owns the upper canvas; partner data owns a real lower dock. */
 .kiosk-ad-partner-panel--split {
   left: 12px;
