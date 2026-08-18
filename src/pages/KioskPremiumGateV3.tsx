@@ -8,6 +8,7 @@ import "./kiosk-pricing-explainer.css";
 import "./kiosk-home-reference-lock.css";
 import "./kiosk-p0-core-scenes.css";
 import "./kiosk-p0-physical-proof.css";
+import "./kiosk-p0-confirmation-proof.css";
 
 /**
  * Single-owner Premium kiosk runtime.
@@ -16,11 +17,10 @@ import "./kiosk-p0-physical-proof.css";
  * - Home reference: kiosk-home-reference-lock.css + the deliberately scoped
  *   critical-scene refinements in kiosk-p0-core-scenes.css.
  * - Connected member / pricing / payment: kiosk-p0-core-scenes.css.
- * - kiosk-p0-physical-proof.css is the last-imported field-proof authority for
- *   regressions observed only on the physical 1280×720 kiosk: duplicate legacy
- *   Home footer, standing-distance Home readability, right-side ambience and the
- *   battery-selection geometry. Its rules must be folded back into the owners
- *   after physical validation.
+ * - kiosk-p0-physical-proof.css is the field-proof authority for physical
+ *   Home/selection regressions already proven on DTA21277.
+ * - kiosk-p0-confirmation-proof.css is temporarily scoped only to the physical
+ *   rental-confirmation (`pricing`) scene and must be folded back after PASS.
  * - One shared operational footer owns payment trust, backend commercial values,
  *   station identity, local clock and connectivity state.
  *
@@ -31,7 +31,7 @@ import "./kiosk-p0-physical-proof.css";
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-selection-physical-proof-2026-1280x720";
+    root.dataset.kioskVersion = "p0-confirmation-physical-proof-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -69,7 +69,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-selection-physical-proof-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-confirmation-physical-proof-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
