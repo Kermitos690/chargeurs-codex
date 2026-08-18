@@ -120,7 +120,8 @@ const partnerBoundaryMarkers = [
   'static getDerivedStateFromError',
   '<AdvertisingPartnerBoundary>',
   '<KioskAdvertisingPartnerBridgeRuntime />',
-  'data.hasPartnerQr',
+  'dataset.hasPartnerQr',
+  'Chargeurs partner QR bridge disabled after async Ads error',
 ];
 for (const marker of partnerBoundaryMarkers) {
   if (!adsPartnerBridge.includes(marker)) failures.push(`missing partner Ads isolation marker: ${marker}`);
