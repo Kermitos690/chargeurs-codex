@@ -1,0 +1,60 @@
+/*
+ * Advertising / kiosk P0 integration contract.
+ *
+ * Advertising is isolated from the transaction journey. Split media may only
+ * occupy a reserved Home rail and must never cover the shared system footer.
+ * Fullscreen screensaver media remains isolated above the complete kiosk.
+ */
+html.kiosk-v3[data-kiosk-ads-split="true"] {
+  --p0-ads-rail-width: min(32vw, 360px);
+}
+
+html.kiosk-v3 .kiosk-ad-split {
+  top: 84px !important;
+  right: 0 !important;
+  bottom: 62px !important;
+  width: var(--p0-ads-rail-width, min(32vw, 360px)) !important;
+  min-width: 300px !important;
+  max-width: 360px !important;
+  border-radius: 24px 0 0 0 !important;
+}
+
+/* Current approved neon Home reserves a real rail instead of letting Ads float
+ * over the customer cards. The header and shared footer keep their full width. */
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+  left: 34px !important;
+  width: calc(100vw - var(--p0-ads-rail-width, min(32vw, 360px)) - 92px) !important;
+  max-width: none !important;
+  transform: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home::after,
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-ambient-b {
+  opacity: 0 !important;
+}
+
+/* Ads are never allowed to alter or overlap transaction scenes. */
+html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-ad-split {
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer {
+  position: fixed !important;
+  z-index: 210 !important;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  html.kiosk-v3[data-kiosk-ads-split="true"] {
+    --p0-ads-rail-width: min(31vw, 340px);
+  }
+
+  html.kiosk-v3 .kiosk-ad-split {
+    min-width: 284px !important;
+    max-width: 340px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+    left: 28px !important;
+    width: calc(100vw - var(--p0-ads-rail-width, min(31vw, 340px)) - 76px) !important;
+  }
+}
