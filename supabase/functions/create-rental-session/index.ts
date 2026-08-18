@@ -194,6 +194,53 @@ Deno.serve(async (req) => {
       });
     }
 
+    const selectedBatteryId = typeof selectedSlot.battery_id === "string" ? selectedSlot.battery_id.trim() : "";
+    if (!selectedBatteryId) {
+      return refuse(409, "BATTERY_ID_MISSING", { station_id: stationId, slot_num: selectedSlotNum });
+    }
+
+    const [{ data: operationalBattery, error: operationalBatteryError }, { data: identifier, error: identifierError }] = await Promise.all([
+      db.from("batteries")
+        .select("battery_id,quarantine_reason")
+        .eq("battery_id", selectedBatteryId)
+        .maybeSingle(),
+      db.from("inventory_asset_identifiers")
+        .select("asset_id")
+        .eq("identifier_value", selectedBatteryId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (operationalBatteryError) throw operationalBatteryError;
+    if (identifierError) throw identifierError;
+
+    let inventoryQuarantineReason: string | null = null;
+    if (identifier?.asset_id) {
+      const { data: inventoryQuarantine, error: inventoryQuarantineError } = await db.from("inventory_quarantine_cases")
+        .select("source_reason_code")
+        .eq("asset_id", identifier.asset_id)
+        .eq("status", "active")
+        .order("opened_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (inventoryQuarantineError) throw inventoryQuarantineError;
+      inventoryQuarantineReason = typeof inventoryQuarantine?.source_reason_code === "string"
+        ? inventoryQuarantine.source_reason_code.trim()
+        : null;
+    }
+
+    const operationalQuarantineReason = typeof operationalBattery?.quarantine_reason === "string"
+      ? operationalBattery.quarantine_reason.trim()
+      : null;
+    const batteryQuarantineReason = operationalQuarantineReason || inventoryQuarantineReason;
+    if (batteryQuarantineReason) {
+      return refuse(409, "BATTERY_QUARANTINED", {
+        station_id: stationId,
+        slot_num: selectedSlotNum,
+        battery_id: selectedBatteryId,
+        quarantine_reason: batteryQuarantineReason,
+      });
+    }
+
     const { data: snapshot, error: priceErr } = await db.rpc("compute_customer_pricing_snapshot", {
       p_station: stationId,
       p_segment: customerSegment,
