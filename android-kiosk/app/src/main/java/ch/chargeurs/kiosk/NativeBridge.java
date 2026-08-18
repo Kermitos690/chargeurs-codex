@@ -1,8 +1,12 @@
 package ch.chargeurs.kiosk;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.webkit.JavascriptInterface;
 
 public final class NativeBridge {
+    private static final int STRIPE_LOCATION_PERMISSION_REQUEST = 4701;
+
     private final MainActivity activity;
     private final KioskConfig config;
     private final String devicePublicId;
@@ -27,6 +31,13 @@ public final class NativeBridge {
 
         ChargeursKioskApplication application = (ChargeursKioskApplication) activity.getApplication();
         this.terminalRuntime = application.terminalRuntime(config);
+        if (BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED
+            && activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(
+                new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                STRIPE_LOCATION_PERMISSION_REQUEST
+            );
+        }
         this.terminalRuntime.ensureStarted();
     }
 
