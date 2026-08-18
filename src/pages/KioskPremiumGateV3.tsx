@@ -9,19 +9,21 @@ import "./kiosk-home-reference-lock.css";
 import "./kiosk-p0-core-scenes.css";
 import "./kiosk-p0-physical-proof.css";
 import "./kiosk-p0-confirmation-polish.css";
+import "./kiosk-p0-transaction-readability.css";
 import "./kiosk-1280-geometry-contract.css";
 
 /**
  * Single-owner Premium kiosk runtime.
  *
- * Scene files own visual presentation. The final 1280×720 geometry contract owns
- * only physical framing so header/content/CTA/footer dimensions cannot drift per
- * deployment. Business journey, pricing, payment and hardware remain untouched.
+ * Scene files own visual presentation. Transaction readability is applied before
+ * the final 1280×720 geometry contract, which owns only physical framing so
+ * header/content/CTA/footer dimensions cannot drift per deployment. Business
+ * journey, pricing, payment and hardware remain untouched.
  */
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-geometry-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-2026-1280x720";
     root.classList.add("kiosk-v3");
 
     const syncScene = () => {
@@ -59,7 +61,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-geometry-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskSystemFooter />
       <KioskPaymentTimeoutGuard />
