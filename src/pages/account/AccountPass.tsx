@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
   CalendarClock,
@@ -257,10 +258,13 @@ export default function AccountPass() {
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
           <p className="mt-2 text-sm text-muted-foreground">
             {providerStatus === "issued"
-              ? "Le backend indique qu’un objet Wallet a été émis."
-              : "Le modèle de Pass est prêt, mais aucun bouton d’ajout n’est affiché tant que les certificats et identifiants plateforme nécessaires ne sont pas configurés côté serveur."}
+              ? "Le backend indique qu’un pass Apple Wallet a été émis pour ce compte."
+              : "Le Wallet Sandbox vérifie la configuration Apple avant toute émission et refuse tout faux succès si un certificat manque."}
           </p>
           {state.walletPass ? <p className="mt-4 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
+          <Button asChild variant="outline" className="mt-4 rounded-full">
+            <Link to="/compte/wallet-test"><WalletCards className="mr-2 h-4 w-4" />Tester Apple Wallet</Link>
+          </Button>
         </article>
 
         <article className="glass rounded-3xl p-6">

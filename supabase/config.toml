@@ -80,3 +80,13 @@ verify_jwt = false
 verify_jwt = true
 [functions.kiosk-ads-playlist]
 verify_jwt = false
+[functions.apple-wallet-pass]
+# Public status + short-lived download URL are handled in-function; pass issuance
+# itself still validates the authenticated Chargeurs.ch user explicitly.
+verify_jwt = false
+[functions.apple-wallet-sync]
+verify_jwt = true
+[functions.apple-wallet-web-service]
+# Apple Wallet devices authenticate with Apple's ApplePass protocol, not a
+# Supabase JWT, so gateway JWT verification must remain disabled here.
+verify_jwt = false

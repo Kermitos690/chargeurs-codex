@@ -11,8 +11,10 @@ import { kioskAwareFetch } from '@/lib/kioskFetch';
 const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
 const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY;
+// Exported public endpoint metadata is also used by the Apple Wallet sandbox
+// for its unauthenticated configuration-health probe; no private key is exposed.
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL;
+export const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY;
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
 // Import the supabase client like this:

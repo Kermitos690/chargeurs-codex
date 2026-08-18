@@ -25,6 +25,7 @@ import AccountHome from "./pages/account/AccountHome.tsx";
 import AccountRentals from "./pages/account/AccountRentals.tsx";
 import AccountPayments from "./pages/account/AccountPayments.tsx";
 import AccountPass from "./pages/account/AccountPass.tsx";
+import AppleWalletSandbox from "./pages/account/AppleWalletSandbox.tsx";
 import AccountSupport from "./pages/account/AccountSupport.tsx";
 import AccountProfile from "./pages/account/AccountProfile.tsx";
 import AccountResetPassword from "./pages/account/AccountResetPassword.tsx";
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="locations" element={<AccountRentals />} />
               <Route path="paiements" element={<AccountPayments />} />
               <Route path="pass" element={<AccountPass />} />
+              <Route path="wallet-test" element={<AppleWalletSandbox />} />
               <Route path="support" element={<AccountSupport />} />
               <Route path="profil" element={<AccountProfile />} />
             </Route>
