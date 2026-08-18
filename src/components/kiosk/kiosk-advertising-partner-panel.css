@@ -216,6 +216,7 @@
 
 .kiosk-ad-screensaver[data-has-partner-qr="true"] .kiosk-ad-screensaver-cta {
   left: 37%;
+  bottom: 78px;
   min-width: min(58vw, 650px);
 }
 
@@ -274,6 +275,10 @@
   .kiosk-ad-partner-panel--screensaver .kiosk-ad-partner-panel__qr {
     width: 116px;
     height: 116px;
+  }
+
+  .kiosk-ad-screensaver[data-has-partner-qr="true"] .kiosk-ad-screensaver-cta {
+    bottom: 76px;
   }
 }
 
