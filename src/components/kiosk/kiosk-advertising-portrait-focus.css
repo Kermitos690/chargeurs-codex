@@ -1,0 +1,59 @@
+/*
+ * Home split Advertising is a portrait surface.
+ * The creative fills the reserved rail; a saliency-derived object-position is
+ * applied by KioskAdvertisingPortraitFocus. Failure falls back to 50% / 45%.
+ */
+.kiosk-ad-split .kiosk-ad-media {
+  object-fit: cover !important;
+  object-position: var(--kiosk-ad-focus-x, 50%) var(--kiosk-ad-focus-y, 45%) !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+
+/* Wide creatives are no longer letterboxed/contained in the Home rail. */
+.kiosk-ad-split .kiosk-ad-media-backdrop {
+  display: none !important;
+}
+
+.kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: var(--kiosk-ad-focus-x, 50%) var(--kiosk-ad-focus-y, 45%) !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+
+/* Partner QR/data stays in the lower dock; the ad keeps the upper portrait canvas. */
+.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media {
+  inset: 0 0 158px !important;
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover !important;
+  object-position: var(--kiosk-ad-focus-x, 50%) var(--kiosk-ad-focus-y, 45%) !important;
+}
+
+.kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+  inset: 0 0 158px !important;
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* Do not animate layout; only the focal crop may settle after analysis. */
+.kiosk-ad-split img.kiosk-ad-media[data-smart-focus="saliency"] {
+  transition: object-position 180ms ease-out;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media,
+  .kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+    inset: 0 0 142px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kiosk-ad-split img.kiosk-ad-media {
+    transition: none !important;
+  }
+}
