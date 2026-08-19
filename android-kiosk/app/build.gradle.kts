@@ -53,8 +53,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 131
-        versionName = "1.0.31-terminal-contract-restore"
+        versionCode = 132
+        versionName = "1.0.32-terminal-v222-restore"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -198,11 +198,10 @@ android {
 }
 
 dependencies {
-    // DTA21269 remains on the legacy v2 compatibility lane because the modern
-    // SDK's offline crypto initialization was physically incompatible with its
-    // Android 11 Keymaster. 2.23.4 is the final v2 patch and contains Stripe's
-    // USB timeout and long-uptime reader reconnect fixes.
-    implementation("com.stripe:stripeterminal:2.23.4")
+    // Exact P0 restoration lane: DTA21269 physically connected its WisePad 3
+    // with Stripe Terminal 2.22.0. Do not upgrade this dependency during the
+    // restoration gate; first re-prove READY / TERMINAL_AND_QR on the device.
+    implementation("com.stripe:stripeterminal:2.22.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
