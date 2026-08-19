@@ -4,8 +4,10 @@ import path from 'node:path';
 const root = process.cwd();
 const cssPath = path.join(root, 'src/pages/kiosk-1280-geometry-contract.css');
 const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readability.css');
+const supportCssPath = path.join(root, 'src/pages/kiosk-p0-support-safe.css');
 const adsPath = path.join(root, 'src/components/kiosk/kiosk-advertising-p0-safe.css');
 const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
+const paymentStatePath = path.join(root, 'src/lib/kioskPaymentState.ts');
 const adsSyncPath = path.join(root, 'src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx');
 const adsPartnerBridgePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPartnerBridge.tsx');
 const adsPartnerCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-partner-panel.css');
@@ -13,8 +15,10 @@ const adsPortraitRuntimePath = path.join(root, 'src/components/kiosk/KioskAdvert
 const adsPortraitCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-portrait-focus.css');
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
+const supportCss = fs.readFileSync(supportCssPath, 'utf8');
 const adsCss = fs.readFileSync(adsPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
+const paymentState = fs.readFileSync(paymentStatePath, 'utf8');
 const adsSync = fs.readFileSync(adsSyncPath, 'utf8');
 const adsPartnerBridge = fs.readFileSync(adsPartnerBridgePath, 'utf8');
 const adsPartnerCss = fs.readFileSync(adsPartnerCssPath, 'utf8');
@@ -92,9 +96,12 @@ const runtimeMarkers = [
   'import "./kiosk-p0-transaction-readability.css";',
   'import "./kiosk-1280-geometry-contract.css";',
   'import "@/components/kiosk/kiosk-advertising-p0-safe.css";',
+  'import "./kiosk-p0-support-safe.css";',
   'KioskAdvertisingSynchronizedLayer',
   '<KioskAdvertisingSynchronizedLayer />',
   'scene = "starting"',
+  'scene = protectedSupport ? "support" : "release"',
+  'card.dataset.supportSecureLabel',
   'p0-deterministic-transaction-v2-ads-restored-2026-1280x720',
 ];
 for (const marker of runtimeMarkers) {
@@ -103,11 +110,40 @@ for (const marker of runtimeMarkers) {
 const readabilityIndex = runtime.indexOf('import "./kiosk-p0-transaction-readability.css";');
 const geometryIndex = runtime.indexOf('import "./kiosk-1280-geometry-contract.css";');
 const adsIndex = runtime.indexOf('import "@/components/kiosk/kiosk-advertising-p0-safe.css";');
+const supportIndex = runtime.indexOf('import "./kiosk-p0-support-safe.css";');
 if (readabilityIndex >= 0 && geometryIndex >= 0 && readabilityIndex > geometryIndex) {
   failures.push('geometry contract must remain after transaction readability');
 }
 if (geometryIndex >= 0 && adsIndex >= 0 && adsIndex < geometryIndex) {
   failures.push('advertising safety contract must load after base geometry');
+}
+if (adsIndex >= 0 && supportIndex >= 0 && supportIndex < adsIndex) {
+  failures.push('support safety contract must load after advertising safety');
+}
+
+const supportPaymentMarkers = [
+  'HARDWARE_EJECTION_DISABLED: { phase: "waitpay"',
+  'BATTERY_ID_MISSING: { phase: "waitpay"',
+  'BATTERY_CORRELATION_REQUIRED: { phase: "waitpay"',
+  'chargenow_failed: { phase: "waitpay"',
+  'eject_failed: { phase: "waitpay"',
+  'needs_support: { phase: "waitpay"',
+  'manual_review: { phase: "waitpay"',
+];
+for (const marker of supportPaymentMarkers) {
+  if (!paymentState.includes(marker)) failures.push(`support state left protected polling runtime: ${marker}`);
+}
+
+const supportCssMarkers = [
+  'html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage',
+  '.kiosk-release-stage > :first-child',
+  'content: attr(data-support-secure-label)',
+  '.kiosk-ad-split,',
+  '.kiosk-ad-screensaver',
+  'display: none !important',
+];
+for (const marker of supportCssMarkers) {
+  if (!supportCss.includes(marker)) failures.push(`missing protected support presentation marker: ${marker}`);
 }
 
 const partnerRuntimeMarkers = [
@@ -157,6 +193,9 @@ const portraitCssMarkers = [
   '.kiosk-ad-split .kiosk-ad-media-backdrop',
   'display: none !important',
   '.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media',
+  'height: calc(100% - 158px) !important',
+  'height: calc(100% - 142px) !important',
+  'bottom: auto !important',
 ];
 for (const marker of portraitCssMarkers) {
   if (!adsPortraitCss.includes(marker)) failures.push(`missing portrait Ads presentation marker: ${marker}`);
@@ -192,5 +231,6 @@ console.log(JSON.stringify({
   transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
   partnerQrIsolated: true, partnerQrSingleOwner: true,
-  portraitAdsFullBleed: true, portraitAdsFocalCrop: true,
+  portraitAdsFullBleed: true, portraitAdsFocalCrop: true, portraitAdsExplicitHeight: true,
+  protectedSupportPolling: true, supportRestartSuppressed: true,
 }));
