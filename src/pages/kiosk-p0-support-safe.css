@@ -1,0 +1,144 @@
+/*
+ * P0 protected support presentation.
+ *
+ * Support states run inside the existing `waitpay` runtime so the authoritative
+ * rental session keeps polling. This stylesheet changes presentation only when
+ * KioskPremiumGateV3 identifies a support title and sets data-kiosk-scene=support.
+ * No reset/retry control is exposed here.
+ */
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage {
+  display: flex !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 520px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px 24px 44px !important;
+}
+
+/* The 3D release visual belongs to the physical ejection state, not support. */
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :first-child {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) {
+  display: flex !important;
+  width: min(620px, 72vw) !important;
+  min-height: 365px !important;
+  max-width: 620px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  border: 1px solid rgba(125, 211, 252, .24) !important;
+  border-radius: 32px !important;
+  background:
+    linear-gradient(145deg, rgba(22, 45, 91, .82), rgba(9, 28, 67, .86)),
+    rgba(7, 18, 48, .94) !important;
+  padding: 42px 54px !important;
+  text-align: center !important;
+  box-shadow:
+    0 32px 100px rgba(0, 0, 0, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .08),
+    0 0 70px rgba(34, 211, 238, .09) !important;
+}
+
+/* Keep only the ambient glow; remove release-specific badge/slot/progress UI. */
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) > .inline-flex,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) > .relative.mt-8,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) > .relative.mt-9 {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2)::before {
+  content: "⚠";
+  display: grid;
+  width: 96px;
+  height: 96px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-bottom: 28px;
+  border: 1px solid rgba(251, 146, 60, .18);
+  border-radius: 999px;
+  background: rgba(251, 146, 60, .11);
+  color: #fb923c;
+  font-size: 52px;
+  line-height: 1;
+  filter: saturate(.9);
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2 {
+  margin-top: 0 !important;
+  max-width: 540px !important;
+  color: #fff !important;
+  font-size: 40px !important;
+  line-height: 1.05 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.035em !important;
+  text-align: center !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2 + p {
+  margin-top: 22px !important;
+  max-width: 520px !important;
+  color: rgba(226, 232, 240, .82) !important;
+  font-size: 23px !important;
+  line-height: 1.34 !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2)::after {
+  content: attr(data-support-secure-label);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 28px;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, .07);
+  padding: 10px 18px;
+  color: #86ef60;
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+/* Advertising must never appear over a protected transaction/support state. */
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-ad-split,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-ad-screensaver {
+  display: none !important;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage {
+    min-height: 500px !important;
+    padding-top: 8px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) {
+    width: min(590px, 70vw) !important;
+    min-height: 340px !important;
+    padding: 34px 48px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2)::before {
+    width: 82px;
+    height: 82px;
+    margin-bottom: 22px;
+    font-size: 44px;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2 {
+    font-size: 34px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2 + p {
+    margin-top: 16px !important;
+    font-size: 20px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2)::after {
+    margin-top: 22px;
+    font-size: 16px;
+  }
+}
