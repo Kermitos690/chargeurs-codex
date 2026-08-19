@@ -1,0 +1,3 @@
+DTA21269 WisePad 3 terminal-contract restore build trigger
+version=1.0.31-terminal-contract-restore-staging
+hardware_ejection=false
