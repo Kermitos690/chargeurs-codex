@@ -1,0 +1,11 @@
+- [x] Start from current main
+- [x] Preserve current Home / Ads / support P0 fixes
+- [x] Preserve Stripe Terminal 2.23.4 legacy USB compatibility lane from #260
+- [x] Preserve canonical Stripe Terminal backend URL
+- [x] Preserve staging signer continuity
+- [x] Bump version above installed 1.0.29
+- [ ] CI staging APK built and signer verified
+- [ ] Install on DTA21269
+- [ ] Heartbeat reports 1.0.31-terminal-contract-restore-staging
+- [ ] WisePad reports READY / TERMINAL_AND_QR
+- [ ] Physical amount display verified
