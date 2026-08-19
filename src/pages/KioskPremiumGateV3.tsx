@@ -13,8 +13,28 @@ import "./kiosk-p0-confirmation-polish.css";
 import "./kiosk-p0-transaction-readability.css";
 import "./kiosk-1280-geometry-contract.css";
 import "@/components/kiosk/kiosk-advertising-p0-safe.css";
+import "./kiosk-p0-support-safe.css";
 
 const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
+
+/*
+ * These titles are all server-derived protected post-payment states. They are
+ * intentionally presented through the `waitpay` runtime so session polling
+ * remains alive. Detection is presentation-only: it never changes payment,
+ * rental, stock or hardware state.
+ */
+function isProtectedSupportTitle(title: string) {
+  const normalized = title.trim().toLowerCase();
+  if (!normalized) return false;
+  return /support|vérification|verification|überprüfung|intervention|eingriff|revue manuelle|manual review|manuelle prüfung|paiement confirmé\s*[—-]|payment confirmed\s*[—-]|zahlung bestätigt\s*[—-]/i.test(normalized);
+}
+
+function secureSupportLabel(lang: string) {
+  const normalized = lang.toLowerCase();
+  if (normalized.startsWith("de")) return "✓ Sichere Zahlung über Stripe";
+  if (normalized.startsWith("en")) return "✓ Secure payment by Stripe";
+  return "✓ Paiement sécurisé par Stripe";
+}
 
 /**
  * Single-owner Premium kiosk runtime.
@@ -33,6 +53,10 @@ export default function KioskPremiumGateV3() {
     const syncScene = () => {
       let scene = "";
       const home = document.querySelector<HTMLElement>(".kv3-product-layer > .ck2-home");
+      const releaseStage = document.querySelector<HTMLElement>(".kv3-product-layer .kiosk-release-stage");
+      const releaseTitle = releaseStage?.querySelector<HTMLElement>("h2")?.textContent?.trim() ?? "";
+      const protectedSupport = Boolean(releaseStage && isProtectedSupportTitle(releaseTitle));
+
       if (home) scene = "home";
       else if (document.querySelector(".kv3-product-layer > .ck2-connected")) scene = "connected";
       else if (document.querySelector(".kv3-product-layer > .ck2-member")) scene = "member";
@@ -42,10 +66,23 @@ export default function KioskPremiumGateV3() {
       else if (document.querySelector(".kv3-product-layer .kiosk-idle-stage")) scene = "selection";
       else if (document.querySelector(".kv3-product-layer .h-20.w-20.animate-spin.text-primary")) scene = "starting";
       else if (document.querySelector(".kv3-product-layer .kiosk-ready-stage")) scene = "success";
-      else if (document.querySelector(".kv3-product-layer .kiosk-release-stage")) scene = "release";
+      else if (releaseStage) scene = protectedSupport ? "support" : "release";
 
       if (scene) root.dataset.kioskScene = scene;
       else delete root.dataset.kioskScene;
+
+      if (releaseStage) {
+        const card = releaseStage.children.item(1) as HTMLElement | null;
+        if (card && protectedSupport) {
+          card.dataset.supportSecureLabel = secureSupportLabel(root.lang || "fr");
+          card.setAttribute("aria-live", "polite");
+          card.setAttribute("aria-busy", "true");
+        } else if (card) {
+          delete card.dataset.supportSecureLabel;
+          card.removeAttribute("aria-live");
+          card.removeAttribute("aria-busy");
+        }
+      }
 
       // Physical P0 golden is authoritative for the French Home. Keep the
       // product state machine in React; this guard only prevents presentation
