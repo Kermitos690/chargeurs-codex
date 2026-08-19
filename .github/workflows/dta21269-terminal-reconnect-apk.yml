@@ -88,8 +88,8 @@ jobs:
           manifest="android-kiosk/app/src/main/AndroidManifest.xml"
 
           test -s "$apk"
-          grep -F 'versionCode = 130' "$gradle"
-          grep -F 'versionName = "1.0.30-terminal-reconnect"' "$gradle"
+          grep -F 'versionCode = 131' "$gradle"
+          grep -F 'versionName = "1.0.31-terminal-contract-restore"' "$gradle"
           grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' "$gradle"
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
           grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")' "$gradle"
@@ -112,8 +112,8 @@ jobs:
 
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='130'"
-          printf '%s\n' "$badging" | grep -F "versionName='1.0.30-terminal-reconnect-staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='131'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.31-terminal-contract-restore-staging'"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.30-terminal-reconnect-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.31-terminal-contract-restore-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -148,8 +148,8 @@ jobs:
           cat > dist/PROVENANCE.txt <<EOF
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=130
-          versionName=1.0.30-terminal-reconnect-staging
+          versionCode=131
+          versionName=1.0.31-terminal-contract-restore-staging
           environment=STAGING_TEST
           frontend=https://chargeurs-ch-staging.vercel.app
           stripeTerminalSdk=2.23.4
