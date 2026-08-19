@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { KioskAdvertisingLayer } from "./KioskAdvertisingLayer";
 import { KioskAdvertisingPartnerBridge } from "./KioskAdvertisingPartnerBridge";
+import { KioskAdvertisingPortraitFocus } from "./KioskAdvertisingPortraitFocus";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import {
   estimateNetworkClockSample,
@@ -69,9 +70,9 @@ function warmCachedAdvertisingMedia() {
  * its cached playlist. Media are also warmed ahead of boundaries so Android
  * decode latency does not become visible as a one-second slide offset.
  *
- * The partner QR/data bridge is also mounted here, but under its own error
- * boundary. A QR/data regression can disable itself without ever propagating to
- * the kiosk product shell.
+ * Partner QR/data and portrait smart-crop helpers are mounted only inside this
+ * Advertising runtime. Either helper may fail closed without propagating to the
+ * kiosk product shell.
  *
  * This wrapper owns no rental, payment, return, inventory or hardware state.
  */
@@ -149,6 +150,7 @@ export function KioskAdvertisingSynchronizedLayer() {
     <>
       <KioskAdvertisingLayer />
       <KioskAdvertisingPartnerBridge />
+      <KioskAdvertisingPortraitFocus />
     </>
   );
 }
