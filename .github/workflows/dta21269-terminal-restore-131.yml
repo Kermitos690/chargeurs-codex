@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   build:
@@ -117,8 +118,10 @@ jobs:
           src="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           name="Chargeurs_CH_Kiosk_1.0.31-terminal-contract-restore-staging.apk"
           cp "$src" "dist/$name"
-          sha256sum "dist/$name" > dist/SHA256SUMS.txt
-          printf 'signerCertificateSha256=%s\n' "$(cat /tmp/apk_signer_sha256)" > dist/SIGNER.txt
+          apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
+          signer_sha="$(cat /tmp/apk_signer_sha256)"
+          printf '%s  %s\n' "$apk_sha" "$name" > dist/SHA256SUMS.txt
+          printf 'signerCertificateSha256=%s\n' "$signer_sha" > dist/SIGNER.txt
           cat > dist/PROVENANCE.txt <<EOF
           sha=$GITHUB_SHA
           station=DTA21269
@@ -129,8 +132,12 @@ jobs:
           expectedReader=tmr_GnorJgwc2oWVq3
           expectedLocation=tml_GnoORA0w9yjeut
           hardwareEjectionEnabled=false
+          apkSha256=$apk_sha
+          signerCertificateSha256=$signer_sha
           EOF
           echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "apk_sha=$apk_sha" >> "$GITHUB_OUTPUT"
+          echo "signer_sha=$signer_sha" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -139,3 +146,16 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: dist/*
+
+      - name: Report successful restore build
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ steps.package.outputs.name }}
+          APK_SHA: ${{ steps.package.outputs.apk_sha }}
+          SIGNER_SHA: ${{ steps.package.outputs.signer_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="RESTORE_APK_READY run=${GITHUB_RUN_ID} sha=${GITHUB_SHA} apk=${APK_NAME} apkSha256=${APK_SHA} signerSha256=${SIGNER_SHA}"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/273/comments" -f body="$body"
