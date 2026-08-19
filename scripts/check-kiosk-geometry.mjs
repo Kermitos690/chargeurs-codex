@@ -9,6 +9,8 @@ const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
 const adsSyncPath = path.join(root, 'src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx');
 const adsPartnerBridgePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPartnerBridge.tsx');
 const adsPartnerCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-partner-panel.css');
+const adsPortraitRuntimePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPortraitFocus.tsx');
+const adsPortraitCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-portrait-focus.css');
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
 const adsCss = fs.readFileSync(adsPath, 'utf8');
@@ -16,6 +18,8 @@ const runtime = fs.readFileSync(runtimePath, 'utf8');
 const adsSync = fs.readFileSync(adsSyncPath, 'utf8');
 const adsPartnerBridge = fs.readFileSync(adsPartnerBridgePath, 'utf8');
 const adsPartnerCss = fs.readFileSync(adsPartnerCssPath, 'utf8');
+const adsPortraitRuntime = fs.readFileSync(adsPortraitRuntimePath, 'utf8');
+const adsPortraitCss = fs.readFileSync(adsPortraitCssPath, 'utf8');
 
 function pxVar(name) {
   const match = css.match(new RegExp(`${name}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`));
@@ -115,6 +119,14 @@ for (const marker of partnerRuntimeMarkers) {
   if (!adsSync.includes(marker)) failures.push(`missing partner Ads runtime marker: ${marker}`);
 }
 
+const portraitRuntimeMarkers = [
+  'import { KioskAdvertisingPortraitFocus } from "./KioskAdvertisingPortraitFocus";',
+  '<KioskAdvertisingPortraitFocus />',
+];
+for (const marker of portraitRuntimeMarkers) {
+  if (!adsSync.includes(marker)) failures.push(`missing portrait Ads runtime marker: ${marker}`);
+}
+
 const partnerBoundaryMarkers = [
   'class AdvertisingPartnerBoundary',
   'static getDerivedStateFromError',
@@ -138,8 +150,34 @@ for (const marker of partnerCssMarkers) {
   if (!adsPartnerCss.includes(marker)) failures.push(`missing partner Ads presentation marker: ${marker}`);
 }
 
+const portraitCssMarkers = [
+  '.kiosk-ad-split .kiosk-ad-media',
+  'object-fit: cover !important',
+  'object-position: var(--kiosk-ad-focus-x, 50%) var(--kiosk-ad-focus-y, 45%) !important',
+  '.kiosk-ad-split .kiosk-ad-media-backdrop',
+  'display: none !important',
+  '.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media',
+];
+for (const marker of portraitCssMarkers) {
+  if (!adsPortraitCss.includes(marker)) failures.push(`missing portrait Ads presentation marker: ${marker}`);
+}
+
+const portraitIsolationMarkers = [
+  'const SAMPLE_SIZE = 56',
+  'const FALLBACK_FOCUS = { x: 50, y: 45 }',
+  'querySelectorAll<HTMLImageElement>(".kiosk-ad-split img.kiosk-ad-media")',
+  'Never let smart cropping affect the Advertising runtime or kiosk shell',
+  'return null;',
+];
+for (const marker of portraitIsolationMarkers) {
+  if (!adsPortraitRuntime.includes(marker)) failures.push(`missing portrait Ads isolation marker: ${marker}`);
+}
+
 if (runtime.includes('KioskAdvertisingPartnerBridge')) {
   failures.push('partner QR bridge must never mount in the global kiosk runtime');
+}
+if (runtime.includes('KioskAdvertisingPortraitFocus')) {
+  failures.push('portrait focus must never mount in the global kiosk runtime');
 }
 
 if (failures.length) {
@@ -154,4 +192,5 @@ console.log(JSON.stringify({
   transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
   partnerQrIsolated: true, partnerQrSingleOwner: true,
+  portraitAdsFullBleed: true, portraitAdsFocalCrop: true,
 }));
