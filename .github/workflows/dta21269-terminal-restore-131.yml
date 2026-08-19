@@ -1,18 +1,18 @@
-name: DTA21269 Terminal Restore 1.0.31
+name: DTA21269 Terminal Restore 1.0.32 v2.22
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - "android-kiosk/**"
-      - ".ci-trigger/dta21269-terminal-restore-131"
+      - ".ci-trigger/dta21269-terminal-restore-132"
       - ".github/workflows/dta21269-terminal-restore-131.yml"
   push:
     branches:
       - main
     paths:
       - "android-kiosk/**"
-      - ".ci-trigger/dta21269-terminal-restore-131"
+      - ".ci-trigger/dta21269-terminal-restore-132"
       - ".github/workflows/dta21269-terminal-restore-131.yml"
 
 permissions:
@@ -62,7 +62,7 @@ jobs:
       - name: Gradle setup
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build restored staging APK
+      - name: Build exact v2.22 staging APK
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
@@ -75,39 +75,58 @@ jobs:
           CHARGEURS_STAGING_KEY_PASSWORD: android
         run: ./gradlew --no-daemon clean testDebugUnitTest lintStaging assembleStaging
 
-      - name: Verify restored contract
+      - name: Verify exact physical-pass restoration contract
         shell: bash
         run: |
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           gradle="android-kiosk/app/build.gradle.kts"
-          runtime="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java"
           backend="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalBackendClient.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
+          manifest="android-kiosk/app/src/main/AndroidManifest.xml"
 
           test -s "$apk"
-          grep -F 'versionCode = 131' "$gradle"
-          grep -F 'versionName = "1.0.31-terminal-contract-restore"' "$gradle"
-          grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' "$gradle"
+          grep -F 'versionCode = 132' "$gradle"
+          grep -F 'versionName = "1.0.32-terminal-v222-restore"' "$gradle"
+          grep -F 'implementation("com.stripe:stripeterminal:2.22.0")' "$gradle"
+          if grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' "$gradle"; then
+            echo "2.23.4 regression: exact physical restore must remain on 2.22.0" >&2
+            exit 32
+          fi
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
-          grep -F 'SDK_COMPAT = "2.23.4-test-only"' "$runtime"
-          grep -F 'void requestReconnect()' "$runtime"
+          grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")' "$gradle"
           grep -F 'startTerminalPayment(String rentalSessionId)' "$bridge"
+          grep -F 'getPaymentReaderStatus()' "$bridge"
+          grep -F 'refreshPaymentReader()' "$bridge"
           grep -F 'static final class ConnectionTokenResult' "$backend"
           grep -F 'static final class PaymentIntentResult' "$backend"
           grep -F 'static final class PaymentStateResult' "$backend"
+          grep -F 'android.permission.ACCESS_FINE_LOCATION' "$manifest"
 
           aapt_path="$(find "${ANDROID_HOME}/build-tools" -type f -name aapt -perm -u+x | sort -V | tail -1)"
           apksigner_path="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -1)"
+          test -n "$aapt_path"
+          test -n "$apksigner_path"
+
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='131'"
-          printf '%s\n' "$badging" | grep -F "versionName='1.0.31-terminal-contract-restore-staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='132'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.32-terminal-v222-restore-staging'"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
           test "$cert" = "$(cat /tmp/canonical_staging_signer_sha256)"
           printf '%s' "$cert" > /tmp/apk_signer_sha256
+
+          : > /tmp/dex_strings.txt
+          while IFS= read -r dex; do
+            unzip -p "$apk" "$dex" | strings >> /tmp/dex_strings.txt
+          done < <(zipinfo -1 "$apk" | grep -E '^classes([0-9]+)?\.dex$')
+          grep -F 'StripeTerminalReaderRuntime' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$ConnectionTokenResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentIntentResult' /tmp/dex_strings.txt
+          grep -F 'StripeTerminalBackendClient$PaymentStateResult' /tmp/dex_strings.txt
+          grep -F 'WisePadUsbProbe' /tmp/dex_strings.txt
 
       - name: Package artifact
         id: package
@@ -116,7 +135,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           src="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
-          name="Chargeurs_CH_Kiosk_1.0.31-terminal-contract-restore-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.32-terminal-v222-restore-staging.apk"
           cp "$src" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -126,9 +145,11 @@ jobs:
           sha=$GITHUB_SHA
           station=DTA21269
           package=ch.chargeurs.kiosk.staging
-          versionCode=131
-          versionName=1.0.31-terminal-contract-restore-staging
-          stripeTerminalSdk=2.23.4
+          versionCode=132
+          versionName=1.0.32-terminal-v222-restore-staging
+          environment=STAGING_TEST
+          stripeTerminalSdk=2.22.0
+          restoreEvidence=physical-pass-1.0.22-terminal-compat-v2-core-staging
           expectedReader=tmr_GnorJgwc2oWVq3
           expectedLocation=tml_GnoORA0w9yjeut
           hardwareEjectionEnabled=false
@@ -157,5 +178,5 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="RESTORE_APK_READY run=${GITHUB_RUN_ID} sha=${GITHUB_SHA} apk=${APK_NAME} apkSha256=${APK_SHA} signerSha256=${SIGNER_SHA}"
+          body="RESTORE_V222_APK_READY run=${GITHUB_RUN_ID} sha=${GITHUB_SHA} apk=${APK_NAME} apkSha256=${APK_SHA} signerSha256=${SIGNER_SHA}"
           gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/273/comments" -f body="$body"
