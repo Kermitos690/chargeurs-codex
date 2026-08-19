@@ -1,0 +1,1 @@
+Do not revert the frontend. The Android terminal-contract source on main already matches the #260 restoration lane; this package exists to upgrade the physical kiosk from 1.0.29 to that restored lineage with a higher versionCode and the canonical staging signer.
