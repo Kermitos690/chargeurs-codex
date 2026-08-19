@@ -5,12 +5,14 @@ on:
   pull_request:
     paths:
       - "android-kiosk/**"
+      - ".ci-trigger/dta21269-terminal-restore-131"
       - ".github/workflows/dta21269-terminal-restore-131.yml"
   push:
     branches:
       - main
     paths:
       - "android-kiosk/**"
+      - ".ci-trigger/dta21269-terminal-restore-131"
       - ".github/workflows/dta21269-terminal-restore-131.yml"
 
 permissions:
