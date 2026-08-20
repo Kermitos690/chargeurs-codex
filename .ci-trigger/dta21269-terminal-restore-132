@@ -2,3 +2,4 @@ station=DTA21269
 version=1.0.32-terminal-v222-restore-staging
 stripeTerminalSdk=2.22.0
 hardwareEjectionEnabled=false
+retrigger=2026-08-20T20:05:33Z
