@@ -1,7 +1,6 @@
-// ChargeNow rental callback — provider-confirmed release + battery-first return reconciliation.
-// A verified status=1 callback uniquely matched by trade number can close the kiosk release phase
-// when the exact paid slot/battery was reserved before payment and exactly one C3 command was sent.
-// This avoids indefinite "release in progress" when the supplier omits battery/slot identity.
+// ChargeNow rental callback — supplier notifications plus battery-first return
+// reconciliation. A callback alone is never physical release proof: the cabinet
+// event/snapshot reconciler owns the transition to an active rental.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const encoder = new TextEncoder();
@@ -146,75 +145,6 @@ async function appendExactEvent(
   throw new Error("ORCHESTRATOR_VERSION_CONFLICT");
 }
 
-async function confirmProviderRelease(
-  client: ReturnType<typeof db>,
-  session: Record<string, unknown>,
-  callbackKey: string,
-  occurredAt: string,
-) {
-  if (["ejected", "active_rental", "battery_taken", "battery_returned", "completed"].includes(String(session.state))) return true;
-  if (session.state !== "ejecting") return false;
-
-  const slotNum = Number(session.selected_slot_num);
-  const batteryId = String(session.battery_id ?? "").trim();
-  const stationId = String(session.station_id ?? "").trim();
-  if (!stationId || !Number.isInteger(slotNum) || slotNum < 1 || !batteryId) throw new Error("RELEASE_IDENTITY_INCOMPLETE");
-
-  const { data: releaseAttempt, error: attemptError } = await client.from("hardware_release_attempts")
-    .select("id,command_sent_at,selected_slot_num,expected_battery_id,result")
-    .eq("rental_session_id", session.id).maybeSingle();
-  if (attemptError) throw attemptError;
-  if (!releaseAttempt?.command_sent_at) throw new Error("EJECT_COMMAND_NOT_CONFIRMED_SENT");
-  if (Number(releaseAttempt.selected_slot_num) !== slotNum || String(releaseAttempt.expected_battery_id ?? "") !== batteryId) {
-    throw new Error("RELEASE_RESERVATION_MISMATCH");
-  }
-
-  const { error: releaseAttemptError } = await client.from("hardware_release_attempts").update({
-    result: "single_release",
-    released_slot_nums: [slotNum],
-    released_battery_ids: [batteryId],
-    reconciled_at: occurredAt,
-    updated_at: new Date().toISOString(),
-  }).eq("id", releaseAttempt.id).in("result", ["prepared", "command_sent", "pending", "single_release"]);
-  if (releaseAttemptError) throw releaseAttemptError;
-
-  const metadata = {
-    source: "verified_chargenow_release_callback",
-    providerCallbackKey: callbackKey,
-    tradeNo: session.apifox_trade_no ?? null,
-    slotNum,
-    batteryId,
-    provider_identity_fallback: true,
-    duplicate_hardware_command: false,
-  };
-  await appendExactEvent(client, session, {
-    eventType: "battery_released", fromStates: ["release_requested"], targetState: "released",
-    key: `battery_released:provider_callback:${callbackKey}`, occurredAt, stationId, batteryId, metadata,
-  });
-  await appendExactEvent(client, session, {
-    eventType: "rental_activated", fromStates: ["released"], targetState: "active",
-    key: `rental_activated:provider_callback:${callbackKey}`, occurredAt, stationId, batteryId, metadata,
-  });
-
-  const now = new Date().toISOString();
-  const { error: sessionError } = await client.from("rental_sessions").update({
-    state: "ejected",
-    ejected_at: session.ejected_at ?? occurredAt,
-    started_at: session.started_at ?? occurredAt,
-    chargenow_status: "ejected_provider_confirmed",
-    failure_code: null,
-    failure_message: null,
-    updated_at: now,
-  }).eq("id", session.id).eq("state", "ejecting");
-  if (sessionError) throw sessionError;
-  await client.from("station_slot_reservations").update({
-    state: "released", released_at: occurredAt, release_reason: "provider_release_confirmed", updated_at: now,
-  }).eq("rental_session_id", session.id).eq("state", "reserved");
-  await client.from("batteries").update({ station_id: null, slot_num: null, status: "out_of_station", updated_at: now }).eq("battery_id", batteryId);
-  await audit(client, "rental.release.confirmed_from_verified_provider_callback", String(session.id), metadata);
-  return true;
-}
-
 async function physicalReturnTime(
   client: ReturnType<typeof db>,
   session: Record<string, unknown>,
@@ -306,9 +236,14 @@ Deno.serve(async (req) => {
     if (callbackError) throw callbackError;
 
     if (parsed.status === "1") {
-      const releasedAt = new Date().toISOString();
-      const confirmed = await confirmProviderRelease(client, session, callbackKey, releasedAt);
-      return json({ received: true, provider_release_confirmed: true, state: confirmed ? "ejected" : session.state, kiosk_release_complete: confirmed }, confirmed ? 200 : 202);
+      await incident(
+        client,
+        session,
+        "RELEASE_PROVIDER_NOTIFICATION_ONLY",
+        "Le fournisseur a signalé une sortie, mais cette notification ne prouve ni le slot ni la batterie physiquement sortie; la location reste en réconciliation.",
+        { tradeNo: parsed.tradeNo, battery_id: parsed.batteryId, station_id: parsed.stationId, slot_num: parsed.slotNum },
+      );
+      return json({ received: true, provider_release_confirmed: false, state: session.state, requires_physical_reconciliation: true }, 202);
     }
     if (parsed.status === "0") {
       await incident(client, session, "CHARGENOW_RELEASE_FAILURE_EVIDENCE", "ChargeNow a signalé un échec de sortie; aucune seconde commande d'éjection n'est envoyée automatiquement.", { tradeNo: parsed.tradeNo, currentState: session.state, automatic_retry_allowed: false });
@@ -316,23 +251,23 @@ Deno.serve(async (req) => {
     }
     if (parsed.status !== "2") return json({ received: true, ignored: true, reason: "UNKNOWN_STATUS" }, 202);
 
-    if (session.state === "ejecting") {
-      const { data: releaseEvidence } = await client.from("chargenow_callbacks")
-        .select("idempotency_key,created_at")
-        .eq("trade_no", canonicalTradeNo || parsed.tradeNo)
-        .eq("status", "1").eq("processed", true)
-        .order("created_at", { ascending: true }).limit(1).maybeSingle();
-      if (releaseEvidence) {
-        await confirmProviderRelease(client, session, String(releaseEvidence.idempotency_key), String(releaseEvidence.created_at));
-        const { data: refreshed, error: refreshError } = await client.from("rental_sessions").select(SESSION_FIELDS).eq("id", session.id).single();
-        if (refreshError) throw refreshError;
-        session = refreshed as Record<string, unknown>;
-      }
+    // A generic order-status callback is not physical return evidence. The
+    // return must name the actual battery, receiving station and slot. Falling
+    // back to the reserved identity here can settle the wrong rental after a
+    // supplier double-ejection.
+    if (!parsed.batteryId || !parsed.stationId || parsed.slotNum == null) {
+      await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le callback de retour ne contient pas l'identité physique complète; aucune clôture ni capture n'est autorisée.", {
+        tradeNo: parsed.tradeNo,
+        battery_id: parsed.batteryId,
+        station_id: parsed.stationId,
+        slot_num: parsed.slotNum,
+      });
+      return json({ received: true, settlement_triggered: false, reason: "RETURN_IDENTITY_INCOMPLETE" }, 202);
     }
 
-    const batteryId = parsed.batteryId ?? (typeof session.battery_id === "string" ? session.battery_id : null);
-    const stationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
-    const slotNum = parsed.slotNum ?? Number(session.selected_slot_num);
+    const batteryId = parsed.batteryId;
+    const stationId = parsed.stationId;
+    const slotNum = parsed.slotNum;
     const eventId = parsed.eventId ?? `trade-${canonicalTradeNo || parsed.tradeNo || session.id}-return`;
     if (!batteryId || !stationId || !Number.isInteger(slotNum) || slotNum < 1) {
       await incident(client, session, "RETURN_IDENTITY_INCOMPLETE", "Le retour fournisseur ne peut pas être corrélé à l'identité réservée de la location.", { tradeNo: parsed.tradeNo });
@@ -368,7 +303,7 @@ Deno.serve(async (req) => {
       physical_event_id: physical?.externalEventId ?? null,
       provider_trade_no: parsed.tradeNo || null,
       canonical_trade_no: canonicalTradeNo || null,
-      provider_identity_fallback: !parsed.batteryId || !parsed.stationId || parsed.slotNum == null,
+      provider_identity_fallback: false,
       settlement_ok: settlement.ok,
     });
     if (!settlement.ok) await incident(client, session, "SETTLEMENT_RETRY_REQUIRED", "Le retour est enregistré mais le règlement financier doit être réconcilié.", { settlement_status: settlement.status, battery_id: batteryId });

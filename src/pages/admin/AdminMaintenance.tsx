@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ShieldCheck, RefreshCw, Loader2, Inbox, LockKeyhole, Radio } from "lucide-react";
+import { ShieldCheck, RefreshCw, Loader2, Inbox, LockKeyhole, Radio, TriangleAlert } from "lucide-react";
 
 const REQUEST_ROLES = new Set(["super_admin", "admin", "operations_admin", "support_agent"]);
 
@@ -14,6 +14,12 @@ type StationOption = {
   location_name: string | null;
   online: boolean | null;
   status: string | null;
+};
+
+type PreparedEjection = {
+  permitId: string;
+  batteryId: string;
+  expiresAt: string;
 };
 
 export default function AdminMaintenance() {
@@ -28,6 +34,10 @@ export default function AdminMaintenance() {
     organization: string | null; message: string; status: string; created_at: string;
   }>>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const [ejectionSlot, setEjectionSlot] = useState("1");
+  const [ejectionBatteryId, setEjectionBatteryId] = useState("");
+  const [ejectionConfirmation, setEjectionConfirmation] = useState("");
+  const [preparedEjection, setPreparedEjection] = useState<PreparedEjection | null>(null);
 
   const loadRequests = useCallback(async () => {
     if (!canHandleRequests) { setRequests([]); return; }
@@ -102,6 +112,51 @@ export default function AdminMaintenance() {
   };
 
   const selectedStation = stations.find((station) => station.station_id === stationId) ?? null;
+  const maintenancePhrase = stationId && ejectionSlot ? `EJECTER ${stationId} SLOT ${ejectionSlot}` : "";
+
+  const prepareEjection = async () => {
+    if (!canWrite || !stationId || !ejectionSlot || !ejectionBatteryId.trim()) return;
+    setBusy("prepare_eject_by_repair");
+    setPreparedEjection(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
+        body: {
+          actionType: "prepare_eject_by_repair", stationId,
+          slotNum: Number(ejectionSlot), batteryId: ejectionBatteryId.trim().toUpperCase(),
+        },
+      });
+      if (error || !data?.ok) {
+        const detected = data?.detectedBatteryId ? ` La borne lit actuellement ${data.detectedBatteryId}.` : "";
+        toast.error(`${data?.error ?? error?.message ?? "Préparation impossible"}.${detected}`);
+        return;
+      }
+      setPreparedEjection({ permitId: data.permitId, batteryId: data.batteryId, expiresAt: data.expiresAt });
+      toast.success("Batterie vérifiée. L’autorisation unique est prête pendant cinq minutes.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const executeEjection = async () => {
+    if (!canWrite || !preparedEjection || ejectionConfirmation !== maintenancePhrase) return;
+    setBusy("eject_by_repair");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
+        body: {
+          actionType: "eject_by_repair", stationId, slotNum: Number(ejectionSlot), permitId: preparedEjection.permitId,
+        },
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error ?? error?.message ?? "La commande n’a pas été envoyée.");
+        return;
+      }
+      toast.success("Commande envoyée à ChargeNow. Vérifiez que la batterie est physiquement sortie avant toute autre action.");
+      setPreparedEjection(null);
+      setEjectionConfirmation("");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="animate-fade-in max-w-3xl space-y-6">
@@ -166,6 +221,34 @@ export default function AdminMaintenance() {
               <Button onClick={() => void call("sync_status")} disabled={!!busy || !stationId} variant="ghost" className="gap-2 border border-border">{busy === "sync_status" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Lire l’état fournisseur</Button>
             </div>
           </section>
+
+          <section className="space-y-4 rounded-2xl border border-warning/40 bg-warning/5 p-6">
+            <h2 className="font-display text-lg font-bold"><TriangleAlert className="mr-2 inline h-5 w-5 text-warning" />Éjection de maintenance ponctuelle</h2>
+            <p className="text-sm text-muted-foreground">Réservée à une batterie bloquée. Cette action ne crée aucune location, ne touche aucun paiement, et ne peut viser qu’une batterie détectée dans un slot précis.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-muted-foreground">Emplacement
+                <input value={ejectionSlot} onChange={(event) => { setEjectionSlot(event.target.value); setPreparedEjection(null); }} inputMode="numeric" min="1" max="128" type="number" className="mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-foreground" />
+              </label>
+              <label className="text-sm text-muted-foreground">Identifiant batterie détecté
+                <input value={ejectionBatteryId} onChange={(event) => { setEjectionBatteryId(event.target.value.toUpperCase()); setPreparedEjection(null); }} placeholder="ex. F0F0004944" className="mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-foreground" />
+              </label>
+            </div>
+            {!preparedEjection ? (
+              <Button onClick={() => void prepareEjection()} disabled={!!busy || !stationId || !ejectionBatteryId.trim() || !ejectionSlot} variant="outline" className="gap-2 border-warning/50">
+                {busy === "prepare_eject_by_repair" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}Vérifier puis préparer l’éjection
+              </Button>
+            ) : (
+              <div className="space-y-3 rounded-xl border border-warning/40 bg-background/60 p-4">
+                <p className="text-sm">Vérifié : <strong>{preparedEjection.batteryId}</strong> · slot {ejectionSlot}. L’autorisation expire à {new Date(preparedEjection.expiresAt).toLocaleTimeString("fr-CH", { hour: "2-digit", minute: "2-digit" })}.</p>
+                <label className="block text-sm text-muted-foreground">Pour envoyer l’unique commande, saisissez exactement <code className="select-all">{maintenancePhrase}</code>.
+                  <input value={ejectionConfirmation} onChange={(event) => setEjectionConfirmation(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-foreground" />
+                </label>
+                <Button onClick={() => void executeEjection()} disabled={!!busy || ejectionConfirmation !== maintenancePhrase} className="gap-2 bg-warning text-warning-foreground hover:bg-warning/90">
+                  {busy === "eject_by_repair" ? <Loader2 className="h-4 w-4 animate-spin" /> : <TriangleAlert className="h-4 w-4" />}Éjecter uniquement cette batterie
+                </Button>
+              </div>
+            )}
+          </section>
         </>
       )}
 
@@ -176,7 +259,7 @@ export default function AdminMaintenance() {
 
       <section className="rounded-2xl border border-warning/35 bg-warning/5 p-6">
         <h2 className="font-display text-lg font-bold"><LockKeyhole className="mr-2 inline h-5 w-5" />Actions physiques verrouillées</h2>
-        <p className="mt-2 text-sm text-muted-foreground">POP et configuration fournisseur générique sont bloqués par design. Une éjection de maintenance n’est possible qu’avec un permis serveur explicite, limité à une borne et un slot, et n’est donc pas présentée comme un bouton permanent.</p>
+        <p className="mt-2 text-sm text-muted-foreground">POP et configuration fournisseur générique sont bloqués par design. L’éjection de maintenance ci-dessus impose une vérification fournisseur, une autorisation de cinq minutes, une confirmation écrite et une cible unique.</p>
       </section>
     </div>
   );

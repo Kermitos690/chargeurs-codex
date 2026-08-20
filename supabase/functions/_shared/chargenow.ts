@@ -245,8 +245,12 @@ export const ejectByRepair = (cabinetid: string, slotNum: number, context: Super
 // The only route allowed to bypass the broad mutation flag. Its target is
 // fixed by a short-lived, server-only permit; every other mutation remains
 // governed by CHARGENOW_MUTATIONS_ENABLED.
-export const ejectByRepairWithOneTimePermit = (cabinetid: string, slotNum: number) => {
-  const permit = oneTimeMaintenanceEjectionPermit();
+export const ejectByRepairWithOneTimePermit = (
+  cabinetid: string,
+  slotNum: number,
+  suppliedPermit: OneTimeMaintenanceEjectionPermit | null = oneTimeMaintenanceEjectionPermit(),
+) => {
+  const permit = suppliedPermit;
   if (!permit || permit.stationId !== cabinetid || permit.slotNum !== slotNum || Date.parse(permit.expiresAt) <= Date.now()) {
     return Promise.resolve<ApiResult>({ ok: false, status: 0, data: null, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" });
   }

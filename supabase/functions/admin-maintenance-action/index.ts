@@ -11,6 +11,9 @@ import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const db = adminClient();
+  let auditActionType: string | null = null;
+  let auditStationId: string | null = null;
+  let auditSlotNum: number | null = null;
 
   const adminId = await requireAdmin(req, db);
   if (!adminId) {
@@ -19,7 +22,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { actionType, stationId, slotNum, eventPushUrl, language } = await req.json();
+    const { actionType, stationId, slotNum, eventPushUrl, language, batteryId, permitId } = await req.json();
+    auditActionType = typeof actionType === "string" ? actionType : null;
+    auditStationId = typeof stationId === "string" ? stationId : null;
+    auditSlotNum = Number.isInteger(Number(slotNum)) ? Number(slotNum) : null;
 
     // Real backend health probe (no secrets exposed, only booleans).
     if (actionType === "health_check") {
@@ -57,27 +63,94 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const stationActions = new Set(["test_auth", "sync_status", "eject_by_repair", "operation_pop"]);
+    const stationActions = new Set(["test_auth", "sync_status", "prepare_eject_by_repair", "eject_by_repair", "operation_pop"]);
     if (stationActions.has(actionType) && (typeof stationId !== "string" || !/^[A-Za-z0-9_-]{4,64}$/.test(stationId))) {
       return new Response(JSON.stringify({ ok: false, error: "VALID_STATION_REQUIRED" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (["eject_by_repair", "operation_pop"].includes(actionType)
+    if (["prepare_eject_by_repair", "eject_by_repair", "operation_pop"].includes(actionType)
       && (!Number.isInteger(Number(slotNum)) || Number(slotNum) < 1 || Number(slotNum) > 128)) {
       return new Response(JSON.stringify({ ok: false, error: "VALID_SLOT_REQUIRED" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // A physical repair ejection is never unlocked by the broad provider flag
-    // alone. It needs an exact, short-lived server-only permit. No client can
-    // select a different cabinet or slot, and the permit is consumed after one
-    // recorded attempt (including an ambiguous timeout).
+    // alone. It needs an exact, short-lived server-side permit. No client can
+    // select a different cabinet, slot or detected battery, and the permit is
+    // consumed before one recorded attempt (including an ambiguous timeout).
     let oneTimePermit: OneTimeMaintenanceEjectionPermit | null = null;
+    const normalizedBatteryId = typeof batteryId === "string" ? batteryId.trim().toUpperCase() : "";
+
+    const detectedBatteryInSlot = (providerPayload: unknown, expectedSlot: number): string | null => {
+      const root = providerPayload && typeof providerPayload === "object" ? providerPayload as Record<string, unknown> : {};
+      const nested = root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : root;
+      const batteries = nested.batteries;
+      if (!Array.isArray(batteries)) return null;
+      const entry = batteries.find((candidate) => {
+        const item = candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : {};
+        return Number(item.slotNum ?? item.slot_num) === expectedSlot;
+      });
+      if (!entry || typeof entry !== "object") return null;
+      const id = (entry as Record<string, unknown>).batteryId ?? (entry as Record<string, unknown>).battery_id;
+      return typeof id === "string" && id.trim() ? id.trim().toUpperCase() : null;
+    };
+
+    if (actionType === "prepare_eject_by_repair") {
+      if (!/^[A-Z0-9_-]{6,64}$/.test(normalizedBatteryId)) {
+        return new Response(JSON.stringify({ ok: false, error: "VALID_BATTERY_ID_REQUIRED" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const current = await cabinetQuery(stationId);
+      const detectedBatteryId = current.ok ? detectedBatteryInSlot(current.data, Number(slotNum)) : null;
+      if (!detectedBatteryId || detectedBatteryId !== normalizedBatteryId) {
+        await logApi(db, {
+          service: "chargenow", endpoint: "maintenance:prepare_eject_by_repair", method: "POST", status_code: current.status,
+          request: { stationId, slotNum, claimedBatteryId: normalizedBatteryId }, response: current.data,
+          error: current.error ?? "BATTERY_SLOT_MISMATCH",
+        });
+        return new Response(JSON.stringify({ ok: false, error: "BATTERY_SLOT_MISMATCH", detectedBatteryId }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const prepared: OneTimeMaintenanceEjectionPermit = {
+        id: crypto.randomUUID(), stationId, slotNum: Number(slotNum),
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+      };
+      const { error: insertError } = await db.from("maintenance_actions").insert({
+        station_id: stationId,
+        action_type: "pending_one_time_maintenance_ejection",
+        params: { oneTimePermitId: prepared.id, stationId, slotNum: prepared.slotNum, batteryId: normalizedBatteryId, expiresAt: prepared.expiresAt },
+        result: { state: "prepared_after_provider_slot_check" },
+        performed_by: adminId,
+      });
+      if (insertError) throw insertError;
+      await logApi(db, {
+        service: "chargenow", endpoint: "maintenance:prepare_eject_by_repair", method: "POST", status_code: current.status,
+        request: { stationId, slotNum, batteryId: normalizedBatteryId, permitId: prepared.id },
+        response: { state: "prepared", expiresAt: prepared.expiresAt },
+      });
+      return new Response(JSON.stringify({ ok: true, permitId: prepared.id, batteryId: normalizedBatteryId, expiresAt: prepared.expiresAt }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (actionType === "eject_by_repair") {
-      const permit = oneTimeMaintenanceEjectionPermit();
-      const permitMatches = permit
-        && permit.stationId === stationId
-        && permit.slotNum === Number(slotNum)
+      const requestedPermitId = typeof permitId === "string" ? permitId.trim() : "";
+      const { data: permitRow, error: permitError } = await db.from("maintenance_actions")
+        .select("id,params,performed_by")
+        .eq("action_type", "pending_one_time_maintenance_ejection")
+        .eq("performed_by", adminId)
+        .contains("params", { oneTimePermitId: requestedPermitId })
+        .maybeSingle();
+      if (permitError) throw permitError;
+      const permitParams = permitRow?.params && typeof permitRow.params === "object" ? permitRow.params as Record<string, unknown> : {};
+      const permit: OneTimeMaintenanceEjectionPermit | null = permitRow
+        && typeof permitParams.oneTimePermitId === "string"
+        && permitParams.oneTimePermitId === requestedPermitId
+        && typeof permitParams.stationId === "string"
+        && Number.isInteger(Number(permitParams.slotNum))
+        && typeof permitParams.expiresAt === "string"
+        ? { id: requestedPermitId, stationId: permitParams.stationId, slotNum: Number(permitParams.slotNum), expiresAt: permitParams.expiresAt }
+        : null;
+      const permitMatches = permit && permit.stationId === stationId && permit.slotNum === Number(slotNum)
         && Date.parse(permit.expiresAt) > Date.now();
       if (!permitMatches) {
         return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" }),
@@ -86,13 +159,31 @@ Deno.serve(async (req) => {
       oneTimePermit = permit;
       const { count, error: priorAttemptError } = await db.from("maintenance_actions")
         .select("id", { count: "exact", head: true })
-        .eq("action_type", "eject_by_repair")
+        .eq("action_type", "one_time_maintenance_ejection_attempt")
         .contains("params", { oneTimePermitId: permit.id });
       if (priorAttemptError) throw priorAttemptError;
       if ((count ?? 0) > 0) {
         return new Response(JSON.stringify({ ok: false, error: "ONE_TIME_MAINTENANCE_EJECTION_ALREADY_ATTEMPTED" }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+      const current = await cabinetQuery(stationId);
+      const expectedBatteryId = typeof permitParams.batteryId === "string" ? permitParams.batteryId : "";
+      const detectedBatteryId = current.ok ? detectedBatteryInSlot(current.data, Number(slotNum)) : null;
+      if (!detectedBatteryId || detectedBatteryId !== expectedBatteryId) {
+        await logApi(db, {
+          service: "chargenow", endpoint: "maintenance:eject_by_repair", method: "POST", status_code: current.status,
+          request: { stationId, slotNum, permitId: permit.id, expectedBatteryId }, response: current.data,
+          error: current.error ?? "BATTERY_SLOT_MISMATCH",
+        });
+        return new Response(JSON.stringify({ ok: false, error: "BATTERY_SLOT_MISMATCH", detectedBatteryId }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { error: attemptError } = await db.from("maintenance_actions").insert({
+        station_id: stationId, action_type: "one_time_maintenance_ejection_attempt",
+        params: { oneTimePermitId: permit.id, slotNum: Number(slotNum), batteryId: expectedBatteryId, expiresAt: permit.expiresAt },
+        result: { state: "provider_request_started" }, performed_by: adminId,
+      });
+      if (attemptError) throw attemptError;
     }
     if (["operation_pop", "config_event_push"].includes(actionType)) {
       return new Response(JSON.stringify({ ok: false, error: "PHYSICAL_MUTATION_NOT_PERMITTED" }),
@@ -121,7 +212,7 @@ Deno.serve(async (req) => {
         result = await eventPushConfig(eventPushUrl);
         break;
       case "eject_by_repair": // ⚠️ DANGEROUS
-        result = await ejectByRepairWithOneTimePermit(stationId, Number(slotNum));
+        result = await ejectByRepairWithOneTimePermit(stationId, Number(slotNum), oneTimePermit);
         break;
       case "operation_pop": // ⚠️ DANGEROUS
         result = await operationPop(stationId, Number(slotNum));
@@ -144,7 +235,12 @@ Deno.serve(async (req) => {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
+    const error = String(e);
+    await logApi(db, {
+      service: "chargenow", endpoint: "maintenance:unhandled", method: "POST", status_code: 500,
+      request: { actionType: auditActionType, stationId: auditStationId, slotNum: auditSlotNum }, error,
+    });
+    return new Response(JSON.stringify({ ok: false, error: "MAINTENANCE_ACTION_FAILED", detail: error }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
