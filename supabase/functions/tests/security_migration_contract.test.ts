@@ -1,7 +1,7 @@
 import { assert, assertMatch } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 const migration = await Deno.readTextFile(
-  new URL("../../migrations/20260803203905_harden_public_rpc_access.sql", import.meta.url),
+  new URL("../../migrations/20260809024640_harden_public_rpc_access.sql", import.meta.url),
 );
 
 Deno.test("role helper hardening binds every callable role check to auth.uid", () => {

@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * TEST-only Stripe Terminal 2.23.4 compatibility runtime for DTA21269.
+ * TEST-only Stripe Terminal 2.22.0 compatibility runtime for DTA21269.
  *
  * This remains on Stripe's v2 USB lane because the modern offline-capable SDK
  * previously failed against the tablet's Android 11 Keymaster. The runtime is
@@ -56,7 +56,9 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
     private static final String TAG = "ChargeursStripeV2";
     private static final String PREFS = "stripe_terminal_reader";
     private static final String LAST_READER_ID = "last_reader_id";
-    private static final String SDK_COMPAT = "2.23.4-test-only";
+    // Kept package-visible so the build contract can prevent diagnostics from
+    // drifting away from the pinned SDK dependency.
+    static final String SDK_COMPAT = "2.22.0-test-only";
 
     private final Context context;
     private final KioskConfig config;
@@ -331,7 +333,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
             }
             return true;
         } catch (Exception error) {
-            Log.e(TAG, "Stripe Terminal 2.23.4 init failed", error);
+            Log.e(TAG, "Stripe Terminal 2.22.0 init failed", error);
             setError("STRIPE_TERMINAL_V2_INIT_FAILED");
             return false;
         }
@@ -447,7 +449,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         else if (blankToNull(stripeReaderSerial) != null) preferences.edit().putString(LAST_READER_ID, stripeReaderSerial).apply();
         safeErrorCode = null;
         readerState = paymentRunning.get() ? "BUSY" : "READY";
-        Log.i(TAG, "WisePad USB connected through Stripe Terminal 2.23.4");
+        Log.i(TAG, "WisePad USB connected through Stripe Terminal 2.22.0");
     }
 
     private boolean readerMatchesBinding(Reader reader) {

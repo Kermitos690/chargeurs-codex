@@ -148,6 +148,8 @@ const copy = {
   },
 } as const;
 
+type ReturnCopy = (typeof copy)[keyof typeof copy];
+
 const locales = { fr: "fr-CH", en: "en-CH", de: "de-CH" } as const;
 
 function stationFromPath() {
@@ -456,7 +458,7 @@ function PricingGrid({
   summary: Summary;
   locale: string;
   currency: string;
-  copy: (typeof copy)[keyof typeof copy];
+  copy: ReturnCopy;
   periods: string;
 }) {
   return (

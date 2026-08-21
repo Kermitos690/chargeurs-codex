@@ -193,7 +193,9 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
         warningsAsErrors = true
-        disable += setOf("OldTargetApi", "GradleDependency")
+        // The wrapper version is pinned for reproducible signed staging APKs;
+        // availability of a newer Gradle patch must not hide application lint.
+        disable += setOf("OldTargetApi", "GradleDependency", "AndroidGradlePluginVersion")
     }
 }
 

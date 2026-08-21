@@ -17,7 +17,7 @@ describe("kiosk Edge proxy", () => {
       { "X-Kiosk-Token": "kt_test", "X-Idempotency-Key": "intent-12345678" },
     );
 
-    expect(result).toEqual({ data: { ok: true }, transportError: false });
+    expect(result).toEqual({ data: { ok: true }, transportError: false, status: 200, authError: false });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/kiosk/create-rental-session",
       expect.objectContaining({

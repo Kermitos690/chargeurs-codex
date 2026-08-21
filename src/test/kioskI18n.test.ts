@@ -44,7 +44,7 @@ describe("kiosk translations", () => {
 
   it("never starts an inactivity reset while payment or dispense is active", () => {
     const source = readFileSync("src/pages/Kiosk.tsx", "utf8");
-    expect(source).toContain('const protectedFlow = ["starting", "qr", "waitpay", "success", "support"].includes(phase);');
+    expect(source).toContain('const protectedFlow = ["starting", "payment_ready", "terminal", "qr", "waitpay", "success", "support"].includes(phase);');
   });
 
   it("does not leave legacy French kiosk UI literals in the main rental path", () => {

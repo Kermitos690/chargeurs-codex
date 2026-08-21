@@ -26,7 +26,7 @@ describe("rental alert engine", () => {
 
   it("warns before the daily cap and blocks duplicates", () => {
     const due = dueRentalAlerts(
-      { startedAt, now: new Date("2026-07-15T19:30:00.000Z") },
+      { startedAt, now: new Date("2026-07-16T07:30:00.000Z") },
       ["rental_started", "first_hour"],
     );
     expect(due.some((item) => item.kind === "daily_cap_approaching")).toBe(true);

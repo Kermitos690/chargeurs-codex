@@ -59,6 +59,7 @@ describe("customer account navigation", () => {
       "/compte",
       "/compte/locations",
       "/compte/paiements",
+      "/compte/pass",
       "/compte/support",
       "/compte/profil",
     ]);

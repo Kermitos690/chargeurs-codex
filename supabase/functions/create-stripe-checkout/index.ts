@@ -1,176 +1,382 @@
-// create-stripe-checkout — real hosted Stripe Checkout for the kiosk QR.
-// Customer-facing methods are intentionally limited to card wallets/cards and
-// TWINT. Card/Apple Pay/Google Pay use a manual-capture authorization; TWINT
-// keeps its native automatic-capture/refund semantics.
-import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+// create-stripe-checkout — creates a hosted Stripe Checkout Session for the
+// server-computed deposit. The kiosk renders the returned URL as a QR code.
+//
+// Settlement is payment-method aware:
+//  - card / Apple Pay / Google Pay: manual capture (30 CHF hold, capture later)
+//  - TWINT: automatic capture (30 CHF prepaid, unused balance refunded later)
+//
+// The deposit, currency and pricing profile are taken only from the frozen
+// server-side pricing snapshot. No amount supplied by the browser is trusted.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
+import { adminClient, logApi, auditLog, snapshotHash, verifyKioskDevice } from "../_shared/db.ts";
+import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
+import { computeFinalPricingFromSnapshot, PricingSnapshotError } from "../_shared/pricingSnapshot.ts";
+import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
+import { evaluateCheckoutKioskBinding } from "./kioskBinding.ts";
+import { BRAND, checkoutLocale, checkoutProductCopy } from "../_shared/brand.ts";
+import { checkoutExpiryUnix } from "../_shared/checkoutExpiry.ts";
 
-const headers = {
+const APP_URL = Deno.env.get("PUBLIC_APP_URL") ?? "";
+
+const checkoutCorsHeaders = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-idempotency-key",
-  "Access-Control-Expose-Headers": "x-correlation-id",
 };
-const admin = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
-async function sha256(input: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-function canonicalize(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(obj[key])}`).join(",")}}`;
-}
-async function snapshotHash(value: unknown) { return sha256(canonicalize(value)); }
-
-async function auth(req: Request, db: any, stationId: string) {
-  const token = (req.headers.get("X-Kiosk-Token") ?? "").trim();
-  if (token.length < 24) return null;
-  const hash = await sha256(token);
-  const { data } = await db.from("kiosk_devices").select("id,station_id,active,token_revoked,token_expires_at").eq("token_hash", hash).maybeSingle();
-  if (!data || data.station_id !== stationId || !data.active || data.token_revoked) return null;
-  if (data.token_expires_at && Date.parse(data.token_expires_at) < Date.now()) return null;
-  return data;
-}
-function safeOrigin(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
+function configuredAppUrl(): string | null {
   try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" || url.hostname.endsWith(".supabase.co")) return null;
+    const url = new URL(APP_URL);
+    if (url.protocol !== "https:") return null;
     return url.origin;
-  } catch { return null; }
-}
-
-async function loadOrCreateOrchestrator(db: any, session: any) {
-  const read = async () => {
-    const { data, error } = await db.from("rental_orchestrator_snapshots").select("state,version").eq("rental_id", session.id).maybeSingle();
-    if (error) throw error;
-    return data;
-  };
-  let orchestrator = await read();
-  if (orchestrator) return orchestrator;
-  const { data: created, error: createError } = await db.from("rental_orchestrator_snapshots").insert({ rental_id: session.id, state: "created", version: 0, station_id: session.station_id ?? null, battery_id: session.battery_id ?? null }).select("state,version").maybeSingle();
-  if (!createError && created) return created;
-  if (createError && createError.code !== "23505") throw createError;
-  orchestrator = await read();
-  if (!orchestrator) throw new Error("ORCHESTRATOR_SNAPSHOT_CREATE_FAILED");
-  return orchestrator;
-}
-async function ensurePaymentStarted(db: any, session: any) {
-  const orchestrator = await loadOrCreateOrchestrator(db, session);
-  if (String(orchestrator.state) === "payment_pending") return;
-  if (String(orchestrator.state) !== "created") throw new Error(`PAYMENT_STATE_${String(orchestrator.state).toUpperCase()}`);
-  const { error: appendError } = await db.rpc("append_rental_orchestrator_event", {
-    p_rental_id: session.id,
-    p_expected_version: Number(orchestrator.version ?? 0),
-    p_event_type: "payment_started",
-    p_idempotency_key: `payment_started:direct_stripe:${session.id}`,
-    p_occurred_at: new Date().toISOString(),
-    p_metadata: { source: "kiosk_direct_stripe_checkout" },
-    p_resulting_state: "payment_pending",
-    p_payment_intent_id: null,
-    p_station_id: session.station_id ?? null,
-    p_battery_id: session.battery_id ?? null,
-    p_final_amount_chf: null,
-    p_failure_reason: null,
-  });
-  if (appendError && !String(appendError.message ?? "").includes("IDEMPOTENCY_KEY_CONFLICT")) throw appendError;
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers });
   const correlationId = crypto.randomUUID();
-  const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify({ ...body, correlationId }), { status, headers: { ...headers, "Content-Type": "application/json", "X-Correlation-Id": correlationId } });
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify({ ...(body as object), correlationId }), {
+    status,
+    headers: { ...checkoutCorsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+  });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: checkoutCorsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
-  let db: any = null;
+  const db = adminClient();
   let rentalSessionId = "";
+
   try {
-    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const body = await req.json().catch(() => ({}));
     rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
     if (!rentalSessionId) return json({ ok: false, error: "MISSING_SESSION" }, 400);
 
-    db = admin();
-    const { data: session, error } = await db.from("rental_sessions").select("*").eq("id", rentalSessionId).maybeSingle();
-    if (error) throw error;
+    const { data: session, error: sessionError } = await db.from("rental_sessions")
+      .select("*").eq("id", rentalSessionId).maybeSingle();
+    if (sessionError) throw sessionError;
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
-    const stationId = String(session.station_id ?? "");
-    const device = await auth(req, db, stationId);
-    if (!device) return json({ ok: false, error: "KIOSK_AUTH_INVALID" }, 401);
-    if (String(session.kiosk_device_id ?? "") !== String(device.id)) return json({ ok: false, error: "KIOSK_DEVICE_MISMATCH" }, 403);
-    if (session.expires_at && Date.parse(session.expires_at) < Date.now()) return json({ ok: false, error: "SESSION_EXPIRED" }, 410);
-    if (session.paid_at) return json({ ok: false, error: "SESSION_ALREADY_PAID" }, 409);
-
-    const secretKey = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
-    if (!(secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_"))) return json({ ok: false, error: "STRIPE_TEST_KEY_REQUIRED" }, 503);
-
-    const appOrigin = safeOrigin(body.origin) ?? safeOrigin(Deno.env.get("PUBLIC_APP_URL"));
-    if (!appOrigin) return json({ ok: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
-
-    const snapshot = session.pricing_snapshot as Record<string, unknown> | null;
-    const depositCents = Math.round(Number(session.deposit_amount_cents ?? snapshot?.deposit_cents ?? 0));
-    if (!snapshot || !Number.isInteger(depositCents) || depositCents <= 0) return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
-    const storedHash = typeof session.pricing_snapshot_hash === "string" ? session.pricing_snapshot_hash : "";
-    if (storedHash && await snapshotHash(snapshot) !== storedHash) return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
-
-    const stripe = new Stripe(secretKey, { apiVersion: "2025-09-30.clover" as any, httpClient: Stripe.createFetchHttpClient() });
-
-    if (session.stripe_checkout_session_id) {
-      try {
-        const existing = await stripe.checkout.sessions.retrieve(String(session.stripe_checkout_session_id));
-        if (existing.status === "open" && existing.url) {
-          return json({ ok: true, checkout_url: existing.url, checkout_id: existing.id, public_session_code: session.public_session_code, expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : session.checkout_url_expires_at, status: "awaiting_payment", deposit_cents: depositCents });
-        }
-      } catch { /* fresh Checkout below */ }
+    // Checkout URLs are payment capabilities. They may only be created or
+    // disclosed to the exact active kiosk that created this station-bound
+    // rental. verifyKioskDevice also rejects revoked and expired credentials.
+    const stationId = typeof session.station_id === "string" ? session.station_id.trim() : "";
+    if (!stationId) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: { reason: "SESSION_STATION_MISSING" },
+      });
+      return json({ ok: false, error: "SESSION_STATION_MISSING" }, 409);
+    }
+    const kioskAuth = await verifyKioskDevice(req, db, stationId);
+    if (!kioskAuth.ok) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: { reason: kioskAuth.error, station_id: stationId },
+      });
+      return json({ ok: false, error: kioskAuth.error }, kioskAuth.status);
+    }
+    const binding = evaluateCheckoutKioskBinding(session, kioskAuth.device);
+    if (!binding.ok) {
+      await auditLog(db, {
+        action: "stripe.checkout.refused",
+        target: String(session.id),
+        data: {
+          reason: binding.error,
+          station_id: stationId,
+          kiosk_device_id: kioskAuth.device.id,
+          token_fp: kioskAuth.tokenFingerprint,
+        },
+      });
+      return json({ ok: false, error: binding.error }, binding.status);
     }
 
-    await ensurePaymentStarted(db, session);
-    const lang = session.customer_language === "de" || session.customer_language === "en" ? session.customer_language : "fr";
-    const currency = String(session.currency ?? "CHF").toLowerCase();
-    if (currency !== "chf") return json({ ok: false, error: "TWINT_REQUIRES_CHF" }, 409);
-    const publicCode = String(session.public_session_code ?? "");
-    const expiresAt = Math.floor(Date.now() / 1000) + 30 * 60;
-    const pricingHash = storedHash || await snapshotHash(snapshot);
+    const stripeRuntime = validateStripeTestRuntime();
+    if (!stripeRuntime.ok) {
+      return json({ ok: false, configured: false, error: stripeRuntime.error }, 503);
+    }
+
+    const base = configuredAppUrl();
+    if (!base) return json({ ok: false, configured: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
+
+    const snap = (session.pricing_snapshot ?? null) as Record<string, unknown> | null;
+    if (!snap || typeof snap !== "object") {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "MISSING_SNAPSHOT" } });
+      return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
+    }
+
+    const storedHash = typeof session.pricing_snapshot_hash === "string"
+      ? session.pricing_snapshot_hash
+      : "";
+    const recomputedHash = await snapshotHash(snap);
+    if (!storedHash || recomputedHash !== storedHash) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_HASH_MISMATCH" } });
+      return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    }
+
+    const snapCurrency = String(snap.currency ?? "").toUpperCase();
+    const sessCurrency = String(session.currency ?? "CHF").toUpperCase();
+    if (snapCurrency && snapCurrency !== sessCurrency) {
+      await auditLog(db, {
+        action: "pricing.error",
+        target: session.id,
+        data: { code: "CURRENCY_MISMATCH", snapCurrency, sessCurrency },
+      });
+      return json({ ok: false, error: "CURRENCY_MISMATCH" }, 409);
+    }
+    if (
+      (session.price_profile_id && String(snap.profile_id ?? "") !== String(session.price_profile_id)) ||
+      (session.price_profile_version != null && Number(snap.profile_version) !== Number(session.price_profile_version))
+    ) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "SNAPSHOT_BINDING_MISMATCH" } });
+      return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    }
+
+    try {
+      const validationTime = String(session.created_at ?? new Date().toISOString());
+      computeFinalPricingFromSnapshot({
+        snapshot: snap,
+        expectedCurrency: sessCurrency,
+        startAt: validationTime,
+        endAt: validationTime,
+        returnState: "normal",
+      });
+    } catch (error) {
+      const code = error instanceof PricingSnapshotError ? error.code : "SNAPSHOT_INVALID";
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code } });
+      return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    }
+
+    const depositCents = Number(snap.deposit_cents ?? NaN);
+    if (!Number.isInteger(depositCents) || depositCents <= 0) {
+      await auditLog(db, { action: "pricing.error", target: session.id, data: { code: "DEPOSIT_NOT_CONFIGURED" } });
+      return json({ ok: false, error: "DEPOSIT_NOT_CONFIGURED" }, 409);
+    }
+
+    // The first payment rail is authoritative. Claim QR before returning a
+    // cached Checkout URL or making a new Stripe request so Terminal and QR
+    // cannot create concurrent financial side effects for one rental.
+    const { error: railError } = await db.rpc("claim_rental_payment_rail", {
+      p_rental_id: session.id,
+      p_rail: "qr_checkout",
+      p_correlation_id: correlationId,
+      p_metadata: { source: "create_stripe_checkout", station_id: stationId },
+    });
+    if (railError) {
+      const message = String(railError.message ?? "");
+      if (message.includes("PAYMENT_RAIL_ALREADY_CLAIMED")) {
+        return json({ ok: false, error: "PAYMENT_RAIL_ALREADY_CLAIMED" }, 409);
+      }
+      throw railError;
+    }
+
+    const pricingHash = storedHash;
+    const paymentEventKey = `payment_started:${session.id}:${pricingHash}`;
+    await appendRentalEvent(db, {
+      rentalId: String(session.id),
+      eventType: "payment_started",
+      idempotencyKey: paymentEventKey,
+      stationId: String(session.station_id ?? "") || null,
+      metadata: {
+        pricingSnapshotHash: pricingHash,
+        depositAmountCents: depositCents,
+        currency: sessCurrency,
+      },
+    });
+
+    if (
+      session.checkout_url &&
+      session.checkout_url_expires_at &&
+      new Date(session.checkout_url_expires_at).getTime() > Date.now() &&
+      ["checkout_created", "created", "payment_pending"].includes(String(session.state))
+    ) {
+      // Repair the local payment projection before re-disclosing an existing
+      // Checkout capability. A prior request may have created the Checkout
+      // session then failed while persisting `payments`; the webhook must
+      // still have a deterministic row to reconcile.
+      if (session.stripe_checkout_session_id) {
+        const { error: cachedPaymentError } = await db.from("payments").upsert({
+          rental_session_id: session.id,
+          stripe_session_id: session.stripe_checkout_session_id,
+          amount: Number(session.amount ?? depositCents / 100),
+          currency: session.currency,
+          status: "pending",
+          amount_authorized_cents: 0,
+          amount_captured_cents: 0,
+          amount_refunded_cents: 0,
+        }, { onConflict: "stripe_session_id" });
+        if (cachedPaymentError) throw cachedPaymentError;
+      }
+      return json({
+        ok: true,
+        checkout_url: session.checkout_url,
+        public_session_code: session.public_session_code,
+        expires_at: session.checkout_url_expires_at,
+        status: "awaiting_payment",
+        deposit_cents: depositCents,
+      });
+    }
+
+    const stripe = new Stripe(stripeRuntime.secretKey, {
+      apiVersion: "2024-12-18.acacia",
+      httpClient: Stripe.createFetchHttpClient(),
+    });
+
+    const amount = depositCents / 100;
+    const currency = sessCurrency.toLowerCase();
+    const expiresAtUnix = checkoutExpiryUnix();
+    const locale = checkoutLocale(session.customer_language ?? body.language);
+    const productCopy = checkoutProductCopy(locale);
+
     const metadata: Record<string, string> = {
-      rental_session_id: String(session.id), public_session_code: publicCode, station_id: stationId,
-      kiosk_device_id: String(session.kiosk_device_id ?? ""), pricing_snapshot_hash: pricingHash,
-      deposit_amount_cents: String(depositCents), payment_purpose: "rental_guarantee",
+      rental_session_id: String(session.id),
+      public_session_code: String(session.public_session_code ?? ""),
+      station_id: String(session.station_id ?? ""),
+      kiosk_device_id: String(session.kiosk_device_id ?? ""),
+      cabinet_sn: String(session.cabinet_id ?? ""),
+      shop_id: String(session.shop_id ?? ""),
+      price_profile_id: String(session.price_profile_id ?? ""),
+      price_profile_version: String(session.price_profile_version ?? ""),
+      pricing_snapshot_hash: pricingHash,
+      deposit_amount_cents: String(depositCents),
+      expected_currency: currency,
+      payment_purpose: "rental_deposit",
     };
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "payment",
-      locale: lang,
+      // No payment_method_types here: hosted Checkout reads the account's
+      // Dashboard configuration and only shows methods eligible for the CHF
+      // amount, country and customer phone. The kiosk remains QR-only.
+      locale,
       client_reference_id: String(session.id),
-      customer_creation: "always",
-      payment_method_types: ["card", "twint"],
-      payment_method_options: { card: { capture_method: "manual", setup_future_usage: "off_session" } },
-      payment_intent_data: { description: "Chargeurs.ch — garantie de location", metadata },
-      expires_at: expiresAt,
-      line_items: [{ price_data: { currency, product_data: { name: "Chargeurs.ch — Garantie de location", description: "30 CHF de garantie. Le prix réel est calculé au retour de la batterie." }, unit_amount: depositCents }, quantity: 1 }],
+      payment_intent_data: {
+        description: `${BRAND.name} — ${productCopy.depositLabel}`,
+        metadata,
+      },
+      // Do not override individual payment-method options here. Hosted
+      // Checkout selects only Dashboard-enabled methods eligible for the CHF
+      // amount and device, and they all use the same prepaid/refund settlement
+      // flow. A mixed manual-capture/card configuration is incompatible with
+      // some dynamic Checkout methods and caused Stripe to reject the session.
+      expires_at: expiresAtUnix,
+      line_items: [{
+        price_data: {
+          currency,
+          product_data: {
+            name: productCopy.name,
+            description: productCopy.description,
+          },
+          unit_amount: depositCents,
+        },
+        quantity: 1,
+      }],
       metadata,
-      custom_text: { submit: { message: "Le prix final est calculé au retour. Carte et wallets compatibles : réservation bancaire temporaire. TWINT : débit puis remboursement de la différence." } },
-      success_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/success?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
-      cancel_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/cancel?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
-    } as any, { idempotencyKey: `rental_direct_checkout:v8:${session.id}:${pricingHash}` });
+      success_url: `${base}/pay/${session.id}/success?c=${encodeURIComponent(session.public_session_code ?? "")}`,
+      cancel_url: `${base}/pay/${session.id}/cancel?c=${encodeURIComponent(session.public_session_code ?? "")}`,
+    }, {
+      // v2 intentionally supersedes the rejected v1 request shape. Stripe
+      // caches failed idempotent requests, so retrying a given rental must use
+      // this versioned key once rather than replaying the old invalid payload.
+      idempotencyKey: `rental_deposit_checkout:v2:${session.id}:${pricingHash}`,
+    });
 
-    const expiresIso = new Date(expiresAt * 1000).toISOString();
-    const { error: updateError } = await db.from("rental_sessions").update({ stripe_checkout_session_id: checkout.id, checkout_url: checkout.url, checkout_url_expires_at: expiresIso, expires_at: expiresIso, state: "checkout_created", amount: depositCents / 100, amount_expected: depositCents / 100, deposit_amount_cents: depositCents, settlement_status: "pending", settlement_error: null, updated_at: new Date().toISOString() }).eq("id", session.id);
-    if (updateError) throw updateError;
-    const { error: paymentError } = await db.from("payments").upsert({ rental_session_id: session.id, stripe_session_id: checkout.id, amount: depositCents / 100, currency: session.currency, status: "pending", amount_authorized_cents: 0, amount_captured_cents: 0, amount_refunded_cents: 0 }, { onConflict: "stripe_session_id" });
+    const expiresAtIso = new Date(expiresAtUnix * 1000).toISOString();
+
+    await logApi(db, {
+      service: "stripe",
+      endpoint: "checkout.sessions.create",
+      method: "POST",
+      status_code: 200,
+      request: { rentalSessionId, depositCents },
+      response: { id: checkout.id },
+      error: null,
+    });
+
+    // Legacy fields remain a compatibility projection for the current UI. The
+    // canonical payment_started transition is already persisted above.
+    const { error: rentalUpdateError } = await db.from("rental_sessions").update({
+      stripe_checkout_session_id: checkout.id,
+      checkout_url: checkout.url,
+      checkout_url_expires_at: expiresAtIso,
+      state: "checkout_created",
+      amount,
+      amount_expected: amount,
+      deposit_amount_cents: depositCents,
+      settlement_status: "pending",
+      settlement_error: null,
+    }).eq("id", session.id);
+    if (rentalUpdateError) throw rentalUpdateError;
+
+    const { error: paymentError } = await db.from("payments").upsert({
+      rental_session_id: session.id,
+      stripe_session_id: checkout.id,
+      amount,
+      currency: session.currency,
+      status: "pending",
+      amount_authorized_cents: 0,
+      amount_captured_cents: 0,
+      amount_refunded_cents: 0,
+    }, { onConflict: "stripe_session_id" });
     if (paymentError) throw paymentError;
 
-    await db.from("audit_logs").insert({ action: "stripe.checkout.direct_created", target: String(session.id), data: { stripe_checkout_session_id: checkout.id, station_id: stationId, deposit_cents: depositCents, currency, pricing_snapshot_hash: pricingHash, qr_target: "stripe_checkout", payment_methods: ["card", "twint"], card_capture: "manual", twint_capture: "automatic", stripe_api_version: "2025-09-30.clover", success_route: "legacy_and_current_compatible_success", correlation_id: correlationId } }).then(() => {}, () => {});
+    await auditLog(db, {
+      action: "stripe.checkout.created",
+      target: session.id,
+      data: {
+        stripe_checkout_session_id: checkout.id,
+        station_id: session.station_id,
+        kiosk_device_id: session.kiosk_device_id ?? null,
+        price_profile_id: session.price_profile_id,
+        price_profile_version: session.price_profile_version,
+        deposit_cents: depositCents,
+        currency,
+        pricing_snapshot_hash: pricingHash,
+        settlement_strategy: "prepaid_refund",
+        correlation_id: correlationId,
+      },
+    });
 
-    return json({ ok: true, checkout_url: checkout.url, checkout_id: checkout.id, public_session_code: session.public_session_code, expires_at: expiresIso, status: "awaiting_payment", deposit_cents: depositCents });
+    return json({
+      ok: true,
+      checkout_url: checkout.url,
+      checkout_id: checkout.id,
+      public_session_code: session.public_session_code,
+      expires_at: expiresAtIso,
+      status: "awaiting_payment",
+      deposit_cents: depositCents,
+    });
   } catch (error) {
-    const raw = error as any;
-    const errorCode = typeof raw?.code === "string" ? raw.code : (error instanceof Error ? error.message : "UNKNOWN");
-    const errorMessage = typeof raw?.message === "string" ? raw.message : (error instanceof Error ? error.message : "");
-    console.error("create-stripe-checkout direct", { name: error instanceof Error ? error.name : "error", code: raw?.code ?? null, param: raw?.param ?? null, message: errorMessage.slice(0, 500), correlationId });
-    if (db && rentalSessionId) await db.from("audit_logs").insert({ action: "stripe.checkout.failed", target: rentalSessionId, data: { code: String(errorCode).slice(0, 120), message: errorMessage.slice(0, 500), stripe_param: typeof raw?.param === "string" ? raw.param.slice(0, 120) : null, error_type: typeof raw?.type === "string" ? raw.type.slice(0, 80) : null, correlation_id: correlationId } }).then(() => {}, () => {});
-    return json({ ok: false, error: typeof raw?.code === "string" ? `STRIPE_${raw.code.toUpperCase()}` : "STRIPE_CHECKOUT_FAILED" }, 500);
+    const stripeError = error as {
+      type?: unknown; code?: unknown; param?: unknown; statusCode?: unknown;
+    };
+    const stripeErrorCode = typeof stripeError.code === "string" ? stripeError.code : null;
+    const stripeErrorType = typeof stripeError.type === "string" ? stripeError.type : null;
+    const stripeErrorParam = typeof stripeError.param === "string" ? stripeError.param : null;
+    const code = error instanceof OrchestratorError
+      ? error.code
+      : stripeErrorParam === "expires_at"
+        ? "STRIPE_CHECKOUT_EXPIRY_INVALID"
+        : "STRIPE_CHECKOUT_FAILED";
+    // Only structured, non-secret Stripe diagnostics are retained. The raw
+    // provider message is deliberately never returned to the kiosk screen.
+    console.error("create-stripe-checkout failed", { code, stripeErrorCode, stripeErrorType, stripeErrorParam });
+    if (rentalSessionId) {
+      await auditLog(db, {
+        action: "stripe.checkout.failed",
+        target: rentalSessionId,
+        data: {
+          code,
+          correlation_id: correlationId,
+          stripe_error_code: stripeErrorCode,
+          stripe_error_type: stripeErrorType,
+          stripe_error_param: stripeErrorParam,
+          stripe_status_code: typeof stripeError.statusCode === "number" ? stripeError.statusCode : null,
+        },
+      }).catch(() => {});
+    }
+    const status = error instanceof OrchestratorError ? 409 : 500;
+    return json({ ok: false, error: code }, status);
   }
 });

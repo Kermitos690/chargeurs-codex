@@ -28,6 +28,8 @@ type Station = Record<string, any> & {
   location_name?: string | null;
   rentable_count?: number | null;
   last_sync_at?: string | null;
+  online?: boolean | null;
+  status?: string | null;
 };
 
 type KioskDevice = {
@@ -272,7 +274,7 @@ export default function AdminRemoteKiosk() {
 
   const selected = useMemo(() => stations.find((station) => station.station_id === selectedId) ?? null, [stations, selectedId]);
   const kiosk = useMemo(() => devices.find((device) => device.station_id === selectedId && device.active && !device.token_revoked) ?? devices.find((device) => device.station_id === selectedId) ?? null, [devices, selectedId]);
-  const connection = selected ? stationConnectionState(selected) : "unknown";
+  const connection = selected ? stationConnectionState({ online: selected.online ?? null, status: selected.status ?? null }) : "unknown";
   const online = connection === "online";
   const kioskRecentlySeen = kiosk?.last_seen_at ? Date.now() - new Date(kiosk.last_seen_at).getTime() < 90_000 : false;
 
@@ -303,7 +305,7 @@ export default function AdminRemoteKiosk() {
             {selected && (
               <div className="mt-5 space-y-3 text-sm">
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill tone={online ? "good" : "warn"}>{online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{stationConnectionLabel(selected)}</StatusPill>
+                  <StatusPill tone={online ? "good" : "warn"}>{online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}{stationConnectionLabel({ online: selected.online ?? null, status: selected.status ?? null })}</StatusPill>
                   <StatusPill tone={kioskRecentlySeen ? "good" : "neutral"}><CircleDot className="h-3.5 w-3.5" />{kioskRecentlySeen ? "Tablette active" : "Tablette non vue récemment"}</StatusPill>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-3">

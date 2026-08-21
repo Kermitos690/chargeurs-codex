@@ -4,13 +4,13 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 import { readCabinetSnapshot } from "../_shared/cabinetSnapshot.ts";
-import { isCanonicalUuid } from "../_shared/uuid.ts";
 
 const headers = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
   "Access-Control-Expose-Headers": "x-correlation-id",
 };
+const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}[0-9a-f]$/i.test(v);
 const trustworthy = (s: any) => Boolean(s && s.confidence !== "low" && Array.isArray(s.conflicts) && s.conflicts.length === 0);
 // ChargeNow can emit two physical events several seconds after the HTTP answer.
 // Do not accept an early one-slot snapshot before that supplier event window has
@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     const rentalSessionId = body.rentalSessionId;
-    if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId) || !isCanonicalUuid(rentalSessionId)) return json({ ok: false, error: "INVALID_RECONCILIATION_REQUEST" }, 400);
+    if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId) || !uuid(rentalSessionId)) return json({ ok: false, error: "INVALID_RECONCILIATION_REQUEST" }, 400);
     const d = adminClient();
     const kiosk = await verifyKioskDevice(req, d, stationId);
     if (!kiosk.ok) return json({ ok: false, error: kiosk.error }, kiosk.status);

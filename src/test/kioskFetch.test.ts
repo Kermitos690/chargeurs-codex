@@ -51,16 +51,20 @@ describe("kiosk quote safety guard", () => {
     expect(isKioskQuoteRequest("https://example.supabase.co/rest/v1/rpc/compute_pricing")).toBe(false);
   });
 
-  it("accepts the confirmed beta upfront quote", () => {
+  it("accepts the authoritative Premium Guest quote", () => {
     expect(isSafeKioskQuote({
+      customer_segment: "guest",
+      tiered: true,
       currency: "CHF",
-      period_minutes: 30,
-      duration_cents: 75,
-      price_per_period_cents: 75,
-      final_cents: 75,
+      final_cents: 190,
       deposit_cents: 3_000,
-      daily_cap_cents: 1_800,
-      unreturned_fee_cents: 9_900,
+      total_cap_cents: 2_990,
+      tiers: [
+        { upper_minutes: 30, total_cents: 190 },
+        { upper_minutes: 120, total_cents: 390 },
+        { upper_minutes: 360, total_cents: 590 },
+        { upper_minutes: 1_440, total_cents: 790 },
+      ],
     })).toBe(true);
   });
 
