@@ -2,7 +2,8 @@
 // Stores raw events and classifies severity. Online/offline events update the
 // station directly. BATTERY_IN and BATTERY_BORROW_OUT are never assigned
 // heuristically: both require an exact immutable order/battery/station/slot
-// identity before they are delegated to the canonical rental state machine.
+// identity before they are retained as physical evidence. A delayed reconciler
+// owns any rental activation so it can see the full station delta.
 //
 // SECURITY: this endpoint MUTATES business state (station status, rental
 // returns/releases), so it is FAIL-CLOSED by default. Without
@@ -28,6 +29,11 @@ const SEVERITY: Record<string, string> = {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
+// The provider's BATTERY_BORROW_OUT events are stored as evidence, but they
+// cannot activate a paid rental directly. A real incident delivered two such
+// events for one rental order. Only the delayed reconciliation, which checks
+// the complete station delta, may activate a rental.
+const DIRECT_BORROW_OUT_ACTIVATION_ENABLED = false;
 
 export interface EventPayload {
   eventType?: string; type?: string; event?: string;
@@ -200,6 +206,15 @@ async function delegateBatteryBorrowOut(
       });
     }
     return j({ received: true, release_confirmed: false, requires_reconciliation: true, reason: "RELEASE_IDENTITY_INCOMPLETE" }, 202);
+  }
+
+  if (!DIRECT_BORROW_OUT_ACTIVATION_ENABLED) {
+    return j({
+      received: true,
+      release_confirmed: false,
+      requires_reconciliation: true,
+      reason: "AWAITING_COMPLETE_PHYSICAL_RECONCILIATION",
+    }, 202);
   }
 
   const { data: matches, error: matchError } = await db.from("rental_sessions")
