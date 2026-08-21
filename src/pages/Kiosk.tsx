@@ -26,6 +26,7 @@ import { createKioskIdempotencyKey } from "@/lib/kioskIdempotency";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { acceptsKioskStateVersion } from "@/lib/kioskStateVersion";
 import { hourlyRateCents } from "@/lib/kioskPricing";
+import { isKioskRentalReady } from "@/lib/kioskRentalGuard";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
@@ -482,7 +483,7 @@ export default function Kiosk() {
   };
 
   const available = slots.filter((slot) => slot.rentable).length || station?.rentable_count || 0;
-  const canRent = available > 0 && configured && slotNum !== null;
+  const canRent = isKioskRentalReady({ quotePresent: quote !== null, available, configured, slotNum });
   const connection = stationConnectionState(station ?? { status: null, online: null });
   const fmtAmount = (a: number, c: string) => `${Number(a).toFixed(2)} ${c}`;
   const fmtCents = (cents: number, currency = "CHF") => fmtAmount(cents / 100, currency);

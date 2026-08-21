@@ -141,6 +141,20 @@ type ReleaseBlockResult = {
   mode: "simulation" | "disabled";
 };
 
+type ReleaseBlockOptions = {
+  code?: string;
+  chargenowStatus?: string;
+  message?: string;
+};
+
+// A real station incident demonstrated that the currently documented O2/C3
+// sequence is ambiguous: order/create released one battery and ejectByRent
+// released another. Customer rentals remain fail-closed until ChargeNow's
+// single-slot contract has been explicitly verified by an operator.
+function hasVerifiedSingleSlotRentalContract(): boolean {
+  return Deno.env.get("CHARGENOW_SINGLE_SLOT_RENTAL_CONTRACT") === "verified";
+}
+
 // A disabled hardware gate is an intentional staging terminal, not a transient
 // provider error. Persist it before returning so the kiosk leaves the
 // "Préparation" screen. No cancellation/refund is attempted here: the payment
@@ -148,18 +162,23 @@ type ReleaseBlockResult = {
 async function markHardwareReleaseBlocked(
   db: DB,
   session: Session,
+  options: ReleaseBlockOptions = {},
 ): Promise<ReleaseBlockResult> {
-  const code = "HARDWARE_EJECTION_DISABLED";
+  const code = options.code ?? "HARDWARE_EJECTION_DISABLED";
   const mode = (Deno.env.get("CHARGENOW_MODE") ?? "test").trim().toLowerCase() === "test"
     ? "simulation"
     : "disabled";
-  const message = mode === "simulation"
+  const defaultMessage = mode === "simulation"
     ? "Paiement confirmé en staging; la sortie matérielle est désactivée et requiert une validation opérateur."
     : "Paiement confirmé; la sortie matérielle est désactivée et requiert une validation opérateur.";
+  const message = options.message ?? defaultMessage;
+  const chargenowStatus = options.chargenowStatus ?? (mode === "simulation"
+    ? "simulation_ejection_blocked"
+    : "hardware_ejection_disabled");
 
   const { data: transitioned, error } = await db.from("rental_sessions").update({
     state: "needs_support",
-    chargenow_status: mode === "simulation" ? "simulation_ejection_blocked" : "hardware_ejection_disabled",
+    chargenow_status: chargenowStatus,
     failure_code: code,
     failure_message: message,
   }).eq("id", session.id)
@@ -448,6 +467,14 @@ Deno.serve(async (req) => {
       // result remains explicit and terminal, preventing a retry loop.
       return reply({ ok: false, error: "HARDWARE_EJECTION_DISABLED", ...blocked });
     }
+    if (!hasVerifiedSingleSlotRentalContract()) {
+      const blocked = await markHardwareReleaseBlocked(db, session, {
+        code: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED",
+        chargenowStatus: "supplier_single_slot_contract_unverified",
+        message: "La sortie client est suspendue : le fournisseur n'a pas encore fourni un contrat vérifié garantissant une seule batterie dans le slot demandé.",
+      });
+      return reply({ ok: false, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED", ...blocked });
+    }
     if (!isChargeNowConfigured()) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CHARGENOW_NOT_CONFIGURED");
       return reply({ ok: false, error: "CHARGENOW_NOT_CONFIGURED", compensation }, 503);
@@ -655,47 +682,23 @@ Deno.serve(async (req) => {
       return reply({ ok: false, error: "BATTERY_CORRELATION_REQUIRED" }, 202);
     }
 
-    const releasedAt = new Date().toISOString();
-    await appendRentalEvent(db, {
-      rentalId: rentalSessionId,
-      eventType: "battery_released",
-      idempotencyKey: `battery_released:${tradeNo}:${released.batteryId}`,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId: String(session.station_id ?? "") || null,
-      batteryId: released.batteryId,
-      occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum: selectedSlotNum, tradeNo },
-    });
-    await appendRentalEvent(db, {
-      rentalId: rentalSessionId,
-      eventType: "rental_activated",
-      idempotencyKey: `rental_activated:${tradeNo}:${released.batteryId}`,
-      paymentIntentId: String(session.stripe_payment_intent_id ?? "") || null,
-      stationId: String(session.station_id ?? "") || null,
-      batteryId: released.batteryId,
-      occurredAt: releasedAt,
-      metadata: { cabinetId, slotNum: selectedSlotNum, tradeNo },
-    });
-
-    const { error: releaseUpdateError } = await db.from("rental_sessions").update({
-      state: "ejected",
-      ejected_at: releasedAt,
-      chargenow_status: "ejected",
-      started_at: releasedAt,
-      selected_slot_num: selectedSlotNum,
-      battery_id: released.batteryId,
+    // An HTTP success (even with an ID in its body) is not physical proof. The
+    // kiosk must wait for the delayed, read-only reconciliation window before
+    // a rental can become active. This is what catches a supplier double-out.
+    const { error: pendingUpdateError } = await db.from("rental_sessions").update({
+      state: "ejecting",
+      chargenow_status: "release_physical_reconciliation_pending",
       failure_code: null,
-      failure_message: null,
-    }).eq("id", session.id);
-    if (releaseUpdateError) throw releaseUpdateError;
-
+      failure_message: "Commande fournisseur reçue; vérification physique de la sortie en cours.",
+    }).eq("id", session.id).eq("state", "ejecting");
+    if (pendingUpdateError) throw pendingUpdateError;
     await auditLog(db, {
       actor: caller.actor,
-      action: "rental.released",
+      action: "rental.release.physical_reconciliation_pending",
       target: session.id,
-      data: { cabinetId, slotNum: selectedSlotNum, tradeNo, battery_id: released.batteryId },
+      data: { cabinetId, slotNum: selectedSlotNum, tradeNo, reported_battery_id: released.batteryId },
     });
-    return reply({ ok: true, slotNum: selectedSlotNum, batteryId: released.batteryId });
+    return reply({ ok: true, state: "ejecting", confirmationPending: true, requiresPhysicalReconciliation: true }, 202);
   } catch (error) {
     const code = error instanceof OrchestratorError
       ? error.code

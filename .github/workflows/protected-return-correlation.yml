@@ -1,0 +1,115 @@
+name: Protected Release and Return Correlation
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/eject-after-payment/**"
+      - "supabase/functions/reconcile-pending-ejection/**"
+      - "supabase/functions/cabinet-event-push/**"
+      - "supabase/functions/chargenow-rent-callback/**"
+      - "supabase/functions/_shared/returnCorrelation.ts"
+      - "supabase/functions/tests/chargenow_return_correlation_contract.test.ts"
+      - "supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts"
+      - "supabase/functions/tests/rental_lifecycle_safety_contract.test.ts"
+      - ".github/workflows/protected-return-correlation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-release-return-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protected-core-contract:
+    name: Protected Core release/return contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check eject-after-payment
+        id: check_eject
+        continue-on-error: true
+        run: deno check supabase/functions/eject-after-payment/index.ts
+
+      - name: Check reconcile-pending-ejection
+        id: check_reconcile
+        continue-on-error: true
+        run: deno check supabase/functions/reconcile-pending-ejection/index.ts
+
+      - name: Check cabinet-event-push
+        id: check_events
+        continue-on-error: true
+        run: deno check supabase/functions/cabinet-event-push/index.ts
+
+      - name: Check chargenow-rent-callback
+        id: check_callback
+        continue-on-error: true
+        run: deno check supabase/functions/chargenow-rent-callback/index.ts
+
+      - name: Check return correlation helper
+        id: check_return_helper
+        continue-on-error: true
+        run: deno check supabase/functions/_shared/returnCorrelation.ts
+
+      - name: Test return correlation
+        id: test_return
+        continue-on-error: true
+        run: deno test --allow-read supabase/functions/tests/chargenow_return_correlation_contract.test.ts
+
+      - name: Test pending ejection reconciliation
+        id: test_reconcile
+        continue-on-error: true
+        run: deno test --allow-read supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts
+
+      - name: Test rental lifecycle safety
+        id: test_lifecycle
+        continue-on-error: true
+        run: deno test --allow-read supabase/functions/tests/rental_lifecycle_safety_contract.test.ts
+
+      - name: Enforce Protected Core gate
+        if: always()
+        env:
+          CHECK_EJECT: ${{ steps.check_eject.outcome }}
+          CHECK_RECONCILE: ${{ steps.check_reconcile.outcome }}
+          CHECK_EVENTS: ${{ steps.check_events.outcome }}
+          CHECK_CALLBACK: ${{ steps.check_callback.outcome }}
+          CHECK_RETURN_HELPER: ${{ steps.check_return_helper.outcome }}
+          TEST_RETURN: ${{ steps.test_return.outcome }}
+          TEST_RECONCILE: ${{ steps.test_reconcile.outcome }}
+          TEST_LIFECYCLE: ${{ steps.test_lifecycle.outcome }}
+        run: |
+          printf '%-28s %s\n' \
+            'check:eject-after-payment' "$CHECK_EJECT" \
+            'check:reconcile-pending' "$CHECK_RECONCILE" \
+            'check:cabinet-event-push' "$CHECK_EVENTS" \
+            'check:rent-callback' "$CHECK_CALLBACK" \
+            'check:return-helper' "$CHECK_RETURN_HELPER" \
+            'test:return-correlation' "$TEST_RETURN" \
+            'test:pending-reconciliation' "$TEST_RECONCILE" \
+            'test:rental-lifecycle' "$TEST_LIFECYCLE"
+          test "$CHECK_EJECT" = success
+          test "$CHECK_RECONCILE" = success
+          test "$CHECK_EVENTS" = success
+          test "$CHECK_CALLBACK" = success
+          test "$CHECK_RETURN_HELPER" = success
+          test "$TEST_RETURN" = success
+          test "$TEST_RECONCILE" = success
+          test "$TEST_LIFECYCLE" = success
