@@ -15,6 +15,7 @@ import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
+import { ChargeursPlusPushPanel } from "./components/account/ChargeursPlusPushPanel.tsx";
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -98,7 +99,7 @@ const App = () => (
               <Route index element={<AccountHome />} />
               <Route path="locations" element={<AccountRentals />} />
               <Route path="paiements" element={<AccountPayments />} />
-              <Route path="pass" element={<AccountPass />} />
+              <Route path="pass" element={<><AccountPass /><ChargeursPlusPushPanel /></>} />
               <Route path="support" element={<AccountSupport />} />
               <Route path="profil" element={<AccountProfile />} />
             </Route>

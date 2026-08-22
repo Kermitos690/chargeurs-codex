@@ -7,7 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   // The embedded tablet runs Android 8+ (minSdk 26), whose System WebView
-  // can be substantially older than Vite's moving browser baseline.  Keep
+  // can be substantially older than Vite's moving browser baseline. Keep
   // the kiosk bundle compatible with Chromium 61 instead of shipping syntax
   // that renders a native WebView as an empty page before React can recover.
   build: {
@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => ({
       filename: "sw.js",
       // No SW in dev / Lovable preview.
       devOptions: { enabled: false },
-      includeAssets: ["favicon.ico", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
+      includeAssets: ["favicon.ico", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "chargeurs-plus-push-sw.js"],
       manifest: {
         name: "Chargeurs.ch Kiosk",
         short_name: "Chargeurs Kiosk",
@@ -56,6 +56,9 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        // The same service worker controls kiosk and account routes. Push handlers
+        // are inert unless a signed-in Chargeurs+ user explicitly subscribes.
+        importScripts: ["/chargeurs-plus-push-sw.js"],
         // Precache the built app shell (hashed JS/CSS + icons).
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         cleanupOutdatedCaches: true,
