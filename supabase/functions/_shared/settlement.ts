@@ -1,9 +1,11 @@
 // Pure settlement planning for Chargeurs.ch rentals.
 //
 // Cards can use manual capture: 30 CHF is authorized, then the final amount is
-// captured when the rental ends. TWINT does not support manual capture, so the
-// 30 CHF deposit is charged immediately and the unused balance is refunded.
-// Any final amount above the deposit becomes a supplemental collection.
+// captured when the rental ends. Stripe Terminal exposes an in-person card as
+// `card_present`, which must follow the same manual-capture strategy as `card`.
+// TWINT does not support manual capture, so the 30 CHF deposit is charged
+// immediately and the unused balance is refunded. Any final amount above the
+// deposit becomes a supplemental collection.
 
 export type SettlementStrategy = "manual_capture" | "prepaid_refund";
 
@@ -53,7 +55,8 @@ export function resolveSettlementStrategy(args: {
 }): SettlementStrategy {
   const method = (args.paymentMethodType ?? "").toLowerCase();
   const capture = (args.captureMethod ?? "").toLowerCase();
-  return method === "card" && capture === "manual" ? "manual_capture" : "prepaid_refund";
+  const manualCaptureCard = method === "card" || method === "card_present";
+  return manualCaptureCard && capture === "manual" ? "manual_capture" : "prepaid_refund";
 }
 
 export function planSettlement(input: SettlementPlanInput): SettlementPlan {
