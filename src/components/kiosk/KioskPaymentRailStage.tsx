@@ -26,7 +26,7 @@ type Props = {
   inProgress?: boolean;
   onChooseQr: () => void;
   onTerminalEngaged: () => void;
-  onTerminalCancelled: () => void;
+  onTerminalCancelled?: () => void;
   onServerConfirmed: () => void;
 };
 
@@ -190,7 +190,8 @@ export function KioskPaymentRailStage(props: Props) {
     setCancellingTerminal(false);
     setLocalRail("NONE");
     setLocalRailState("UNCLAIMED");
-    onTerminalCancelled();
+    if (onTerminalCancelled) onTerminalCancelled();
+    else window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
   }, [inProgress, model.payment.railState, onTerminalCancelled]);
 
   const chooseQr = () => {
