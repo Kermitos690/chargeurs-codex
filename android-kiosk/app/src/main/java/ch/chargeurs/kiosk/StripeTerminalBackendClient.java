@@ -65,6 +65,23 @@ final class StripeTerminalBackendClient {
             "action", reconcile ? "reconcile_payment_intent" : "get_payment_state",
             "rentalSessionId", rentalSessionId
         ));
+        return paymentState(response);
+    }
+
+    /**
+     * Idempotent customer cancellation. The backend is authoritative: it only
+     * releases the TERMINAL rail after Stripe confirms the PaymentIntent is
+     * safely cancelled. No rental release/ejection action is called here.
+     */
+    PaymentStateResult cancelPaymentIntent(String rentalSessionId) throws IOException {
+        JSONObject response = post(body(
+            "action", "cancel_payment_intent",
+            "rentalSessionId", rentalSessionId
+        ));
+        return paymentState(response);
+    }
+
+    private static PaymentStateResult paymentState(JSONObject response) {
         return new PaymentStateResult(
             response.optString("rail", "NONE"),
             response.optString("railState", "UNCLAIMED"),
