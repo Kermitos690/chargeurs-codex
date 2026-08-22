@@ -1,0 +1,54 @@
+name: Deploy Chargeurs+ PWA to staging once
+
+on:
+  push:
+    branches:
+      - fix/staging-mobile-rental-progress
+    paths:
+      - .github/workflows/deploy-chargeurs-plus-staging-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.head_commit.message == 'ops(staging): deploy Chargeurs+ PWA once'
+    runs-on: [self-hosted, chargeurs-adb]
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact staging head
+        uses: actions/checkout@v4
+
+      - name: Verify Chargeurs+ commit is included
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor f7187edb91dc30b3f2ccc725390d22660ecb4fb5 HEAD
+          test -f public/chargeurs-plus.webmanifest
+          grep -q '"name": "Chargeurs+"' public/chargeurs-plus.webmanifest
+          grep -q '"start_url": "/compte/pass"' public/chargeurs-plus.webmanifest
+          echo "PWA_SOURCE_OK"
+
+      - name: Verify Vercel CLI authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v vercel >/dev/null 2>&1; then
+            npm install --global vercel@latest
+          fi
+          vercel whoami
+
+      - name: Link staging project
+        shell: bash
+        run: |
+          set -euo pipefail
+          vercel link --yes \
+            --project chargeurs-ch-staging \
+            --scope gaetans-projects-4974c31a
+
+      - name: Deploy to stable staging alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          vercel deploy --prod --yes --scope gaetans-projects-4974c31a | tee /tmp/chargeurs-plus-vercel-url.txt
+          echo "STAGING_DEPLOY_OK"
