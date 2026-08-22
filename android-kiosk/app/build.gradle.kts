@@ -55,8 +55,8 @@ android {
         targetSdk = 36
         // The DTA21269 currently runs versionCode 141. A normal Android
         // upgrade must increase this value; no downgrade install is permitted.
-        versionCode = 144
-        versionName = "1.0.44-terminal-cancel-authoritative"
+        versionCode = 145
+        versionName = "1.0.45-terminal-offline-cache-repair"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

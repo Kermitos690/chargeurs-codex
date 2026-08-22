@@ -28,6 +28,13 @@ public final class StripeTerminalReaderRuntimeTest {
     }
 
     @Test
+    public void onlyOverridesAStuckConnectionForKnownOfflineCacheRepairWithoutPayment() {
+        assertTrue(StripeTerminalReaderRuntime.canOverrideStuckConnectionForOfflineCacheRepair(true, false));
+        assertFalse(StripeTerminalReaderRuntime.canOverrideStuckConnectionForOfflineCacheRepair(false, false));
+        assertFalse(StripeTerminalReaderRuntime.canOverrideStuckConnectionForOfflineCacheRepair(true, true));
+    }
+
+    @Test
     public void ignoresPaymentStateResponseThatPredatesCancellation() {
         assertTrue(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-a"));
         assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 15, "rental-a", "rental-a"));

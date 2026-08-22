@@ -38,12 +38,17 @@ public final class ChargeursKioskApplication extends Application {
         RxJavaPlugins.setErrorHandler(error -> {
             if (isRecoverableStripeOfflineCacheError(error)) {
                 Log.e(TAG, "Stripe offline credential cache needs explicit reader repair", error);
+                reportOfflineCredentialCacheFailure();
                 return;
             }
             Thread.UncaughtExceptionHandler handler = Thread.currentThread().getUncaughtExceptionHandler();
             if (handler != null) handler.uncaughtException(Thread.currentThread(), error);
         });
         TerminalApplicationDelegate.onCreate(this);
+    }
+
+    private synchronized void reportOfflineCredentialCacheFailure() {
+        if (terminalRuntime != null) terminalRuntime.requireOfflineCredentialCacheRepair();
     }
 
     static boolean isRecoverableStripeOfflineCacheError(Throwable error) {

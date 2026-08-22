@@ -93,6 +93,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private volatile boolean serverConfirmed;
     private volatile boolean recoveryRequired;
     private volatile boolean bindingMismatchBlocked;
+    // Set only after Stripe has reported its specific offline-cache decryption
+    // failure. It allows an explicit user retry to clear credentials even when
+    // Stripe failed before delivering the ordinary connection callback.
+    private volatile boolean offlineCredentialRepairRequired;
     private volatile String correlationId;
     private Cancelable discoveryCancelable;
     private Cancelable paymentCancelable;
@@ -158,34 +162,35 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             readerState = "ABSENT";
             return;
         }
-        if (paymentRunning.get() || connectionRunning.get()) return;
+        if (paymentRunning.get()
+            || (connectionRunning.get()
+                && !canOverrideStuckConnectionForOfflineCacheRepair(
+                    offlineCredentialRepairRequired,
+                    paymentRunning.get()
+                ))) return;
 
         main.post(() -> {
             if (!ensureTerminalInitialized()) return;
             Reader connected = Terminal.getInstance().getConnectedReader();
-            if (connected != null && readerMatchesBinding(connected)) {
+            if (!offlineCredentialRepairRequired
+                && connected != null
+                && readerMatchesBinding(connected)) {
                 acceptConnectedReader(connected);
                 return;
             }
-            if (canClearCachedCredentialsForRepair(
-                readerState,
-                paymentRunning.get(),
-                activeRentalSessionId,
-                connected != null
-            )) {
-                try {
-                    // This is deliberately an explicit retry-only repair, not
-                    // an automatic startup action. Stripe requires no reader
-                    // to be connected. It clears Terminal credentials only;
-                    // it does not clear kiosk storage, create a payment, or
-                    // release any hardware.
-                    Terminal.getInstance().clearCachedCredentials();
-                    prefetchedConnectionTokenSecret = null;
-                    Log.i(TAG, "Cleared Stripe Terminal cached credentials for explicit reader repair");
-                } catch (RuntimeException error) {
-                    setError("STRIPE_CREDENTIAL_REPAIR_FAILED");
+            if (offlineCredentialRepairRequired) {
+                // Stripe did not invoke ReaderCallback.onFailure for this
+                // cache failure. Invalidate its stale operation before the
+                // user-requested repair, never while a payment is active.
+                discoveryGeneration.incrementAndGet();
+                cancelDiscoverySilently();
+                discoveryRunning.set(false);
+                connectionRunning.set(false);
+                if (connected != null) {
+                    disconnectForOfflineCredentialRepair();
                     return;
                 }
+                if (!clearCachedCredentialsForOfflineRepair()) return;
             }
 
             discoveryGeneration.incrementAndGet();
@@ -194,6 +199,22 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             safeErrorCode = null;
             readerState = "RECONNECTING";
             main.postDelayed(this::ensureStarted, 250L);
+        });
+    }
+
+    /**
+     * Called by the application-level RxJava handler only for Stripe's known
+     * offline-cache decryption error. This records a fail-closed reader ERROR;
+     * credentials are still cleared only after a user explicitly retries.
+     */
+    void requireOfflineCredentialCacheRepair() {
+        offlineCredentialRepairRequired = true;
+        main.post(() -> {
+            connectionRunning.set(false);
+            discoveryRunning.set(false);
+            safeErrorCode = "STRIPE_OFFLINE_CREDENTIAL_CACHE_REPAIR_REQUIRED";
+            readerState = usbPresent() ? "ERROR" : "ABSENT";
+            Log.w(TAG, "Reader retry required after Stripe offline credential cache failure");
         });
     }
 
@@ -412,6 +433,13 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
     static boolean canStartUsbDiscovery(boolean discoveryRunning, boolean connectionRunning, boolean paymentRunning) {
         return !discoveryRunning && !connectionRunning && !paymentRunning;
+    }
+
+    static boolean canOverrideStuckConnectionForOfflineCacheRepair(
+        boolean offlineCredentialRepairRequired,
+        boolean paymentRunning
+    ) {
+        return offlineCredentialRepairRequired && !paymentRunning;
     }
 
     static boolean canClearCachedCredentialsForRepair(
@@ -698,6 +726,50 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             });
         } catch (RuntimeException error) {
             Log.w(TAG, "Failed to start mismatched USB reader disconnect", error);
+        }
+    }
+
+    private void disconnectForOfflineCredentialRepair() {
+        readerState = "RECONNECTING";
+        try {
+            Terminal.getInstance().disconnectReader(new Callback() {
+                @Override public void onSuccess() {
+                    if (!offlineCredentialRepairRequired) return;
+                    if (!clearCachedCredentialsForOfflineRepair()) return;
+                    main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 250L);
+                }
+
+                @Override public void onFailure(TerminalException error) {
+                    setError("STRIPE_CREDENTIAL_REPAIR_DISCONNECT_FAILED");
+                }
+            });
+        } catch (RuntimeException error) {
+            setError("STRIPE_CREDENTIAL_REPAIR_DISCONNECT_FAILED");
+        }
+    }
+
+    private boolean clearCachedCredentialsForOfflineRepair() {
+        if (!canClearCachedCredentialsForRepair(
+            "ERROR",
+            paymentRunning.get(),
+            activeRentalSessionId,
+            Terminal.getInstance().getConnectedReader() != null
+        )) {
+            setError("STRIPE_CREDENTIAL_REPAIR_NOT_SAFE");
+            return false;
+        }
+        try {
+            // Explicit retry only, after a disconnected reader. Stripe
+            // credentials are the sole cleared data: kiosk storage, payment
+            // state and hardware controls remain untouched.
+            Terminal.getInstance().clearCachedCredentials();
+            prefetchedConnectionTokenSecret = null;
+            offlineCredentialRepairRequired = false;
+            Log.i(TAG, "Cleared Stripe Terminal cached credentials for explicit reader repair");
+            return true;
+        } catch (RuntimeException error) {
+            setError("STRIPE_CREDENTIAL_REPAIR_FAILED");
+            return false;
         }
     }
 
