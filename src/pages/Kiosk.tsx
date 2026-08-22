@@ -501,8 +501,8 @@ export default function Kiosk() {
     fr: {
       preparingEyebrow: "PAIEMENT CONFIRMÉ",
       preparingTitle: "Libération en cours",
-      preparingSubtitle: slotNum ? `Le slot ${slotNum} s’ouvre maintenant.` : "Votre batterie est en cours de libération.",
-      preparingNote: "Gardez les yeux sur le compartiment éclairé.",
+      preparingSubtitle: "Votre batterie est en cours de libération.",
+      preparingNote: "Regardez le compartiment qui s’allume.",
       readyEyebrow: "BATTERIE PRÊTE",
       readyTitle: "Prenez votre batterie",
       readySubtitle: slotNum ? `Elle vous attend dans le slot ${slotNum}.` : "Prenez la batterie dans le compartiment éclairé.",
@@ -513,8 +513,8 @@ export default function Kiosk() {
     en: {
       preparingEyebrow: "PAYMENT CONFIRMED",
       preparingTitle: "Releasing now",
-      preparingSubtitle: slotNum ? `Slot ${slotNum} is opening now.` : "Your powerbank is being released.",
-      preparingNote: "Watch the illuminated compartment.",
+      preparingSubtitle: "Your powerbank is being released.",
+      preparingNote: "Watch the compartment that lights up.",
       readyEyebrow: "POWERBANK READY",
       readyTitle: "Take your powerbank",
       readySubtitle: slotNum ? `It is waiting in slot ${slotNum}.` : "Take the powerbank from the illuminated compartment.",
@@ -525,8 +525,8 @@ export default function Kiosk() {
     de: {
       preparingEyebrow: "ZAHLUNG BESTÄTIGT",
       preparingTitle: "Ausgabe läuft",
-      preparingSubtitle: slotNum ? `Fach ${slotNum} öffnet sich jetzt.` : "Deine Powerbank wird ausgegeben.",
-      preparingNote: "Achte auf das beleuchtete Fach.",
+      preparingSubtitle: "Deine Powerbank wird ausgegeben.",
+      preparingNote: "Achte auf das Fach, das aufleuchtet.",
       readyEyebrow: "POWERBANK BEREIT",
       readyTitle: "Nimm deine Powerbank",
       readySubtitle: slotNum ? `Sie wartet in Fach ${slotNum}.` : "Nimm die Powerbank aus dem beleuchteten Fach.",
@@ -743,7 +743,7 @@ export default function Kiosk() {
 
           {phase === "waitpay" && (
             <motion.div key="waitpay" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: .985 }} className="kiosk-release-stage grid w-full max-w-[92rem] items-center gap-8 px-4 lg:grid-cols-[1.15fr_.85fr] lg:px-8">
-              <SlotReleaseScene slotNum={slotNum} />
+              <SlotReleaseScene slotNum={null} />
               <div className="relative flex min-h-[28rem] flex-col justify-center overflow-hidden rounded-[2.4rem] border border-cyan-200/15 bg-slate-950/20 p-9 text-left shadow-[0_30px_90px_rgba(0,0,0,.28),0_0_60px_rgba(34,211,238,.08)]">
                 <motion.div aria-hidden className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" animate={{ scale: [1, 1.18, 1], opacity: [.4, .72, .4] }} transition={{ duration: 2.4, repeat: Infinity }} />
                 <div className="relative inline-flex w-fit items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/[.07] px-4 py-2 text-sm font-black tracking-[.16em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{releaseCopy.preparingEyebrow}</div>
@@ -751,7 +751,7 @@ export default function Kiosk() {
                 <p className="relative mt-5 max-w-xl text-2xl font-medium leading-snug text-slate-200/80">{statusMsg?.sub ?? releaseCopy.preparingSubtitle}</p>
                 <div className="relative mt-8 flex items-center gap-4">
                   <motion.div className="grid h-16 w-16 place-items-center rounded-2xl border border-cyan-200/25 bg-cyan-300/10" animate={{ boxShadow: ["0 0 12px rgba(34,211,238,.08)", "0 0 38px rgba(34,211,238,.3)", "0 0 12px rgba(34,211,238,.08)"] }} transition={{ duration: 1.3, repeat: Infinity }}><Zap className="h-8 w-8 text-cyan-100" /></motion.div>
-                  <div><p className="text-base font-bold text-cyan-100">{slotNum ? t("kiosk.slot.label", { slot: slotNum }) : releaseCopy.preparingTitle}</p><p className="mt-1 text-base text-muted-foreground">{releaseCopy.preparingNote}</p></div>
+                  <div><p className="text-base font-bold text-cyan-100">{releaseCopy.preparingTitle}</p><p className="mt-1 text-base text-muted-foreground">{releaseCopy.preparingNote}</p></div>
                 </div>
                 <div className="relative mt-9 h-1.5 overflow-hidden rounded-full bg-white/8"><motion.div className="h-full w-[42%] rounded-full bg-gradient-to-r from-cyan-300 via-blue-500 to-violet-400 shadow-[0_0_20px_rgba(34,211,238,.7)]" animate={{ x: ["-110%", "255%"] }} transition={{ duration: 1.25, repeat: Infinity, ease: "easeInOut" }} /></div>
               </div>
