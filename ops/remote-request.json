@@ -1,0 +1,7 @@
+{
+  "request_id": "bootstrap",
+  "action": "noop",
+  "device": "",
+  "target": "",
+  "source_ref": "main"
+}
