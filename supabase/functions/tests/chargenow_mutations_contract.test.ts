@@ -28,6 +28,8 @@ import { jsonResponse, stubFetch } from "./_fakes.ts";
 Deno.env.set("CHARGENOW_BASIC_AUTH", "dGVzdC10b2tlbg==");
 Deno.env.set("CHARGENOW_API_BASE_URL", "https://example.test/cdb-open-api/v1");
 Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "true");
+Deno.env.set("HARDWARE_EJECTION_ENABLED", "true");
+Deno.env.set("CHARGENOW_SINGLE_SLOT_RENTAL_CONTRACT", "verified");
 const cn = await import("../_shared/chargenow.ts");
 
 const HTTP_ERRORS = [400, 401, 403, 404, 409, 429, 500] as const;
@@ -325,7 +327,7 @@ Deno.test("C2 ejectByRepair — builds POST with cabinetid/slotNum (mock only)",
 });
 Deno.test("C2 ejectByRepair — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRepair("DTA21269", 1)));
 
-Deno.test("C2 one-time maintenance permit bypasses no other mutation gate", async () => {
+Deno.test("C2 one-time maintenance permit cannot bypass the physical release gates", async () => {
   const previousMutations = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
   const previousPermit = Deno.env.get("CHARGENOW_ONE_TIME_MAINTENANCE_EJECTION_PERMIT");
   Deno.env.set("CHARGENOW_MUTATIONS_ENABLED", "false");
@@ -334,17 +336,18 @@ Deno.test("C2 one-time maintenance permit bypasses no other mutation gate", asyn
   }));
   const s = stubFetch(() => jsonResponse({ code: 0 }));
   try {
-    const allowed = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1);
-    assertEquals(allowed.ok, true);
-    assertEquals(s.calls.length, 1);
+    const blockedByHardwareGate = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1);
+    assertEquals(blockedByHardwareGate.ok, false);
+    assertEquals(blockedByHardwareGate.error, "HARDWARE_EJECTION_DISABLED");
+    assertEquals(s.calls.length, 0);
     const blocked = await cn.ejectByRepairWithOneTimePermit("DTA21269", 2);
     assertEquals(blocked.ok, false);
-    assertEquals(blocked.error, "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED");
-    assertEquals(s.calls.length, 1);
+    assertEquals(blocked.error, "HARDWARE_EJECTION_DISABLED");
+    assertEquals(s.calls.length, 0);
     const otherMutation = await cn.orderCreate({ deviceId: "DTA21269" });
     assertEquals(otherMutation.ok, false);
     assertEquals(otherMutation.error, "CHARGENOW_MUTATIONS_DISABLED");
-    assertEquals(s.calls.length, 1);
+    assertEquals(s.calls.length, 0);
   } finally {
     s.restore();
     if (previousMutations === undefined) Deno.env.delete("CHARGENOW_MUTATIONS_ENABLED");

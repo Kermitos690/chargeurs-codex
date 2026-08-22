@@ -231,28 +231,51 @@ export const cabinetListGeo = (args: {
 export type CabinetOperationType =
   | "restart" | "pop" | "popall" | "popallForNoAuth" | "popallForAuth"
   | "heartbeat" | "lock" | "unlock" | "lockStopCharge" | "report";
+const PHYSICAL_EJECTION_OPERATIONS = new Set<CabinetOperationType>([
+  "pop", "popall", "popallForNoAuth", "popallForAuth",
+]);
+
+// A one-time maintenance permit narrows an operator action, but it never
+// proves the supplier's physical behavior. Every physical release path must
+// therefore pass the global kill switch and the same single-slot contract.
+export function physicalEjectionBlockError(): string | null {
+  if (!areHardwareEjectionsEnabled()) return "HARDWARE_EJECTION_DISABLED";
+  if (!hasVerifiedSingleSlotRentalContract()) return "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
+  return null;
+}
+
 export const cabinetOperation = (args: {
   cabinetid: string; slotNum?: number; operationType: CabinetOperationType; reason?: string;
-}, context: SuperAdminMutationContext = {}) =>
-  request("POST", "/cabinet/operation", {
+}, context: SuperAdminMutationContext = {}) => {
+  if (PHYSICAL_EJECTION_OPERATIONS.has(args.operationType)) {
+    const blocked = physicalEjectionBlockError();
+    if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });
+  }
+  return request("POST", "/cabinet/operation", {
     query: {
       cabinetid: args.cabinetid, slotNum: args.slotNum,
       operationType: args.operationType, reason: args.reason ?? "admin",
     },
     mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
+};
 // Back-compat helper used by older callers.
 export const operationPop = (cabinetid: string, slotNum: number, context: SuperAdminMutationContext = {}) =>
   cabinetOperation({ cabinetid, slotNum, operationType: "pop" }, context);
 
 // C2 — Eject By Repair (query: cabinetid, slotNum). 0/null = eject all.
-export const ejectByRepair = (cabinetid: string, slotNum: number, context: SuperAdminMutationContext = {}) =>
-  request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true, superAdminMutation: context.superAdminConfirmed });
+export const ejectByRepair = (cabinetid: string, slotNum: number, context: SuperAdminMutationContext = {}) => {
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });
+  return request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true, superAdminMutation: context.superAdminConfirmed });
+};
 
 // The only route allowed to bypass the broad mutation flag. Its target is
 // fixed by a short-lived, server-only permit; every other mutation remains
 // governed by CHARGENOW_MUTATIONS_ENABLED.
 export const ejectByRepairWithOneTimePermit = (cabinetid: string, slotNum: number) => {
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });
   const permit = oneTimeMaintenanceEjectionPermit();
   if (!permit || permit.stationId !== cabinetid || permit.slotNum !== slotNum || Date.parse(permit.expiresAt) <= Date.now()) {
     return Promise.resolve<ApiResult>({ ok: false, status: 0, data: null, error: "ONE_TIME_MAINTENANCE_EJECTION_NOT_PERMITTED" });
@@ -272,6 +295,8 @@ export const ejectByRent = (
   rentOrderId?: string,
   context: SuperAdminMutationContext = {},
 ): Promise<ApiResult> => {
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve({ ok: false, status: 409, data: null, error: blocked });
   const slot = resolveRentSlot(slotNum, Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE"));
   if (!slot.ok) {
     return Promise.resolve({ ok: false, status: 0, data: null, error: slot.error });
@@ -292,6 +317,8 @@ export const ejectByRentWithOneTimeRentalPermit = (
   rentalSessionId: string,
   permit: OneTimeRentalEjectionPermit,
 ): Promise<ApiResult> => {
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve({ ok: false, status: 409, data: null, error: blocked });
   if (
     chargeNowMode() !== "test" ||
     permit.rentalSessionId !== rentalSessionId ||

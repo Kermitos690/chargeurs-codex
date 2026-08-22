@@ -8,6 +8,7 @@ const callbackSource = await Deno.readTextFile("supabase/functions/chargenow-ren
 const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-event-push/index.ts");
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
 const refundSource = await Deno.readTextFile("supabase/functions/_shared/stripeRefundRuntime.ts");
+const chargeNowSource = await Deno.readTextFile("supabase/functions/_shared/chargenow.ts");
 
 Deno.test("uncertain ejection results never trigger automatic retry or refund", () => {
   assert(ejectSource.includes("hardwareCommandIssued = true"));
@@ -57,6 +58,19 @@ Deno.test("the supplier administration gateway cannot bypass the single-slot con
   const ejectCallAt = chargeNowAdminSource.indexOf("cn.ejectByRent", ejectAt);
   assert(orderAt >= 0 && orderGateAt > orderAt && orderCallAt > orderGateAt);
   assert(ejectAt >= 0 && ejectGateAt > ejectAt && ejectCallAt > ejectGateAt);
+});
+
+Deno.test("all direct physical supplier endpoints share the hardware and single-slot gates", () => {
+  assert(chargeNowAdminSource.includes("cn.ejectByRepair"));
+  assert(chargeNowAdminSource.includes("cn.cabinetOperation"));
+  assert(ejectSource.includes("ejectByRent"));
+  assert(callbackSource.includes("requires_physical_reconciliation: true"));
+  assert(preflightSource.includes("HARDWARE_EJECTION_DISABLED"));
+  assert(chargeNowSource.includes("export function physicalEjectionBlockError"));
+  assert(chargeNowSource.includes("PHYSICAL_EJECTION_OPERATIONS"));
+  assert(chargeNowSource.includes("ejectByRepairWithOneTimePermit"));
+  assert(chargeNowSource.includes("const blocked = physicalEjectionBlockError()"));
+  assert(chargeNowSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
 });
 
 Deno.test("ChargeNow return settlement requires contractual BATTERY_IN evidence", () => {
