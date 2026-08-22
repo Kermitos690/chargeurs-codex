@@ -181,17 +181,34 @@ Deno.serve(async (req) => {
 
   const vaultResend = await secret(db, "resend_api_key").catch(() => "");
   const vaultFrom = await secret(db, "transactional_email_from").catch(() => "");
+  const vaultSendAfter = await secret(db, "transactional_email_send_after").catch(() => "");
   const apiKey = (Deno.env.get("RESEND_API_KEY") ?? vaultResend).trim();
-  const from = (Deno.env.get("TRANSACTIONAL_EMAIL_FROM") ?? vaultFrom ?? "").trim() || "Chargeurs.ch <noreply@chargeurs.ch>";
+  const from = (Deno.env.get("TRANSACTIONAL_EMAIL_FROM") ?? vaultFrom).trim();
+  const sendAfter = (Deno.env.get("TRANSACTIONAL_EMAIL_SEND_AFTER") ?? vaultSendAfter).trim();
   if (!apiKey) {
     return new Response(JSON.stringify({ ok: true, configured: false, queued: true, reason: "EMAIL_PROVIDER_NOT_CONFIGURED" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
+  if (!from) {
+    return new Response(JSON.stringify({ ok: true, configured: false, queued: true, reason: "EMAIL_FROM_NOT_CONFIGURED" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const sendAfterMs = Date.parse(sendAfter);
+  if (!sendAfter || !Number.isFinite(sendAfterMs)) {
+    return new Response(JSON.stringify({ ok: true, configured: false, queued: true, reason: "EMAIL_DELIVERY_NOT_ARMED" }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const sendAfterIso = new Date(sendAfterMs).toISOString();
 
   const { data: rows, error } = await db.from("transactional_email_outbox")
     .select("*")
     .eq("status", "queued")
+    // Do not back-send historical test or pilot messages merely because the
+    // provider was configured. A deliberate cut-over timestamp is required.
+    .gte("created_at", sendAfterIso)
     .order("created_at", { ascending: true })
     .limit(10);
   if (error) throw error;
