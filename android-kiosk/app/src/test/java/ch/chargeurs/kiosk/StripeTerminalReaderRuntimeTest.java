@@ -26,4 +26,12 @@ public final class StripeTerminalReaderRuntimeTest {
         assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(true, false, false));
         assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, false, true));
     }
+
+    @Test
+    public void ignoresPaymentStateResponseThatPredatesCancellation() {
+        assertTrue(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-a"));
+        assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 15, "rental-a", "rental-a"));
+        assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", null));
+        assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-b"));
+    }
 }

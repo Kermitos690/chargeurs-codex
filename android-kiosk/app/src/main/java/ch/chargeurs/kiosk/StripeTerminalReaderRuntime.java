@@ -332,9 +332,19 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     void refreshPaymentState(boolean reconcile) {
         String rental = activeRentalSessionId;
         if (rental == null || rental.isBlank()) return;
+        final int operationGeneration = paymentOperationGeneration.get();
         io.execute(() -> {
             try {
                 StripeTerminalBackendClient.PaymentStateResult state = backend.getPaymentState(rental, reconcile);
+                // State reads are queued while the WebView polls. A response
+                // that began before a cancellation must not resurrect the
+                // released TERMINAL rail after the cancellation is confirmed.
+                if (!shouldApplyPaymentState(
+                    operationGeneration,
+                    paymentOperationGeneration.get(),
+                    rental,
+                    activeRentalSessionId
+                )) return;
                 paymentRail = state.rail();
                 paymentRailState = state.railState();
                 serverConfirmed = state.serverConfirmed();
@@ -352,6 +362,17 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
     static boolean canStartUsbDiscovery(boolean discoveryRunning, boolean connectionRunning, boolean paymentRunning) {
         return !discoveryRunning && !connectionRunning && !paymentRunning;
+    }
+
+    static boolean shouldApplyPaymentState(
+        int responseGeneration,
+        int activeGeneration,
+        String requestedRentalSessionId,
+        String activeRentalSessionId
+    ) {
+        return responseGeneration == activeGeneration
+            && requestedRentalSessionId != null
+            && requestedRentalSessionId.equals(activeRentalSessionId);
     }
 
     private void retrieveAndCollect(String clientSecret, int operationGeneration) {
