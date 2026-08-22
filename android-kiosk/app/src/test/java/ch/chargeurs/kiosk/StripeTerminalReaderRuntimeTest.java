@@ -1,6 +1,8 @@
 package ch.chargeurs.kiosk;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -9,5 +11,11 @@ public final class StripeTerminalReaderRuntimeTest {
     @Test
     public void reportsThePinnedTerminalSdkVersion() {
         assertEquals("3.0.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
+    }
+
+    @Test
+    public void rejectsStripeCallbacksFromAnOperationInvalidatedByCancellation() {
+        assertTrue(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 14));
+        assertFalse(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 15));
     }
 }

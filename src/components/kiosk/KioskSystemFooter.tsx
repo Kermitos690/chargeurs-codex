@@ -24,7 +24,7 @@ type ConnectionState = "online" | "limited" | "offline" | "checking";
 const COPY = {
   fr: {
     secure: "Paiement sécurisé par Stripe",
-    daily: "Plafond journalier",
+    upTo24Hours: "Jusqu'à 24 h",
     deposit: "Caution",
     online: "En ligne",
     limited: "Connexion limitée",
@@ -33,7 +33,7 @@ const COPY = {
   },
   en: {
     secure: "Secure payment by Stripe",
-    daily: "Daily cap",
+    upTo24Hours: "Up to 24 h",
     deposit: "Deposit",
     online: "Online",
     limited: "Limited connection",
@@ -42,7 +42,7 @@ const COPY = {
   },
   de: {
     secure: "Sichere Zahlung mit Stripe",
-    daily: "Tageslimit",
+    upTo24Hours: "Bis 24 Std.",
     deposit: "Garantie",
     online: "Online",
     limited: "Eingeschränkte Verbindung",
@@ -105,7 +105,7 @@ export function KioskSystemFooter() {
       .sort((a, b) => a.upper_minutes - b.upper_minutes);
     return valid.find((tier) => tier.upper_minutes === 1440) ?? valid[valid.length - 1] ?? null;
   }, [guest?.tiers]);
-  const dailyCap = dayTier?.total_cents ?? guest?.daily_cap_cents ?? null;
+  const upTo24HoursPrice = dayTier?.total_cents ?? guest?.daily_cap_cents ?? null;
   const deposit = guest?.deposit_cents ?? null;
 
   const connection: ConnectionState = net === "offline"
@@ -139,7 +139,7 @@ export function KioskSystemFooter() {
       </div>
 
       <div className="kiosk-system-footer__commercial">
-        <span><small>{copy.daily}</small><strong>{money(dailyCap, currency)}</strong></span>
+        <span><small>{copy.upTo24Hours}</small><strong>{money(upTo24HoursPrice, currency)}</strong></span>
         <i aria-hidden="true" />
         <span><small>{copy.deposit}</small><strong>{money(deposit, currency)}</strong></span>
       </div>

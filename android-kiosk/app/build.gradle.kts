@@ -53,8 +53,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 138
-        versionName = "1.0.38-terminal-v300-cancel-safe"
+        versionCode = 139
+        versionName = "1.0.39-terminal-v300-cancel-race-safe"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

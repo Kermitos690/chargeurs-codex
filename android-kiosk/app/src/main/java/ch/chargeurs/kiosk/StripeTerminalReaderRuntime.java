@@ -67,6 +67,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentCancellationRunning = new AtomicBoolean(false);
+    private final AtomicInteger paymentOperationGeneration = new AtomicInteger(0);
     private final AtomicBoolean bindingBootstrapRunning = new AtomicBoolean(false);
     private final AtomicInteger discoveryGeneration = new AtomicInteger(0);
 
@@ -225,6 +226,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             return JsonObjects.of("ok", false, "code", "TERMINAL_BUSY");
         }
 
+        final int operationGeneration = paymentOperationGeneration.incrementAndGet();
         activeRentalSessionId = rentalSessionId;
         localPaymentState = "CLAIMING";
         paymentRail = "TERMINAL";
@@ -237,6 +239,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         io.execute(() -> {
             try {
                 StripeTerminalBackendClient.PaymentIntentResult result = backend.createPaymentIntent(rentalSessionId);
+                if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                 paymentRail = result.rail();
                 paymentRailState = result.railState();
                 correlationId = blankToNull(result.correlationId());
@@ -246,9 +249,11 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 if (blankToNull(result.expectedReaderId()) != null) expectedReaderId = result.expectedReaderId();
                 localPaymentState = "RETRIEVING_INTENT";
                 String clientSecret = result.clientSecret();
-                main.post(() -> retrieveAndCollect(clientSecret));
+                main.post(() -> retrieveAndCollect(clientSecret, operationGeneration));
             } catch (Exception error) {
-                finishPaymentFailure(StripeTerminalBackendClient.safeCode(error.getMessage()));
+                if (isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) {
+                    finishPaymentFailure(StripeTerminalBackendClient.safeCode(error.getMessage()));
+                }
             }
         });
         return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CLAIMING");
@@ -269,6 +274,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         if (!paymentCancellationRunning.compareAndSet(false, true)) {
             return JsonObjects.of("ok", false, "code", "TERMINAL_CANCEL_IN_PROGRESS");
         }
+        // Every collect/confirm callback created by the previous operation is
+        // now stale. It must never overwrite the authoritative cancellation
+        // result after the WisePad has acknowledged cancellation.
+        paymentOperationGeneration.incrementAndGet();
         localPaymentState = "CANCELLING";
         paymentRail = "TERMINAL";
         paymentRailState = "CANCELLING";
@@ -301,6 +310,8 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 correlationId = blankToNull(state.correlationId());
                 localPaymentState = "CANCELLED";
                 activePaymentIntentId = null;
+                activeRentalSessionId = null;
+                paymentCancelable = null;
                 paymentRunning.set(false);
                 readerState = usbPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
             } catch (IOException error) {
@@ -330,7 +341,12 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         });
     }
 
-    private void retrieveAndCollect(String clientSecret) {
+    static boolean isCurrentPaymentOperation(int callbackGeneration, int activeGeneration) {
+        return callbackGeneration == activeGeneration;
+    }
+
+    private void retrieveAndCollect(String clientSecret, int operationGeneration) {
+        if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
         if (!Terminal.isInitialized() || Terminal.getInstance().getConnectedReader() == null) {
             finishPaymentFailure("TERMINAL_DISCONNECTED");
             return;
@@ -338,6 +354,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         Terminal.getInstance().retrievePaymentIntent(clientSecret, new PaymentIntentCallback() {
             @Override
             public void onSuccess(PaymentIntent paymentIntent) {
+                if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                 localPaymentState = "COLLECTING";
                 paymentRailState = "PROCESSING";
                 CollectConfiguration collect = new CollectConfiguration.Builder()
@@ -348,11 +365,13 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                     new PaymentIntentCallback() {
                         @Override
                         public void onSuccess(PaymentIntent collected) {
+                            if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                             paymentCancelable = null;
                             localPaymentState = "PROCESSING";
                             Terminal.getInstance().confirmPaymentIntent(collected, new PaymentIntentCallback() {
                                 @Override
                                 public void onSuccess(PaymentIntent processed) {
+                                    if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                                     activePaymentIntentId = processed.getId();
                                     localPaymentState = "SDK_SUCCEEDED";
                                     paymentRailState = "PROCESSING";
@@ -363,6 +382,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
                                 @Override
                                 public void onFailure(TerminalException error) {
+                                    if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                                     finishPaymentFailure(safeTerminalCode(error));
                                     refreshPaymentState(true);
                                 }
@@ -371,6 +391,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
                         @Override
                         public void onFailure(TerminalException error) {
+                            if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                             paymentCancelable = null;
                             finishPaymentFailure(safeTerminalCode(error));
                             refreshPaymentState(true);
@@ -382,6 +403,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
             @Override
             public void onFailure(TerminalException error) {
+                if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                 finishPaymentFailure(safeTerminalCode(error));
                 refreshPaymentState(true);
             }
