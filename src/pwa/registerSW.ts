@@ -7,6 +7,7 @@ import { registerSW } from "virtual:pwa-register";
 let _updateSW: ((reload?: boolean) => Promise<void>) | null = null;
 let _swVersionUrl: string | null = null;
 let _needRefresh = false;
+let _registrationStarted = false;
 const listeners = new Set<(needRefresh: boolean) => void>();
 
 function emit() {
@@ -51,7 +52,9 @@ function isBlockedContext(): boolean {
   return false;
 }
 
-export function initKioskPwa(): void {
+function initPwa(): void {
+  if (_registrationStarted) return;
+  _registrationStarted = true;
   if (isBlockedContext()) {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
@@ -82,4 +85,15 @@ export function initKioskPwa(): void {
       }
     },
   });
+}
+
+// Kept as the kiosk entry point so its update semantics remain unchanged.
+export function initKioskPwa(): void {
+  initPwa();
+}
+
+// The member account is a separate, browser-only PWA surface. It uses the
+// same controlled worker but is never enabled by the native Android kiosk.
+export function initAccountPwa(): void {
+  initPwa();
 }

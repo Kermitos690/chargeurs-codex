@@ -9,7 +9,7 @@ import "./kiosk-v2-overlays.css";
 import "./kiosk-final-overrides.css";
 import "./kiosk-production-premium.css";
 import { KioskBlankScreenGuard, KioskErrorBoundary } from "./components/kiosk/KioskRuntimeGuard";
-import { initKioskPwa } from "./pwa/registerSW";
+import { initAccountPwa, initKioskPwa } from "./pwa/registerSW";
 import { prepareNativeKioskBootstrap } from "./pwa/nativeKioskBootstrap";
 
 // The service worker and runtime recovery guards belong to the kiosk surface
@@ -21,6 +21,7 @@ const isKioskSurface =
   hashPath === "/kiosk" ||
   hashPath.startsWith("/kiosk/");
 const isStaticHashPreview = import.meta.env.VITE_ROUTER_MODE === "hash";
+const isAccountSurface = window.location.pathname === "/compte" || window.location.pathname.startsWith("/compte/");
 
 function detectNativeKioskWrapper() {
   if ("ChargeursNative" in window) return true;
@@ -130,6 +131,11 @@ async function startApplication() {
   // kiosks never register this SW; their shell is cleaned before React above.
   if (isKioskSurface && !isStaticHashPreview && !isNativeKioskWrapper) {
     initKioskPwa();
+  } else if (isAccountSurface && !isStaticHashPreview && !isNativeKioskWrapper) {
+    // Chargeurs+ is installable in a normal mobile browser. The native
+    // Android kiosk never reaches this branch, so its update/cache contract
+    // remains isolated from the customer account.
+    initAccountPwa();
   } else if (!isNativeKioskWrapper && "serviceWorker" in navigator) {
     navigator.serviceWorker
       .getRegistrations()

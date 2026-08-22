@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   CalendarClock,
+  BellRing,
   CheckCircle2,
   CircleDollarSign,
   ExternalLink,
+  Download,
   Gem,
   Loader2,
   RefreshCw,
   RotateCcw,
+  Share,
   ShieldCheck,
   Smartphone,
   WalletCards,
@@ -36,6 +39,21 @@ type State = {
 
 type ManageAction = "portal" | "cancel_at_period_end" | "resume";
 
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+function isIosBrowser(): boolean {
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isStandalonePwa(): boolean {
+  return window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
 const initial: State = {
   loading: true,
   error: false,
@@ -51,6 +69,10 @@ export default function AccountPass() {
   const [managementAction, setManagementAction] = useState<ManageAction | null>(null);
   const [managementMessage, setManagementMessage] = useState<string | null>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
+  const installPrompt = useRef<InstallPromptEvent | null>(null);
+  const [pwaInstalled, setPwaInstalled] = useState(() => isStandalonePwa());
+  const [installAvailable, setInstallAvailable] = useState(false);
+  const [showIosInstallHelp, setShowIosInstallHelp] = useState(false);
   const membershipReturn = useMemo(() => new URLSearchParams(window.location.search).get("membership"), []);
 
   const load = useCallback(async () => {
@@ -70,6 +92,37 @@ export default function AccountPass() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    // The public kiosk manifest stays unchanged. Only the member account
+    // advertises the Chargeurs+ home-screen application.
+    const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const previousHref = manifest?.getAttribute("href") ?? null;
+    const previousTitle = document.title;
+    if (manifest) manifest.href = "/chargeurs-plus.webmanifest";
+    document.title = "Chargeurs+";
+
+    const onBeforeInstall = (event: Event) => {
+      event.preventDefault();
+      installPrompt.current = event as InstallPromptEvent;
+      setInstallAvailable(true);
+    };
+    const onInstalled = () => {
+      installPrompt.current = null;
+      setInstallAvailable(false);
+      setPwaInstalled(true);
+      setShowIosInstallHelp(false);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+      if (manifest && previousHref) manifest.setAttribute("href", previousHref);
+      document.title = previousTitle;
+    };
+  }, []);
 
   const plan = membershipPlan(state.membership);
   const membershipActive = Boolean(state.membership && ["active", "trialing"].includes(state.membership.status));
@@ -94,6 +147,21 @@ export default function AccountPass() {
           : providerStatus === "revoked"
             ? "Révoqué"
             : "Émission Wallet non activée";
+
+  const installPassApp = async () => {
+    if (pwaInstalled) return;
+    if (isIosBrowser()) {
+      setShowIosInstallHelp(true);
+      return;
+    }
+    const prompt = installPrompt.current;
+    if (!prompt) return;
+    await prompt.prompt();
+    const result = await prompt.userChoice;
+    if (result.outcome !== "accepted") return;
+    installPrompt.current = null;
+    setInstallAvailable(false);
+  };
 
   const subscribe = async () => {
     if (subscribing) return;
@@ -252,6 +320,37 @@ export default function AccountPass() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
+        <article className="glass rounded-3xl p-6">
+          <div className="flex items-center gap-3"><Download className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Installer Chargeurs+</h2></div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Ajoutez votre Pass à l’écran d’accueil : il s’ouvrira comme une application, sans modifier le kiosque ni votre moyen de paiement.
+          </p>
+          {pwaInstalled ? (
+            <p className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-success"><CheckCircle2 className="h-4 w-4" />Chargeurs+ est déjà installé sur cet appareil.</p>
+          ) : (
+            <>
+              <Button className="mt-5 rounded-full" onClick={() => void installPassApp()} disabled={!isIosBrowser() && !installAvailable}>
+                {isIosBrowser() ? <Share className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
+                Ajouter à l’écran d’accueil
+              </Button>
+              {!isIosBrowser() && !installAvailable && <p className="mt-3 text-xs text-muted-foreground">L’installation sera proposée par votre navigateur lorsqu’elle est disponible.</p>}
+              {showIosInstallHelp && (
+                <p className="mt-4 rounded-2xl border border-primary/25 bg-primary/10 p-3 text-sm text-foreground">
+                  Dans Safari, touchez <strong>Partager</strong>, puis <strong>Sur l’écran d’accueil</strong>, et confirmez <strong>Ajouter</strong>.
+                </p>
+              )}
+            </>
+          )}
+        </article>
+
+        <article className="glass rounded-3xl p-6">
+          <div className="flex items-center gap-3"><BellRing className="h-7 w-7 text-violet-300" /><h2 className="font-display text-xl font-bold">Notifications du Pass</h2></div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Le support technique PWA est préparé. Aucune notification ne sera demandée ou envoyée pendant ce test tant que le service d’envoi staging sécurisé n’est pas configuré.
+          </p>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">État : en attente de l’activation serveur</p>
+        </article>
+
         <article className="glass rounded-3xl p-6">
           <div className="flex items-center gap-3"><Smartphone className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Apple Wallet / Google Wallet</h2></div>
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
