@@ -1,14 +1,12 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { passwordRecoveryAuth, supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { canView } from "@/lib/roles";
 import { CUSTOMER_PASSWORD_MIN_LENGTH, signupNeedsEmailConfirmation } from "@/lib/customerAccount";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -40,36 +38,23 @@ export default function AccountAuth() {
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const googleAuthEnabled = import.meta.env.VITE_ENABLE_GOOGLE_AUTH === "true";
 
-  const navigateAfterPasswordSignIn = async (userId: string) => {
-    // A scan explicitly asking to return to a pairing wins over the ordinary
-    // role landing page. Admin roles can still use a customer account journey.
-    if (nextPath !== "/compte") {
-      nav(nextPath, { replace: true });
-      return;
-    }
-
-    const { data: roleRows, error: roleError } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (!roleError && canView((roleRows ?? []).map((row) => row.role))) {
-      nav("/admin", { replace: true });
-      return;
-    }
-    nav("/compte", { replace: true });
+  const navigateAfterCustomerSignIn = () => {
+    // /compte is deliberately a customer surface. Even if the same identity
+    // also has an admin role, signing in here must remain inside Chargeurs+.
+    nav(nextPath, { replace: true });
   };
 
   const signInWithGoogle = async () => {
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}${nextPath}`,
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}${nextPath}` },
       });
-      if (result.error) {
+      if (error) {
         toast.error("Connexion Google indisponible. Réessayez.");
         return;
       }
-      if (result.redirected) return;
-      nav(nextPath, { replace: true });
+      if (data.url) window.location.assign(data.url);
     } catch {
       toast.error("Connexion Google indisponible. Réessayez.");
     }
@@ -116,7 +101,7 @@ export default function AccountAuth() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       if (!data.user) throw new Error("Connexion incomplète. Réessayez.");
-      await navigateAfterPasswordSignIn(data.user.id);
+      navigateAfterCustomerSignIn();
     } catch (err) {
       toast.error((err as Error).message ?? "Erreur");
     } finally { setLoading(false); }
