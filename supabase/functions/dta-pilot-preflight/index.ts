@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { hasVerifiedSingleSlotRentalContract } from "../_shared/chargenow.ts";
+import { hasVerifiedSingleSlotRentalContract, legacyRentalFlowBlockError } from "../_shared/chargenow.ts";
 
 const STATION_ID = "DTA21269";
 const ACTIVE_RUN_STATES = [
@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
     providerMutationsEnabled: Deno.env.get("CHARGENOW_MUTATIONS_ENABLED") === "true",
     hardwareEjectionEnabled: Deno.env.get("HARDWARE_EJECTION_ENABLED") === "true",
     supplierSingleSlotContractVerified: hasVerifiedSingleSlotRentalContract(),
+    legacyRentalFlowBlocked: Boolean(legacyRentalFlowBlockError()),
   };
 
   const blockers: string[] = [];
@@ -104,6 +105,7 @@ Deno.serve(async (req) => {
   if (!guards.providerMutationsEnabled) blockers.push("CHARGENOW_MUTATIONS_DISABLED");
   if (!guards.hardwareEjectionEnabled) blockers.push("HARDWARE_EJECTION_DISABLED");
   if (!guards.supplierSingleSlotContractVerified) blockers.push("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED");
+  if (guards.legacyRentalFlowBlocked) blockers.push("CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE");
   if (runs.length) blockers.push("QUALIFICATION_RUN_ALREADY_ACTIVE");
   if (slots.length !== 4) blockers.push("FOUR_SLOT_INVENTORY_NOT_CONFIRMED");
   if (slots.length === 4 && slots.some((slot) => slot.status !== "occupied" || !slot.battery_id)) {

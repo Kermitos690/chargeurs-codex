@@ -9,6 +9,7 @@ import {
   ejectByRent,
   hasVerifiedSingleSlotRentalContract,
   isChargeNowConfigured,
+  legacyRentalFlowBlockError,
   orderCreate,
   type ApiResult,
 } from "../_shared/chargenow.ts";
@@ -337,6 +338,10 @@ Deno.serve(async (req) => {
       if (!areHardwareEjectionsEnabled()) return json({ ok: false, error: "HARDWARE_EJECTION_DISABLED" }, 409);
       if (!hasVerifiedSingleSlotRentalContract()) {
         return json({ ok: false, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED" }, 409);
+      }
+      const legacySupplierFlowBlock = legacyRentalFlowBlockError();
+      if (legacySupplierFlowBlock) {
+        return json({ ok: false, error: legacySupplierFlowBlock }, 409);
       }
 
       const { data: activeRun, error: activeError } = await db.from("hardware_qualification_runs")

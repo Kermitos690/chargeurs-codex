@@ -11,6 +11,7 @@ import {
   ejectByRentWithOneTimeRentalPermit,
   hasVerifiedSingleSlotRentalContract,
   isChargeNowConfigured,
+  legacyRentalFlowBlockError,
   type OneTimeRentalEjectionPermit,
   orderCreate,
   orderCreateWithOneTimeRentalPermit,
@@ -467,6 +468,15 @@ Deno.serve(async (req) => {
         message: "La sortie client est suspendue : le fournisseur n'a pas encore fourni un contrat vérifié garantissant une seule batterie dans le slot demandé.",
       });
       return reply({ ok: false, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED", ...blocked });
+    }
+    const legacySupplierFlowBlock = legacyRentalFlowBlockError();
+    if (legacySupplierFlowBlock) {
+      const blocked = await markHardwareReleaseBlocked(db, session, {
+        code: legacySupplierFlowBlock,
+        chargenowStatus: "legacy_o2_c3_flow_physically_unsafe",
+        message: "La sortie client est suspendue : la séquence fournisseur historique peut libérer plusieurs batteries. Aucun ordre matériel n'a été envoyé.",
+      });
+      return reply({ ok: false, error: legacySupplierFlowBlock, ...blocked });
     }
     if (!isChargeNowConfigured()) {
       const compensation = await compensateBeforeHardwareRequest(db, session, "CHARGENOW_NOT_CONFIGURED");

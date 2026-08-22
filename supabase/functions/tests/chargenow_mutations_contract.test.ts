@@ -124,22 +124,28 @@ async function expectResilience(run: () => Promise<ApiResult>) {
   } finally { s.restore(); }
 }
 
+// The DTA21269 incident proved that the legacy O2 -> C3 rental sequence can
+// produce two independent supplier commands. These operations must therefore
+// fail before fetch even when legacy feature flags are set to their permissive
+// test values above.
+async function expectLegacyPhysicalFlowBlocked(run: () => Promise<ApiResult>) {
+  const s = stubFetch(() => jsonResponse({ code: 0 }));
+  try {
+    const res = await run();
+    assertEquals(res.ok, false);
+    assertEquals(res.status, 409);
+    assertEquals(res.error, "CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE");
+    assertEquals(s.calls.length, 0, "unsafe physical flow must be stopped before fetch");
+  } finally {
+    s.restore();
+  }
+}
+
 // ----------------------------------------------------------------
 // O2 — Create Rent Order (POST /rent/order/create?deviceId&callbackURL)
 // ----------------------------------------------------------------
-Deno.test("O2 orderCreate — builds POST with deviceId + callbackURL query", async () => {
-  await expectSuccess(
-    () => cn.orderCreate({ deviceId: "DTA21277", callbackURL: "https://cb.test/x" }),
-    (c) => {
-      assertEquals(c.init?.method, "POST");
-      assert(c.url.includes("/rent/order/create"));
-      assert(c.url.includes("deviceId=DTA21277"));
-      assert(c.url.includes("callbackURL=https"));
-    },
-  );
-});
-Deno.test("O2 orderCreate — HTTP errors mapped", () => expectHttpErrors(() => cn.orderCreate({ deviceId: "DTA21277" })));
-Deno.test("O2 orderCreate — resilience", () => expectResilience(() => cn.orderCreate({ deviceId: "DTA21277" })));
+Deno.test("O2 orderCreate — blocked before fetch after the DTA21269 double-release incident", () =>
+  expectLegacyPhysicalFlowBlocked(() => cn.orderCreate({ deviceId: "DTA21277", callbackURL: "https://cb.test/x" })));
 
 // ----------------------------------------------------------------
 // O3 — Query Rent Order Status (POST /rent/order/query?tradeNo) — idempotent
@@ -297,35 +303,15 @@ Deno.test("P6 priceStrategyUnbind — resilience", () => expectResilience(() => 
 // C1 — Cabinet Operation (POST /cabinet/operation) — BLOCKED_BY_SAFETY
 // Physical effect: pop/eject/lock/restart. Contract-mock only.
 // ----------------------------------------------------------------
-Deno.test("C1 cabinetOperation — builds POST with operationType/slotNum (mock only)", async () => {
-  await expectSuccess(
-    () => cn.cabinetOperation({ cabinetid: "DTA21269", slotNum: 2, operationType: "pop", reason: "test" }),
-    (c) => {
-      assertEquals(c.init?.method, "POST");
-      assert(c.url.includes("/cabinet/operation"));
-      assert(c.url.includes("cabinetid=DTA21269"));
-      assert(c.url.includes("operationType=pop"));
-      assert(c.url.includes("slotNum=2"));
-    },
-  );
-});
+Deno.test("C1 cabinetOperation pop — blocked before fetch after the DTA21269 double-release incident", () =>
+  expectLegacyPhysicalFlowBlocked(() => cn.cabinetOperation({ cabinetid: "DTA21269", slotNum: 2, operationType: "pop", reason: "test" })));
 Deno.test("C1 cabinetOperation — HTTP errors mapped", () => expectHttpErrors(() => cn.cabinetOperation({ cabinetid: "DTA21269", operationType: "heartbeat" })));
 
 // ----------------------------------------------------------------
 // C2 — Eject By Repair (POST /cabinet/ejectByRepair) — BLOCKED_BY_SAFETY
 // ----------------------------------------------------------------
-Deno.test("C2 ejectByRepair — builds POST with cabinetid/slotNum (mock only)", async () => {
-  await expectSuccess(
-    () => cn.ejectByRepair("DTA21269", 1),
-    (c) => {
-      assertEquals(c.init?.method, "POST");
-      assert(c.url.includes("/cabinet/ejectByRepair"));
-      assert(c.url.includes("cabinetid=DTA21269"));
-      assert(c.url.includes("slotNum=1"));
-    },
-  );
-});
-Deno.test("C2 ejectByRepair — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRepair("DTA21269", 1)));
+Deno.test("C2 ejectByRepair — blocked before fetch after the DTA21269 double-release incident", () =>
+  expectLegacyPhysicalFlowBlocked(() => cn.ejectByRepair("DTA21269", 1)));
 
 Deno.test("C2 one-time maintenance permit cannot bypass the physical release gates", async () => {
   const previousMutations = Deno.env.get("CHARGENOW_MUTATIONS_ENABLED");
@@ -360,19 +346,8 @@ Deno.test("C2 one-time maintenance permit cannot bypass the physical release gat
 // ----------------------------------------------------------------
 // C3 — Eject By Rent (POST /cabinet/ejectByRent) — BLOCKED_BY_SAFETY
 // ----------------------------------------------------------------
-Deno.test("C3 ejectByRent — builds POST with cabinetid/rentOrderId/slotNum (mock only)", async () => {
-  await expectSuccess(
-    () => cn.ejectByRent("DTA21269", 3, "ORD-1"),
-    (c) => {
-      assertEquals(c.init?.method, "POST");
-      assert(c.url.includes("/cabinet/ejectByRent"));
-      assert(c.url.includes("cabinetid=DTA21269"));
-      assert(c.url.includes("rentOrderId=ORD-1"));
-      assert(c.url.includes("slotNum=3"));
-    },
-  );
-});
-Deno.test("C3 ejectByRent — HTTP errors mapped", () => expectHttpErrors(() => cn.ejectByRent("DTA21269", 3, "ORD-1")));
+Deno.test("C3 ejectByRent — blocked before fetch after the DTA21269 double-release incident", () =>
+  expectLegacyPhysicalFlowBlocked(() => cn.ejectByRent("DTA21269", 3, "ORD-1")));
 
 Deno.test("C3 ejectByRent — slot 0 is fail-closed without a confirmed provider convention", async () => {
   const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
@@ -381,7 +356,7 @@ Deno.test("C3 ejectByRent — slot 0 is fail-closed without a confirmed provider
   try {
     const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
     assertEquals(result.ok, false);
-    assertEquals(result.error, "CHARGENOW_SLOT_ZERO_NOT_ALLOWED");
+    assertEquals(result.error, "CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE");
     assertEquals(s.calls.length, 0, "fail-closed validation must happen before fetch");
   } finally {
     s.restore();
@@ -390,15 +365,15 @@ Deno.test("C3 ejectByRent — slot 0 is fail-closed without a confirmed provider
   }
 });
 
-Deno.test("C3 ejectByRent — slot 0 is sent only in explicit provider-auto-select mode", async () => {
+Deno.test("C3 ejectByRent — provider-auto-select mode cannot revive the unsafe path", async () => {
   const previous = Deno.env.get("CHARGENOW_RENT_SLOT_ZERO_MODE");
   Deno.env.set("CHARGENOW_RENT_SLOT_ZERO_MODE", "provider_auto_select");
   const s = stubFetch(() => jsonResponse({ code: 0 }));
   try {
     const result = await cn.ejectByRent("DTA21269", 0, "ORD-ZERO");
-    assertEquals(result.ok, true);
-    assertEquals(s.calls.length, 1);
-    assert(s.calls[0].url.includes("slotNum=0"));
+    assertEquals(result.ok, false);
+    assertEquals(result.error, "CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE");
+    assertEquals(s.calls.length, 0);
   } finally {
     s.restore();
     if (previous === undefined) Deno.env.delete("CHARGENOW_RENT_SLOT_ZERO_MODE");

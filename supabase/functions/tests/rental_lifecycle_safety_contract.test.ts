@@ -47,6 +47,7 @@ Deno.test("physical qualification cannot bypass the supplier single-slot contrac
 Deno.test("qualification preflight reports an unverified supplier single-slot contract", () => {
   assert(preflightSource.includes("supplierSingleSlotContractVerified"));
   assert(preflightSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+  assert(preflightSource.includes("CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE"));
   assert(preflightSource.indexOf("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED") > preflightSource.indexOf("const blockers"));
 });
 
@@ -73,6 +74,10 @@ Deno.test("all direct physical supplier endpoints share the hardware and single-
   assert(chargeNowSource.includes("ejectByRepairWithOneTimePermit"));
   assert(chargeNowSource.includes("const blocked = physicalEjectionBlockError()"));
   assert(chargeNowSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+  assert(ejectSource.includes("legacyRentalFlowBlockError"));
+  assert(qualificationSource.includes("legacyRentalFlowBlockError"));
+  assert(chargeNowSource.includes("export const LEGACY_RENTAL_FLOW_UNSAFE"));
+  assert(chargeNowSource.includes("return legacyRentalFlowBlockError()"));
 });
 
 Deno.test("ChargeNow return settlement requires contractual BATTERY_IN evidence", () => {

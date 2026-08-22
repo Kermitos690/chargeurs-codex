@@ -47,6 +47,18 @@ export function hasVerifiedSingleSlotRentalContract(): boolean {
   return Deno.env.get("CHARGENOW_SINGLE_SLOT_RENTAL_CONTRACT") === "verified";
 }
 
+// DTA21269 physical evidence on 2026-08-22 disproved the legacy flow:
+// order/create followed by cabinet/ejectByRent produced two independent
+// RentPowerBank commands from the Bajie cloud (slots 3 and 4, with different
+// provider order numbers).  A future integration must use one documented
+// supplier operation whose one-command/one-slot behaviour has been proven;
+// toggling an environment variable must never revive this unsafe pair.
+export const LEGACY_RENTAL_FLOW_UNSAFE = "CHARGENOW_LEGACY_O2_C3_FLOW_UNSAFE";
+
+export function legacyRentalFlowBlockError(): string {
+  return LEGACY_RENTAL_FLOW_UNSAFE;
+}
+
 export function chargeNowMode(): "test" | "live" {
   return CHARGENOW_MODE === "live" ? "live" : "test";
 }
@@ -249,7 +261,7 @@ export function physicalEjectionBlockError(): string | null {
   if (!areChargeNowMutationsEnabled()) return "CHARGENOW_MUTATIONS_DISABLED";
   if (Deno.env.get("HARDWARE_EJECTION_ENABLED") !== "true") return "HARDWARE_EJECTION_DISABLED";
   if (!hasVerifiedSingleSlotRentalContract()) return "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
-  return null;
+  return legacyRentalFlowBlockError();
 }
 
 export const cabinetOperation = (args: {
