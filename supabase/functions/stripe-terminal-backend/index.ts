@@ -89,7 +89,7 @@ async function loadClaimAndAttempt(db: any, rentalSessionId: string) {
 async function projectState(db: any, stripe: Stripe, session: any, reconcile: boolean) {
   const { claim, attempt } = await loadClaimAndAttempt(db, String(session.id));
   let stripeStatus = attempt?.status ?? null;
-  let intentId = attempt?.stripe_payment_intent_id ?? null;
+  const intentId = attempt?.stripe_payment_intent_id ?? null;
 
   if (reconcile && intentId) {
     const intent = await stripe.paymentIntents.retrieve(String(intentId));

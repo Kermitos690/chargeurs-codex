@@ -54,6 +54,7 @@ function diagnostic(error: unknown) {
 }
 async function paymentMethodType(stripe: Stripe, intent: Stripe.PaymentIntent) {
   const id = typeof intent.payment_method === "string" ? intent.payment_method : intent.payment_method?.id;
+  // eslint-disable-next-line no-empty -- payment-method lookup is diagnostic only.
   if (id) try { const method = await stripe.paymentMethods.retrieve(id); if (method.type) return method.type; } catch {}
   return intent.payment_method_types?.[0] ?? "unknown";
 }
@@ -246,6 +247,7 @@ export async function handleSettlementRequestV3(req: Request): Promise<Response>
     return await settle(db, stripe, session, returnState, finalAt);
   } catch (error) {
     const c = errorCode(error);
+    // eslint-disable-next-line no-empty -- preserve the original response if best-effort failure recording also fails.
     if (rentalId) try { const { data: session } = await db.from("rental_sessions").select("*").eq("id", rentalId).maybeSingle(); if (session) await recordFailure(db, session, "SETTLEMENT_INTERNAL_ERROR", "Le règlement final a échoué et doit être réconcilié.", { underlying_code: c, provider: diagnostic(error), stripe_api_version: "2025-09-30.clover" }); } catch {}
     return json({ ok: false, error: "SETTLEMENT_INTERNAL_ERROR" }, 500);
   }
