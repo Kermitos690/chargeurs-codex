@@ -1,0 +1,39 @@
+name: Chargeurs Mac Remote Ops
+
+on:
+  push:
+    branches:
+      - "ops/chargeurs-mac-remote"
+    paths:
+      - "ops/remote-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chargeurs-mac-remote-ops
+  cancel-in-progress: false
+
+jobs:
+  remote-ops:
+    runs-on: [self-hosted, macOS, chargeurs-adb]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout restricted ops branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          clean: true
+
+      - name: Execute allow-listed STAGING operation
+        shell: bash
+        run: bash scripts/remote_staging_ops.sh ops/remote-request.json
+
+      - name: Upload remote operation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-mac-remote-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 3
+          path: ops-output/**
