@@ -1,11 +1,39 @@
 name: Chargeurs Mac Remote Ops
 
 on:
-  push:
-    branches:
-      - "ops/chargeurs-mac-remote"
-    paths:
-      - "ops/remote-request.json"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Allow-listed STAGING action"
+        required: true
+        type: choice
+        options:
+          - adb_devices
+          - adb_connect
+          - kiosk_status
+          - kiosk_version
+          - kiosk_restart
+          - kiosk_screenshot
+          - kiosk_logcat
+          - build_staging
+          - install_staging
+          - build_install_staging
+      source_ref:
+        description: "Approved source to build (ignored by diagnostics)"
+        required: true
+        type: choice
+        default: hotfix/staging-terminal-cancel-v300
+        options:
+          - main
+          - hotfix/staging-terminal-cancel-v300
+          - hotfix/staging-terminal-cancel-136
+      station:
+        description: "Physical target"
+        required: true
+        type: choice
+        default: DTA21269
+        options:
+          - DTA21269
 
 permissions:
   contents: read
@@ -22,12 +50,15 @@ jobs:
       - name: Checkout restricted ops branch
         uses: actions/checkout@v4
         with:
+          ref: ops/chargeurs-mac-remote
           persist-credentials: false
           clean: true
 
       - name: Execute allow-listed STAGING operation
         shell: bash
-        run: bash scripts/remote_staging_ops.sh ops/remote-request.json
+        run: |
+          printf '%s\n' '${{ toJSON(inputs) }}' > ops/remote-request.json
+          bash scripts/remote_staging_ops.sh ops/remote-request.json
 
       - name: Upload remote operation evidence
         if: always()

@@ -1,7 +1,5 @@
 {
-  "request_id": "bootstrap",
-  "action": "noop",
-  "device": "",
-  "target": "",
+  "action": "adb_devices",
+  "station": "DTA21269",
   "source_ref": "main"
 }
