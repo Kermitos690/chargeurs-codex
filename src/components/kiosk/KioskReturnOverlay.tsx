@@ -252,19 +252,25 @@ export function KioskReturnOverlay() {
     const token = readKioskToken();
     if (!token) return;
     let stopped = false;
-    const tick = async () => {
+    const snapshot = async () => {
       await invokeKioskEdgeProxy(
         "/api/kiosk/cabinet-snapshot",
         { stationId },
         { "X-Kiosk-Token": token },
       );
-      if (!stopped) await fetchSummary();
     };
-    void tick();
-    const id = window.setInterval(() => void tick(), 5000);
+    void snapshot();
+    void fetchSummary();
+    const snapshotId = window.setInterval(() => {
+      if (!stopped) void snapshot();
+    }, 5000);
+    const summaryId = window.setInterval(() => {
+      if (!stopped) void fetchSummary();
+    }, 650);
     return () => {
       stopped = true;
-      window.clearInterval(id);
+      window.clearInterval(snapshotId);
+      window.clearInterval(summaryId);
     };
   }, [stationId, fetchSummary]);
 
@@ -431,8 +437,7 @@ export function KioskReturnOverlay() {
             </div>
             <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Cell label={c.duration} value={duration(summary)} />
-              <Cell label={c.periods} value={periods} />
-              <Cell label={c.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+              <RateCells summary={summary} currency={currency} copy={c} periods={periods} />
               <Cell label={c.start} value={when(summary.startedAt, locale)} />
               <Cell label={c.return} value={when(summary.returnedAt, locale)} />
               <Cell label={c.initialSecurity} value={money(summary.depositCents, currency)} />
@@ -486,14 +491,31 @@ function PricingGrid({
   return (
     <div className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Cell label={copy.duration} value={duration(summary)} />
-      <Cell label={copy.periods} value={periods} />
-      <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+      <RateCells summary={summary} currency={currency} copy={copy} periods={periods} />
       <Cell label={copy.initialSecurity} value={money(summary.depositCents, currency)} />
       <Cell label={copy.start} value={when(summary.startedAt, locale)} />
       <Cell label={copy.return} value={when(summary.returnedAt, locale)} />
       <Cell label={copy.returnStation} value={summary.returnStationId ?? "—"} />
       <Cell label={copy.slot} value={summary.returnedSlotNum ? String(summary.returnedSlotNum) : "—"} />
     </div>
+  );
+}
+
+function RateCells({ summary, currency, copy, periods }: { summary: Summary; currency: string; copy: Copy; periods: string }) {
+  if (isTiered(summary)) {
+    const tier = appliedTier(summary);
+    return (
+      <>
+        <Cell label={copy.appliedTier} value={tier ? interpolate(copy.upTo, { minutes: tier.upper_minutes }) : "—"} />
+        <Cell label={copy.appliedRate} value={money(tier ? tier.total_cents : summary.finalAmountCents, currency)} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Cell label={copy.periods} value={periods} />
+      <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+    </>
   );
 }
 
