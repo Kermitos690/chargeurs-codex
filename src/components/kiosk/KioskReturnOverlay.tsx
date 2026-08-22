@@ -6,7 +6,7 @@ import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/i18n";
 
-const FINAL_SECONDS = 20;
+const FINAL_SECONDS = 8;
 const SUPPORT_SECONDS = 20;
 
 type Summary = {
@@ -40,6 +40,8 @@ type Summary = {
   dailyCapCents: number;
   failureCode?: string | null;
   failureMessage?: string | null;
+  tiered?: boolean;
+  tiers?: Array<{ upper_minutes: number; total_cents: number }>;
 };
 
 type Result = {
@@ -52,7 +54,7 @@ type Result = {
 const copy = {
   fr: {
     detected: "Retour détecté",
-    detectedBody: "La batterie est bien revenue. Calcul du prix exact…",
+    detectedBody: "La batterie est bien revenue. Finalisation en cours…",
     calculated: "Prix calculé",
     calculatedBody: "Le retour est confirmé. Le montant ci-dessous est calculé à partir de la durée réelle de location.",
     finalizing: "Finalisation du paiement…",
@@ -65,6 +67,9 @@ const copy = {
     duration: "Durée",
     periods: "Périodes",
     rate: "Tarif",
+    appliedTier: "Palier appliqué",
+    appliedRate: "Tarif appliqué",
+    upTo: "Jusqu’à {{minutes}} min",
     start: "Départ",
     return: "Retour",
     initialSecurity: "Garantie initiale",
@@ -84,7 +89,7 @@ const copy = {
   },
   en: {
     detected: "Return detected",
-    detectedBody: "Your powerbank has been returned. Calculating the exact price…",
+    detectedBody: "Your powerbank has been returned. Finalising now…",
     calculated: "Price calculated",
     calculatedBody: "The return is confirmed. The amount below is calculated from the actual rental duration.",
     finalizing: "Finalising payment…",
@@ -97,6 +102,9 @@ const copy = {
     duration: "Duration",
     periods: "Periods",
     rate: "Rate",
+    appliedTier: "Applied tier",
+    appliedRate: "Applied rate",
+    upTo: "Up to {{minutes}} min",
     start: "Start",
     return: "Return",
     initialSecurity: "Initial security amount",
@@ -116,7 +124,7 @@ const copy = {
   },
   de: {
     detected: "Rückgabe erkannt",
-    detectedBody: "Die Powerbank wurde zurückgegeben. Der genaue Preis wird berechnet…",
+    detectedBody: "Die Powerbank wurde zurückgegeben. Abschluss läuft…",
     calculated: "Preis berechnet",
     calculatedBody: "Die Rückgabe ist bestätigt. Der Betrag wird anhand der tatsächlichen Mietdauer berechnet.",
     finalizing: "Zahlung wird abgeschlossen…",
@@ -129,6 +137,9 @@ const copy = {
     duration: "Dauer",
     periods: "Perioden",
     rate: "Tarif",
+    appliedTier: "Angewendete Stufe",
+    appliedRate: "Angewendeter Tarif",
+    upTo: "Bis {{minutes}} Min.",
     start: "Beginn",
     return: "Rückgabe",
     initialSecurity: "Anfänglicher Sicherheitsbetrag",
@@ -149,6 +160,19 @@ const copy = {
 } as const;
 
 const locales = { fr: "fr-CH", en: "en-CH", de: "de-CH" } as const;
+
+type Copy = (typeof copy)[keyof typeof copy];
+
+function appliedTier(summary: Summary) {
+  const tiers = [...(summary.tiers ?? [])].sort((a, b) => a.upper_minutes - b.upper_minutes);
+  if (!tiers.length) return null;
+  const minutes = Math.max(0, summary.totalMinutes || 0);
+  return tiers.find((tier) => tier.upper_minutes >= minutes) ?? tiers[tiers.length - 1];
+}
+
+function isTiered(summary: Summary) {
+  return Boolean(summary.tiered && (summary.tiers?.length ?? 0) > 0);
+}
 
 function stationFromPath() {
   const match = window.location.pathname.match(/^\/kiosk\/(?:station\/)?([A-Za-z0-9_-]{4,32})(?:\/|$)/);
@@ -228,19 +252,25 @@ export function KioskReturnOverlay() {
     const token = readKioskToken();
     if (!token) return;
     let stopped = false;
-    const tick = async () => {
+    const snapshot = async () => {
       await invokeKioskEdgeProxy(
         "/api/kiosk/cabinet-snapshot",
         { stationId },
         { "X-Kiosk-Token": token },
       );
-      if (!stopped) await fetchSummary();
     };
-    void tick();
-    const id = window.setInterval(() => void tick(), 5000);
+    void snapshot();
+    void fetchSummary();
+    const snapshotId = window.setInterval(() => {
+      if (!stopped) void snapshot();
+    }, 5000);
+    const summaryId = window.setInterval(() => {
+      if (!stopped) void fetchSummary();
+    }, 650);
     return () => {
       stopped = true;
-      window.clearInterval(id);
+      window.clearInterval(snapshotId);
+      window.clearInterval(summaryId);
     };
   }, [stationId, fetchSummary]);
 
@@ -407,8 +437,7 @@ export function KioskReturnOverlay() {
             </div>
             <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Cell label={c.duration} value={duration(summary)} />
-              <Cell label={c.periods} value={periods} />
-              <Cell label={c.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+              <RateCells summary={summary} currency={currency} copy={c} periods={periods} />
               <Cell label={c.start} value={when(summary.startedAt, locale)} />
               <Cell label={c.return} value={when(summary.returnedAt, locale)} />
               <Cell label={c.initialSecurity} value={money(summary.depositCents, currency)} />
@@ -456,20 +485,37 @@ function PricingGrid({
   summary: Summary;
   locale: string;
   currency: string;
-  copy: (typeof copy)[keyof typeof copy];
+  copy: Copy;
   periods: string;
 }) {
   return (
     <div className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Cell label={copy.duration} value={duration(summary)} />
-      <Cell label={copy.periods} value={periods} />
-      <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+      <RateCells summary={summary} currency={currency} copy={copy} periods={periods} />
       <Cell label={copy.initialSecurity} value={money(summary.depositCents, currency)} />
       <Cell label={copy.start} value={when(summary.startedAt, locale)} />
       <Cell label={copy.return} value={when(summary.returnedAt, locale)} />
       <Cell label={copy.returnStation} value={summary.returnStationId ?? "—"} />
       <Cell label={copy.slot} value={summary.returnedSlotNum ? String(summary.returnedSlotNum) : "—"} />
     </div>
+  );
+}
+
+function RateCells({ summary, currency, copy, periods }: { summary: Summary; currency: string; copy: Copy; periods: string }) {
+  if (isTiered(summary)) {
+    const tier = appliedTier(summary);
+    return (
+      <>
+        <Cell label={copy.appliedTier} value={tier ? interpolate(copy.upTo, { minutes: tier.upper_minutes }) : "—"} />
+        <Cell label={copy.appliedRate} value={money(tier ? tier.total_cents : summary.finalAmountCents, currency)} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Cell label={copy.periods} value={periods} />
+      <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+    </>
   );
 }
 
