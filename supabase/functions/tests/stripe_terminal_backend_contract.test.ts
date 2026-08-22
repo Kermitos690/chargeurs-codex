@@ -10,6 +10,7 @@ import {
   terminalIntentIdempotencyKey,
   terminalRailState,
 } from "../_shared/stripeTerminalTest.ts";
+import { classifyCheckoutIntentForExplicitCancellation } from "../_shared/checkoutCancellation.ts";
 
 const backendSource = await Deno.readTextFile(new URL("../stripe-terminal-backend/index.ts", import.meta.url));
 const qrSource = await Deno.readTextFile(new URL("../create-stripe-checkout/index.ts", import.meta.url));
@@ -62,6 +63,20 @@ Deno.test("cancel safety refuses confirmed financial side effects and identifies
   assert(stripeIntentSafelyCancelable("processing"));
   assertEquals(stripeIntentHasFinancialSideEffect("requires_capture"), true);
   assertEquals(stripeIntentHasFinancialSideEffect("succeeded"), true);
+});
+
+Deno.test("Checkout cancellation only releases Stripe-incomplete intents", () => {
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("requires_payment_method"), "cancelable");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("requires_confirmation"), "cancelable");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("requires_action"), "cancelable");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("canceled"), "already_canceled");
+});
+
+Deno.test("Checkout cancellation fails closed for processing, paid, and unknown intents", () => {
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("processing"), "reconciliation_required");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("requires_capture"), "payment_confirmed");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("succeeded"), "payment_confirmed");
+  assertEquals(classifyCheckoutIntentForExplicitCancellation("unexpected"), "reconciliation_required");
 });
 
 Deno.test("ConnectionToken reader connectivity requires station not rental and creates no rental", () => {

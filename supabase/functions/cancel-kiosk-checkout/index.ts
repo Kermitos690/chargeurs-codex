@@ -6,6 +6,7 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { classifyCheckoutIntentForExplicitCancellation } from "../_shared/checkoutCancellation.ts";
 
 const headers = {
   ...corsHeaders,
@@ -83,12 +84,13 @@ Deno.serve(async (req) => {
     const captured = Number(payment?.amount_captured_cents ?? 0);
     const refunded = Number(payment?.amount_refunded_cents ?? 0);
     const financialState = String(payment?.status ?? "pending");
-    if (authorized > 0 || captured > 0 || refunded > 0 || payment?.stripe_payment_intent_id
+    if (authorized > 0 || captured > 0 || refunded > 0
       || ["authorized", "succeeded", "refunded", "partially_refunded"].includes(financialState)) {
       return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
     }
 
     const checkoutId = String(session.stripe_checkout_session_id ?? "").trim();
+    let safelyCancelledIntentId: string | null = null;
     if (checkoutId) {
       const secretKey = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
       if (!(secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_"))) {
@@ -102,7 +104,43 @@ Deno.serve(async (req) => {
       if (checkout.payment_status === "paid" || checkout.status === "complete") {
         return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
       }
+
+      // Checkout creates a PaymentIntent before a customer supplies a payment
+      // method. Query Stripe before deciding whether that incomplete intent
+      // may be cancelled; unknown or asynchronous states stay fail-closed.
+      const rawIntent = payment?.stripe_payment_intent_id ?? checkout.payment_intent;
+      const intentId = typeof rawIntent === "string" ? rawIntent : rawIntent?.id;
+      if (typeof intentId === "string" && intentId) {
+        const intent = await stripe.paymentIntents.retrieve(intentId);
+        const decision = classifyCheckoutIntentForExplicitCancellation(intent.status);
+        if (decision === "payment_confirmed") {
+          return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
+        }
+        if (decision === "reconciliation_required") {
+          return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
+        }
+        if (decision === "cancelable") {
+          const canceledIntent = await stripe.paymentIntents.cancel(intent.id, {
+            cancellation_reason: "requested_by_customer",
+          });
+          if (canceledIntent.status !== "canceled") {
+            return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
+          }
+        }
+        safelyCancelledIntentId = intent.id;
+      }
       if (checkout.status === "open") await stripe.checkout.sessions.expire(checkoutId);
+    }
+
+    // Persist Stripe's confirmed cancellation before ending the rental. If
+    // this write fails, leave the rental resumable so the same idempotent
+    // path can reconcile it on retry rather than hiding a financial record.
+    if (safelyCancelledIntentId) {
+      const { error: paymentCancelledError } = await db.from("payments")
+        .update({ status: "canceled", refunded_at: null })
+        .eq("rental_session_id", rentalSessionId)
+        .eq("stripe_payment_intent_id", safelyCancelledIntentId);
+      if (paymentCancelledError) throw paymentCancelledError;
     }
 
     const now = new Date().toISOString();
@@ -134,6 +172,7 @@ Deno.serve(async (req) => {
         station_id: stationId,
         public_session_code: session.public_session_code ?? null,
         stripe_checkout_expired: Boolean(checkoutId),
+        stripe_payment_intent_canceled: Boolean(safelyCancelledIntentId),
         correlation_id: correlationId,
       },
     }).then(() => {}, () => {});
