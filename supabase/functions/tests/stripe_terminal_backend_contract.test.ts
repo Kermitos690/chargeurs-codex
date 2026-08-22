@@ -168,6 +168,16 @@ Deno.test("simulated Terminal reader is server-gated and never reaches physical 
   assert(webhookGatewaySource.includes("SIMULATED_TERMINAL_NO_EJECTION"));
 });
 
+Deno.test("simulated Terminal reconciliation voids only its own capturable TEST authorization", () => {
+  assert(backendSource.includes('release_reason,correlation_id,metadata'));
+  assert(backendSource.includes('claim?.metadata?.reader_mode === "simulated"'));
+  assert(backendSource.includes("intent.livemode === false"));
+  assert(backendSource.includes('if (isSimulatedTerminalIntent && intent.status === "requires_capture")'));
+  assert(backendSource.includes('p_reason: isSimulatedTerminalIntent'));
+  assert(backendSource.includes('"simulated_terminal_authorization_voided_no_hardware"'));
+  assert(backendSource.includes('simulatedAuthorizationVoided\n    ? "CANCELLED"'));
+});
+
 Deno.test("Terminal backend contains no direct ejection return or settlement implementation", () => {
   assertEquals(backendSource.includes("ejectByRent"), false);
   assertEquals(backendSource.includes("eject-after-payment"), false);

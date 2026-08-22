@@ -72,7 +72,7 @@ public final class NativeBridge {
     @JavascriptInterface
     public String getPaymentReaderStatus() {
         terminalRuntime.ensureStarted();
-        terminalRuntime.refreshPaymentState(false);
+        terminalRuntime.refreshPaymentState(terminalRuntime.shouldReconcilePaymentState());
         return terminalRuntime.snapshot().toString();
     }
 

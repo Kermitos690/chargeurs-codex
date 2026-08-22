@@ -439,10 +439,37 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 serverConfirmed = state.serverConfirmed();
                 recoveryRequired = state.recoveryRequired();
                 correlationId = blankToNull(state.correlationId());
+                if (simulatedReaderEnabled()
+                    && "NONE".equals(paymentRail)
+                    && "CANCELLED".equals(paymentRailState)
+                    && !serverConfirmed
+                    && !recoveryRequired) {
+                    // The simulated authorization has been voided by the
+                    // server. Forget this test attempt so a later real
+                    // WisePad payment starts from an unclaimed rail.
+                    localPaymentState = "SIMULATED_AUTHORIZATION_VOIDED";
+                    activePaymentIntentId = null;
+                    activeRentalSessionId = null;
+                    paymentCancelable = null;
+                    paymentRunning.set(false);
+                    safeErrorCode = null;
+                }
             } catch (IOException error) {
                 safeErrorCode = StripeTerminalBackendClient.safeCode(error.getMessage());
             }
         });
+    }
+
+    /**
+     * Physical WisePad payments keep their normal webhook/reconciliation path.
+     * A simulated reader has no physical rental side effect, so its completed
+     * TEST authorization is explicitly reconciled and voided by the server.
+     */
+    boolean shouldReconcilePaymentState() {
+        return simulatedReaderEnabled()
+            && "SDK_SUCCEEDED".equals(localPaymentState)
+            && activeRentalSessionId != null
+            && !activeRentalSessionId.isBlank();
     }
 
     static boolean isCurrentPaymentOperation(int callbackGeneration, int activeGeneration) {

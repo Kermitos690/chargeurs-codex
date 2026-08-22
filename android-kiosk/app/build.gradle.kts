@@ -62,13 +62,13 @@ android {
         targetSdk = 36
         // The DTA21269 currently runs versionCode 141. A normal Android
         // upgrade must increase this value; no downgrade install is permitted.
-        // 1.0.48 is a temporary STAGING simulator build.  1.0.49 is the
+        // 1.0.50 is a temporary STAGING simulator build.  1.0.51 is the
         // normal WisePad build that can restore it in-place afterwards.
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 148 else 149
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 151
         versionName = if (stagingSimulatedTerminalReaderVersion)
-            "1.0.48-terminal-simulated-reader"
+            "1.0.50-terminal-simulated-reader-reconcile"
         else
-            "1.0.49-terminal-simulated-reader-restore"
+            "1.0.51-terminal-simulated-reader-restore"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))

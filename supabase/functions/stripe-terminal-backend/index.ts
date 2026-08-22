@@ -91,7 +91,7 @@ async function loadRentalContext(req: Request, db: any, rentalSessionId: string)
 async function loadClaimAndAttempt(db: any, rentalSessionId: string) {
   const [{ data: claim, error: claimError }, { data: attempt, error: attemptError }] = await Promise.all([
     db.from("rental_payment_rail_claims")
-      .select("rail,claim_state,claimed_at,released_at,release_reason,correlation_id")
+      .select("rail,claim_state,claimed_at,released_at,release_reason,correlation_id,metadata")
       .eq("rental_session_id", rentalSessionId).maybeSingle(),
     db.from("stripe_terminal_payment_attempts")
       .select("*").eq("rental_session_id", rentalSessionId).maybeSingle(),
@@ -105,31 +105,58 @@ async function projectState(db: any, stripe: Stripe, session: any, reconcile: bo
   const { claim, attempt } = await loadClaimAndAttempt(db, String(session.id));
   let stripeStatus = attempt?.status ?? null;
   const intentId = attempt?.stripe_payment_intent_id ?? null;
+  let simulatedAuthorizationVoided = false;
 
   if (reconcile && intentId) {
     const intent = await stripe.paymentIntents.retrieve(String(intentId));
     stripeStatus = intent.status;
+    // The claim marker is written exclusively by this function after the
+    // authenticated STAGING simulation gate has passed.  It is deliberately
+    // the source of truth here: Stripe may not expose newly-written intent
+    // metadata during the first immediate reconciliation callback.
+    const isSimulatedTerminalIntent = claim?.metadata?.reader_mode === "simulated"
+      && intent.livemode === false;
+
+    // The simulated reader exists to validate the official Stripe Terminal SDK
+    // and our server orchestration, never to advance a physical rental.  Stripe
+    // may deliver its webhook after this immediate post-SDK reconciliation, so
+    // release a capturable TEST authorization here as well. This is deliberately
+    // narrower than the physical path: only the server-issued simulation marker
+    // above may take this branch, and it never reaches any ejection code.
+    if (isSimulatedTerminalIntent && intent.status === "requires_capture") {
+      const canceled = await stripe.paymentIntents.cancel(String(intentId), {
+        cancellation_reason: "abandoned",
+      });
+      stripeStatus = canceled.status;
+    }
+    simulatedAuthorizationVoided = isSimulatedTerminalIntent && stripeStatus === "canceled";
     const update: Record<string, unknown> = {
-      status: intent.status,
+      status: stripeStatus,
       last_reconciled_at: new Date().toISOString(),
-      reconciliation_required: false,
-      last_error: intent.last_payment_error?.message?.slice(0, 500) ?? null,
+      reconciliation_required: isSimulatedTerminalIntent && stripeStatus !== "canceled",
+      last_error: isSimulatedTerminalIntent && stripeStatus !== "canceled"
+        ? "SIMULATED_TERMINAL_UNEXPECTED_STRIPE_STATE"
+        : intent.last_payment_error?.message?.slice(0, 500) ?? null,
       updated_at: new Date().toISOString(),
     };
-    if (intent.status === "canceled") update.canceled_at = new Date().toISOString();
+    if (stripeStatus === "canceled") update.canceled_at = new Date().toISOString();
     await db.from("stripe_terminal_payment_attempts").update(update).eq("rental_session_id", session.id);
-    if (intent.status === "canceled") {
+    if (stripeStatus === "canceled") {
       await db.rpc("release_rental_payment_rail_claim", {
         p_rental_id: session.id,
         p_expected_rail: "stripe_terminal",
-        p_reason: "stripe_confirmed_canceled",
+        p_reason: isSimulatedTerminalIntent
+          ? "simulated_terminal_authorization_voided_no_hardware"
+          : "stripe_confirmed_canceled",
       });
     }
   }
 
   const refreshed = await loadClaimAndAttempt(db, String(session.id));
   const rail = canonicalRail(refreshed.claim?.rail, refreshed.claim?.claim_state);
-  const railState = terminalRailState(refreshed.attempt?.status ?? stripeStatus, refreshed.claim?.claim_state);
+  const railState = simulatedAuthorizationVoided
+    ? "CANCELLED"
+    : terminalRailState(refreshed.attempt?.status ?? stripeStatus, refreshed.claim?.claim_state);
   return {
     rail,
     railState,
