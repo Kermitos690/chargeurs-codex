@@ -28,6 +28,8 @@ type Station = Record<string, any> & {
   location_name?: string | null;
   rentable_count?: number | null;
   last_sync_at?: string | null;
+  online?: boolean | null;
+  status?: string | null;
 };
 
 type KioskDevice = {
