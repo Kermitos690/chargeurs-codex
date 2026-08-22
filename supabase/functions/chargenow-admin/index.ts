@@ -27,7 +27,11 @@ async function dispatch(code: string, p: Record<string, unknown>, superAdminMuta
   switch (code) {
     case "A1": return await cn.oauth2Login(s("username"), s("passwordSha256"));
     case "O1": return await cn.cabinetQuery(s("deviceId", TEST_STATION));
-    case "O2": return await cn.orderCreate({ deviceId: s("deviceId", TEST_STATION), callbackURL: s("callbackURL") || undefined }, context);
+    case "O2":
+      if (!cn.hasVerifiedSingleSlotRentalContract()) {
+        return { ok: false, status: 409, data: null, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED" };
+      }
+      return await cn.orderCreate({ deviceId: s("deviceId", TEST_STATION), callbackURL: s("callbackURL") || undefined }, context);
     case "O3": return await cn.orderQuery(s("tradeNo"));
     case "O4": return await cn.orderClose(s("tradeNo"), context);
     case "O5": return await cn.orderDetail(s("tradeNo"));
@@ -35,7 +39,11 @@ async function dispatch(code: string, p: Record<string, unknown>, superAdminMuta
     case "O7": return { ok: false, status: 0, data: null, error: "PROVIDER_ENDPOINT_MISSING" };
     case "C1": return await cn.cabinetOperation({ cabinetid: s("cabinetid", TEST_STATION), slotNum: n("slotNum"), operationType: (s("operationType", "heartbeat") as cn.CabinetOperationType), reason: s("reason", "admin") }, context);
     case "C2": return await cn.ejectByRepair(s("cabinetid", TEST_STATION), n("slotNum"), context);
-    case "C3": return await cn.ejectByRent(s("cabinetid", TEST_STATION), n("slotNum"), s("rentOrderId") || undefined, context);
+    case "C3":
+      if (!cn.hasVerifiedSingleSlotRentalContract()) {
+        return { ok: false, status: 409, data: null, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED" };
+      }
+      return await cn.ejectByRent(s("cabinetid", TEST_STATION), n("slotNum"), s("rentOrderId") || undefined, context);
     case "C4": return await cn.cabinetDetail(s("cabinetId", TEST_STATION));
     case "C5": return await cn.getDeviceByShopId(s("shopid", "630bdd3b23"));
     case "C6": return await cn.getAllDevicePage(s("page", "1"), s("limit", "20"));

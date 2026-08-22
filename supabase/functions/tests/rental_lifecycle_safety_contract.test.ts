@@ -2,6 +2,7 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 
 const ejectSource = await Deno.readTextFile("supabase/functions/eject-after-payment/index.ts");
 const qualificationSource = await Deno.readTextFile("supabase/functions/dta-pilot-qualification/index.ts");
+const chargeNowAdminSource = await Deno.readTextFile("supabase/functions/chargenow-admin/index.ts");
 const callbackSource = await Deno.readTextFile("supabase/functions/chargenow-rent-callback/index.ts");
 const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-event-push/index.ts");
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
@@ -37,6 +38,18 @@ Deno.test("physical qualification cannot bypass the supplier single-slot contrac
   assert(contractAt >= 0);
   assert(orderAt > contractAt);
   assert(qualificationSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+});
+
+Deno.test("the supplier administration gateway cannot bypass the single-slot contract", () => {
+  const gate = "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
+  const orderAt = chargeNowAdminSource.indexOf('case "O2":');
+  const orderGateAt = chargeNowAdminSource.indexOf(gate, orderAt);
+  const orderCallAt = chargeNowAdminSource.indexOf("cn.orderCreate", orderAt);
+  const ejectAt = chargeNowAdminSource.indexOf('case "C3":');
+  const ejectGateAt = chargeNowAdminSource.indexOf(gate, ejectAt);
+  const ejectCallAt = chargeNowAdminSource.indexOf("cn.ejectByRent", ejectAt);
+  assert(orderAt >= 0 && orderGateAt > orderAt && orderCallAt > orderGateAt);
+  assert(ejectAt >= 0 && ejectGateAt > ejectAt && ejectCallAt > ejectGateAt);
 });
 
 Deno.test("ChargeNow return settlement requires contractual BATTERY_IN evidence", () => {
