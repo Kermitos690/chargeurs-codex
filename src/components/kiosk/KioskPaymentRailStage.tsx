@@ -40,6 +40,7 @@ const COPY = {
   fr: {
     eyebrow: "PAIEMENT SÉCURISÉ",
     ready: "Comment souhaitez-vous payer ?",
+    reservedSlot: (slot: number) => `Batterie réservée : slot ${slot}`,
     terminal: "Sans contact",
     terminalSub: "Présentez votre carte ou votre téléphone sur le terminal",
     qr: "QR code",
@@ -61,6 +62,7 @@ const COPY = {
   en: {
     eyebrow: "SECURE PAYMENT",
     ready: "How would you like to pay?",
+    reservedSlot: (slot: number) => `Reserved battery: slot ${slot}`,
     terminal: "Contactless",
     terminalSub: "Tap your card or phone on the payment reader",
     qr: "QR code",
@@ -82,6 +84,7 @@ const COPY = {
   de: {
     eyebrow: "SICHERE ZAHLUNG",
     ready: "Wie möchten Sie bezahlen?",
+    reservedSlot: (slot: number) => `Reservierte Batterie: Fach ${slot}`,
     terminal: "Kontaktlos",
     terminalSub: "Karte oder Smartphone an das Terminal halten",
     qr: "QR-Code",
@@ -310,6 +313,7 @@ export function KioskPaymentRailStage(props: Props) {
       <CreditCard className="h-20 w-20 text-cyan-100" />
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.processing}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.processingSub}</p>
+      {selectedSlot != null && <p className="text-lg font-bold text-cyan-100">{copy.reservedSlot(selectedSlot)}</p>}
       {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
       <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : terminalCancelRequested ? copy.cancelling : terminalAwaitingCard ? copy.awaitingCard : `${readerState} · ${model.payment.railState}`}</span></div>
       {!model.payment.serverConfirmed && native?.cancelTerminalPayment && <Button variant="outline" onClick={cancelTerminal} disabled={terminalCancelRequested} className="h-14 rounded-full px-7 text-base font-bold">{terminalCancelRequested ? copy.cancelling : copy.cancel}</Button>}
@@ -355,6 +359,7 @@ export function KioskPaymentRailStage(props: Props) {
   return <div className="kiosk-payment-rail-stage flex w-full max-w-6xl flex-col items-center gap-7 px-5 text-center" data-payment-capability="TERMINAL_AND_QR" data-reader-state={readerState} data-native-payment-bridge="true">
     <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
     <h2 className="font-display text-5xl font-black tracking-tight sm:text-6xl">{copy.ready}</h2>
+    {selectedSlot != null && <p className="text-lg font-bold text-cyan-100">{copy.reservedSlot(selectedSlot)}</p>}
     {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
     <div className="grid w-full grid-cols-2 gap-6">
       <button type="button" onClick={chooseTerminal} disabled={!model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>

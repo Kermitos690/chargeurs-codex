@@ -27,6 +27,7 @@ import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
 import { acceptsKioskStateVersion } from "@/lib/kioskStateVersion";
 import { hourlyRateCents } from "@/lib/kioskPricing";
 import { preferredKioskSlot } from "@/lib/kioskSlotSelection";
+import { authoritativeKioskSlot } from "@/lib/kioskSlotContract";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { KioskPaymentRailStage } from "@/components/kiosk/KioskPaymentRailStage";
@@ -455,12 +456,22 @@ export default function Kiosk() {
       }
       if (!idemRef.current) idemRef.current = createKioskIdempotencyKey();
       const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
-        session?: { id?: string; public_session_code?: string | null; expires_at?: string | null };
+        session?: {
+          id?: string;
+          public_session_code?: string | null;
+          expires_at?: string | null;
+          selected_slot_num?: number | string | null;
+        };
       }>("/api/kiosk/create-rental-session", { stationId, language: lang, selectedSlotNum: slotNum }, {
         "X-Kiosk-Token": kioskToken,
         "X-Idempotency-Key": idemRef.current,
       });
-      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string; public_session_code?: string | null; expires_at?: string | null } }) | null;
+      const sessionResponse = sess as (KioskFunctionResponse & { session?: {
+        id?: string;
+        public_session_code?: string | null;
+        expires_at?: string | null;
+        selected_slot_num?: number | string | null;
+      } }) | null;
       if (sessionTransportError || !sessionResponse?.ok || !sessionResponse.session?.id) {
         failFlow({
           code: sessionResponse?.error ?? "RENTAL_SESSION_REQUEST_FAILED",
@@ -470,8 +481,17 @@ export default function Kiosk() {
         return;
       }
       const rentalSessionId = sessionResponse.session.id;
+      const reservedSlotNum = authoritativeKioskSlot(sessionResponse.session.selected_slot_num);
+      if (reservedSlotNum === null) {
+        // Do not offer payment if the browser cannot show the server-reserved
+        // compartment. This prevents a local UI state from describing another
+        // physical slot than the rental contract.
+        failFlow({ code: "SLOT_CONTRACT_MISSING", step: "create_rental_session", sessionId: rentalSessionId });
+        return;
+      }
       seenStateVersionRef.current = -1;
       releaseFallbackAtRef.current = 0;
+      setSlotNum(reservedSlotNum);
       setSessionId(rentalSessionId);
       setPublicCode(sessionResponse.session.public_session_code ?? null);
       setExpiresAt(sessionResponse.session.expires_at ? new Date(sessionResponse.session.expires_at).getTime() : null);
