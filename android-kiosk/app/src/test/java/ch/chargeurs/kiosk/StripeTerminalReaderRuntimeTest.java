@@ -41,6 +41,13 @@ public final class StripeTerminalReaderRuntimeTest {
     }
 
     @Test
+    public void doesNotAutoReconnectAReaderAfterAnyConnectionError() {
+        assertFalse(StripeTerminalReaderRuntime.shouldAutoReconnectReader("ERROR"));
+        assertTrue(StripeTerminalReaderRuntime.shouldAutoReconnectReader("DISCOVERING"));
+        assertTrue(StripeTerminalReaderRuntime.shouldAutoReconnectReader("RECONNECTING"));
+    }
+
+    @Test
     public void ignoresPaymentStateResponseThatPredatesCancellation() {
         assertTrue(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-a"));
         assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 15, "rental-a", "rental-a"));

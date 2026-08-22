@@ -124,6 +124,11 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             if (!"BUSY".equals(readerState) && !"UPDATING".equals(readerState)) readerState = "ABSENT";
             return;
         }
+        // Reader failures, including Stripe's offline-cache fault, must not
+        // be retried by status polling. The kiosk presents an explicit retry
+        // control instead, preventing connection loops and preserving a
+        // deterministic recovery boundary.
+        if (!shouldAutoReconnectReader(readerState)) return;
         if (bindingMismatchBlocked) {
             readerState = "ERROR";
             safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
@@ -452,6 +457,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
     static boolean shouldHoldReaderForExplicitOfflineCacheRepair(boolean offlineCredentialRepairRequired) {
         return offlineCredentialRepairRequired;
+    }
+
+    static boolean shouldAutoReconnectReader(String readerState) {
+        return !"ERROR".equals(readerState);
     }
 
     static boolean canClearCachedCredentialsForRepair(
