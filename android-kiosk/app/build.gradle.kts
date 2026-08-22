@@ -53,8 +53,8 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 132
-        versionName = "1.0.32-terminal-v222-restore"
+        versionCode = 137
+        versionName = "1.0.37-terminal-v300-usb-connect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -73,6 +73,7 @@ android {
         buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
+        manifestPlaceholders["terminalDiagnosticExported"] = "false"
     }
 
     buildFeatures {
@@ -140,6 +141,7 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
         }
         create("staging") {
             initWith(getByName("debug"))
@@ -165,6 +167,7 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
         }
         release {
@@ -200,10 +203,9 @@ android {
 }
 
 dependencies {
-    // Exact P0 restoration lane: DTA21269 physically connected its WisePad 3
-    // with Stripe Terminal 2.22.0. Do not upgrade this dependency during the
-    // restoration gate; first re-prove READY / TERMINAL_AND_QR on the device.
-    implementation("com.stripe:stripeterminal:2.22.0")
+    // SDK 3.0.0 is Stripe's first Android USB-compatible lane for WisePad 3.
+    // This is a local compile probe only; it is not an installation decision.
+    implementation("com.stripe:stripeterminal:3.0.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")

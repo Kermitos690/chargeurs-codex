@@ -17,14 +17,13 @@ import com.stripe.stripeterminal.external.callable.DiscoveryListener;
 import com.stripe.stripeterminal.external.callable.PaymentIntentCallback;
 import com.stripe.stripeterminal.external.callable.ReaderCallback;
 import com.stripe.stripeterminal.external.callable.TerminalListener;
-import com.stripe.stripeterminal.external.callable.UsbReaderListener;
+import com.stripe.stripeterminal.external.callable.ReaderListener;
 import com.stripe.stripeterminal.external.models.BatteryStatus;
 import com.stripe.stripeterminal.external.models.CollectConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionStatus;
 import com.stripe.stripeterminal.external.models.ConnectionTokenException;
 import com.stripe.stripeterminal.external.models.DiscoveryConfiguration;
-import com.stripe.stripeterminal.external.models.DiscoveryMethod;
 import com.stripe.stripeterminal.external.models.PaymentIntent;
 import com.stripe.stripeterminal.external.models.PaymentStatus;
 import com.stripe.stripeterminal.external.models.Reader;
@@ -45,20 +44,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * TEST-only Stripe Terminal 2.22.0 compatibility runtime for DTA21269.
+ * TEST-only Stripe Terminal 3.0.0 USB runtime for DTA21269.
  *
- * This remains on Stripe's v2 USB lane because the modern offline-capable SDK
- * previously failed against the tablet's Android 11 Keymaster. The runtime is
- * intentionally payment-reader only: it has no battery-release capability and
- * does not weaken HARDWARE_EJECTION_ENABLED.
+ * Stripe documents 3.0.0 as the first Android SDK version supporting WisePad
+ * 3 over USB. The runtime is intentionally payment-reader only: it has no
+ * battery-release capability and does not weaken HARDWARE_EJECTION_ENABLED.
  */
-final class StripeTerminalReaderRuntime implements UsbReaderListener {
+final class StripeTerminalReaderRuntime implements ReaderListener {
     private static final String TAG = "ChargeursStripeV2";
     private static final String PREFS = "stripe_terminal_reader";
     private static final String LAST_READER_ID = "last_reader_id";
     // Kept package-visible so the build contract can prevent diagnostics from
     // drifting away from the pinned SDK dependency.
-    static final String SDK_COMPAT = "2.22.0-test-only";
+    static final String SDK_COMPAT = "3.0.0-test-only";
 
     private final Context context;
     private final KioskConfig config;
@@ -75,6 +73,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
     private volatile String safeErrorCode;
     private volatile String stripeReaderId;
     private volatile String stripeReaderSerial;
+    private volatile String discoveredReaderId;
+    private volatile String discoveredReaderSerial;
     private volatile String stripeLocationId;
     private volatile String expectedReaderId;
     private volatile String prefetchedConnectionTokenSecret;
@@ -85,6 +85,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
     private volatile String paymentRailState = "UNCLAIMED";
     private volatile boolean serverConfirmed;
     private volatile boolean recoveryRequired;
+    private volatile boolean bindingMismatchBlocked;
     private volatile String correlationId;
     private Cancelable discoveryCancelable;
     private Cancelable paymentCancelable;
@@ -110,6 +111,11 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         }
         if (!usbPresent()) {
             if (!"BUSY".equals(readerState) && !"UPDATING".equals(readerState)) readerState = "ABSENT";
+            return;
+        }
+        if (bindingMismatchBlocked) {
+            readerState = "ERROR";
+            safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
             return;
         }
         if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -198,6 +204,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                 "targetPid", "0101",
                 "stripeReaderId", nullableJson(stripeReaderId),
                 "stripeReaderSerial", nullableJson(stripeReaderSerial),
+                "discoveredReaderId", nullableJson(discoveredReaderId),
+                "discoveredReaderSerial", nullableJson(discoveredReaderSerial),
                 "stripeLocationId", nullableJson(stripeLocationId),
                 "expectedReaderId", nullableJson(expectedReaderId),
                 "errorCode", nullableJson(safeErrorCode)
@@ -274,7 +282,6 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                 paymentRailState = "PROCESSING";
                 CollectConfiguration collect = new CollectConfiguration.Builder()
                     .skipTipping(true)
-                    .setMoto(false)
                     .build();
                 paymentCancelable = Terminal.getInstance().collectPaymentMethod(
                     paymentIntent,
@@ -283,7 +290,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                         public void onSuccess(PaymentIntent collected) {
                             paymentCancelable = null;
                             localPaymentState = "PROCESSING";
-                            Terminal.getInstance().processPayment(collected, new PaymentIntentCallback() {
+                            Terminal.getInstance().confirmPaymentIntent(collected, new PaymentIntentCallback() {
                                 @Override
                                 public void onSuccess(PaymentIntent processed) {
                                     activePaymentIntentId = processed.getId();
@@ -333,7 +340,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
             }
             return true;
         } catch (Exception error) {
-            Log.e(TAG, "Stripe Terminal 2.22.0 init failed", error);
+            Log.e(TAG, "Stripe Terminal 3.0.0 init failed", error);
             setError("STRIPE_TERMINAL_V2_INIT_FAILED");
             return false;
         }
@@ -353,14 +360,24 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         final int generation = discoveryGeneration.incrementAndGet();
         readerState = "DISCOVERING";
         safeErrorCode = null;
-        DiscoveryConfiguration discoveryConfig = new DiscoveryConfiguration(0, DiscoveryMethod.USB, false);
+        Log.i(TAG, "USB discovery started; locationBound=" + (blankToNull(stripeLocationId) != null)
+            + ", readerBound=" + (blankToNull(expectedReaderId) != null));
+        DiscoveryConfiguration discoveryConfig = new DiscoveryConfiguration.UsbDiscoveryConfiguration(0, false);
         discoveryCancelable = Terminal.getInstance().discoverReaders(
             discoveryConfig,
             new DiscoveryListener() {
                 @Override
                 public void onUpdateDiscoveredReaders(List<Reader> readers) {
                     if (generation != discoveryGeneration.get() || !discoveryRunning.get()) return;
+                    if (readers != null && !readers.isEmpty()) {
+                        Reader first = readers.get(0);
+                        discoveredReaderId = first.getId();
+                        discoveredReaderSerial = first.getSerialNumber();
+                    }
                     Reader candidate = chooseReader(readers);
+                    Log.i(TAG, "USB discovery update; count=" + (readers == null ? 0 : readers.size())
+                        + ", candidate=" + (candidate != null)
+                        + ", discoveredReaderId=" + (discoveredReaderId == null ? "none" : discoveredReaderId));
                     if (candidate != null) connect(candidate, generation);
                 }
             },
@@ -393,6 +410,11 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         String remembered = preferences.getString(LAST_READER_ID, null);
         if (expected != null) {
             for (Reader reader : readers) if (expected.equals(reader.getId())) return reader;
+            // USB discovery supplies no Stripe reader ID until after a physical
+            // connection on some WisePad 3 firmware. A single attached reader
+            // is safe to connect non-financially; its Stripe ID is verified in
+            // the connection callback before it can become READY.
+            if (readers.size() == 1 && blankToNull(readers.get(0).getId()) == null) return readers.get(0);
             return null;
         }
         if (remembered != null) {
@@ -412,6 +434,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
             return;
         }
         readerState = "CONNECTING";
+        Log.i(TAG, "USB reader connection requested; expectedReaderBound="
+            + (blankToNull(expectedReaderId) != null));
         Terminal.getInstance().connectUsbReader(
             reader,
             new ConnectionConfiguration.UsbConnectionConfiguration(location),
@@ -423,6 +447,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                     discoveryRunning.set(false);
                     cancelDiscoverySilently();
                     if (!readerMatchesBinding(connected)) {
+                        bindingMismatchBlocked = true;
+                        disconnectForBindingMismatch();
                         setError("TERMINAL_READER_BINDING_MISMATCH");
                         return;
                     }
@@ -440,6 +466,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
     }
 
     private void acceptConnectedReader(Reader reader) {
+        bindingMismatchBlocked = false;
         stripeReaderId = reader.getId();
         stripeReaderSerial = reader.getSerialNumber();
         if (reader.getLocation() != null && reader.getLocation().getId() != null) {
@@ -449,7 +476,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         else if (blankToNull(stripeReaderSerial) != null) preferences.edit().putString(LAST_READER_ID, stripeReaderSerial).apply();
         safeErrorCode = null;
         readerState = paymentRunning.get() ? "BUSY" : "READY";
-        Log.i(TAG, "WisePad USB connected through Stripe Terminal 2.22.0");
+        Log.i(TAG, "WisePad USB connected through Stripe Terminal 3.0.0");
     }
 
     private boolean readerMatchesBinding(Reader reader) {
@@ -466,6 +493,19 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
         if (blankToNull(stripeLocationId) == null || !Terminal.isInitialized()) return false;
         Reader connected = Terminal.getInstance().getConnectedReader();
         return connected != null && readerMatchesBinding(connected);
+    }
+
+    private void disconnectForBindingMismatch() {
+        try {
+            Terminal.getInstance().disconnectReader(new Callback() {
+                @Override public void onSuccess() { Log.w(TAG, "Disconnected mismatched USB reader"); }
+                @Override public void onFailure(TerminalException error) {
+                    Log.w(TAG, "Failed to disconnect mismatched USB reader: " + safeTerminalCode(error));
+                }
+            });
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Failed to start mismatched USB reader disconnect", error);
+        }
     }
 
     private boolean usbPresent() {
@@ -495,6 +535,7 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
     private void setError(String code) {
         safeErrorCode = code;
         readerState = usbPresent() ? "ERROR" : "ABSENT";
+        Log.w(TAG, "Terminal reader state=" + readerState + ", code=" + code);
     }
 
     private static String safeTerminalCode(TerminalException error) {
@@ -522,6 +563,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                 expectedReaderId = blankToNull(result.expectedReaderId());
                 prefetchedConnectionTokenSecret = result.secret();
                 safeErrorCode = null;
+                Log.i(TAG, "Terminal binding fetched; locationBound=true, readerBound="
+                    + (expectedReaderId != null));
             } catch (Exception error) {
                 prefetchedConnectionTokenSecret = null;
                 setError(StripeTerminalBackendClient.safeCode(error.getMessage()));
@@ -546,6 +589,8 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                     StripeTerminalBackendClient.ConnectionTokenResult result = backend.fetchConnectionToken();
                     stripeLocationId = blankToNull(result.locationId());
                     expectedReaderId = blankToNull(result.expectedReaderId());
+                    Log.i(TAG, "Terminal token refreshed; locationBound=" + (stripeLocationId != null)
+                        + ", readerBound=" + (expectedReaderId != null));
                     callback.onSuccess(result.secret());
                 } catch (Exception error) {
                     safeErrorCode = StripeTerminalBackendClient.safeCode(error.getMessage());
@@ -562,6 +607,11 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
             stripeReaderSerial = null;
             discoveryGeneration.incrementAndGet();
             cancelDiscoverySilently();
+            if (bindingMismatchBlocked) {
+                readerState = "ERROR";
+                safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
+                return;
+            }
             readerState = usbPresent() ? "RECONNECTING" : "ABSENT";
             if (usbPresent() && !paymentRunning.get()) main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 250L);
         }
@@ -576,6 +626,11 @@ final class StripeTerminalReaderRuntime implements UsbReaderListener {
                     if (connected != null && readerMatchesBinding(connected)) acceptConnectedReader(connected);
                 }
                 case "NOT_CONNECTED" -> {
+                    if (bindingMismatchBlocked) {
+                        readerState = "ERROR";
+                        safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
+                        return;
+                    }
                     if (!paymentRunning.get()) {
                         if (usbPresent()) {
                             readerState = "RECONNECTING";

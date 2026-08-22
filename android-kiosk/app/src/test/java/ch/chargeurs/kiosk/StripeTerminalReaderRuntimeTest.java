@@ -8,6 +8,6 @@ import org.junit.Test;
 public final class StripeTerminalReaderRuntimeTest {
     @Test
     public void reportsThePinnedTerminalSdkVersion() {
-        assertEquals("2.22.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
+        assertEquals("3.0.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
     }
 }
