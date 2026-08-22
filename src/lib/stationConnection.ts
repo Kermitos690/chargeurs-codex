@@ -1,8 +1,8 @@
 export type StationConnectionState = "online" | "offline" | "unknown";
 
 type StationConnectionInput = {
-  online: boolean | null | undefined;
-  status: string | null | undefined;
+  online?: boolean | null;
+  status?: string | null;
 };
 
 /**
