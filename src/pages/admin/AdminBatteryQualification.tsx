@@ -140,12 +140,12 @@ export default function AdminBatteryQualification() {
       const { data, error } = await supabase.functions.invoke("dta-pilot-qualification", {
         body: { action, ...extra },
       });
+      if (data?.station || data?.campaign) setDashboard(data as Dashboard);
       if (error || !data?.ok) {
-        const code = data?.error ?? error?.message ?? "DTA_QUALIFICATION_FAILED";
+        const code = data?.error ?? data?.decision?.reason ?? error?.message ?? "DTA_QUALIFICATION_FAILED";
         if (!quiet) toast.error(code);
         return data ?? null;
       }
-      if (data.station || data.campaign) setDashboard(data as Dashboard);
       if (!quiet) toast.success(action === "sync" ? "Inventaire DTA21269 synchronisé" : "Action enregistrée");
       return data;
     } finally {
