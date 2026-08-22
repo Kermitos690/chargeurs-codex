@@ -55,8 +55,8 @@ android {
         targetSdk = 36
         // The DTA21269 currently runs versionCode 141. A normal Android
         // upgrade must increase this value; no downgrade install is permitted.
-        versionCode = 143
-        versionName = "1.0.43-terminal-cancel-authoritative"
+        versionCode = 144
+        versionName = "1.0.44-terminal-cancel-authoritative"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -205,6 +205,9 @@ android {
 }
 
 dependencies {
+    // Needed only to register the narrowly scoped handler for Stripe 3.0.0's
+    // otherwise process-fatal offline-cache undeliverable exception.
+    implementation("io.reactivex.rxjava3:rxjava:3.1.6")
     // SDK 3.0.0 is Stripe's first Android USB-compatible lane for WisePad 3.
     // This is a local compile probe only; it is not an installation decision.
     implementation("com.stripe:stripeterminal:3.0.0")

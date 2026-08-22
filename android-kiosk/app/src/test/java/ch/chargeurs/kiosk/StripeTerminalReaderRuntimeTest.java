@@ -56,4 +56,14 @@ public final class StripeTerminalReaderRuntimeTest {
         assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", false, "rental-a", false));
         assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", false, null, true));
     }
+
+    @Test
+    public void quarantinesOnlyTheKnownStripeOfflineCacheCrash() {
+        assertTrue(ChargeursKioskApplication.isRecoverableStripeOfflineCacheError(
+            new RuntimeException("OfflineDecryptionException(table=offline_location)")
+        ));
+        assertFalse(ChargeursKioskApplication.isRecoverableStripeOfflineCacheError(
+            new RuntimeException("unexpected terminal failure")
+        ));
+    }
 }
