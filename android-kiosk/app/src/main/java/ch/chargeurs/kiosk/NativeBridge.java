@@ -93,6 +93,15 @@ public final class NativeBridge {
     }
 
     /**
+     * Cancels the active Terminal collection. This never releases hardware; the
+     * payment rail is released only after the backend confirms Stripe cancellation.
+     */
+    @JavascriptInterface
+    public String cancelTerminalPayment() {
+        return terminalRuntime.cancelTerminalPayment().toString();
+    }
+
+    /**
      * Metadata-only provider compatibility state for the hidden diagnostics
      * view. It cannot see or take over another app's network/serial session.
      */
