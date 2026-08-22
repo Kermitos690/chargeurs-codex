@@ -170,6 +170,13 @@ Deno.serve(async (req) => {
     ].includes(String(selected.settlement_status ?? ""));
     const stage = settlementConfirmed ? "completed" : requiresSupport ? "support" : "settling";
 
+    const pricingSource = finalPricing ?? selected.pricing_snapshot;
+    const tiered = Boolean((pricingSource as any)?.tiered);
+    const rawTiers = Array.isArray((pricingSource as any)?.tiers) ? (pricingSource as any).tiers : [];
+    const tiers = rawTiers
+      .filter((tier: any) => tier && Number.isInteger(tier.upper_minutes) && tier.upper_minutes > 0)
+      .map((tier: any) => ({ upper_minutes: cents(tier.upper_minutes), total_cents: cents(tier.total_cents) }));
+
     return json({
       ok: true,
       stage,
@@ -206,6 +213,8 @@ Deno.serve(async (req) => {
         dailyCapCents: cents(selected.pricing_snapshot?.daily_cap_cents),
         failureCode: selected.failure_code ?? null,
         failureMessage: selected.failure_message ?? null,
+        tiered,
+        tiers,
       },
     });
   } catch (error) {
