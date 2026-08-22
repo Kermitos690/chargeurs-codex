@@ -5,8 +5,7 @@ import { useCustomer } from "@/hooks/useCustomer";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, LayoutDashboard } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { Loader2, LogOut } from "lucide-react";
 import { ACCOUNT_NAV_ITEMS } from "./accountNavigation";
 
 const MEMBERSHIP_INTENT_KEY = "chargeurs:membership-intent";
@@ -41,7 +40,6 @@ function AccountNavigation({ mobile = false }: { mobile?: boolean }) {
 
 export default function AccountLayout() {
   const { user, loading } = useCustomer();
-  const { isAdmin, loading: rolesLoading } = useAuth();
   const nav = useNavigate();
 
   useEffect(() => {
@@ -86,11 +84,6 @@ export default function AccountLayout() {
           <BrandLogo size="sm" />
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">{user.email}</span>
-            {!rolesLoading && isAdmin && (
-              <Button variant="outline" size="sm" onClick={() => nav("/admin")} className="rounded-full">
-                <LayoutDashboard className="mr-1.5 h-4 w-4" /> Back-office
-              </Button>
-            )}
             <Button variant="outline" size="sm" onClick={logout} className="rounded-full" aria-label="Se déconnecter">
               <LogOut className="h-4 w-4 sm:mr-1.5" /> <span className="hidden sm:inline">Déconnexion</span>
             </Button>
