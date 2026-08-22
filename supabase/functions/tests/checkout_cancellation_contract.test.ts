@@ -48,7 +48,10 @@ Deno.test("recovery endpoint verifies no hardware attempt and releases only QR c
   assert(source.includes('p_expected_rail: "qr_checkout"'));
   assert(source.includes('STAGING_OPERATOR_AUTHORIZATION_RELEASED_NO_EJECTION'));
   assert(source.includes('String(session.failure_code ?? "") === "SESSION_EXPIRED"'));
+  assert(source.includes('String(session.failure_code ?? "") === "KIOSK_CANCELLED_BY_CUSTOMER"'));
   assert(source.indexOf('release_rental_payment_rail_claim') < source.indexOf('state: "expired"'));
+  assert(source.includes('p_reason: recoveredAuthorizedTestHold'));
+  assertEquals(source.includes('if (recoveredAuthorizedTestHold) {\n      const { error: railError }'), false);
   assertEquals(source.includes('eject-after-payment'), false);
   assertEquals(source.includes('chargenow-rent'), false);
 });

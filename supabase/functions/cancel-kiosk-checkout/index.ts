@@ -77,7 +77,14 @@ Deno.serve(async (req) => {
     const normalCancellationState = ["created", "checkout_created"].includes(String(session.state ?? ""));
     const timedOutUnpaidSession = String(session.state ?? "") === "expired"
       && String(session.failure_code ?? "") === "SESSION_EXPIRED";
-    if ((!normalCancellationState && !(operatorAuthorizationRelease && timedOutUnpaidSession))
+    // A prior browser cancellation may have already expired the unpaid
+    // session before the rail-release write failed. Permit only that precise,
+    // idempotent recovery state; all other expired sessions remain closed.
+    const customerCancellationRecovery = String(session.state ?? "") === "expired"
+      && String(session.failure_code ?? "") === "KIOSK_CANCELLED_BY_CUSTOMER";
+    if ((!normalCancellationState
+      && !customerCancellationRecovery
+      && !(operatorAuthorizationRelease && timedOutUnpaidSession))
       || session.paid_at || session.ejected_at || session.returned_at || session.completed_at) {
       return reply({ ok: false, error: "CHECKOUT_CANCELLATION_NOT_ALLOWED" }, 409);
     }
@@ -223,17 +230,20 @@ Deno.serve(async (req) => {
       .eq("state", "reserved");
     if (reservationError) throw reservationError;
 
-    // Release the QR claim before expiring the rental. Should this fail after
-    // Stripe has canceled the TEST hold, a retry sees the canceled intent and
-    // completes this repair instead of creating a new payment rail.
-    if (recoveredAuthorizedTestHold) {
-      const { error: railError } = await db.rpc("release_rental_payment_rail_claim", {
-        p_rental_id: rentalSessionId,
-        p_expected_rail: "qr_checkout",
-        p_reason: "staging_operator_authorization_released_no_ejection",
-      });
-      if (railError) throw railError;
-    }
+    // Release the QR claim before expiring the rental in both cancellation
+    // paths. The previous implementation did this only for a supervised
+    // authorization release, leaving ordinary unpaid QR cancellations
+    // permanently ENGAGED even though Stripe had confirmed the cancellation.
+    // A release failure remains fail-closed: the session is not expired and
+    // the same idempotent request can reconcile it safely.
+    const { error: railError } = await db.rpc("release_rental_payment_rail_claim", {
+      p_rental_id: rentalSessionId,
+      p_expected_rail: "qr_checkout",
+      p_reason: recoveredAuthorizedTestHold
+        ? "staging_operator_authorization_released_no_ejection"
+        : "customer_cancelled_checkout",
+    });
+    if (railError) throw railError;
 
     const { data: cancelled, error: cancelError } = await db.from("rental_sessions")
       .update({
@@ -251,7 +261,12 @@ Deno.serve(async (req) => {
       })
       .eq("id", rentalSessionId)
       .is("paid_at", null)
-      .in("state", recoveredAuthorizedTestHold ? ["created", "checkout_created", "expired"] : ["created", "checkout_created"])
+      .in(
+        "state",
+        (recoveredAuthorizedTestHold || customerCancellationRecovery)
+          ? ["created", "checkout_created", "expired"]
+          : ["created", "checkout_created"],
+      )
       .select("id")
       .maybeSingle();
     if (cancelError) throw cancelError;
