@@ -35,6 +35,12 @@ public final class StripeTerminalReaderRuntimeTest {
     }
 
     @Test
+    public void holdsTheReaderUntilTheUserExplicitlyRequestsOfflineCacheRepair() {
+        assertTrue(StripeTerminalReaderRuntime.shouldHoldReaderForExplicitOfflineCacheRepair(true));
+        assertFalse(StripeTerminalReaderRuntime.shouldHoldReaderForExplicitOfflineCacheRepair(false));
+    }
+
+    @Test
     public void ignoresPaymentStateResponseThatPredatesCancellation() {
         assertTrue(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-a"));
         assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 15, "rental-a", "rental-a"));

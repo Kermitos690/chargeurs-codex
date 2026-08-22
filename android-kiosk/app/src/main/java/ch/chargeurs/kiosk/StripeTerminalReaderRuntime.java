@@ -129,6 +129,14 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
             return;
         }
+        // The Stripe offline cache is corrupted. Do not automatically start a
+        // second connection attempt: it would repeat the same failure and can
+        // race the explicit, safe credential-repair action exposed to the UI.
+        if (shouldHoldReaderForExplicitOfflineCacheRepair(offlineCredentialRepairRequired)) {
+            readerState = "ERROR";
+            safeErrorCode = "STRIPE_OFFLINE_CREDENTIAL_CACHE_REPAIR_REQUIRED";
+            return;
+        }
         if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
             return;
@@ -440,6 +448,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         boolean paymentRunning
     ) {
         return offlineCredentialRepairRequired && !paymentRunning;
+    }
+
+    static boolean shouldHoldReaderForExplicitOfflineCacheRepair(boolean offlineCredentialRepairRequired) {
+        return offlineCredentialRepairRequired;
     }
 
     static boolean canClearCachedCredentialsForRepair(
