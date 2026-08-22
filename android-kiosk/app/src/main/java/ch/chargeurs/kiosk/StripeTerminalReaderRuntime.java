@@ -65,6 +65,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
+    // Stripe rejects a second connectUsbReader call while the first one is in
+    // flight. WebView diagnostics poll frequently, so readerState alone cannot
+    // provide the required mutual exclusion.
+    private final AtomicBoolean connectionRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentCancellationRunning = new AtomicBoolean(false);
     private final AtomicInteger paymentOperationGeneration = new AtomicInteger(0);
@@ -135,7 +139,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 acceptConnectedReader(connected);
                 return;
             }
-            if (!discoveryRunning.get() && !paymentRunning.get()) startDiscovery();
+            if (canStartUsbDiscovery(discoveryRunning.get(), connectionRunning.get(), paymentRunning.get())) startDiscovery();
         });
     }
 
@@ -153,7 +157,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             readerState = "ABSENT";
             return;
         }
-        if (paymentRunning.get()) return;
+        if (paymentRunning.get() || connectionRunning.get()) return;
 
         main.post(() -> {
             if (!ensureTerminalInitialized()) return;
@@ -201,6 +205,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 "usbPermission", usb.optBoolean("permission", false),
                 "locationPermission", context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED,
                 "discoveryRunning", discoveryRunning.get(),
+                "connectionRunning", connectionRunning.get(),
                 "discoveryGeneration", discoveryGeneration.get(),
                 "targetVid", "15a2",
                 "targetPid", "0101",
@@ -345,6 +350,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         return callbackGeneration == activeGeneration;
     }
 
+    static boolean canStartUsbDiscovery(boolean discoveryRunning, boolean connectionRunning, boolean paymentRunning) {
+        return !discoveryRunning && !connectionRunning && !paymentRunning;
+    }
+
     private void retrieveAndCollect(String clientSecret, int operationGeneration) {
         if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
         if (!Terminal.isInitialized() || Terminal.getInstance().getConnectedReader() == null) {
@@ -437,7 +446,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
             return;
         }
-        if (!discoveryRunning.compareAndSet(false, true)) return;
+        if (connectionRunning.get() || !discoveryRunning.compareAndSet(false, true)) return;
 
         final int generation = discoveryGeneration.incrementAndGet();
         readerState = "DISCOVERING";
@@ -509,9 +518,10 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
     private void connect(Reader reader, int generation) {
         if (generation != discoveryGeneration.get()) return;
-        if ("CONNECTING".equals(readerState) || "READY".equals(readerState)) return;
+        if ("CONNECTING".equals(readerState) || "READY".equals(readerState) || !connectionRunning.compareAndSet(false, true)) return;
         String location = blankToNull(stripeLocationId);
         if (location == null) {
+            connectionRunning.set(false);
             setError("TERMINAL_LOCATION_BINDING_REQUIRED");
             return;
         }
@@ -525,6 +535,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             new ReaderCallback() {
                 @Override
                 public void onSuccess(Reader connected) {
+                    connectionRunning.set(false);
                     if (generation != discoveryGeneration.get()) return;
                     discoveryRunning.set(false);
                     cancelDiscoverySilently();
@@ -539,6 +550,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
                 @Override
                 public void onFailure(TerminalException error) {
+                    connectionRunning.set(false);
                     if (generation != discoveryGeneration.get()) return;
                     discoveryRunning.set(false);
                     setError(safeTerminalCode(error));

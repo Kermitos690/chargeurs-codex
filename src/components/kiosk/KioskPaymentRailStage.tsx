@@ -51,6 +51,7 @@ const COPY = {
     slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
     processing: "Paiement sans contact en cours",
     processingSub: "Suivez les instructions affichées sur le terminal. N’approchez pas votre carte si le montant ne correspond pas à la garantie annoncée.",
+    awaitingCard: "Lecteur prêt · présentez votre carte ou téléphone",
     guarantee: (amount: string) => `Garantie temporaire et montant maximal de location : ${amount}. Seul le prix final est capturé au retour.`,
     cancel: "Annuler la demande",
     cancelling: "Annulation sécurisée…",
@@ -71,6 +72,7 @@ const COPY = {
     slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
     processing: "Contactless payment in progress",
     processingSub: "Follow the instructions shown on the payment reader. Do not tap your card if the amount does not match the stated guarantee.",
+    awaitingCard: "Reader ready · tap your card or phone",
     guarantee: (amount: string) => `Temporary guarantee and maximum rental amount: ${amount}. Only the final rental price is captured on return.`,
     cancel: "Cancel request",
     cancelling: "Cancelling safely…",
@@ -91,6 +93,7 @@ const COPY = {
     slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst die QR-Zahlung.",
     processing: "Kontaktlose Zahlung läuft",
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal. Halten Sie keine Karte vor, wenn der Betrag nicht der angekündigten Garantie entspricht.",
+    awaitingCard: "Leser bereit · Karte oder Smartphone vorhalten",
     guarantee: (amount: string) => `Vorübergehende Garantie und maximaler Mietbetrag: ${amount}. Bei Rückgabe wird nur der tatsächliche Mietpreis eingezogen.`,
     cancel: "Anfrage abbrechen",
     cancelling: "Sichere Stornierung…",
@@ -296,6 +299,10 @@ export function KioskPaymentRailStage(props: Props) {
     : null;
   const guarantee = money(pricingDepositCents);
   const cap = money(pricingTotalCapCents);
+  const terminalAwaitingCard = !terminalCancelRequested
+    && model.payment.rail === "TERMINAL"
+    && ["CLAIMING", "ENGAGED", "PROCESSING"].includes(model.payment.railState)
+    && !model.payment.serverConfirmed;
 
   if (inProgress || model.payment.rail === "TERMINAL") {
     return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail="TERMINAL" data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
@@ -304,7 +311,7 @@ export function KioskPaymentRailStage(props: Props) {
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.processing}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.processingSub}</p>
       {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
-      <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
+      <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : terminalCancelRequested ? copy.cancelling : terminalAwaitingCard ? copy.awaitingCard : `${readerState} · ${model.payment.railState}`}</span></div>
       {!model.payment.serverConfirmed && native?.cancelTerminalPayment && <Button variant="outline" onClick={cancelTerminal} disabled={terminalCancelRequested} className="h-14 rounded-full px-7 text-base font-bold">{terminalCancelRequested ? copy.cancelling : copy.cancel}</Button>}
       {(terminalCancelError || (terminalCancelRequested && model.journey.state === "RECOVERY")) && <p className="text-sm font-semibold text-warning">{terminalCancelError ?? "PAYMENT_RECONCILIATION_REQUIRED"}</p>}
     </div>;

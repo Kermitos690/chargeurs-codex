@@ -18,4 +18,12 @@ public final class StripeTerminalReaderRuntimeTest {
         assertTrue(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 14));
         assertFalse(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 15));
     }
+
+    @Test
+    public void doesNotStartAnotherUsbDiscoveryWhileStripeIsConnecting() {
+        assertTrue(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, false, false));
+        assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, true, false));
+        assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(true, false, false));
+        assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, false, true));
+    }
 }
