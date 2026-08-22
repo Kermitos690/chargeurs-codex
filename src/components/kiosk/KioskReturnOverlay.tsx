@@ -6,7 +6,7 @@ import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/i18n";
 
-const FINAL_SECONDS = 20;
+const FINAL_SECONDS = 8;
 const SUPPORT_SECONDS = 20;
 
 type Summary = {
@@ -40,6 +40,8 @@ type Summary = {
   dailyCapCents: number;
   failureCode?: string | null;
   failureMessage?: string | null;
+  tiered?: boolean;
+  tiers?: Array<{ upper_minutes: number; total_cents: number }>;
 };
 
 type Result = {
@@ -52,7 +54,7 @@ type Result = {
 const copy = {
   fr: {
     detected: "Retour détecté",
-    detectedBody: "La batterie est bien revenue. Calcul du prix exact…",
+    detectedBody: "La batterie est bien revenue. Finalisation en cours…",
     calculated: "Prix calculé",
     calculatedBody: "Le retour est confirmé. Le montant ci-dessous est calculé à partir de la durée réelle de location.",
     finalizing: "Finalisation du paiement…",
@@ -65,6 +67,9 @@ const copy = {
     duration: "Durée",
     periods: "Périodes",
     rate: "Tarif",
+    appliedTier: "Palier appliqué",
+    appliedRate: "Tarif appliqué",
+    upTo: "Jusqu’à {{minutes}} min",
     start: "Départ",
     return: "Retour",
     initialSecurity: "Garantie initiale",
@@ -84,7 +89,7 @@ const copy = {
   },
   en: {
     detected: "Return detected",
-    detectedBody: "Your powerbank has been returned. Calculating the exact price…",
+    detectedBody: "Your powerbank has been returned. Finalising now…",
     calculated: "Price calculated",
     calculatedBody: "The return is confirmed. The amount below is calculated from the actual rental duration.",
     finalizing: "Finalising payment…",
@@ -97,6 +102,9 @@ const copy = {
     duration: "Duration",
     periods: "Periods",
     rate: "Rate",
+    appliedTier: "Applied tier",
+    appliedRate: "Applied rate",
+    upTo: "Up to {{minutes}} min",
     start: "Start",
     return: "Return",
     initialSecurity: "Initial security amount",
@@ -116,7 +124,7 @@ const copy = {
   },
   de: {
     detected: "Rückgabe erkannt",
-    detectedBody: "Die Powerbank wurde zurückgegeben. Der genaue Preis wird berechnet…",
+    detectedBody: "Die Powerbank wurde zurückgegeben. Abschluss läuft…",
     calculated: "Preis berechnet",
     calculatedBody: "Die Rückgabe ist bestätigt. Der Betrag wird anhand der tatsächlichen Mietdauer berechnet.",
     finalizing: "Zahlung wird abgeschlossen…",
@@ -129,6 +137,9 @@ const copy = {
     duration: "Dauer",
     periods: "Perioden",
     rate: "Tarif",
+    appliedTier: "Angewendete Stufe",
+    appliedRate: "Angewendeter Tarif",
+    upTo: "Bis {{minutes}} Min.",
     start: "Beginn",
     return: "Rückgabe",
     initialSecurity: "Anfänglicher Sicherheitsbetrag",
@@ -149,6 +160,19 @@ const copy = {
 } as const;
 
 const locales = { fr: "fr-CH", en: "en-CH", de: "de-CH" } as const;
+
+type Copy = (typeof copy)[keyof typeof copy];
+
+function appliedTier(summary: Summary) {
+  const tiers = [...(summary.tiers ?? [])].sort((a, b) => a.upper_minutes - b.upper_minutes);
+  if (!tiers.length) return null;
+  const minutes = Math.max(0, summary.totalMinutes || 0);
+  return tiers.find((tier) => tier.upper_minutes >= minutes) ?? tiers[tiers.length - 1];
+}
+
+function isTiered(summary: Summary) {
+  return Boolean(summary.tiered && (summary.tiers?.length ?? 0) > 0);
+}
 
 function stationFromPath() {
   const match = window.location.pathname.match(/^\/kiosk\/(?:station\/)?([A-Za-z0-9_-]{4,32})(?:\/|$)/);
@@ -456,7 +480,7 @@ function PricingGrid({
   summary: Summary;
   locale: string;
   currency: string;
-  copy: (typeof copy)[keyof typeof copy];
+  copy: Copy;
   periods: string;
 }) {
   return (
