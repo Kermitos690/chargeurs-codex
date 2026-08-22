@@ -40,6 +40,13 @@ export function areHardwareEjectionsEnabled(): boolean {
   return areChargeNowMutationsEnabled() && Deno.env.get("HARDWARE_EJECTION_ENABLED") === "true";
 }
 
+// A supplier response alone is not proof that C3 releases exactly one requested
+// slot. This is shared by customer rentals and physical qualification so a
+// staging diagnostic can never silently bypass the same supplier contract.
+export function hasVerifiedSingleSlotRentalContract(): boolean {
+  return Deno.env.get("CHARGENOW_SINGLE_SLOT_RENTAL_CONTRACT") === "verified";
+}
+
 export function chargeNowMode(): "test" | "live" {
   return CHARGENOW_MODE === "live" ? "live" : "test";
 }

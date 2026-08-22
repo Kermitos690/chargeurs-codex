@@ -1,5 +1,7 @@
 import {
   choosePilotBattery,
+  MULTI_BATTERY_RELEASE_OBSERVED,
+  preservedMultiReleaseFailure,
   providerResultSucceeded,
   reconcileQualificationRun,
 } from "../_shared/dtaPilot.ts";
@@ -108,6 +110,31 @@ Deno.test("DTA pilot completes only when the exact battery reappears", () => {
   ]));
   if (decision.state !== "completed" || decision.observedSlotNum !== 6) {
     throw new Error(`unexpected decision ${JSON.stringify(decision)}`);
+  }
+});
+
+Deno.test("DTA pilot preserves a multi-release incident after both batteries are returned", () => {
+  const run = {
+    state: "needs_reconciliation",
+    requested_slot_num: 4,
+    expected_battery_id: "BAT-D",
+    observed_battery_id: "BAT-D",
+    failure_code: MULTI_BATTERY_RELEASE_OBSERVED,
+    initial_snapshot: snapshot([
+      { slotNum: 1, batteryId: "BAT-A" },
+      { slotNum: 3, batteryId: "BAT-C" },
+      { slotNum: 4, batteryId: "BAT-D" },
+    ]),
+  };
+  const decision = reconcileQualificationRun(run, status([
+    { slotNum: 1, batteryId: "BAT-A" },
+    { slotNum: 3, batteryId: "BAT-C" },
+    { slotNum: 4, batteryId: "BAT-D" },
+  ]));
+  if (decision.state !== "completed") throw new Error(`inventory should close: ${JSON.stringify(decision)}`);
+  const incident = preservedMultiReleaseFailure(run);
+  if (incident?.code !== MULTI_BATTERY_RELEASE_OBSERVED) {
+    throw new Error(`multi-release history was lost: ${JSON.stringify(incident)}`);
   }
 });
 

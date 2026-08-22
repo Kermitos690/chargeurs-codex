@@ -9,6 +9,7 @@ import {
   chargeNowMode,
   ejectByRent,
   ejectByRentWithOneTimeRentalPermit,
+  hasVerifiedSingleSlotRentalContract,
   isChargeNowConfigured,
   type OneTimeRentalEjectionPermit,
   orderCreate,
@@ -146,14 +147,6 @@ type ReleaseBlockOptions = {
   chargenowStatus?: string;
   message?: string;
 };
-
-// A real station incident demonstrated that the currently documented O2/C3
-// sequence is ambiguous: order/create released one battery and ejectByRent
-// released another. Customer rentals remain fail-closed until ChargeNow's
-// single-slot contract has been explicitly verified by an operator.
-function hasVerifiedSingleSlotRentalContract(): boolean {
-  return Deno.env.get("CHARGENOW_SINGLE_SLOT_RENTAL_CONTRACT") === "verified";
-}
 
 // A disabled hardware gate is an intentional staging terminal, not a transient
 // provider error. Persist it before returning so the kiosk leaves the

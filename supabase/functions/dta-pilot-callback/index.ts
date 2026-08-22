@@ -1,6 +1,6 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, auditLog, logApi } from "../_shared/db.ts";
-import { DTA_PILOT_STATION_ID } from "../_shared/dtaPilot.ts";
+import { DTA_PILOT_STATION_ID, preservedMultiReleaseFailure } from "../_shared/dtaPilot.ts";
 import { verifyDtaPilotCallback } from "../_shared/dtaPilotCallbackAuth.ts";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -160,13 +160,14 @@ Deno.serve(async (req) => {
         return json({ received: true, state: "needs_reconciliation", reason: "RELEASE_IDENTITY_MISMATCH" }, 202);
       }
       const now = new Date().toISOString();
+      const preservedIncident = preservedMultiReleaseFailure(run);
       await db.from("hardware_qualification_runs").update({
         state: "ejection_confirmed",
         observed_battery_id: identity.batteryId,
         observed_slot_num: identity.slotNum,
         ejection_confirmed_at: now,
-        failure_code: null,
-        failure_message: null,
+        failure_code: preservedIncident?.code ?? null,
+        failure_message: preservedIncident?.message ?? null,
         updated_at: now,
       }).eq("id", runId);
       await db.from("batteries").update({
@@ -216,14 +217,15 @@ Deno.serve(async (req) => {
       }
 
       const now = new Date().toISOString();
+      const preservedIncident = preservedMultiReleaseFailure(run);
       await db.from("hardware_qualification_runs").update({
         state: "completed",
         observed_battery_id: identity.batteryId,
         observed_slot_num: identity.slotNum,
         return_confirmed_at: now,
         completed_at: now,
-        failure_code: null,
-        failure_message: null,
+        failure_code: preservedIncident?.code ?? null,
+        failure_message: preservedIncident?.message ?? null,
         updated_at: now,
       }).eq("id", runId);
       await db.from("batteries").update({

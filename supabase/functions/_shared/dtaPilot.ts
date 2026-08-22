@@ -2,6 +2,7 @@ import type { ApiResult } from "./chargenow.ts";
 import { parseChargeNowCabinetStatus, type ChargeNowBattery, type ParsedCabinetStatus } from "./chargenowStatus.ts";
 
 export const DTA_PILOT_STATION_ID = "DTA21269";
+export const MULTI_BATTERY_RELEASE_OBSERVED = "MULTI_BATTERY_RELEASE_OBSERVED";
 
 export type ProviderOrderIdentity = {
   tradeNo: string | null;
@@ -19,6 +20,7 @@ export type QualificationRunShape = {
   expected_battery_id: string | null;
   observed_battery_id: string | null;
   initial_snapshot?: unknown;
+  failure_code?: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -113,6 +115,20 @@ export type ReconciliationDecision = {
   unexpectedMissingBatteryIds: string[];
 };
 
+// A physically observed multi-release is a permanent qualification incident.
+// Returning the batteries repairs inventory, but it must never rewrite the
+// history as if the provider had released exactly one battery.
+export function preservedMultiReleaseFailure(run: Pick<QualificationRunShape, "failure_code">): {
+  code: typeof MULTI_BATTERY_RELEASE_OBSERVED;
+  message: string;
+} | null {
+  if (run.failure_code !== MULTI_BATTERY_RELEASE_OBSERVED) return null;
+  return {
+    code: MULTI_BATTERY_RELEASE_OBSERVED,
+    message: "Sortie multiple confirmée; les batteries sont revenues, mais la qualification fournisseur reste invalide.",
+  };
+}
+
 function unexpectedMissingBatteryIds(run: QualificationRunShape, latest: ParsedCabinetStatus, expectedBattery: string): string[] {
   if (run.initial_snapshot == null) return [];
   const initial = parseChargeNowCabinetStatus(run.initial_snapshot);
@@ -145,7 +161,7 @@ export function reconcileQualificationRun(
       state: "needs_reconciliation",
       observedBatteryId: expectedBattery,
       observedSlotNum: requestedSlot,
-      reason: "MULTI_BATTERY_RELEASE_OBSERVED",
+      reason: MULTI_BATTERY_RELEASE_OBSERVED,
       unexpectedMissingBatteryIds: missingAdditionalBatteries,
     };
   }

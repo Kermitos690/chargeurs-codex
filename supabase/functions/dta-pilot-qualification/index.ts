@@ -7,6 +7,7 @@ import {
   cabinetQuery,
   chargeNowMode,
   ejectByRent,
+  hasVerifiedSingleSlotRentalContract,
   isChargeNowConfigured,
   orderCreate,
   type ApiResult,
@@ -18,6 +19,7 @@ import {
   DTA_PILOT_STATION_ID,
   extractProviderOrderIdentity,
   extractProviderReleaseIdentity,
+  preservedMultiReleaseFailure,
   providerResultSucceeded,
   reconcileQualificationRun,
   safeProviderError,
@@ -55,6 +57,7 @@ type RunRow = {
   provider_order_id: string | null;
   command_sent_at: string | null;
   initial_snapshot?: unknown;
+  failure_code?: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -331,6 +334,9 @@ Deno.serve(async (req) => {
       if (!isChargeNowConfigured()) return json({ ok: false, error: "CHARGENOW_NOT_CONFIGURED" }, 503);
       if (chargeNowMode() !== "test") return json({ ok: false, error: "CHARGENOW_TEST_MODE_REQUIRED" }, 409);
       if (!areHardwareEjectionsEnabled()) return json({ ok: false, error: "HARDWARE_EJECTION_DISABLED" }, 409);
+      if (!hasVerifiedSingleSlotRentalContract()) {
+        return json({ ok: false, error: "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED" }, 409);
+      }
 
       const { data: activeRun, error: activeError } = await db.from("hardware_qualification_runs")
         .select("id,state")
@@ -509,18 +515,23 @@ Deno.serve(async (req) => {
       if (!provider.parsed) return json({ ok: false, error: provider.error, attempts: provider.attempts.map(sanitizedAttempt) }, 502);
       await persistPilotStatus(db, provider.parsed);
       const decision = reconcileQualificationRun(run as RunRow, provider.parsed);
+      const preservedIncident = decision.state === "completed"
+        ? preservedMultiReleaseFailure(run as RunRow)
+        : null;
       const now = new Date().toISOString();
       const update: Record<string, unknown> = {
         state: decision.state,
         observed_battery_id: decision.observedBatteryId,
         observed_slot_num: decision.observedSlotNum,
         latest_snapshot: provider.parsed.payload,
-        failure_code: decision.state === "needs_reconciliation" ? decision.reason : null,
+        failure_code: decision.state === "needs_reconciliation"
+          ? decision.reason
+          : preservedIncident?.code ?? null,
         failure_message: decision.state === "needs_reconciliation"
           ? decision.unexpectedMissingBatteryIds.length > 0
             ? `Sortie multiple détectée : ${decision.unexpectedMissingBatteryIds.join(", ")}. Intervention opérateur obligatoire.`
             : "L'état physique ne correspond pas encore au cycle attendu."
-          : null,
+          : preservedIncident?.message ?? null,
         updated_at: now,
       };
       if (decision.state === "completed") {
