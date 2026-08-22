@@ -54,6 +54,7 @@ type RunRow = {
   provider_trade_no: string | null;
   provider_order_id: string | null;
   command_sent_at: string | null;
+  initial_snapshot?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -515,7 +516,11 @@ Deno.serve(async (req) => {
         observed_slot_num: decision.observedSlotNum,
         latest_snapshot: provider.parsed.payload,
         failure_code: decision.state === "needs_reconciliation" ? decision.reason : null,
-        failure_message: decision.state === "needs_reconciliation" ? "L'état physique ne correspond pas encore au cycle attendu." : null,
+        failure_message: decision.state === "needs_reconciliation"
+          ? decision.unexpectedMissingBatteryIds.length > 0
+            ? `Sortie multiple détectée : ${decision.unexpectedMissingBatteryIds.join(", ")}. Intervention opérateur obligatoire.`
+            : "L'état physique ne correspond pas encore au cycle attendu."
+          : null,
         updated_at: now,
       };
       if (decision.state === "completed") {
@@ -552,7 +557,12 @@ Deno.serve(async (req) => {
         actor,
         action: "hardware.qualification.reconciled",
         target: runId,
-        data: { state: decision.state, reason: decision.reason, battery_id: batteryId },
+        data: {
+          state: decision.state,
+          reason: decision.reason,
+          battery_id: batteryId,
+          unexpected_missing_battery_ids: decision.unexpectedMissingBatteryIds,
+        },
       });
       return json({ ok: decision.state !== "needs_reconciliation", decision, ...(await dashboard(db)) }, decision.state === "needs_reconciliation" ? 202 : 200);
     }

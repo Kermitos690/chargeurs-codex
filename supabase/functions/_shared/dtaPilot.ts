@@ -1,5 +1,5 @@
 import type { ApiResult } from "./chargenow.ts";
-import type { ChargeNowBattery, ParsedCabinetStatus } from "./chargenowStatus.ts";
+import { parseChargeNowCabinetStatus, type ChargeNowBattery, type ParsedCabinetStatus } from "./chargenowStatus.ts";
 
 export const DTA_PILOT_STATION_ID = "DTA21269";
 
@@ -18,6 +18,7 @@ export type QualificationRunShape = {
   requested_slot_num: number | null;
   expected_battery_id: string | null;
   observed_battery_id: string | null;
+  initial_snapshot?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -109,7 +110,18 @@ export type ReconciliationDecision = {
   observedBatteryId: string | null;
   observedSlotNum: number | null;
   reason: string;
+  unexpectedMissingBatteryIds: string[];
 };
+
+function unexpectedMissingBatteryIds(run: QualificationRunShape, latest: ParsedCabinetStatus, expectedBattery: string): string[] {
+  if (run.initial_snapshot == null) return [];
+  const initial = parseChargeNowCabinetStatus(run.initial_snapshot);
+  if (!initial.recognized) return [];
+  const latestIds = new Set(latest.batteries.map((battery) => battery.batteryId).filter((battery): battery is string => Boolean(battery)));
+  return initial.batteries
+    .map((battery) => battery.batteryId)
+    .filter((battery): battery is string => typeof battery === "string" && battery !== expectedBattery && !latestIds.has(battery));
+}
 
 export function reconcileQualificationRun(
   run: QualificationRunShape,
@@ -123,6 +135,18 @@ export function reconcileQualificationRun(
       observedBatteryId: expectedBattery ?? null,
       observedSlotNum: requestedSlot ?? null,
       reason: "QUALIFICATION_IDENTITY_INCOMPLETE",
+      unexpectedMissingBatteryIds: [],
+    };
+  }
+
+  const missingAdditionalBatteries = unexpectedMissingBatteryIds(run, latest, expectedBattery);
+  if (missingAdditionalBatteries.length > 0) {
+    return {
+      state: "needs_reconciliation",
+      observedBatteryId: expectedBattery,
+      observedSlotNum: requestedSlot,
+      reason: "MULTI_BATTERY_RELEASE_OBSERVED",
+      unexpectedMissingBatteryIds: missingAdditionalBatteries,
     };
   }
 
@@ -134,6 +158,7 @@ export function reconcileQualificationRun(
         observedBatteryId: expectedBattery,
         observedSlotNum: requestedSlot,
         reason: "EXPECTED_BATTERY_ABSENT_AFTER_EJECTION",
+        unexpectedMissingBatteryIds: [],
       };
     }
     return {
@@ -143,6 +168,7 @@ export function reconcileQualificationRun(
       reason: present.slotNum === requestedSlot
         ? "EXPECTED_BATTERY_STILL_PRESENT_IN_REQUESTED_SLOT"
         : "EXPECTED_BATTERY_PRESENT_IN_DIFFERENT_SLOT",
+      unexpectedMissingBatteryIds: [],
     };
   }
 
@@ -153,6 +179,7 @@ export function reconcileQualificationRun(
         observedBatteryId: expectedBattery,
         observedSlotNum: present.slotNum,
         reason: "EXPECTED_BATTERY_PRESENT_AFTER_RETURN",
+        unexpectedMissingBatteryIds: [],
       };
     }
     return {
@@ -160,6 +187,7 @@ export function reconcileQualificationRun(
       observedBatteryId: expectedBattery,
       observedSlotNum: requestedSlot,
       reason: "EXPECTED_BATTERY_STILL_OUTSIDE_NETWORK",
+      unexpectedMissingBatteryIds: [],
     };
   }
 
@@ -168,6 +196,7 @@ export function reconcileQualificationRun(
     observedBatteryId: expectedBattery,
     observedSlotNum: present?.slotNum ?? requestedSlot,
     reason: "QUALIFICATION_STATE_NOT_RECONCILABLE",
+    unexpectedMissingBatteryIds: [],
   };
 }
 

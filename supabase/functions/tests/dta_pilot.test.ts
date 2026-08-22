@@ -21,6 +21,15 @@ const status = (batteryRows: Array<{ slotNum: number; batteryId: string; powerLe
   payload: { cabinet: { online: true, slots: 8 } },
 });
 
+const snapshot = (batteryRows: Array<{ slotNum: number; batteryId: string; powerLevel?: number }>) => ({
+  cabinet: { online: true, slots: 8 },
+  batteries: batteryRows.map((battery) => ({
+    slotNum: battery.slotNum,
+    batteryId: battery.batteryId,
+    vol: battery.powerLevel ?? 100,
+  })),
+});
+
 Deno.test("DTA pilot accepts provider business code zero serialized as text", () => {
   const result = providerResultSucceeded({
     ok: false,
@@ -65,6 +74,26 @@ Deno.test("DTA pilot marks a confirmed ejection as battery taken after inventory
     observed_battery_id: "BAT-B",
   }, status([{ slotNum: 1, batteryId: "BAT-A" }]));
   if (decision.state !== "battery_taken") throw new Error(`unexpected state ${decision.state}`);
+});
+
+Deno.test("DTA pilot fails closed when a second battery disappears after one requested ejection", () => {
+  const decision = reconcileQualificationRun({
+    state: "ejection_confirmed",
+    requested_slot_num: 4,
+    expected_battery_id: "BAT-D",
+    observed_battery_id: "BAT-D",
+    initial_snapshot: snapshot([
+      { slotNum: 1, batteryId: "BAT-A" },
+      { slotNum: 3, batteryId: "BAT-C" },
+      { slotNum: 4, batteryId: "BAT-D" },
+    ]),
+  }, status([{ slotNum: 1, batteryId: "BAT-A" }]));
+  if (decision.state !== "needs_reconciliation" || decision.reason !== "MULTI_BATTERY_RELEASE_OBSERVED") {
+    throw new Error(`multi-release was not blocked: ${JSON.stringify(decision)}`);
+  }
+  if (decision.unexpectedMissingBatteryIds.join(",") !== "BAT-C") {
+    throw new Error(`missing additional battery not recorded: ${JSON.stringify(decision)}`);
+  }
 });
 
 Deno.test("DTA pilot completes only when the exact battery reappears", () => {
