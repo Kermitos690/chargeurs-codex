@@ -28,3 +28,40 @@ export function classifyCheckoutIntentForExplicitCancellation(status: unknown): 
       return "reconciliation_required";
   }
 }
+
+export type StagingAuthorizationReleaseInput = {
+  requested: boolean;
+  confirmedNoHardwareRelease: boolean;
+  confirmedTestAuthorizationRelease: boolean;
+  recoveryReason: unknown;
+  intent: {
+    status?: unknown;
+    livemode?: unknown;
+    amount?: unknown;
+    amount_capturable?: unknown;
+    amount_received?: unknown;
+    metadata?: Record<string, unknown> | null;
+  };
+  expectedRentalSessionId: string;
+  expectedStationId: string;
+  expectedAmountCents: number;
+};
+
+// This is deliberately not part of the customer cancellation path. It exists
+// solely for a supervised STAGING recovery of a test card hold where Stripe
+// proves that no amount was captured and the caller has separately proved that
+// the kiosk has made no hardware release attempt.
+export function stagingAuthorizationReleaseAllowed(input: StagingAuthorizationReleaseInput): boolean {
+  const metadata = input.intent.metadata ?? {};
+  return input.requested
+    && input.confirmedNoHardwareRelease
+    && input.confirmedTestAuthorizationRelease
+    && input.recoveryReason === "operator_confirmed_no_hardware_release"
+    && input.intent.livemode === false
+    && input.intent.status === "requires_capture"
+    && Number(input.intent.amount) === input.expectedAmountCents
+    && Number(input.intent.amount_capturable) === input.expectedAmountCents
+    && Number(input.intent.amount_received) === 0
+    && String(metadata.rental_session_id ?? "") === input.expectedRentalSessionId
+    && String(metadata.station_id ?? "") === input.expectedStationId;
+}

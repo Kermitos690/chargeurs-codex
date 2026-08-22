@@ -6,7 +6,10 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { classifyCheckoutIntentForExplicitCancellation } from "../_shared/checkoutCancellation.ts";
+import {
+  classifyCheckoutIntentForExplicitCancellation,
+  stagingAuthorizationReleaseAllowed,
+} from "../_shared/checkoutCancellation.ts";
 
 const headers = {
   ...corsHeaders,
@@ -50,11 +53,15 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId.trim() : "";
+    const operatorAuthorizationRelease = body.operatorTestAuthorizationRelease === true
+      && body.confirmNoHardwareRelease === true
+      && body.confirmTestAuthorizationRelease === true
+      && body.recoveryReason === "operator_confirmed_no_hardware_release";
     if (!/^[0-9a-f-]{36}$/i.test(rentalSessionId)) return reply({ ok: false, error: "INVALID_SESSION" }, 400);
 
     const db = admin();
     const { data: session, error: sessionError } = await db.from("rental_sessions")
-      .select("id,station_id,kiosk_device_id,state,paid_at,ejected_at,returned_at,completed_at,stripe_checkout_session_id,public_session_code")
+      .select("id,station_id,kiosk_device_id,state,paid_at,ejected_at,returned_at,completed_at,stripe_checkout_session_id,public_session_code,deposit_amount_cents,stripe_payment_intent_id,apifox_trade_no,chargenow_order_id,chargenow_status")
       .eq("id", rentalSessionId)
       .maybeSingle();
     if (sessionError) throw sessionError;
@@ -84,13 +91,34 @@ Deno.serve(async (req) => {
     const captured = Number(payment?.amount_captured_cents ?? 0);
     const refunded = Number(payment?.amount_refunded_cents ?? 0);
     const financialState = String(payment?.status ?? "pending");
-    if (authorized > 0 || captured > 0 || refunded > 0
+    if (captured > 0 || refunded > 0
       || ["authorized", "succeeded", "refunded", "partially_refunded"].includes(financialState)) {
       return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
+    }
+    if (authorized > 0 && !operatorAuthorizationRelease) {
+      return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
+    }
+
+    // An authorization release is a supervised STAGING repair, never a normal
+    // customer cancellation. Refuse it as soon as the session has any supplier
+    // order/trade reference or any hardware release attempt.
+    if (operatorAuthorizationRelease) {
+      if (authorized > 0 || session.apifox_trade_no || session.chargenow_order_id) {
+        return reply({ ok: false, error: "STAGING_AUTH_RELEASE_NOT_ALLOWED" }, 409);
+      }
+      const { count, error: attemptError } = await db.from("hardware_release_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("rental_session_id", rentalSessionId);
+      if (attemptError) throw attemptError;
+      if (count !== 0) return reply({ ok: false, error: "STAGING_AUTH_RELEASE_NOT_ALLOWED" }, 409);
     }
 
     const checkoutId = String(session.stripe_checkout_session_id ?? "").trim();
     let safelyCancelledIntentId: string | null = null;
+    let recoveredAuthorizedTestHold = false;
+    if (operatorAuthorizationRelease && !checkoutId) {
+      return reply({ ok: false, error: "STAGING_AUTH_RELEASE_NOT_ALLOWED" }, 409);
+    }
     if (checkoutId) {
       const secretKey = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
       if (!(secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_"))) {
@@ -101,7 +129,7 @@ Deno.serve(async (req) => {
         httpClient: Stripe.createFetchHttpClient(),
       });
       const checkout = await stripe.checkout.sessions.retrieve(checkoutId);
-      if (checkout.payment_status === "paid" || checkout.status === "complete") {
+      if (!operatorAuthorizationRelease && (checkout.payment_status === "paid" || checkout.status === "complete")) {
         return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
       }
 
@@ -110,24 +138,60 @@ Deno.serve(async (req) => {
       // may be cancelled; unknown or asynchronous states stay fail-closed.
       const rawIntent = payment?.stripe_payment_intent_id ?? checkout.payment_intent;
       const intentId = typeof rawIntent === "string" ? rawIntent : rawIntent?.id;
+      if (operatorAuthorizationRelease && !(typeof intentId === "string" && intentId)) {
+        return reply({ ok: false, error: "STAGING_AUTH_RELEASE_NOT_ALLOWED" }, 409);
+      }
       if (typeof intentId === "string" && intentId) {
         const intent = await stripe.paymentIntents.retrieve(intentId);
-        const decision = classifyCheckoutIntentForExplicitCancellation(intent.status);
-        if (decision === "payment_confirmed") {
-          return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
-        }
-        if (decision === "reconciliation_required") {
-          return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
-        }
-        if (decision === "cancelable") {
-          const canceledIntent = await stripe.paymentIntents.cancel(intent.id, {
-            cancellation_reason: "requested_by_customer",
+        if (operatorAuthorizationRelease) {
+          const expectedAmountCents = Number(session.deposit_amount_cents ?? 0);
+          const alreadyCanceled = intent.status === "canceled"
+            && intent.livemode === false
+            && Number(intent.amount) === expectedAmountCents
+            && Number(intent.amount_received) === 0
+            && String(intent.metadata?.rental_session_id ?? "") === rentalSessionId
+            && String(intent.metadata?.station_id ?? "") === stationId;
+          const allowed = stagingAuthorizationReleaseAllowed({
+            requested: body.operatorTestAuthorizationRelease === true,
+            confirmedNoHardwareRelease: body.confirmNoHardwareRelease === true,
+            confirmedTestAuthorizationRelease: body.confirmTestAuthorizationRelease === true,
+            recoveryReason: body.recoveryReason,
+            intent,
+            expectedRentalSessionId: rentalSessionId,
+            expectedStationId: stationId,
+            expectedAmountCents,
           });
-          if (canceledIntent.status !== "canceled") {
+          if (!allowed && !alreadyCanceled) {
+            return reply({ ok: false, error: "STAGING_AUTH_RELEASE_NOT_ALLOWED" }, 409);
+          }
+          if (intent.status === "requires_capture") {
+            const canceledIntent = await stripe.paymentIntents.cancel(intent.id, {
+              cancellation_reason: "requested_by_customer",
+            });
+            if (canceledIntent.status !== "canceled") {
+              return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
+            }
+          }
+          safelyCancelledIntentId = intent.id;
+          recoveredAuthorizedTestHold = true;
+        } else {
+          const decision = classifyCheckoutIntentForExplicitCancellation(intent.status);
+          if (decision === "payment_confirmed") {
+            return reply({ ok: false, error: "PAYMENT_ALREADY_STARTED" }, 409);
+          }
+          if (decision === "reconciliation_required") {
             return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
           }
+          if (decision === "cancelable") {
+            const canceledIntent = await stripe.paymentIntents.cancel(intent.id, {
+              cancellation_reason: "requested_by_customer",
+            });
+            if (canceledIntent.status !== "canceled") {
+              return reply({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
+            }
+          }
+          safelyCancelledIntentId = intent.id;
         }
-        safelyCancelledIntentId = intent.id;
       }
       if (checkout.status === "open") await stripe.checkout.sessions.expire(checkoutId);
     }
@@ -137,19 +201,49 @@ Deno.serve(async (req) => {
     // path can reconcile it on retry rather than hiding a financial record.
     if (safelyCancelledIntentId) {
       const { error: paymentCancelledError } = await db.from("payments")
-        .update({ status: "canceled", refunded_at: null })
+        .update({
+          status: "canceled",
+          amount_authorized_cents: 0,
+          amount_captured_cents: 0,
+          amount_refunded_cents: 0,
+          refunded_at: null,
+        })
         .eq("rental_session_id", rentalSessionId)
-        .eq("stripe_payment_intent_id", safelyCancelledIntentId);
+        .or(`stripe_payment_intent_id.eq.${safelyCancelledIntentId},stripe_payment_intent_id.is.null`);
       if (paymentCancelledError) throw paymentCancelledError;
     }
 
     const now = new Date().toISOString();
+    const { error: reservationError } = await db.from("station_slot_reservations")
+      .update({ state: "released", released_at: now, release_reason: "customer_cancelled_checkout", updated_at: now })
+      .eq("rental_session_id", rentalSessionId)
+      .eq("state", "reserved");
+    if (reservationError) throw reservationError;
+
+    // Release the QR claim before expiring the rental. Should this fail after
+    // Stripe has canceled the TEST hold, a retry sees the canceled intent and
+    // completes this repair instead of creating a new payment rail.
+    if (recoveredAuthorizedTestHold) {
+      const { error: railError } = await db.rpc("release_rental_payment_rail_claim", {
+        p_rental_id: rentalSessionId,
+        p_expected_rail: "qr_checkout",
+        p_reason: "staging_operator_authorization_released_no_ejection",
+      });
+      if (railError) throw railError;
+    }
+
     const { data: cancelled, error: cancelError } = await db.from("rental_sessions")
       .update({
         state: "expired",
         cancelled_at: now,
-        failure_code: "KIOSK_CANCELLED_BY_CUSTOMER",
-        failure_message: "Checkout annulé par le client avant paiement",
+        failure_code: recoveredAuthorizedTestHold
+          ? "STAGING_OPERATOR_AUTHORIZATION_RELEASED_NO_EJECTION"
+          : "KIOSK_CANCELLED_BY_CUSTOMER",
+        failure_message: recoveredAuthorizedTestHold
+          ? "Autorisation Stripe TEST annulée après vérification de l'absence d'éjection"
+          : "Checkout annulé par le client avant paiement",
+        checkout_url: null,
+        checkout_url_expires_at: null,
         updated_at: now,
       })
       .eq("id", rentalSessionId)
@@ -160,11 +254,6 @@ Deno.serve(async (req) => {
     if (cancelError) throw cancelError;
     if (!cancelled) return reply({ ok: false, error: "CHECKOUT_CANCELLATION_RACE" }, 409);
 
-    await db.from("station_slot_reservations")
-      .update({ state: "released", released_at: now, release_reason: "customer_cancelled_checkout", updated_at: now })
-      .eq("rental_session_id", rentalSessionId)
-      .eq("state", "reserved");
-
     await db.from("audit_logs").insert({
       action: "kiosk.checkout.cancelled",
       target: rentalSessionId,
@@ -173,6 +262,7 @@ Deno.serve(async (req) => {
         public_session_code: session.public_session_code ?? null,
         stripe_checkout_expired: Boolean(checkoutId),
         stripe_payment_intent_canceled: Boolean(safelyCancelledIntentId),
+        staging_operator_authorization_released: recoveredAuthorizedTestHold,
         correlation_id: correlationId,
       },
     }).then(() => {}, () => {});
