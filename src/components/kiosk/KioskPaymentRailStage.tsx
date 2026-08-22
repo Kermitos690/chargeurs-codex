@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   buildChargeursPresentationModel,
@@ -12,6 +12,7 @@ type NativeTerminalBridge = {
   getPaymentReaderStatus?: () => string;
   refreshPaymentReader?: () => string;
   startTerminalPayment?: (rentalSessionId: string) => string;
+  cancelTerminalPayment?: () => string;
 };
 type NativeWindow = Window & { ChargeursNative?: NativeTerminalBridge };
 type Props = {
@@ -25,6 +26,7 @@ type Props = {
   inProgress?: boolean;
   onChooseQr: () => void;
   onTerminalEngaged: () => void;
+  onTerminalCancelled: () => void;
   onServerConfirmed: () => void;
 };
 
@@ -48,6 +50,9 @@ const COPY = {
     processingSub: "Suivez les instructions affichées sur le terminal.",
     retry: "Réessayer le lecteur",
     chooseQr: "Payer par QR code",
+    cancel: "Annuler le paiement",
+    cancelling: "Annulation…",
+    cancelError: "L’annulation n’est pas encore confirmée. Réessayez.",
   },
   en: {
     eyebrow: "SECURE PAYMENT",
@@ -65,6 +70,9 @@ const COPY = {
     processingSub: "Follow the instructions shown on the payment reader.",
     retry: "Retry reader",
     chooseQr: "Pay by QR code",
+    cancel: "Cancel payment",
+    cancelling: "Cancelling…",
+    cancelError: "Cancellation is not confirmed yet. Please retry.",
   },
   de: {
     eyebrow: "SICHERE ZAHLUNG",
@@ -82,6 +90,9 @@ const COPY = {
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
     retry: "Leser erneut verbinden",
     chooseQr: "Per QR-Code bezahlen",
+    cancel: "Zahlung abbrechen",
+    cancelling: "Abbruch…",
+    cancelError: "Der Abbruch ist noch nicht bestätigt. Bitte erneut versuchen.",
   },
 } as const;
 
@@ -107,6 +118,7 @@ export function KioskPaymentRailStage(props: Props) {
     inProgress = false,
     onChooseQr,
     onTerminalEngaged,
+    onTerminalCancelled,
     onServerConfirmed,
   } = props;
   const copy = COPY[lang];
@@ -118,7 +130,9 @@ export function KioskPaymentRailStage(props: Props) {
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [readerGraceExpired, setReaderGraceExpired] = useState(!nativeBridge);
   const [readerProbeGeneration, setReaderProbeGeneration] = useState(0);
+  const [cancellingTerminal, setCancellingTerminal] = useState(false);
   const confirmedRef = useRef(false);
+  const cancellationNotifiedRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
 
@@ -130,7 +144,7 @@ export function KioskPaymentRailStage(props: Props) {
       if (!cancelled && next) setReader(next);
     };
     refresh();
-    const interval = window.setInterval(refresh, inProgress ? 650 : 700);
+    const interval = window.setInterval(refresh, inProgress ? 350 : 700);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -169,6 +183,16 @@ export function KioskPaymentRailStage(props: Props) {
     onServerConfirmed();
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
+  useEffect(() => {
+    if (!inProgress || model.payment.railState !== "CANCELLED" || cancellationNotifiedRef.current) return;
+    cancellationNotifiedRef.current = true;
+    railTapLockRef.current = false;
+    setCancellingTerminal(false);
+    setLocalRail("NONE");
+    setLocalRailState("UNCLAIMED");
+    onTerminalCancelled();
+  }, [inProgress, model.payment.railState, onTerminalCancelled]);
+
   const chooseQr = () => {
     if (railTapLockRef.current || !model.payment.canChooseQr) return;
     railTapLockRef.current = true;
@@ -184,20 +208,8 @@ export function KioskPaymentRailStage(props: Props) {
     && !inProgress;
   const waitingForReader = transientReader && !readerGraceExpired;
   const readerNeedsDecision = transientReader && readerGraceExpired;
-  const confirmedQrOnly = !nativeBridge
-    || readerState === "ABSENT"
-    || readerState === "ERROR";
+  const confirmedQrOnly = !nativeBridge || readerState === "ABSENT" || readerState === "ERROR";
 
-  /*
-   * Payment-rail invariant:
-   * - only an absent bridge or an explicitly ABSENT/ERROR reader may trigger
-   *   automatic QR fallback;
-   * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING never claim QR merely
-   *   because the bounded reader grace elapsed;
-   * - after the grace window, the customer receives an explicit choice to retry
-   *   the reader or intentionally choose QR. This leaves the rental rail
-   *   UNCLAIMED while the physical WisePad is still recovering.
-   */
   useEffect(() => {
     if (
       inProgress
@@ -216,6 +228,7 @@ export function KioskPaymentRailStage(props: Props) {
   const chooseTerminal = () => {
     if (railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
     railTapLockRef.current = true;
+    cancellationNotifiedRef.current = false;
     setNativeError(null);
     setLocalRail("TERMINAL");
     setLocalRailState("CLAIMING");
@@ -237,6 +250,24 @@ export function KioskPaymentRailStage(props: Props) {
     onTerminalEngaged();
   };
 
+  const cancelTerminal = () => {
+    if (cancellingTerminal || !native?.cancelTerminalPayment || model.payment.serverConfirmed) return;
+    setNativeError(null);
+    setCancellingTerminal(true);
+    setLocalRail("TERMINAL");
+    setLocalRailState("CANCELLING");
+    try {
+      const ack = JSON.parse(native.cancelTerminalPayment()) as { ok?: boolean; code?: string };
+      if (ack?.ok !== true) {
+        setNativeError(ack?.code ?? "TERMINAL_CANCEL_FAILED");
+        setCancellingTerminal(false);
+      }
+    } catch {
+      setNativeError("TERMINAL_CANCEL_FAILED");
+      setCancellingTerminal(false);
+    }
+  };
+
   const retryReader = () => {
     setNativeError(null);
     setReaderGraceExpired(false);
@@ -247,12 +278,15 @@ export function KioskPaymentRailStage(props: Props) {
   };
 
   if (inProgress || model.payment.rail === "TERMINAL") {
-    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail="TERMINAL" data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
+    const cancelling = cancellingTerminal || model.payment.railState === "CANCELLING";
+    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail="TERMINAL" data-payment-state={model.payment.railState} data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
       <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
       <CreditCard className="h-20 w-20 text-cyan-100" />
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.processing}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.processingSub}</p>
       <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
+      {!model.payment.serverConfirmed && native?.cancelTerminalPayment && <Button variant="outline" onClick={cancelTerminal} disabled={cancelling} className="h-14 gap-3 rounded-full px-8 text-lg font-black">{cancelling ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}{cancelling ? copy.cancelling : copy.cancel}</Button>}
+      {nativeError && <p className="text-sm font-semibold text-warning">{nativeError === "TERMINAL_CANCEL_FAILED" ? copy.cancelError : nativeError}</p>}
     </div>;
   }
 
