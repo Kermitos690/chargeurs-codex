@@ -17,6 +17,13 @@ val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBacken
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
+// This must be opted into for each APK build. The ordinary STAGING artifact
+// continues to use the physical WisePad lane.
+val stagingSimulatedTerminalReaderEnabled = providers
+    .gradleProperty("chargeursStripeTerminalSimulatedReader")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+val stagingSimulatedTerminalReaderVersion = stagingSimulatedTerminalReaderEnabled.get()
 val releaseStorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orElse("")
 val releaseStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse("")
 val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orElse("")
@@ -55,8 +62,13 @@ android {
         targetSdk = 36
         // The DTA21269 currently runs versionCode 141. A normal Android
         // upgrade must increase this value; no downgrade install is permitted.
-        versionCode = 147
-        versionName = "1.0.47-terminal-explicit-recovery"
+        // 1.0.48 is a temporary STAGING simulator build.  1.0.49 is the
+        // normal WisePad build that can restore it in-place afterwards.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 148 else 149
+        versionName = if (stagingSimulatedTerminalReaderVersion)
+            "1.0.48-terminal-simulated-reader"
+        else
+            "1.0.49-terminal-simulated-reader-restore"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -151,7 +163,11 @@ android {
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
-            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
+            buildConfigField(
+                "boolean",
+                "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED",
+                if (stagingSimulatedTerminalReaderVersion) "true" else "false",
+            )
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",

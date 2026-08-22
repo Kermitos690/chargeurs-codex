@@ -33,6 +33,9 @@ async function recoverManualCard(rawEvent:any){
   if(!rentalId||!piId) return {handled:false,reason:"NOT_TARGET_EVENT"};
 
   const pi=await stripe.paymentIntents.retrieve(piId);
+  if(pi.metadata?.chargeurs_terminal_simulated_reader==="true") {
+    return {handled:true,simulated:true,reason:"SIMULATED_TERMINAL_NO_EJECTION"};
+  }
   const cardCapture=(pi.payment_method_options as any)?.card?.capture_method??null;
   if(pi.status!=="requires_capture"||cardCapture!=="manual"||Number(pi.amount_capturable??0)<=0) return {handled:false,reason:"NOT_MANUAL_CARD_AUTH"};
 

@@ -24,10 +24,11 @@ final class StripeTerminalBackendClient {
         this.config = config;
     }
 
-    ConnectionTokenResult fetchConnectionToken() throws IOException {
+    ConnectionTokenResult fetchConnectionToken(boolean simulatedReader) throws IOException {
         JSONObject response = post(body(
             "action", "connection_token",
-            "stationId", config.stationId()
+            "stationId", config.stationId(),
+            "simulatedReader", simulatedReader
         ));
         String secret = response.optString("secret", "");
         if (secret.isBlank()) throw new IOException("CONNECTION_TOKEN_MISSING");
@@ -38,10 +39,11 @@ final class StripeTerminalBackendClient {
         );
     }
 
-    PaymentIntentResult createPaymentIntent(String rentalSessionId) throws IOException {
+    PaymentIntentResult createPaymentIntent(String rentalSessionId, boolean simulatedReader) throws IOException {
         JSONObject response = post(body(
             "action", "create_payment_intent",
-            "rentalSessionId", rentalSessionId
+            "rentalSessionId", rentalSessionId,
+            "simulatedReader", simulatedReader
         ));
         String clientSecret = response.optString("clientSecret", "");
         String paymentIntentId = response.optString("paymentIntentId", "");

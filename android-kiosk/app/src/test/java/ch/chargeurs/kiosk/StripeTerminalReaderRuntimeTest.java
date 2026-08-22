@@ -14,6 +14,13 @@ public final class StripeTerminalReaderRuntimeTest {
     }
 
     @Test
+    public void enablesTheSimulatedReaderOnlyForAnExplicitStagingBuild() {
+        assertTrue(StripeTerminalReaderRuntime.simulatedReaderEnabledForBuild(true, true));
+        assertFalse(StripeTerminalReaderRuntime.simulatedReaderEnabledForBuild(true, false));
+        assertFalse(StripeTerminalReaderRuntime.simulatedReaderEnabledForBuild(false, true));
+    }
+
+    @Test
     public void rejectsStripeCallbacksFromAnOperationInvalidatedByCancellation() {
         assertTrue(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 14));
         assertFalse(StripeTerminalReaderRuntime.isCurrentPaymentOperation(14, 15));

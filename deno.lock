@@ -294,6 +294,7 @@
     "https://esm.sh/side-channel@1.1.1?target=deno": "f1861312872340c2bfb63c1c702b94779700bf49d61e671b4d4970624aa06db3",
     "https://esm.sh/stripe@17.7.0/deno/stripe.mjs": "da7b7ded28a546e4d0c1e4143b2967dfe71a0dcc41a1114827b8c27688135add",
     "https://esm.sh/stripe@17.7.0?target=deno": "ddb041a98d12c5cbe22086fd01d57a240125505520a7fcfded79a7f207975486",
+    "https://esm.sh/stripe@18.5.0?target=deno": "d9b6d1310d5168cc94495f0ffc275048be7aac23ea942ddc7f8bff513ffd9e71",
     "https://esm.sh/tr46@0.0.3/denonext/tr46.mjs": "5753ec0a99414f4055f0c1f97691100f13d88e48a8443b00aebb90a512785fa2",
     "https://esm.sh/tr46@0.0.3?target=denonext": "19cb9be0f0d418a0c3abb81f2df31f080e9540a04e43b0f699bce1149cba0cbb",
     "https://esm.sh/utf-8-validate@6.0.6/denonext/utf-8-validate.mjs": "4a41983aa887625615f52a52b53c223d8f16c74e52a6bd41b2c361894c07f878",

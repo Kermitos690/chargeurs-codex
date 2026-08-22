@@ -16,6 +16,7 @@ import { receiptEmailForPaymentIntent } from "../_shared/stripeReceipt.ts";
 const backendSource = await Deno.readTextFile(new URL("../stripe-terminal-backend/index.ts", import.meta.url));
 const qrSource = await Deno.readTextFile(new URL("../create-stripe-checkout/index.ts", import.meta.url));
 const webhookSource = await Deno.readTextFile(new URL("../stripe-webhook/index.ts", import.meta.url));
+const webhookGatewaySource = await Deno.readTextFile(new URL("../stripe-webhook-gateway/index.ts", import.meta.url));
 
 Deno.test("Terminal amount remains server-owned from rental canonical deposit", () => {
   assertEquals(canonicalTerminalAmountCents({ deposit_amount_cents: 3000, pricing_snapshot: { deposit_cents: 9999 } }), 3000);
@@ -88,7 +89,7 @@ Deno.test("ConnectionToken reader connectivity requires station not rental and c
   const tokenBranch = backendSource.slice(tokenStart, tokenEnd);
   assert(tokenBranch.includes("body.stationId"));
   assert(tokenBranch.includes("kioskAuth(req, db, stationId)"));
-  assert(tokenBranch.includes('stripe.terminal.connectionTokens.create({ location: String(binding.stripe_location_id) })'));
+  assert(tokenBranch.includes('simulatedReader ? {} : { location: String(binding.stripe_location_id) }'));
   assertEquals(tokenBranch.includes("rental_sessions").valueOf(), false);
   assertEquals(tokenBranch.includes("insert({ rental").valueOf(), false);
 });
@@ -153,6 +154,18 @@ Deno.test("existing signed Stripe webhook already authoritatively handles Termin
   assert(webhookSource.includes('case "payment_intent.payment_failed"'));
   assert(webhookSource.includes("intent.metadata?.rental_session_id"));
   assert(webhookSource.includes("processPaymentIntent(db, stripe, session, intent, event)"));
+});
+
+Deno.test("simulated Terminal reader is server-gated and never reaches physical ejection", () => {
+  assert(backendSource.includes('Deno.env.get("STRIPE_TERMINAL_SIMULATED_READER_ENABLED") === "true"'));
+  assert(backendSource.includes('body.simulatedReader === true'));
+  assert(backendSource.includes('chargeurs_terminal_simulated_reader: simulatedReader ? "true" : "false"'));
+  const simulatedGuard = webhookSource.indexOf("isSimulatedTerminalIntent(intent)");
+  const physicalTrigger = webhookSource.indexOf("await triggerEjection(String(session.id))");
+  assert(simulatedGuard >= 0);
+  assert(physicalTrigger > simulatedGuard);
+  assert(webhookSource.includes("SIMULATED_TERMINAL_PAYMENT_VOIDED_NO_HARDWARE"));
+  assert(webhookGatewaySource.includes("SIMULATED_TERMINAL_NO_EJECTION"));
 });
 
 Deno.test("Terminal backend contains no direct ejection return or settlement implementation", () => {

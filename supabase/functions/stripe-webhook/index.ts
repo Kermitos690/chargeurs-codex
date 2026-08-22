@@ -124,6 +124,76 @@ async function triggerEjection(rentalSessionId: string): Promise<void> {
   if (!response.ok) throw new Error(`EJECT_TRIGGER_HTTP_${response.status}`);
 }
 
+function isSimulatedTerminalIntent(intent: Stripe.PaymentIntent): boolean {
+  return intent.metadata?.chargeurs_terminal_simulated_reader === "true"
+    && intent.metadata?.payment_rail === "stripe_terminal"
+    && intent.metadata?.environment === "test";
+}
+
+/**
+ * A simulated reader proves SDK and server orchestration only. It deliberately
+ * does not change the rental state, activate a battery, or reach the ejection
+ * function. A manual-capture authorization is immediately voided and the
+ * payment rail is released for a later real attempt.
+ */
+async function voidSimulatedTerminalAuthorization(
+  db: DB,
+  stripe: Stripe,
+  session: RentalSession,
+  intent: Stripe.PaymentIntent,
+  event: Stripe.Event,
+): Promise<boolean> {
+  let settledIntent = intent;
+  if (intent.status === "requires_capture") {
+    try {
+      settledIntent = await stripe.paymentIntents.cancel(intent.id, {
+        cancellation_reason: "abandoned",
+      });
+    } catch (error) {
+      const refreshed = await stripe.paymentIntents.retrieve(intent.id);
+      if (refreshed.status !== "canceled") throw error;
+      settledIntent = refreshed;
+    }
+  }
+
+  if (settledIntent.status !== "canceled") {
+    await failPaymentRental(db, session, {
+      code: "SIMULATED_TERMINAL_UNEXPECTED_STRIPE_STATE",
+      message: "Le lecteur simulé a produit un état Stripe inattendu.",
+      idempotencyKey: `simulated_terminal_unexpected:${intent.id}`,
+      metadata: { stripe_status: settledIntent.status, stripe_event_id: event.id },
+    });
+    return true;
+  }
+
+  const now = new Date().toISOString();
+  await db.from("stripe_terminal_payment_attempts").update({
+    status: "canceled",
+    canceled_at: now,
+    reconciliation_required: false,
+    last_error: "SIMULATED_TERMINAL_PAYMENT_VOIDED_NO_HARDWARE",
+    last_reconciled_at: now,
+    updated_at: now,
+  }).eq("rental_session_id", session.id);
+  await db.rpc("release_rental_payment_rail_claim", {
+    p_rental_id: session.id,
+    p_expected_rail: "stripe_terminal",
+    p_reason: "simulated_terminal_authorization_voided_no_hardware",
+  });
+  await auditLog(db, {
+    action: "stripe.terminal.simulated_payment.voided",
+    target: session.id,
+    data: {
+      stripe_payment_intent_id: intent.id,
+      stripe_event_id: event.id,
+      stripe_status: settledIntent.status,
+      physical_ejection: false,
+      rental_activated: false,
+    },
+  });
+  return true;
+}
+
 async function processPaymentIntent(
   db: DB,
   stripe: Stripe,
@@ -132,6 +202,10 @@ async function processPaymentIntent(
   event: Stripe.Event,
   checkout?: Stripe.Checkout.Session,
 ): Promise<boolean> {
+  if (isSimulatedTerminalIntent(intent)) {
+    return voidSimulatedTerminalAuthorization(db, stripe, session, intent, event);
+  }
+
   const methodType = await paymentMethodType(stripe, intent, checkout);
   const strategy = resolveSettlementStrategy({
     paymentMethodType: methodType,

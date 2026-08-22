@@ -53,6 +53,20 @@ function stripeClient(secretKey: string) {
   });
 }
 
+function simulationRequested(body: Record<string, unknown>) {
+  return body.simulatedReader === true;
+}
+
+/**
+ * The native build flag is not sufficient authorization: callers can forge a
+ * JSON body.  A simulation therefore requires all three independent gates:
+ * authenticated kiosk, TEST station binding, and this STAGING-only secret.
+ */
+function simulatedReaderAllowed(binding: any) {
+  return Deno.env.get("STRIPE_TERMINAL_SIMULATED_READER_ENABLED") === "true"
+    && terminalBindingUsable(binding);
+}
+
 async function bindingForStation(db: any, stationId: string) {
   const { data, error } = await db.from("stripe_terminal_station_bindings")
     .select("station_id,stripe_location_id,stripe_reader_id,environment,enabled")
@@ -169,8 +183,17 @@ Deno.serve(async (req) => {
       if (!device) return json({ ok: false, error: "KIOSK_AUTH_INVALID" }, 401);
       const binding = await bindingForStation(db, stationId);
       if (!terminalBindingUsable(binding)) return json({ ok: false, error: "TERMINAL_NOT_CONFIGURED" }, 409);
+      const simulatedReader = simulationRequested(body);
+      if (simulatedReader && !simulatedReaderAllowed(binding)) {
+        return json({ ok: false, error: "SIMULATED_READER_DISABLED" }, 403);
+      }
 
-      const token = await stripe.terminal.connectionTokens.create({ location: String(binding.stripe_location_id) });
+      // Stripe simulated readers use a mock Location. Keep physical tokens
+      // restricted to the bound reader Location; only the separately gated
+      // STAGING simulator receives an unscoped TEST connection token.
+      const token = await stripe.terminal.connectionTokens.create(
+        simulatedReader ? {} : { location: String(binding.stripe_location_id) },
+      );
       await db.from("audit_logs").insert({
         action: "stripe.terminal.connection_token.created",
         target: stationId,
@@ -180,6 +203,7 @@ Deno.serve(async (req) => {
           stripe_location_id: binding.stripe_location_id,
           stripe_reader_id: binding.stripe_reader_id ?? null,
           environment: "test",
+          reader_mode: simulatedReader ? "simulated" : "physical",
           rental_session_created: false,
           correlation_id: correlationId,
         },
@@ -187,8 +211,9 @@ Deno.serve(async (req) => {
       return json({
         ok: true,
         secret: token.secret,
-        locationId: binding.stripe_location_id,
-        expectedReaderId: binding.stripe_reader_id ?? null,
+        locationId: simulatedReader ? null : binding.stripe_location_id,
+        expectedReaderId: simulatedReader ? null : binding.stripe_reader_id ?? null,
+        simulatedReader,
         environment: "test",
       });
     }
@@ -215,6 +240,10 @@ Deno.serve(async (req) => {
 
     const binding = await bindingForStation(db, stationId);
     if (!terminalBindingUsable(binding)) return json({ ok: false, error: "TERMINAL_NOT_CONFIGURED" }, 409);
+    const simulatedReader = simulationRequested(body);
+    if (simulatedReader && !simulatedReaderAllowed(binding)) {
+      return json({ ok: false, error: "SIMULATED_READER_DISABLED" }, 403);
+    }
 
     const current = await loadClaimAndAttempt(db, rentalSessionId);
 
@@ -278,6 +307,7 @@ Deno.serve(async (req) => {
     const pricingHash = typeof session.pricing_snapshot_hash === "string" ? session.pricing_snapshot_hash : "";
 
     if (current.attempt?.stripe_payment_intent_id && !["canceled","failed","timed_out"].includes(String(current.attempt.status))) {
+      if (simulatedReader) return json({ ok: false, error: "SIMULATED_READER_REQUIRES_FRESH_SESSION" }, 409);
       const state = await projectState(db, stripe, session, true);
       if (state.rail !== "TERMINAL") return json({ ok: false, error: "PAYMENT_RAIL_ALREADY_CLAIMED" }, 409);
       return json({ ok: true, reused: true, ...state, clientSecret: (await stripe.paymentIntents.retrieve(String(state.paymentIntentId))).client_secret, amountCents, currency, environment: "test" });
@@ -287,7 +317,12 @@ Deno.serve(async (req) => {
       p_rental_id: rentalSessionId,
       p_rail: "stripe_terminal",
       p_correlation_id: correlationId,
-      p_metadata: { source: "stripe_terminal_backend", station_id: stationId, action },
+      p_metadata: {
+        source: "stripe_terminal_backend",
+        station_id: stationId,
+        action,
+        reader_mode: simulatedReader ? "simulated" : "physical",
+      },
     });
     if (railError) {
       const message = String(railError.message ?? "");
@@ -341,6 +376,7 @@ Deno.serve(async (req) => {
       deposit_amount_cents: String(amountCents),
       payment_purpose: "rental_guarantee",
       payment_rail: "stripe_terminal",
+      chargeurs_terminal_simulated_reader: simulatedReader ? "true" : "false",
       environment: "test",
       attempt_generation: String(generation),
     };
@@ -391,6 +427,7 @@ Deno.serve(async (req) => {
         payment_method_types: ["card_present"],
         attempt_generation: generation,
         environment: "test",
+        reader_mode: simulatedReader ? "simulated" : "physical",
         correlation_id: correlationId,
       },
     }).then(() => {}, () => {});
