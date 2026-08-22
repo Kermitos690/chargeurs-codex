@@ -172,11 +172,16 @@ export const cabinetQuery = (deviceId: string) =>
 // PROVIDER_ENDPOINT_MISSING until ChargeNow confirms an official contract.
 
 // O2 — Create Rent Order (query params: deviceId, callbackURL)
-export const orderCreate = (args: { deviceId: string; callbackURL?: string }, context: SuperAdminMutationContext = {}) =>
-  request("POST", "/rent/order/create", {
+export const orderCreate = (args: { deviceId: string; callbackURL?: string }, context: SuperAdminMutationContext = {}) => {
+  // O2 is treated as physically capable until ChargeNow documents otherwise:
+  // the real DTA21269 incident observed a second output with O2/C3 pairing.
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });
+  return request("POST", "/rent/order/create", {
     query: { deviceId: args.deviceId, callbackURL: args.callbackURL },
     mutation: true, superAdminMutation: context.superAdminConfirmed,
   });
+};
 
 // The same one-time permit is required for the supplier order that precedes a
 // permitted rental ejection. It is deliberately not a general order-creation
@@ -185,6 +190,8 @@ export const orderCreateWithOneTimeRentalPermit = (
   args: { deviceId: string; callbackURL?: string },
   permit: OneTimeRentalEjectionPermit,
 ) => {
+  const blocked = physicalEjectionBlockError();
+  if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });
   if (
     chargeNowMode() !== "test" ||
     permit.stationId !== args.deviceId ||
@@ -239,7 +246,8 @@ const PHYSICAL_EJECTION_OPERATIONS = new Set<CabinetOperationType>([
 // proves the supplier's physical behavior. Every physical release path must
 // therefore pass the global kill switch and the same single-slot contract.
 export function physicalEjectionBlockError(): string | null {
-  if (!areHardwareEjectionsEnabled()) return "HARDWARE_EJECTION_DISABLED";
+  if (!areChargeNowMutationsEnabled()) return "CHARGENOW_MUTATIONS_DISABLED";
+  if (Deno.env.get("HARDWARE_EJECTION_ENABLED") !== "true") return "HARDWARE_EJECTION_DISABLED";
   if (!hasVerifiedSingleSlotRentalContract()) return "SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED";
   return null;
 }
@@ -270,9 +278,8 @@ export const ejectByRepair = (cabinetid: string, slotNum: number, context: Super
   return request("POST", "/cabinet/ejectByRepair", { query: { cabinetid, slotNum }, mutation: true, superAdminMutation: context.superAdminConfirmed });
 };
 
-// The only route allowed to bypass the broad mutation flag. Its target is
-// fixed by a short-lived, server-only permit; every other mutation remains
-// governed by CHARGENOW_MUTATIONS_ENABLED.
+// The permit narrows a maintenance action to one target, but it cannot bypass
+// either the global mutation kill switch or the physical-release contract.
 export const ejectByRepairWithOneTimePermit = (cabinetid: string, slotNum: number) => {
   const blocked = physicalEjectionBlockError();
   if (blocked) return Promise.resolve<ApiResult>({ ok: false, status: 409, data: null, error: blocked });

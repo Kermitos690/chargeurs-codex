@@ -30,6 +30,8 @@ Deno.test("customer ejection is blocked until the supplier proves a single-slot 
   assert(ejectSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
   assert(ejectSource.indexOf("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED") < ejectSource.indexOf("orderCreate({ deviceId"));
   assert(ejectSource.includes("requiresPhysicalReconciliation: true"));
+  assert(chargeNowSource.includes("O2 is treated as physically capable"));
+  assert(chargeNowSource.includes("const blocked = physicalEjectionBlockError()"));
   assert(cabinetEventSource.includes("DIRECT_BORROW_OUT_ACTIVATION_ENABLED = false"));
   assert(cabinetEventSource.includes("AWAITING_COMPLETE_PHYSICAL_RECONCILIATION"));
 });

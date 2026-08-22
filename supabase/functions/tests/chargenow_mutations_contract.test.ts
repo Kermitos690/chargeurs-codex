@@ -338,11 +338,11 @@ Deno.test("C2 one-time maintenance permit cannot bypass the physical release gat
   try {
     const blockedByHardwareGate = await cn.ejectByRepairWithOneTimePermit("DTA21269", 1);
     assertEquals(blockedByHardwareGate.ok, false);
-    assertEquals(blockedByHardwareGate.error, "HARDWARE_EJECTION_DISABLED");
+    assertEquals(blockedByHardwareGate.error, "CHARGENOW_MUTATIONS_DISABLED");
     assertEquals(s.calls.length, 0);
     const blocked = await cn.ejectByRepairWithOneTimePermit("DTA21269", 2);
     assertEquals(blocked.ok, false);
-    assertEquals(blocked.error, "HARDWARE_EJECTION_DISABLED");
+    assertEquals(blocked.error, "CHARGENOW_MUTATIONS_DISABLED");
     assertEquals(s.calls.length, 0);
     const otherMutation = await cn.orderCreate({ deviceId: "DTA21269" });
     assertEquals(otherMutation.ok, false);
