@@ -3,6 +3,7 @@ import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.t
 const ejectSource = await Deno.readTextFile("supabase/functions/eject-after-payment/index.ts");
 const qualificationSource = await Deno.readTextFile("supabase/functions/dta-pilot-qualification/index.ts");
 const chargeNowAdminSource = await Deno.readTextFile("supabase/functions/chargenow-admin/index.ts");
+const preflightSource = await Deno.readTextFile("supabase/functions/dta-pilot-preflight/index.ts");
 const callbackSource = await Deno.readTextFile("supabase/functions/chargenow-rent-callback/index.ts");
 const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-event-push/index.ts");
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
@@ -38,6 +39,12 @@ Deno.test("physical qualification cannot bypass the supplier single-slot contrac
   assert(contractAt >= 0);
   assert(orderAt > contractAt);
   assert(qualificationSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+});
+
+Deno.test("qualification preflight reports an unverified supplier single-slot contract", () => {
+  assert(preflightSource.includes("supplierSingleSlotContractVerified"));
+  assert(preflightSource.includes("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED"));
+  assert(preflightSource.indexOf("SUPPLIER_SINGLE_SLOT_RENTAL_CONTRACT_UNVERIFIED") > preflightSource.indexOf("const blockers"));
 });
 
 Deno.test("the supplier administration gateway cannot bypass the single-slot contract", () => {

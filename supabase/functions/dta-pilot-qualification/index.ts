@@ -249,6 +249,7 @@ async function dashboard(db: SupabaseClient) {
       providerMode: chargeNowMode(),
       providerMutationsEnabled: areChargeNowMutationsEnabled(),
       freePayEnvironmentEnabled: Deno.env.get("DTA21269_FREEPAY_ENABLED") === "true",
+      supplierSingleSlotContractVerified: hasVerifiedSingleSlotRentalContract(),
       stripeUsed: false,
     },
   };

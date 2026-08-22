@@ -87,6 +87,7 @@ type Dashboard = {
     providerMode: string;
     providerMutationsEnabled: boolean;
     freePayEnvironmentEnabled: boolean;
+    supplierSingleSlotContractVerified: boolean;
     stripeUsed: boolean;
   };
 };
@@ -176,6 +177,7 @@ export default function AdminBatteryQualification() {
       && dashboard.guards.providerMode === "test"
       && dashboard.guards.providerMutationsEnabled
       && dashboard.guards.freePayEnvironmentEnabled
+      && dashboard.guards.supplierSingleSlotContractVerified
       && dashboard.station?.qualification_mode === "freepay_test",
   );
 
@@ -252,7 +254,7 @@ export default function AdminBatteryQualification() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-bold">Garde-fous FreePay</h2>
-            <p className="text-sm text-muted-foreground">Trois verrous indépendants doivent être ouverts. Stripe reste absent de ce parcours.</p>
+            <p className="text-sm text-muted-foreground">Le contrat fournisseur single-slot doit être vérifié avant toute commande. Stripe reste absent de ce parcours.</p>
           </div>
           <Badge variant={station?.qualification_mode === "freepay_test" ? "default" : "secondary"}>
             Mode {station?.qualification_mode ?? "inconnu"}
@@ -263,6 +265,7 @@ export default function AdminBatteryQualification() {
           <Guard ok={guards.providerMode === "test"} label="CHARGENOW_MODE=test" />
           <Guard ok={guards.providerMutationsEnabled} label="Mutations ChargeNow autorisées" />
           <Guard ok={guards.freePayEnvironmentEnabled} label="DTA21269_FREEPAY_ENABLED=true" />
+          <Guard ok={guards.supplierSingleSlotContractVerified} label="Contrat ChargeNow : exactement un slot" />
           <Guard ok={station?.qualification_mode === "freepay_test"} label="Borne placée en freepay_test" />
           <Guard ok={!guards.stripeUsed} label="Aucun paiement Stripe" />
         </div>
@@ -272,7 +275,7 @@ export default function AdminBatteryQualification() {
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="secondary" disabled={busy !== null || !guards.freePayEnvironmentEnabled || guards.providerMode !== "test"}>
+              <Button variant="secondary" disabled={busy !== null || !guards.freePayEnvironmentEnabled || guards.providerMode !== "test" || !guards.supplierSingleSlotContractVerified}>
                 <TestTube2 className="mr-2 h-4 w-4" />Activer FreePay pilote
               </Button>
             </AlertDialogTrigger>
