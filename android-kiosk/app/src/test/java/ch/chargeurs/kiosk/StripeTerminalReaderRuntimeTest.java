@@ -34,4 +34,17 @@ public final class StripeTerminalReaderRuntimeTest {
         assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", null));
         assertFalse(StripeTerminalReaderRuntime.shouldApplyPaymentState(14, 14, "rental-a", "rental-b"));
     }
+
+    @Test
+    public void releasesTheUiOnlyAfterAuthoritativeBackendCancellation() {
+        assertTrue(StripeTerminalReaderRuntime.isBackendCancellationConfirmed(
+            new StripeTerminalBackendClient.PaymentStateResult("NONE", "CANCELLED", false, false, "")
+        ));
+        assertFalse(StripeTerminalReaderRuntime.isBackendCancellationConfirmed(
+            new StripeTerminalBackendClient.PaymentStateResult("TERMINAL", "ENGAGED", false, false, "")
+        ));
+        assertFalse(StripeTerminalReaderRuntime.isBackendCancellationConfirmed(
+            new StripeTerminalBackendClient.PaymentStateResult("NONE", "CANCELLED", true, false, "")
+        ));
+    }
 }

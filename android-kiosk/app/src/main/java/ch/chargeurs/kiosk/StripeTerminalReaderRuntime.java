@@ -38,6 +38,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -291,17 +292,34 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             collection.cancel(new Callback() {
                 @Override public void onSuccess() { cancelTerminalIntentOnServer(rental); }
                 @Override public void onFailure(TerminalException error) {
-                    paymentCancellationRunning.set(false);
-                    recoveryRequired = true;
-                    paymentRailState = "RECOVERY_REQUIRED";
-                    setError(safeTerminalCode(error));
-                    refreshPaymentState(true);
+                    // A reader may report an already-ended/cancelled collection
+                    // while the server rail is still engaged. The server is the
+                    // authority for cancelling the PaymentIntent and releasing
+                    // that rail, so a local callback failure must not strand the
+                    // kiosk in BUSY/ENGAGED.
+                    safeErrorCode = safeTerminalCode(error);
+                    cancelTerminalIntentOnServer(rental);
                 }
             });
         } else {
             cancelTerminalIntentOnServer(rental);
         }
         return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CANCELLING");
+    }
+
+    private void cancelAfterReaderStop() {
+        String rental = activeRentalSessionId;
+        if (rental == null || rental.isBlank()) return;
+        if (!paymentCancellationRunning.compareAndSet(false, true)) return;
+        // The reader has already ended collection. Do not invoke cancel() a
+        // second time; invalidate callbacks and move directly to the same
+        // authoritative server cancellation used by the kiosk button.
+        paymentOperationGeneration.incrementAndGet();
+        localPaymentState = "CANCELLING";
+        paymentRail = "TERMINAL";
+        paymentRailState = "CANCELLING";
+        paymentCancelable = null;
+        cancelTerminalIntentOnServer(rental);
     }
 
     private void cancelTerminalIntentOnServer(String rentalSessionId) {
@@ -313,12 +331,24 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 serverConfirmed = state.serverConfirmed();
                 recoveryRequired = state.recoveryRequired();
                 correlationId = blankToNull(state.correlationId());
-                localPaymentState = "CANCELLED";
-                activePaymentIntentId = null;
-                activeRentalSessionId = null;
-                paymentCancelable = null;
-                paymentRunning.set(false);
-                readerState = usbPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
+                if (isBackendCancellationConfirmed(state)) {
+                    localPaymentState = "CANCELLED";
+                    activePaymentIntentId = null;
+                    activeRentalSessionId = null;
+                    paymentCancelable = null;
+                    paymentRunning.set(false);
+                    safeErrorCode = null;
+                    readerState = usbPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
+                } else {
+                    // Never pretend that a local stop released a server claim.
+                    // An ambiguous Stripe state needs the recovery UI rather
+                    // than a second payment attempt or any hardware action.
+                    localPaymentState = "RECOVERY_REQUIRED";
+                    recoveryRequired = true;
+                    paymentRunning.set(false);
+                    safeErrorCode = "PAYMENT_RECONCILIATION_REQUIRED";
+                    readerState = usbPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
+                }
             } catch (IOException error) {
                 recoveryRequired = true;
                 paymentRailState = "RECOVERY_REQUIRED";
@@ -375,6 +405,14 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             && requestedRentalSessionId.equals(activeRentalSessionId);
     }
 
+    static boolean isBackendCancellationConfirmed(StripeTerminalBackendClient.PaymentStateResult state) {
+        return state != null
+            && "NONE".equals(state.rail())
+            && ("CANCELLED".equals(state.railState()) || "EXPIRED".equals(state.railState()))
+            && !state.serverConfirmed()
+            && !state.recoveryRequired();
+    }
+
     private void retrieveAndCollect(String clientSecret, int operationGeneration) {
         if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
         if (!Terminal.isInitialized() || Terminal.getInstance().getConnectedReader() == null) {
@@ -423,6 +461,14 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                         public void onFailure(TerminalException error) {
                             if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                             paymentCancelable = null;
+                            if (isCancellation(error)) {
+                                // STOP on the WisePad reaches this callback. It
+                                // has the same two-phase cancellation contract
+                                // as the kiosk button: invalidate callbacks,
+                                // then let the backend safely cancel/release.
+                                cancelAfterReaderStop();
+                                return;
+                            }
                             finishPaymentFailure(safeTerminalCode(error));
                             refreshPaymentState(true);
                         }
@@ -651,6 +697,14 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         safeErrorCode = code;
         readerState = usbPresent() ? "ERROR" : "ABSENT";
         Log.w(TAG, "Terminal reader state=" + readerState + ", code=" + code);
+    }
+
+    private static boolean isCancellation(TerminalException error) {
+        if (error == null) return false;
+        String code = error.getErrorCode() == null ? "" : error.getErrorCode().name();
+        String message = error.getMessage() == null ? "" : error.getMessage();
+        String combined = (code + " " + message).toUpperCase(Locale.ROOT);
+        return combined.contains("CANCEL") || combined.contains("ABORT");
     }
 
     private static String safeTerminalCode(TerminalException error) {
