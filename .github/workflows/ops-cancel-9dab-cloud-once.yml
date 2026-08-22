@@ -1,0 +1,31 @@
+name: Cancel expired DTA21269 auth cloud once
+
+on:
+  push:
+    branches:
+      - ops/chargeurs-mac-remote
+    paths:
+      - .github/workflows/ops-cancel-9dab-cloud-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cancel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel exact expired authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --max-time 30 \
+            'https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/ops-cancel-broken-authorization-once?permit=cancel-9dab-expired-auth-20260822-v1' \
+            | tee /tmp/cancel.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/cancel.json'))
+          assert data.get('ok') is True, data
+          assert data.get('stripeStatus') == 'canceled', data
+          print('CANCEL_OK')
+          PY
