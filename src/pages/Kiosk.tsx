@@ -71,8 +71,8 @@ type KioskFunctionResponse = {
 };
 
 const RELEASE_STATUS_POLL_MS = 700;
-const RELEASE_FALLBACK_RECONCILE_MS = 2500;
-const SUCCESS_HOME_DELAY_MS = 9500;
+const RELEASE_FALLBACK_RECONCILE_MS = 700;
+const SUCCESS_HOME_DELAY_MS = 4000;
 
 export default function Kiosk() {
   const { stationId } = useParams();
