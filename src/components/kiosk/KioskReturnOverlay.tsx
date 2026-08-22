@@ -37,6 +37,8 @@ type Summary = {
   billedPeriods: number;
   periodMinutes: number;
   pricePerPeriodCents: number;
+  tieredPricing?: boolean;
+  tierUpperMinutes?: number | null;
   dailyCapCents: number;
   failureCode?: string | null;
   failureMessage?: string | null;
@@ -62,6 +64,11 @@ const copy = {
     done: "Location terminée",
     finalPrice: "Prix final confirmé",
     calculatedPrice: "Prix calculé",
+    receipt: "Reçu de location",
+    tierApplied: "Palier appliqué",
+    upToMinutes: "Jusqu’à {{minutes}} min",
+    tieredRate: "Tarif par paliers",
+    kioskRecord: "Récapitulatif borne — conservez cette référence pour le support.",
     duration: "Durée",
     periods: "Périodes",
     rate: "Tarif",
@@ -94,6 +101,11 @@ const copy = {
     done: "Rental complete",
     finalPrice: "Final price confirmed",
     calculatedPrice: "Calculated price",
+    receipt: "Rental receipt",
+    tierApplied: "Applied tier",
+    upToMinutes: "Up to {{minutes}} min",
+    tieredRate: "Tiered pricing",
+    kioskRecord: "Kiosk summary — keep this reference for support.",
     duration: "Duration",
     periods: "Periods",
     rate: "Rate",
@@ -126,6 +138,11 @@ const copy = {
     done: "Miete beendet",
     finalPrice: "Endpreis bestätigt",
     calculatedPrice: "Berechneter Preis",
+    receipt: "Mietbeleg",
+    tierApplied: "Angewendete Stufe",
+    upToMinutes: "Bis zu {{minutes}} Min.",
+    tieredRate: "Staffeltarif",
+    kioskRecord: "Kiosk-Zusammenfassung — diese Referenz für den Support aufbewahren.",
     duration: "Dauer",
     periods: "Perioden",
     rate: "Tarif",
@@ -188,6 +205,15 @@ function interpolate(value: string, values: Record<string, string | number>) {
 
 function supportDismissKey(rentalId: string) {
   return `chargeurs:return-support-dismissed:${rentalId}`;
+}
+
+function rateLabel(summary: Summary, c: ReturnCopy, currency: string) {
+  if (summary.tieredPricing) {
+    return summary.tierUpperMinutes && summary.tierUpperMinutes > 0
+      ? interpolate(c.upToMinutes, { minutes: summary.tierUpperMinutes })
+      : c.tieredRate;
+  }
+  return `${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`;
 }
 
 export function KioskReturnOverlay() {
@@ -293,6 +319,7 @@ export function KioskReturnOverlay() {
   const periods = summary.billedPeriods > 0
     ? `${summary.billedPeriods} × ${summary.periodMinutes || 30} min`
     : `0 × ${summary.periodMinutes || 30} min`;
+  const appliedRate = rateLabel(summary, c, currency);
 
   return (
     <AnimatePresence>
@@ -334,7 +361,7 @@ export function KioskReturnOverlay() {
               </div>
               <p className="mt-2 max-w-3xl text-xl text-muted-foreground">{c.calculatedBody}</p>
             </div>
-            <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} />
+            <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} appliedRate={appliedRate} />
             <div className="mt-6 flex items-center justify-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-lg font-bold">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               {c.finalizing}
@@ -366,7 +393,7 @@ export function KioskReturnOverlay() {
               <p className="mx-auto mt-3 max-w-3xl text-xl text-muted-foreground">{c.supportBody}</p>
             </div>
             {pricingReady && (
-              <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} />
+              <PricingGrid summary={summary} locale={locale} currency={currency} copy={c} periods={periods} appliedRate={appliedRate} />
             )}
             <div className="mt-6 flex flex-col items-center justify-between gap-4 rounded-2xl border border-warning/20 bg-warning/5 p-4 sm:flex-row">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -401,35 +428,38 @@ export function KioskReturnOverlay() {
               <div className="grid h-24 w-24 place-items-center rounded-full bg-success/20 shadow-[0_0_40px_rgba(34,197,94,.2)]">
                 <CheckCircle2 className="h-14 w-14 text-success" />
               </div>
-              <h1 className="mt-4 font-display text-5xl font-extrabold">{c.done}</h1>
+              <p className="mt-4 font-mono text-sm font-bold tracking-[.2em] text-cyan-100">{c.receipt}</p>
+              <h1 className="mt-2 font-display text-5xl font-extrabold">{c.done}</h1>
               <div className="mt-4 font-display text-7xl font-extrabold text-gradient-cyan">
                 {money(summary.finalAmountCents, currency)}
               </div>
               <p className="mt-2 text-lg font-semibold text-muted-foreground">{c.finalPrice}</p>
             </div>
-            <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Cell label={c.duration} value={duration(summary)} />
-              <Cell label={c.periods} value={periods} />
-              <Cell label={c.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
-              <Cell label={c.start} value={when(summary.startedAt, locale)} />
-              <Cell label={c.return} value={when(summary.returnedAt, locale)} />
-              <Cell label={c.initialSecurity} value={money(summary.depositCents, currency)} />
-              <Cell label={c.captured} value={money(summary.capturedCents, currency)} />
-              {summary.settlementStrategy === "manual_capture"
-                ? <Cell label={c.authorizationReleased} value={money(summary.releasedAuthorizationCents, currency)} />
-                : <Cell label={c.refund} value={money(summary.refundedCents, currency)} />}
-              <Cell label={c.method} value={summary.paymentMethod} />
-              <Cell label={c.returnStation} value={summary.returnStationId ?? "—"} />
-              <Cell label={c.slot} value={summary.returnedSlotNum ? String(summary.returnedSlotNum) : "—"} />
-              {summary.supplementalCents > 0 && (
-                <Cell label={c.supplemental} value={money(summary.supplementalCents, currency)} />
-              )}
-              <Cell label={c.reference} value={summary.publicCode ?? "—"} />
-            </div>
+            <section className="mx-auto mt-7 w-full max-w-4xl overflow-hidden rounded-3xl border border-cyan-100/20 bg-slate-950/35 shadow-inner">
+              <div className="flex items-center justify-between border-b border-dashed border-cyan-100/25 px-6 py-4 font-mono text-sm text-cyan-100">
+                <span>{c.reference}</span><strong>{summary.publicCode ?? "—"}</strong>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-y divide-dashed divide-cyan-100/15 sm:grid-cols-3">
+                <ReceiptLine label={c.duration} value={duration(summary)} />
+                <ReceiptLine label={summary.tieredPricing ? c.tierApplied : c.periods} value={summary.tieredPricing ? appliedRate : periods} />
+                <ReceiptLine label={c.rate} value={summary.tieredPricing ? c.tieredRate : appliedRate} />
+                <ReceiptLine label={c.start} value={when(summary.startedAt, locale)} />
+                <ReceiptLine label={c.return} value={when(summary.returnedAt, locale)} />
+                <ReceiptLine label={c.method} value={summary.paymentMethod} />
+                <ReceiptLine label={c.initialSecurity} value={money(summary.depositCents, currency)} />
+                <ReceiptLine label={c.captured} value={money(summary.capturedCents, currency)} emphasis />
+                {summary.settlementStrategy === "manual_capture"
+                  ? <ReceiptLine label={c.authorizationReleased} value={money(summary.releasedAuthorizationCents, currency)} />
+                  : <ReceiptLine label={c.refund} value={money(summary.refundedCents, currency)} />}
+                <ReceiptLine label={c.returnStation} value={summary.returnStationId ?? "—"} />
+                <ReceiptLine label={c.slot} value={summary.returnedSlotNum ? String(summary.returnedSlotNum) : "—"} />
+                {summary.supplementalCents > 0 && <ReceiptLine label={c.supplemental} value={money(summary.supplementalCents, currency)} />}
+              </div>
+            </section>
             <div className="mt-7 flex flex-col items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4 sm:flex-row">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <ShieldCheck className="h-5 w-5 text-success" />
-                {c.serverConfirmed}
+                {c.kioskRecord}
               </p>
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-2 text-sm font-bold">
@@ -454,18 +484,22 @@ function PricingGrid({
   currency,
   copy,
   periods,
+  appliedRate,
 }: {
   summary: Summary;
   locale: string;
   currency: string;
   copy: ReturnCopy;
   periods: string;
+  appliedRate: string;
 }) {
   return (
     <div className="mt-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Cell label={copy.duration} value={duration(summary)} />
-      <Cell label={copy.periods} value={periods} />
-      <Cell label={copy.rate} value={`${money(summary.pricePerPeriodCents, currency)} / ${summary.periodMinutes || 30} min`} />
+      {summary.tieredPricing
+        ? <Cell label={copy.tierApplied} value={appliedRate} />
+        : <Cell label={copy.periods} value={periods} />}
+      <Cell label={copy.rate} value={summary.tieredPricing ? copy.tieredRate : appliedRate} />
       <Cell label={copy.initialSecurity} value={money(summary.depositCents, currency)} />
       <Cell label={copy.start} value={when(summary.startedAt, locale)} />
       <Cell label={copy.return} value={when(summary.returnedAt, locale)} />
@@ -480,6 +514,15 @@ function Cell({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-2 break-words text-lg font-extrabold">{value}</div>
+    </div>
+  );
+}
+
+function ReceiptLine({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="min-h-24 px-5 py-4 text-left">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`mt-2 break-words text-lg font-extrabold ${emphasis ? "text-cyan-100" : ""}`}>{value}</div>
     </div>
   );
 }

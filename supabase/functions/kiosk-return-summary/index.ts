@@ -151,6 +151,15 @@ Deno.serve(async (req) => {
     const pricingMetadata = (pricingEvent?.metadata as any) ?? null;
     const finalPricing = pricingMetadata?.pricingSnapshot ?? null;
     const pricingReady = Boolean(finalPricing);
+    const totalMinutes = cents(finalPricing?.total_minutes);
+    const tieredPricing = finalPricing?.tiered === true;
+    const tierUpperMinutes = tieredPricing && Array.isArray(finalPricing?.tiers)
+      ? finalPricing.tiers
+        .map((tier: any) => cents(tier?.upper_minutes))
+        .filter((upperMinutes: number) => upperMinutes > 0)
+        .sort((a: number, b: number) => a - b)
+        .find((upperMinutes: number) => totalMinutes <= upperMinutes) ?? null
+      : null;
     const payment = await walletType(selected);
     const deposit = cents(selected.deposit_amount_cents ?? selected.pricing_snapshot?.deposit_cents);
     const captured = cents(selected.captured_amount_cents);
@@ -199,10 +208,12 @@ Deno.serve(async (req) => {
         refundedCents: refunded,
         releasedAuthorizationCents: released,
         supplementalCents: cents(selected.supplemental_amount_cents),
-        totalMinutes: cents(finalPricing?.total_minutes),
+        totalMinutes,
         billedPeriods: cents(finalPricing?.billed_periods),
         periodMinutes: cents(finalPricing?.period_minutes ?? selected.pricing_snapshot?.period_minutes),
         pricePerPeriodCents: cents(finalPricing?.price_per_period_cents ?? selected.pricing_snapshot?.price_per_period_cents),
+        tieredPricing,
+        tierUpperMinutes,
         dailyCapCents: cents(selected.pricing_snapshot?.daily_cap_cents),
         failureCode: selected.failure_code ?? null,
         failureMessage: selected.failure_message ?? null,

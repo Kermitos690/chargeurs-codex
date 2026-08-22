@@ -14,6 +14,7 @@ import {
   terminalIntentIdempotencyKey,
   terminalRailState,
 } from "../_shared/stripeTerminalTest.ts";
+import { receiptEmailForPaymentIntent } from "../_shared/stripeReceipt.ts";
 
 const headers = {
   ...corsHeaders,
@@ -345,11 +346,13 @@ Deno.serve(async (req) => {
     };
 
     stripeCallStarted = true;
+    const receiptEmail = receiptEmailForPaymentIntent(session.customer_email);
     const intent = await stripe.paymentIntents.create({
       amount: amountCents,
       currency,
       payment_method_types: ["card_present"],
       capture_method: "manual",
+      ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
       description: "Chargeurs.ch — garantie de location — Terminal TEST",
       metadata,
     }, { idempotencyKey });

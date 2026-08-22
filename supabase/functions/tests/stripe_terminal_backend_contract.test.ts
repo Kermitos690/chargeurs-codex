@@ -11,6 +11,7 @@ import {
   terminalRailState,
 } from "../_shared/stripeTerminalTest.ts";
 import { classifyCheckoutIntentForExplicitCancellation } from "../_shared/checkoutCancellation.ts";
+import { receiptEmailForPaymentIntent } from "../_shared/stripeReceipt.ts";
 
 const backendSource = await Deno.readTextFile(new URL("../stripe-terminal-backend/index.ts", import.meta.url));
 const qrSource = await Deno.readTextFile(new URL("../create-stripe-checkout/index.ts", import.meta.url));
@@ -99,6 +100,13 @@ Deno.test("Terminal PaymentIntent is card_present manual capture and server-pric
   assertEquals(backendSource.includes("body.amount"), false);
   assertEquals(backendSource.includes("body.locationId"), false);
   assertEquals(backendSource.includes("body.readerId"), false);
+});
+
+Deno.test("Terminal receipt email is sent only from a server-stored valid address", () => {
+  assertEquals(receiptEmailForPaymentIntent("client@example.ch"), "client@example.ch");
+  assertEquals(receiptEmailForPaymentIntent(" not-an-email "), null);
+  assertEquals(receiptEmailForPaymentIntent(null), null);
+  assert(backendSource.includes("receipt_email: receiptEmail"));
 });
 
 Deno.test("restart reuses active PaymentIntent and explicit retry advances idempotency generation", () => {
