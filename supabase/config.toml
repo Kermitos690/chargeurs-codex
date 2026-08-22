@@ -80,3 +80,12 @@ verify_jwt = false
 verify_jwt = true
 [functions.kiosk-ads-playlist]
 verify_jwt = false
+
+# Project function quota is currently full. These two pre-existing no-op slots
+# are intentionally recycled for Chargeurs+ Web Push until dedicated slugs are
+# available: noop-placeholder = authenticated subscription API; noop = secret-
+# authenticated outbox worker.
+[functions.noop-placeholder]
+verify_jwt = true
+[functions.noop]
+verify_jwt = false
