@@ -13,6 +13,7 @@ import { adminClient, auditLog, logApi } from "../_shared/db.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { refundPaymentIntentBalance } from "../_shared/stripeRefundRuntime.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
+import { stagingAuthorizationReleaseAllowed } from "../_shared/checkoutCancellation.ts";
 
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
@@ -220,6 +221,146 @@ async function appendAdministrativeRefund(
   });
 }
 
+/**
+ * A legacy Checkout row can be missing its PaymentIntent linkage even though
+ * Stripe has created a TEST manual-capture authorization.  A prepared release
+ * reservation is not physical evidence by itself, but every other result is.
+ */
+async function assertNoPhysicalReleaseEvidence(db: DB, rentalSessionId: string) {
+  const { data: attempts, error } = await db.from("hardware_release_attempts")
+    .select("id,result,command_sent_at,reconciled_at,released_slot_nums,released_battery_ids")
+    .eq("rental_session_id", rentalSessionId);
+  if (error) throw error;
+
+  for (const attempt of attempts ?? []) {
+    const releasedSlots = Array.isArray(attempt.released_slot_nums) ? attempt.released_slot_nums : [];
+    const releasedBatteries = Array.isArray(attempt.released_battery_ids) ? attempt.released_battery_ids : [];
+    if (
+      attempt.result !== "prepared" || attempt.command_sent_at || attempt.reconciled_at ||
+      releasedSlots.length > 0 || releasedBatteries.length > 0
+    ) {
+      throw new OrchestratorError("PHYSICAL_RELEASE_EVIDENCE_PRESENT");
+    }
+  }
+}
+
+async function cancelVerifiedUnlinkedTestAuthorization(
+  db: DB,
+  stripe: Stripe,
+  session: Session,
+  payment: Record<string, any>,
+  uid: string,
+) {
+  const rentalSessionId = String(session.id);
+  const stationId = String(session.station_id ?? "");
+  const checkoutId = String(session.stripe_checkout_session_id ?? "").trim();
+  const expectedAmountCents = Number(session.deposit_amount_cents ?? 0);
+
+  if (
+    String(session.state ?? "") !== "expired" || String(session.failure_code ?? "") !== "SESSION_EXPIRED" ||
+    !checkoutId || !Number.isInteger(expectedAmountCents) || expectedAmountCents <= 0 ||
+    session.paid_at || session.ejected_at || session.returned_at || session.completed_at ||
+    session.apifox_trade_no || session.chargenow_order_id ||
+    String(payment.status ?? "pending") !== "pending" ||
+    Number(payment.amount_authorized_cents ?? 0) !== 0 ||
+    Number(payment.amount_captured_cents ?? 0) !== 0 ||
+    Number(payment.amount_refunded_cents ?? 0) !== 0
+  ) {
+    return null;
+  }
+
+  await assertNoPhysicalReleaseEvidence(db, rentalSessionId);
+  const checkout = await stripe.checkout.sessions.retrieve(checkoutId);
+  const rawIntent = checkout.payment_intent;
+  const paymentIntentId = typeof rawIntent === "string" ? rawIntent : rawIntent?.id;
+  if (
+    checkout.livemode || Number(checkout.amount_total ?? 0) !== expectedAmountCents ||
+    String(checkout.client_reference_id ?? "") !== rentalSessionId ||
+    typeof paymentIntentId !== "string" || !paymentIntentId
+  ) {
+    throw new OrchestratorError("UNLINKED_TEST_AUTHORIZATION_NOT_VERIFIED");
+  }
+
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const allowed = stagingAuthorizationReleaseAllowed({
+    requested: true,
+    confirmedNoHardwareRelease: true,
+    confirmedTestAuthorizationRelease: true,
+    recoveryReason: "operator_confirmed_no_hardware_release",
+    intent,
+    expectedRentalSessionId: rentalSessionId,
+    expectedStationId: stationId,
+    expectedAmountCents,
+  });
+  const alreadyCanceled = intent.status === "canceled" && intent.livemode === false
+    && Number(intent.amount) === expectedAmountCents && Number(intent.amount_received) === 0
+    && String(intent.metadata?.rental_session_id ?? "") === rentalSessionId
+    && String(intent.metadata?.station_id ?? "") === stationId;
+  if (!allowed && !alreadyCanceled) {
+    throw new OrchestratorError("UNLINKED_TEST_AUTHORIZATION_NOT_VERIFIED");
+  }
+
+  const canceledIntent = intent.status === "requires_capture"
+    ? await stripe.paymentIntents.cancel(intent.id, { cancellation_reason: "requested_by_customer" })
+    : intent;
+  if (canceledIntent.status !== "canceled") {
+    throw new OrchestratorError("PAYMENT_RECONCILIATION_REQUIRED");
+  }
+
+  // Stripe is now authoritative.  Every following database operation is
+  // replay-safe: a retry sees Stripe's canceled intent and completes it.
+  const now = new Date().toISOString();
+  const { error: paymentError } = await db.from("payments").update({
+    stripe_payment_intent_id: intent.id,
+    status: "canceled",
+    amount_authorized_cents: 0,
+    amount_captured_cents: 0,
+    amount_refunded_cents: 0,
+    refunded_at: null,
+  }).eq("id", payment.id);
+  if (paymentError) throw paymentError;
+
+  const { error: reservationError } = await db.from("station_slot_reservations")
+    .update({ state: "released", released_at: now, release_reason: "admin_test_authorization_cancelled", updated_at: now })
+    .eq("rental_session_id", rentalSessionId)
+    .eq("state", "reserved");
+  if (reservationError) throw reservationError;
+
+  const { error: railError } = await db.rpc("release_rental_payment_rail_claim", {
+    p_rental_id: rentalSessionId,
+    p_expected_rail: "qr_checkout",
+    p_reason: "staging_admin_authorization_released_no_ejection",
+  });
+  if (railError) throw railError;
+
+  const { error: sessionError } = await db.from("rental_sessions").update({
+    stripe_payment_intent_id: intent.id,
+    state: "expired",
+    cancelled_at: now,
+    checkout_url: null,
+    checkout_url_expires_at: null,
+    failure_code: "STAGING_ADMIN_AUTHORIZATION_RELEASED_NO_EJECTION",
+    failure_message: "Autorisation Stripe TEST annulée après vérification de l'absence de commande matérielle",
+    updated_at: now,
+  }).eq("id", rentalSessionId).eq("state", "expired").is("paid_at", null);
+  if (sessionError) throw sessionError;
+
+  await auditLog(db, {
+    actor: uid,
+    action: "stripe.test_authorization_released",
+    target: rentalSessionId,
+    data: {
+      station_id: stationId,
+      checkout_id: checkoutId,
+      payment_intent_id: intent.id,
+      amount_cents: expectedAmountCents,
+      prepared_release_without_command: true,
+      no_ejection: true,
+    },
+  });
+  return { paymentIntentId: intent.id, alreadyCanceled };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -395,15 +536,31 @@ Deno.serve(async (req) => {
         .eq("rental_session_id", rentalSessionId).order("created_at", { ascending: false })
         .limit(1).maybeSingle();
       if (paymentReadError) throw paymentReadError;
-      if (!payment?.stripe_payment_intent_id) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
+      if (!payment) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
 
       const stripe = new Stripe(stripeRuntime.secretKey, {
         apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient(),
       });
+      if (!payment.stripe_payment_intent_id && !session.stripe_payment_intent_id) {
+        const releasedAuthorization = await cancelVerifiedUnlinkedTestAuthorization(
+          db, stripe, session, payment, uid,
+        );
+        if (releasedAuthorization) {
+          return json({
+            ok: true,
+            authorization_canceled: true,
+            payment_intent_id: releasedAuthorization.paymentIntentId,
+            already_canceled: releasedAuthorization.alreadyCanceled,
+          });
+        }
+      }
+
+      const paymentIntentId = String(payment.stripe_payment_intent_id ?? session.stripe_payment_intent_id ?? "");
+      if (!paymentIntentId) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
       const providerIds: string[] = [];
       const initialRefund = await refundPaymentIntentBalance(
         stripe,
-        payment.stripe_payment_intent_id,
+        paymentIntentId,
         `admin_refund_${rentalSessionId}_initial`,
       );
       providerIds.push(...initialRefund.providerIds);

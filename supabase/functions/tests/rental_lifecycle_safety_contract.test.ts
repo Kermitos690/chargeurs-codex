@@ -69,3 +69,16 @@ Deno.test("administrative refunds derive replay state from Stripe", () => {
   assert(refundSource.includes("Replaying after a database failure"));
   assertEquals(refundSource.includes("refundedCents +="), false);
 });
+
+Deno.test("an unlinked Checkout authorization is cancelled only after no-command hardware verification", () => {
+  assert(adminSource.includes("cancelVerifiedUnlinkedTestAuthorization"));
+  assert(adminSource.includes("assertNoPhysicalReleaseEvidence"));
+  assert(adminSource.includes('attempt.result !== "prepared"'));
+  assert(adminSource.includes("attempt.command_sent_at"));
+  assert(adminSource.includes("releasedSlots.length > 0"));
+  assert(adminSource.includes("checkout.client_reference_id"));
+  assert(adminSource.includes("stagingAuthorizationReleaseAllowed"));
+  assert(adminSource.includes('p_expected_rail: "qr_checkout"'));
+  assert(adminSource.includes("staging_admin_authorization_released_no_ejection"));
+  assert(adminSource.includes("stripe.test_authorization_released"));
+});
