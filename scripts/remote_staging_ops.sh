@@ -203,7 +203,7 @@ case "$ACTION" in
     pkg="$(resolve_package "$dev")"
     echo "Restarting $pkg on $dev"
     "$ADB" -s "$dev" shell am force-stop "$pkg"
-    "$ADB" -s "$dev" shell am start -n "$pkg/.MainActivity"
+    "$ADB" -s "$dev" shell monkey -p "$pkg" 1 >/dev/null
     sleep 2
     "$ADB" -s "$dev" shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | head -20 || true
     ;;
