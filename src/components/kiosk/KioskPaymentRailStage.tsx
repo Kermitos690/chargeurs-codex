@@ -7,6 +7,7 @@ import {
   type PaymentRail,
   type PaymentRailState,
 } from "@/lib/chargeursPresentationModel";
+import { hasServerConfirmedTerminalCancellation } from "@/lib/kioskTerminalCancellation";
 
 type NativeTerminalBridge = {
   getPaymentReaderStatus?: () => string;
@@ -189,10 +190,14 @@ export function KioskPaymentRailStage(props: Props) {
 
   useEffect(() => {
     if (!terminalCancelRequested) return;
-    if (model.payment.rail === "NONE" && ["CANCELLED", "UNCLAIMED", "EXPIRED"].includes(model.payment.railState)) {
+    if (hasServerConfirmedTerminalCancellation(reader)) {
+      // Do not retain the local TERMINAL/ENGAGED placeholder once the native
+      // bridge has received the server's authoritative cancellation result.
+      setLocalRail("NONE");
+      setLocalRailState(reader.payment.railState === "EXPIRED" ? "EXPIRED" : "CANCELLED");
       onTerminalCancelled();
     }
-  }, [terminalCancelRequested, model.payment.rail, model.payment.railState, onTerminalCancelled]);
+  }, [terminalCancelRequested, reader, onTerminalCancelled]);
 
   const chooseQr = () => {
     if (railTapLockRef.current || !model.payment.canChooseQr) return;
