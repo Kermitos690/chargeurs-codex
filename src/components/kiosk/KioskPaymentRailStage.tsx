@@ -50,7 +50,7 @@ const COPY = {
     slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
     processing: "Paiement sans contact en cours",
     processingSub: "Suivez les instructions affichées sur le terminal. N’approchez pas votre carte si le montant ne correspond pas à la garantie annoncée.",
-    guarantee: (guarantee: string, cap: string) => `Garantie temporaire : ${guarantee}. Plafond de location : ${cap}. Seul le prix final est capturé au retour.`,
+    guarantee: (amount: string) => `Garantie temporaire et montant maximal de location : ${amount}. Seul le prix final est capturé au retour.`,
     cancel: "Annuler la demande",
     cancelling: "Annulation sécurisée…",
     retry: "Réessayer le lecteur",
@@ -70,7 +70,7 @@ const COPY = {
     slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
     processing: "Contactless payment in progress",
     processingSub: "Follow the instructions shown on the payment reader. Do not tap your card if the amount does not match the stated guarantee.",
-    guarantee: (guarantee: string, cap: string) => `Temporary guarantee: ${guarantee}. Rental cap: ${cap}. Only the final rental price is captured on return.`,
+    guarantee: (amount: string) => `Temporary guarantee and maximum rental amount: ${amount}. Only the final rental price is captured on return.`,
     cancel: "Cancel request",
     cancelling: "Cancelling safely…",
     retry: "Retry reader",
@@ -90,7 +90,7 @@ const COPY = {
     slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst die QR-Zahlung.",
     processing: "Kontaktlose Zahlung läuft",
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal. Halten Sie keine Karte vor, wenn der Betrag nicht der angekündigten Garantie entspricht.",
-    guarantee: (guarantee: string, cap: string) => `Vorübergehende Garantie: ${guarantee}. Mietobergrenze: ${cap}. Bei Rückgabe wird nur der tatsächliche Mietpreis eingezogen.`,
+    guarantee: (amount: string) => `Vorübergehende Garantie und maximaler Mietbetrag: ${amount}. Bei Rückgabe wird nur der tatsächliche Mietpreis eingezogen.`,
     cancel: "Anfrage abbrechen",
     cancelling: "Sichere Stornierung…",
     retry: "Leser erneut verbinden",
@@ -298,7 +298,7 @@ export function KioskPaymentRailStage(props: Props) {
       <CreditCard className="h-20 w-20 text-cyan-100" />
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.processing}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.processingSub}</p>
-      {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee, cap)}</p>}
+      {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
       <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
       {!model.payment.serverConfirmed && native?.cancelTerminalPayment && <Button variant="outline" onClick={cancelTerminal} disabled={terminalCancelRequested} className="h-14 rounded-full px-7 text-base font-bold">{terminalCancelRequested ? copy.cancelling : copy.cancel}</Button>}
       {(terminalCancelError || (terminalCancelRequested && model.journey.state === "RECOVERY")) && <p className="text-sm font-semibold text-warning">{terminalCancelError ?? "PAYMENT_RECONCILIATION_REQUIRED"}</p>}
@@ -343,7 +343,7 @@ export function KioskPaymentRailStage(props: Props) {
   return <div className="kiosk-payment-rail-stage flex w-full max-w-6xl flex-col items-center gap-7 px-5 text-center" data-payment-capability="TERMINAL_AND_QR" data-reader-state={readerState} data-native-payment-bridge="true">
     <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
     <h2 className="font-display text-5xl font-black tracking-tight sm:text-6xl">{copy.ready}</h2>
-    {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee, cap)}</p>}
+    {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
     <div className="grid w-full grid-cols-2 gap-6">
       <button type="button" onClick={chooseTerminal} disabled={!model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
       <button type="button" onClick={chooseQr} disabled={!model.payment.canChooseQr} className="min-h-64 rounded-[2.25rem] border border-white/15 bg-white/[.055] p-8 text-left disabled:opacity-50"><QrCode className="h-12 w-12 text-primary" /><div className="mt-12 font-display text-3xl font-black">{copy.qr}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.qrSub}</p></button>

@@ -58,7 +58,7 @@ describe("kiosk quote safety guard", () => {
       currency: "CHF",
       final_cents: 190,
       deposit_cents: 3_000,
-      total_cap_cents: 2_990,
+      total_cap_cents: 3_000,
       tiers: [
         { upper_minutes: 30, total_cents: 190 },
         { upper_minutes: 120, total_cents: 390 },

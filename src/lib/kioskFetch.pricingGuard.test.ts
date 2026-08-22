@@ -6,7 +6,7 @@ const currentGuestQuote = {
   tiered: true,
   currency: "CHF",
   deposit_cents: 3_000,
-  total_cap_cents: 2_990,
+  total_cap_cents: 3_000,
   final_cents: 190,
   tiers: [
     { upper_minutes: 30, total_cents: 190 },
@@ -17,7 +17,7 @@ const currentGuestQuote = {
 };
 
 describe("kiosk pricing safety guard", () => {
-  it("accepts the current DTA21269 guest quote with a separate CHF 30 deposit", () => {
+  it("accepts the canonical DTA21269 guest quote with a CHF 30 maximum", () => {
     expect(isSafeKioskQuote(currentGuestQuote)).toBe(true);
   });
 

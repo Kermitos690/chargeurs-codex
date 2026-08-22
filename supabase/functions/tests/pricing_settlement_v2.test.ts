@@ -27,11 +27,11 @@ function premiumSnapshot(): Record<string, unknown> {
     price_per_period_cents: 790,
     grace_minutes: 0,
     daily_cap_cents: 0,
-    total_cap_cents: 2990,
-    max_amount_cents: 2990,
+    total_cap_cents: 3000,
+    max_amount_cents: 3000,
     deposit_cents: 3000,
     late_fee_cents: 0,
-    unreturned_fee_cents: 620,
+    unreturned_fee_cents: 630,
     unreturned_after_minutes: 4320,
     min_amount_cents: 0,
     rounding: "none",
@@ -62,8 +62,8 @@ Deno.test("v2 Premium Guest matches the server tier boundaries", () => {
     [1440, 790],
     [1441, 1580],
     [2881, 2370],
-    [4321, 2990],
-    [5761, 2990],
+    [4321, 3000],
+    [5761, 3000],
   ] as const;
 
   for (const [minutes, expectedFinal] of vectors) {
@@ -82,24 +82,24 @@ Deno.test("v2 continuation periods are measured after the last tier", () => {
 Deno.test("v2 explicit not-returned fee is additive before caps", () => {
   const result = price(120, "not_returned");
   assertEquals(result.duration_cents, 390);
-  assertEquals(result.additional_fees_cents, 620);
-  assertEquals(result.subtotal_cents, 1010);
-  assertEquals(result.final_cents, 1010);
+  assertEquals(result.additional_fees_cents, 630);
+  assertEquals(result.subtotal_cents, 1020);
+  assertEquals(result.final_cents, 1020);
 });
 
 Deno.test("v2 active threshold starts exactly at configured minute", () => {
   const result = price(4320);
   assertEquals(result.duration_cents, 2370);
-  assertEquals(result.additional_fees_cents, 620);
-  assertEquals(result.subtotal_cents, 2990);
-  assertEquals(result.final_cents, 2990);
+  assertEquals(result.additional_fees_cents, 630);
+  assertEquals(result.subtotal_cents, 3000);
+  assertEquals(result.final_cents, 3000);
 });
 
 Deno.test("v2 active threshold remains capped by the immutable total cap", () => {
   const result = price(4321);
-  assertEquals(result.additional_fees_cents, 620);
-  assertEquals(result.final_cents, 2990);
-  assertEquals(result.caps_applied, [{ type: "total", value: 2990 }]);
+  assertEquals(result.additional_fees_cents, 630);
+  assertEquals(result.final_cents, 3000);
+  assertEquals(result.caps_applied, [{ type: "total", value: 3000 }]);
 });
 
 Deno.test("v2 non-tiered member pricing keeps daily cap semantics", () => {

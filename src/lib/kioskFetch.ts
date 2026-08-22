@@ -7,7 +7,7 @@ const PREMIUM_GUEST = {
   // The deposit is a separate authorization/guarantee. It is not part of the
   // rental total cap and must match the server-owned current pricing profile.
   depositCents: 3_000,
-  totalCapCents: 2_990,
+  totalCapCents: 3_000,
   tiers: [
     { upperMinutes: 30, totalCents: 190 },
     { upperMinutes: 120, totalCents: 390 },
