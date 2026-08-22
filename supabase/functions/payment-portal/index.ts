@@ -19,6 +19,8 @@ const money = (value: unknown, currency = "CHF") =>
 
 const langOf = (value: string | null) => value === "de" || value === "en" ? value : "fr";
 const APP_URL = (Deno.env.get("PUBLIC_APP_URL") ?? "https://chargeurs-ch-staging.vercel.app").replace(/\/$/, "");
+const canonicalProgressUrl = (id: string, code: string, lang: string) =>
+  `${APP_URL}/pay/${encodeURIComponent(id)}/progress?c=${encodeURIComponent(code)}&lang=${encodeURIComponent(lang)}`;
 
 const css = `
 :root{color-scheme:dark;--bg:#030817;--panel:rgba(10,24,57,.82);--line:rgba(255,255,255,.16);--muted:#b7c5dc;--cyan:#5ce9ff;--blue:#4588ff;--violet:#8b5cf6;--green:#74f28f}
@@ -86,6 +88,14 @@ Deno.serve(async (req) => {
 
   if (rentalError || !rental) {
     return htmlResponse(documentHtml("Session invalide", `<section class="glass hero"><div class="icon">!</div><h1>Session indisponible</h1><p>Vérifiez le QR affiché sur la borne.</p></section>`, lang), 404);
+  }
+
+  // Legacy QR Checkout URLs remain valid, but their status view now converges
+  // on the single React tracker used by current kiosk flows. That tracker
+  // provides live rental, return and settlement details rather than a second,
+  // reduced state presentation.
+  if (req.method === "GET" && view === "progress") {
+    return new Response(null, { status: 303, headers: { Location: canonicalProgressUrl(id, code, lang) } });
   }
 
   if (req.method === "POST") {
