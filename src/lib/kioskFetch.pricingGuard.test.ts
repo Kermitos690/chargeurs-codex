@@ -6,7 +6,7 @@ const currentGuestQuote = {
   tiered: true,
   currency: "CHF",
   deposit_cents: 3_000,
-  total_cap_cents: 2_990,
+  total_cap_cents: 3_000,
   final_cents: 190,
   tiers: [
     { upper_minutes: 30, total_cents: 190 },
