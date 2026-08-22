@@ -167,6 +167,26 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 acceptConnectedReader(connected);
                 return;
             }
+            if (canClearCachedCredentialsForRepair(
+                readerState,
+                paymentRunning.get(),
+                activeRentalSessionId,
+                connected != null
+            )) {
+                try {
+                    // This is deliberately an explicit retry-only repair, not
+                    // an automatic startup action. Stripe requires no reader
+                    // to be connected. It clears Terminal credentials only;
+                    // it does not clear kiosk storage, create a payment, or
+                    // release any hardware.
+                    Terminal.getInstance().clearCachedCredentials();
+                    prefetchedConnectionTokenSecret = null;
+                    Log.i(TAG, "Cleared Stripe Terminal cached credentials for explicit reader repair");
+                } catch (RuntimeException error) {
+                    setError("STRIPE_CREDENTIAL_REPAIR_FAILED");
+                    return;
+                }
+            }
 
             discoveryGeneration.incrementAndGet();
             cancelDiscoverySilently();
@@ -392,6 +412,18 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
 
     static boolean canStartUsbDiscovery(boolean discoveryRunning, boolean connectionRunning, boolean paymentRunning) {
         return !discoveryRunning && !connectionRunning && !paymentRunning;
+    }
+
+    static boolean canClearCachedCredentialsForRepair(
+        String readerState,
+        boolean paymentRunning,
+        String activeRentalSessionId,
+        boolean readerConnected
+    ) {
+        return "ERROR".equals(readerState)
+            && !paymentRunning
+            && (activeRentalSessionId == null || activeRentalSessionId.isBlank())
+            && !readerConnected;
     }
 
     static boolean shouldApplyPaymentState(

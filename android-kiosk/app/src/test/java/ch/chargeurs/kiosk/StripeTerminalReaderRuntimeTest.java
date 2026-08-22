@@ -47,4 +47,13 @@ public final class StripeTerminalReaderRuntimeTest {
             new StripeTerminalBackendClient.PaymentStateResult("NONE", "CANCELLED", true, false, "")
         ));
     }
+
+    @Test
+    public void onlyClearsStripeCredentialsDuringAnExplicitSafeReaderRepair() {
+        assertTrue(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", false, null, false));
+        assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("READY", false, null, false));
+        assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", true, null, false));
+        assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", false, "rental-a", false));
+        assertFalse(StripeTerminalReaderRuntime.canClearCachedCredentialsForRepair("ERROR", false, null, true));
+    }
 }
