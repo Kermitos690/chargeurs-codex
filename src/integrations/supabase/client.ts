@@ -14,19 +14,19 @@ const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY;
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
+const isAccountSurface = () => window.location.pathname === '/compte' || window.location.pathname.startsWith('/compte/');
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+// Keep customer Chargeurs+ authentication isolated from back-office/admin auth.
+// Both clients use the same Supabase project and RLS, but persist independent
+// sessions so an admin can remain signed in while testing/using Chargeurs+.
+const adminSupabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-    // Reset-password links are handled explicitly by the short-lived recovery
-    // client below. Prevent the normal PKCE client from trying to exchange an
-    // implicit recovery token before that page can validate and clear it.
-    detectSessionInUrl: !isPasswordRecoveryRoute,
+    // Account routes own their auth callback through the dedicated customer
+    // client below; the admin/default client must not consume those tokens.
+    detectSessionInUrl: !isPasswordRecoveryRoute && !isAccountSurface(),
     flowType: 'pkce',
   },
   global: {
@@ -35,6 +35,30 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     fetch: kioskAwareFetch,
   },
 });
+
+export const customerSupabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: localStorage,
+    storageKey: 'chargeurs-plus-auth',
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: !isPasswordRecoveryRoute && isAccountSurface(),
+    flowType: 'pkce',
+  },
+  global: { fetch: kioskAwareFetch },
+});
+
+// Existing application code imports `supabase`. Route that facade dynamically
+// so /compte/* always uses the isolated Chargeurs+ session while kiosk/admin/
+// public surfaces retain the long-standing default session. The proxy keeps
+// route changes inside the SPA safe without forcing a page reload.
+export const supabase = new Proxy(adminSupabase, {
+  get(_target, property) {
+    const client = isAccountSurface() ? customerSupabase : adminSupabase;
+    const value = Reflect.get(client, property, client);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+}) as typeof adminSupabase;
 
 /**
  * Password-recovery emails must work when opened from Gmail, Safari or a
