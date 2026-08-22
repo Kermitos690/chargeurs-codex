@@ -374,7 +374,7 @@
         "npm:recharts@^3.9.2",
         "npm:sonner@^1.7.4",
         "npm:tailwind-merge@^2.6.0",
-        "npm:tailwindcss-animate@^1.0.7",
+        "npm:tailwindcss-animate@1",
         "npm:tailwindcss@^3.4.17",
         "npm:typescript-eslint@^8.38.0",
         "npm:typescript@^5.8.3",
