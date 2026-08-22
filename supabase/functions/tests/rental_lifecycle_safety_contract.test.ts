@@ -82,3 +82,15 @@ Deno.test("an unlinked Checkout authorization is cancelled only after no-command
   assert(adminSource.includes("staging_admin_authorization_released_no_ejection"));
   assert(adminSource.includes("stripe.test_authorization_released"));
 });
+
+Deno.test("a declined Terminal TEST attempt is canceled only after Stripe and physical checks", () => {
+  assert(adminSource.includes("cancelVerifiedFailedTerminalTestAttempt"));
+  assert(adminSource.includes('String(session.state ?? "") !== "payment_failed"'));
+  assert(adminSource.includes('String(attempt?.status ?? "") !== "requires_payment_method"'));
+  assert(adminSource.includes("intent.status === \"requires_payment_method\""));
+  assert(adminSource.includes("Number(intent.amount_received) !== 0"));
+  assert(adminSource.includes('String(metadata.payment_rail ?? "") !== "stripe_terminal"'));
+  assert(adminSource.includes('p_expected_rail: "stripe_terminal"'));
+  assert(adminSource.includes("stripe.terminal.test_attempt_cancelled"));
+  assert(adminSource.includes("no_ejection: true"));
+});

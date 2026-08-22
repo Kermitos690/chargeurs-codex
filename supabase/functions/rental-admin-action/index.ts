@@ -361,6 +361,103 @@ async function cancelVerifiedUnlinkedTestAuthorization(
   return { paymentIntentId: intent.id, alreadyCanceled };
 }
 
+/**
+ * Terminal TEST can reject a real card while leaving its local payment rail
+ * engaged. This is not a refund: Stripe has received zero funds. Reconcile it
+ * only when Stripe, the server-side attempt and physical evidence all agree.
+ */
+async function cancelVerifiedFailedTerminalTestAttempt(
+  db: DB,
+  stripe: Stripe,
+  session: Session,
+  uid: string,
+) {
+  const rentalSessionId = String(session.id);
+  const stationId = String(session.station_id ?? "");
+  if (
+    String(session.state ?? "") !== "payment_failed" || !stationId ||
+    session.paid_at || session.ejected_at || session.returned_at || session.completed_at ||
+    session.apifox_trade_no || session.chargenow_order_id
+  ) return null;
+
+  const { data: attempt, error: attemptError } = await db.from("stripe_terminal_payment_attempts")
+    .select("stripe_payment_intent_id,status,amount_cents,currency,reconciliation_required")
+    .eq("rental_session_id", rentalSessionId).maybeSingle();
+  if (attemptError) throw attemptError;
+  const expectedAmountCents = Number(attempt?.amount_cents ?? 0);
+  const paymentIntentId = String(attempt?.stripe_payment_intent_id ?? "");
+  const expectedCurrency = String(attempt?.currency ?? "").toLowerCase();
+  if (
+    !paymentIntentId || paymentIntentId !== String(session.stripe_payment_intent_id ?? "") ||
+    String(attempt?.status ?? "") !== "requires_payment_method" ||
+    attempt?.reconciliation_required || !Number.isInteger(expectedAmountCents) || expectedAmountCents <= 0 || !expectedCurrency
+  ) return null;
+
+  await assertNoPhysicalReleaseEvidence(db, rentalSessionId);
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const metadata = intent.metadata ?? {};
+  const alreadyCanceled = intent.status === "canceled";
+  const safelyCancelable = intent.status === "requires_payment_method";
+  if (
+    intent.livemode || (!safelyCancelable && !alreadyCanceled) ||
+    Number(intent.amount) !== expectedAmountCents || Number(intent.amount_received) !== 0 ||
+    String(intent.currency ?? "").toLowerCase() !== expectedCurrency ||
+    String(metadata.rental_session_id ?? "") !== rentalSessionId ||
+    String(metadata.station_id ?? "") !== stationId ||
+    String(metadata.payment_rail ?? "") !== "stripe_terminal"
+  ) throw new OrchestratorError("FAILED_TERMINAL_TEST_ATTEMPT_NOT_VERIFIED");
+
+  const canceledIntent = safelyCancelable
+    ? await stripe.paymentIntents.cancel(intent.id, { cancellation_reason: "requested_by_customer" })
+    : intent;
+  if (canceledIntent.status !== "canceled") {
+    throw new OrchestratorError("PAYMENT_RECONCILIATION_REQUIRED");
+  }
+
+  // The cancel is now Stripe-confirmed. Replays only reconcile this same
+  // canceled intent; no release request is issued from this repair path.
+  const now = new Date().toISOString();
+  const { error: updateAttemptError } = await db.from("stripe_terminal_payment_attempts").update({
+    status: "canceled",
+    canceled_at: now,
+    reconciliation_required: false,
+    last_reconciled_at: now,
+    last_error: "TEST_CARD_DECLINED_AND_CANCELED",
+    updated_at: now,
+  }).eq("rental_session_id", rentalSessionId);
+  if (updateAttemptError) throw updateAttemptError;
+
+  const { error: railError } = await db.rpc("release_rental_payment_rail_claim", {
+    p_rental_id: rentalSessionId,
+    p_expected_rail: "stripe_terminal",
+    p_reason: "stripe_test_card_declined_then_canceled",
+  });
+  if (railError) throw railError;
+
+  const { error: sessionError } = await db.from("rental_sessions").update({
+    state: "payment_failed",
+    failure_code: "TERMINAL_TEST_ATTEMPT_CANCELLED",
+    failure_message: "Carte refusée en environnement Stripe TEST ; tentative Terminal annulée sans débit ni commande matérielle",
+    updated_at: now,
+  }).eq("id", rentalSessionId).eq("state", "payment_failed").is("paid_at", null);
+  if (sessionError) throw sessionError;
+
+  await auditLog(db, {
+    actor: uid,
+    action: "stripe.terminal.test_attempt_cancelled",
+    target: rentalSessionId,
+    data: {
+      station_id: stationId,
+      payment_intent_id: intent.id,
+      amount_cents: expectedAmountCents,
+      no_amount_received: true,
+      prepared_release_without_command: true,
+      no_ejection: true,
+    },
+  });
+  return { paymentIntentId: intent.id, alreadyCanceled };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -536,11 +633,24 @@ Deno.serve(async (req) => {
         .eq("rental_session_id", rentalSessionId).order("created_at", { ascending: false })
         .limit(1).maybeSingle();
       if (paymentReadError) throw paymentReadError;
-      if (!payment) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
 
       const stripe = new Stripe(stripeRuntime.secretKey, {
         apiVersion: "2024-12-18.acacia", httpClient: Stripe.createFetchHttpClient(),
       });
+      const cancelledTerminalAttempt = await cancelVerifiedFailedTerminalTestAttempt(
+        db, stripe, session, uid,
+      );
+      if (cancelledTerminalAttempt) {
+        return json({
+          ok: true,
+          terminal_attempt_canceled: true,
+          payment_intent_id: cancelledTerminalAttempt.paymentIntentId,
+          already_canceled: cancelledTerminalAttempt.alreadyCanceled,
+        });
+      }
+
+      if (!payment) return json({ ok: false, error: "NO_PAYMENT_INTENT" }, 409);
+
       if (!payment.stripe_payment_intent_id && !session.stripe_payment_intent_id) {
         const releasedAuthorization = await cancelVerifiedUnlinkedTestAuthorization(
           db, stripe, session, payment, uid,
