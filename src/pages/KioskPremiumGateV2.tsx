@@ -27,6 +27,7 @@ import {
   KIOSK_JOURNEY_STORAGE_KEY,
   KIOSK_PAIRING_STORAGE_KEY,
 } from "@/lib/kioskEdgeProxy";
+import { rentalProgressUrl } from "@/lib/rentalProgressLink";
 import "./kiosk-premium-v2.css";
 
 type PricingTier = {
@@ -105,6 +106,14 @@ type ResumeResponse = {
   active?: boolean;
   state?: string | null;
   kioskActionRequired?: boolean;
+  session?: ResumeSession | null;
+};
+
+type ResumeSession = {
+  id: string;
+  publicCode: string | null;
+  state: string;
+  selectedSlotNum: number | null;
 };
 
 type Stage = "hero" | "guest-pricing" | "member-pricing" | "member" | "connected" | "guest";
@@ -234,7 +243,7 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
   },
 };
 
-const KIOSK_RESUMABLE_STATES = new Set(["created", "checkout_created", "payment_pending", "payment_succeeded", "ejecting"]);
+const KIOSK_RESUMABLE_STATES = new Set(["created", "checkout_created", "payment_pending", "payment_succeeded", "ejecting", "ejected", "battery_taken"]);
 const money = (cents: number | null | undefined, currency = "CHF") => cents == null || !Number.isFinite(Number(cents)) ? "—" : `${(Number(cents) / 100).toFixed(2)} ${currency}`;
 
 function durationLabel(minutes: number, lang: "fr" | "en" | "de") {
@@ -304,6 +313,7 @@ export default function KioskPremiumGateV2() {
   const [refreshing, setRefreshing] = useState(false);
   const [seconds, setSeconds] = useState(35);
   const [journeyProtected, setJourneyProtected] = useState(false);
+  const [resumeSession, setResumeSession] = useState<ResumeSession | null>(null);
 
   const memberPricingReady = Boolean(options?.memberAvailable && hasUsableMemberPricing(options?.member));
   const memberOfferReady = Boolean(options?.membershipPlan || options?.memberAvailable);
@@ -362,7 +372,9 @@ export default function KioskPremiumGateV2() {
       if (!token || !stationId) { setChecking(false); return; }
       const { data } = await invokeKioskEdgeProxy<ResumeResponse>("/api/kiosk/resume-state", { stationId }, { "X-Kiosk-Token": token });
       if (cancelled) return;
-      const state = data?.state ?? null;
+      // kiosk-resume-state returns the lifecycle state inside `session`. The
+      // legacy top-level field is kept only for backwards compatibility.
+      const state = data?.session?.state ?? data?.state ?? null;
       const mustResume = Boolean(data?.ok && data.active && (data.kioskActionRequired === true || (state && KIOSK_RESUMABLE_STATES.has(state))));
       if (mustResume) {
         try {
@@ -370,10 +382,12 @@ export default function KioskPremiumGateV2() {
           if (journey === "member") document.documentElement.dataset.kioskJourney = "client";
           if (journey === "guest") document.documentElement.dataset.kioskJourney = "express";
         } catch { /* noop */ }
+        setResumeSession(data?.session ?? null);
         setStage("guest");
         setChecking(false);
         return;
       }
+      setResumeSession(null);
       try {
         sessionStorage.removeItem(KIOSK_JOURNEY_STORAGE_KEY);
         sessionStorage.removeItem(KIOSK_PAIRING_STORAGE_KEY);
@@ -385,6 +399,32 @@ export default function KioskPremiumGateV2() {
     void boot();
     return () => { cancelled = true; };
   }, [loadOptions, stationId]);
+
+  useEffect(() => {
+    if (!resumeSession || !stationId) return;
+    let cancelled = false;
+    const poll = async () => {
+      const token = readKioskToken();
+      if (!token) return;
+      if (resumeSession.state === "ejecting" && resumeSession.publicCode) {
+        await invokeKioskEdgeProxy(
+          "/api/kiosk/reconcile-pending-ejection",
+          { stationId, rentalSessionId: resumeSession.id, publicCode: resumeSession.publicCode },
+          { "X-Kiosk-Token": token },
+        );
+      }
+      const { data } = await invokeKioskEdgeProxy<ResumeResponse>(
+        "/api/kiosk/resume-state",
+        { stationId },
+        { "X-Kiosk-Token": token },
+      );
+      if (cancelled) return;
+      setResumeSession(data?.ok && data.active && data.session ? data.session : null);
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 2500);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [resumeSession, stationId]);
 
   useEffect(() => {
     try {
@@ -537,7 +577,42 @@ export default function KioskPremiumGateV2() {
     return url.toString();
   }, [stationId]);
 
+  const resumeProgressUrl = resumeSession?.publicCode
+    ? rentalProgressUrl(window.location.origin, resumeSession.id, resumeSession.publicCode, lang)
+    : null;
+  const resumeReleased = resumeSession && ["ejected", "active_rental", "battery_taken"].includes(resumeSession.state);
+  const resumeTitle = resumeReleased
+    ? (lang === "fr" ? "Votre batterie est prête" : lang === "de" ? "Ihre Powerbank ist bereit" : "Your powerbank is ready")
+    : (lang === "fr" ? "Vérification de la sortie en cours" : lang === "de" ? "Ausgabe wird überprüft" : "Release verification in progress");
+  const resumeBody = resumeReleased
+    ? (lang === "fr" ? "Prenez votre batterie. Scannez le QR code pour suivre votre location sur votre téléphone." : lang === "de" ? "Nehmen Sie Ihre Powerbank. Scannen Sie den QR-Code, um Ihre Miete auf dem Telefon zu verfolgen." : "Take your powerbank. Scan the QR code to follow your rental on your phone.")
+    : (lang === "fr" ? "Votre paiement est sécurisé. La borne vérifie la sortie physique avant d’activer la location." : lang === "de" ? "Ihre Zahlung ist gesichert. Die Station prüft die physische Ausgabe vor der Aktivierung." : "Your payment is secure. The kiosk verifies the physical release before activating the rental.");
+
   if (checking) return <div className="ck2-shell ck2-loading"><Loader2 className="ck2-spin" /></div>;
+
+  if (resumeSession) {
+    return (
+      <div className="ck2-shell ck2-resume">
+        <header className="ck2-topbar"><BrandLogo size="md" /><div className="ck2-language"><LanguageSwitcher /></div></header>
+        <main className="ck2-resume-main">
+          <section className="ck2-resume-card" aria-live="polite">
+            {resumeReleased ? <CheckCircle2 className="ck2-resume-icon ck2-resume-icon--ready" /> : <Loader2 className="ck2-resume-icon ck2-spin" />}
+            <p className="ck2-resume-kicker">{lang === "fr" ? "LOCATION EN COURS" : lang === "de" ? "MIETE LÄUFT" : "RENTAL IN PROGRESS"}</p>
+            <h1>{resumeTitle}</h1>
+            <p>{resumeBody}</p>
+            {resumeSession.selectedSlotNum != null && <strong className="ck2-resume-slot">{lang === "fr" ? "Slot" : "Slot"} {resumeSession.selectedSlotNum}</strong>}
+            {resumeProgressUrl && (
+              <div className="ck2-resume-mobile">
+                <div className="ck2-resume-qr"><QRCodeSVG value={resumeProgressUrl} size={150} level="M" bgColor="#ffffff" fgColor="#06111f" marginSize={1} /></div>
+                <span>{lang === "fr" ? "Suivi et reçu sur votre téléphone" : lang === "de" ? "Status und Beleg auf Ihrem Telefon" : "Status and receipt on your phone"}</span>
+              </div>
+            )}
+            {resumeReleased && <button type="button" className="ck2-resume-home" onClick={() => { setResumeSession(null); returnHome(); }}>{lang === "fr" ? "Retour à l’accueil" : lang === "de" ? "Zurück zur Startseite" : "Back to home"}</button>}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   if (stage === "guest") return <><Kiosk />{journeyControl}</>;
 

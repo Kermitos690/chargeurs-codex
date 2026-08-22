@@ -40,6 +40,48 @@
   box-shadow: inset 0 0 90px rgba(0, 0, 0, .62);
 }
 
+.ck2-resume-main {
+  position: relative;
+  z-index: 2;
+  height: calc(100dvh - clamp(64px, 8.4vh, 84px));
+  display: grid;
+  place-items: center;
+  padding: 3vh 5vw;
+}
+
+.ck2-resume-card {
+  width: min(760px, 92vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: clamp(28px, 4vh, 46px) clamp(28px, 5vw, 58px);
+  border: 1px solid rgba(104, 200, 255, .28);
+  border-radius: 30px;
+  background: linear-gradient(145deg, rgba(8, 35, 88, .88), rgba(6, 13, 29, .94));
+  box-shadow: 0 26px 72px rgba(0, 0, 0, .36), inset 0 1px rgba(255,255,255,.08);
+}
+
+.ck2-resume-icon { width: 54px; height: 54px; color: #64d8ff; }
+.ck2-resume-icon--ready { color: #93ff57; }
+.ck2-resume-kicker { margin: 0; color: #85dfff; font-size: 13px; font-weight: 850; letter-spacing: .14em; }
+.ck2-resume-card h1 { margin: 0; font-size: clamp(30px, 4vw, 52px); line-height: 1.05; }
+.ck2-resume-card > p:not(.ck2-resume-kicker) { max-width: 620px; margin: 0; color: rgba(235,246,255,.82); font-size: clamp(17px, 1.8vw, 22px); line-height: 1.38; }
+.ck2-resume-slot { padding: 10px 24px; border-radius: 999px; background: rgba(67, 179, 255, .14); color: #b7edff; font-size: clamp(22px, 2.7vw, 32px); }
+.ck2-resume-mobile { display: flex; align-items: center; gap: 18px; margin-top: 4px; color: #dff7ff; font-size: 16px; font-weight: 750; }
+.ck2-resume-qr { display: grid; place-items: center; padding: 9px; border-radius: 15px; background: #fff; }
+.ck2-resume-home { min-height: 48px; padding: 0 24px; border: 1px solid rgba(148, 194, 255, .38); border-radius: 999px; background: rgba(24, 92, 220, .62); color: #fff; font-weight: 800; cursor: pointer; }
+
+@media (max-height: 640px) {
+  .ck2-resume-main { padding: 1vh 4vw; }
+  .ck2-resume-card { gap: 9px; padding: 20px 34px; }
+  .ck2-resume-icon { width: 42px; height: 42px; }
+  .ck2-resume-mobile { font-size: 14px; }
+  .ck2-resume-qr { padding: 6px; }
+  .ck2-resume-qr svg { width: 112px; height: 112px; }
+}
+
 .ck2-ambient {
   position: absolute;
   border-radius: 999px;
