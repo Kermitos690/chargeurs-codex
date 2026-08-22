@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
     const db = admin();
     const { data: session, error: sessionError } = await db.from("rental_sessions")
-      .select("id,station_id,kiosk_device_id,state,paid_at,ejected_at,returned_at,completed_at,stripe_checkout_session_id,public_session_code,deposit_amount_cents,stripe_payment_intent_id,apifox_trade_no,chargenow_order_id,chargenow_status")
+      .select("id,station_id,kiosk_device_id,state,paid_at,ejected_at,returned_at,completed_at,stripe_checkout_session_id,public_session_code,deposit_amount_cents,stripe_payment_intent_id,apifox_trade_no,chargenow_order_id,chargenow_status,failure_code")
       .eq("id", rentalSessionId)
       .maybeSingle();
     if (sessionError) throw sessionError;
@@ -74,7 +74,10 @@ Deno.serve(async (req) => {
       return reply({ ok: false, error: "KIOSK_DEVICE_MISMATCH" }, 403);
     }
 
-    if (!["created", "checkout_created"].includes(String(session.state ?? ""))
+    const normalCancellationState = ["created", "checkout_created"].includes(String(session.state ?? ""));
+    const timedOutUnpaidSession = String(session.state ?? "") === "expired"
+      && String(session.failure_code ?? "") === "SESSION_EXPIRED";
+    if ((!normalCancellationState && !(operatorAuthorizationRelease && timedOutUnpaidSession))
       || session.paid_at || session.ejected_at || session.returned_at || session.completed_at) {
       return reply({ ok: false, error: "CHECKOUT_CANCELLATION_NOT_ALLOWED" }, 409);
     }
@@ -248,7 +251,7 @@ Deno.serve(async (req) => {
       })
       .eq("id", rentalSessionId)
       .is("paid_at", null)
-      .in("state", ["created", "checkout_created"])
+      .in("state", recoveredAuthorizedTestHold ? ["created", "checkout_created", "expired"] : ["created", "checkout_created"])
       .select("id")
       .maybeSingle();
     if (cancelError) throw cancelError;

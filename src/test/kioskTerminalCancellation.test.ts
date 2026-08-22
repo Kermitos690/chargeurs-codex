@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { hasServerConfirmedTerminalCancellation } from "@/lib/kioskTerminalCancellation";
+import {
+  hasServerConfirmedTerminalCancellation,
+  shouldLeaveTerminalPaymentStage,
+} from "@/lib/kioskTerminalCancellation";
 
 describe("terminal cancellation presentation guard", () => {
   it("returns to the payment choice only after the server has released the terminal rail", () => {
@@ -26,5 +29,15 @@ describe("terminal cancellation presentation guard", () => {
       capability: "TERMINAL_AND_QR",
       payment: { rail: "NONE", railState: "CANCELLED", serverConfirmed: false, recoveryRequired: true },
     })).toBe(false);
+  });
+
+  it("handles a WisePad STOP without requiring a kiosk-button click", () => {
+    const reader = {
+      readerState: "READY" as const,
+      capability: "TERMINAL_AND_QR" as const,
+      payment: { rail: "NONE" as const, railState: "CANCELLED" as const, serverConfirmed: false, recoveryRequired: false },
+    };
+    expect(shouldLeaveTerminalPaymentStage(reader, false)).toBe(true);
+    expect(shouldLeaveTerminalPaymentStage(reader, true)).toBe(false);
   });
 });

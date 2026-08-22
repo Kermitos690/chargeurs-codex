@@ -12,3 +12,13 @@ export function hasServerConfirmedTerminalCancellation(reader: NativeReaderProje
     && payment.serverConfirmed !== true
     && payment.recoveryRequired !== true;
 }
+
+// A cancellation may originate either from the kiosk button or from the
+// WisePad STOP control. Both must leave the payment screen only after the
+// native bridge reports the same server-confirmed terminal-rail release.
+export function shouldLeaveTerminalPaymentStage(
+  reader: NativeReaderProjection | null,
+  cancellationAlreadyHandled: boolean,
+): boolean {
+  return !cancellationAlreadyHandled && hasServerConfirmedTerminalCancellation(reader);
+}
