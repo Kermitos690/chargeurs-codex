@@ -74,6 +74,25 @@ final class StripeTerminalBackendClient {
         );
     }
 
+    /**
+     * Cancels an unconfirmed Terminal intent on the server. The server re-reads
+     * Stripe first and refuses rather than guessing when a payment side effect
+     * might already exist.
+     */
+    PaymentStateResult cancelPaymentIntent(String rentalSessionId) throws IOException {
+        JSONObject response = post(body(
+            "action", "cancel_payment_intent",
+            "rentalSessionId", rentalSessionId
+        ));
+        return new PaymentStateResult(
+            response.optString("rail", "NONE"),
+            response.optString("railState", "UNCLAIMED"),
+            response.optBoolean("serverConfirmed", false),
+            response.optBoolean("recoveryRequired", false),
+            response.optString("correlationId", "")
+        );
+    }
+
     private static JSONObject body(Object... pairs) throws IOException {
         if (pairs.length % 2 != 0) throw new IOException("TERMINAL_BACKEND_REQUEST_INVALID");
         JSONObject body = new JSONObject();

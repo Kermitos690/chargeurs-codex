@@ -92,6 +92,12 @@ public final class NativeBridge {
         return terminalRuntime.startTerminalPayment(rentalSessionId).toString();
     }
 
+    /** Stops local card collection and requests safe server-side cancellation. */
+    @JavascriptInterface
+    public String cancelTerminalPayment() {
+        return terminalRuntime.cancelTerminalPayment().toString();
+    }
+
     /**
      * Metadata-only provider compatibility state for the hidden diagnostics
      * view. It cannot see or take over another app's network/serial session.

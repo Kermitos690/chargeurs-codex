@@ -66,6 +66,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
+    private final AtomicBoolean paymentCancellationRunning = new AtomicBoolean(false);
     private final AtomicBoolean bindingBootstrapRunning = new AtomicBoolean(false);
     private final AtomicInteger discoveryGeneration = new AtomicInteger(0);
 
@@ -251,6 +252,65 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             }
         });
         return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CLAIMING");
+    }
+
+    /**
+     * Customer-requested cancellation before a confirmed payment. We first
+     * cancel local collection so the reader cannot still accept a card while
+     * the server is cancelling the PaymentIntent. The backend then checks the
+     * authoritative Stripe status; any raced/confirmed side effect remains
+     * fail-closed and is surfaced as recovery rather than retried.
+     */
+    JSONObject cancelTerminalPayment() {
+        String rental = activeRentalSessionId;
+        if (rental == null || rental.isBlank()) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_PAYMENT_NOT_ACTIVE");
+        }
+        if (!paymentCancellationRunning.compareAndSet(false, true)) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_CANCEL_IN_PROGRESS");
+        }
+        localPaymentState = "CANCELLING";
+        paymentRail = "TERMINAL";
+        paymentRailState = "CANCELLING";
+        Cancelable collection = paymentCancelable;
+        if (collection != null && !collection.isCompleted()) {
+            collection.cancel(new Callback() {
+                @Override public void onSuccess() { cancelTerminalIntentOnServer(rental); }
+                @Override public void onFailure(TerminalException error) {
+                    paymentCancellationRunning.set(false);
+                    recoveryRequired = true;
+                    paymentRailState = "RECOVERY_REQUIRED";
+                    setError(safeTerminalCode(error));
+                    refreshPaymentState(true);
+                }
+            });
+        } else {
+            cancelTerminalIntentOnServer(rental);
+        }
+        return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CANCELLING");
+    }
+
+    private void cancelTerminalIntentOnServer(String rentalSessionId) {
+        io.execute(() -> {
+            try {
+                StripeTerminalBackendClient.PaymentStateResult state = backend.cancelPaymentIntent(rentalSessionId);
+                paymentRail = state.rail();
+                paymentRailState = state.railState();
+                serverConfirmed = state.serverConfirmed();
+                recoveryRequired = state.recoveryRequired();
+                correlationId = blankToNull(state.correlationId());
+                localPaymentState = "CANCELLED";
+                activePaymentIntentId = null;
+                paymentRunning.set(false);
+                readerState = usbPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
+            } catch (IOException error) {
+                recoveryRequired = true;
+                paymentRailState = "RECOVERY_REQUIRED";
+                safeErrorCode = StripeTerminalBackendClient.safeCode(error.getMessage());
+            } finally {
+                paymentCancellationRunning.set(false);
+            }
+        });
     }
 
     void refreshPaymentState(boolean reconcile) {

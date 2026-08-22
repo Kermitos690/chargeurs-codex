@@ -40,7 +40,7 @@ type Quote = {
   amount: number; currency: string; profile_name: string;
   final_cents: number; profile_id: string; source: string; error?: string;
   deposit_cents: number; period_minutes: number; price_per_period_cents: number;
-  daily_cap_cents: number; unreturned_fee_cents: number;
+  daily_cap_cents: number; total_cap_cents: number; unreturned_fee_cents: number;
   tiered?: boolean; tiers?: Array<{ upper_minutes: number; total_cents: number }>;
 };
 type KioskSlot = {
@@ -178,6 +178,7 @@ export default function Kiosk() {
       period_minutes: Number(snap.period_minutes),
       price_per_period_cents: Number(snap.price_per_period_cents ?? snap.duration_cents),
       daily_cap_cents: Number(snap.daily_cap_cents),
+      total_cap_cents: Number(snap.total_cap_cents ?? snap.max_amount_cents),
       unreturned_fee_cents: Number(snap.unreturned_fee_cents),
       tiered: Boolean(snap.tiered),
       tiers: Array.isArray(snap.tiers) ? snap.tiers.map((tier) => ({
@@ -697,9 +698,12 @@ export default function Kiosk() {
                 selectedSlot={slotNum ?? undefined}
                 pricingReady={Boolean(quote)}
                 pricingCurrency={quote?.currency}
+                pricingDepositCents={quote?.deposit_cents}
+                pricingTotalCapCents={quote?.total_cap_cents}
                 onChooseQr={() => void requestCheckout(sessionId)}
                 onTerminalEngaged={() => setPhase("terminal")}
                 onServerConfirmed={() => setPhase("waitpay")}
+                onTerminalCancelled={() => setPhase("payment_ready")}
               />
             </motion.div>
           )}
@@ -714,10 +718,13 @@ export default function Kiosk() {
                 selectedSlot={slotNum ?? undefined}
                 pricingReady={Boolean(quote)}
                 pricingCurrency={quote?.currency}
+                pricingDepositCents={quote?.deposit_cents}
+                pricingTotalCapCents={quote?.total_cap_cents}
                 inProgress
                 onChooseQr={() => {}}
                 onTerminalEngaged={() => {}}
                 onServerConfirmed={() => setPhase("waitpay")}
+                onTerminalCancelled={() => setPhase("payment_ready")}
               />
             </motion.div>
           )}
