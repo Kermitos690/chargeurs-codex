@@ -59,7 +59,7 @@ type Observation = { source: SourceName; timestamp: string; raw: RecordValue };
 const DEFAULT_MIN_RENTAL_CHARGE_PERCENT = 20;
 const SOC_CONFLICT_TOLERANCE_PERCENT = 5;
 
-function minimumRentalChargePercent(): number {
+export function minimumRentalChargePercent(): number {
   const configured = Number(
     Deno.env.get("MIN_RENTAL_BATTERY_PERCENT") ?? DEFAULT_MIN_RENTAL_CHARGE_PERCENT,
   );

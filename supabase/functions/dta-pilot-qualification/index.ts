@@ -12,6 +12,7 @@ import {
   type ApiResult,
 } from "../_shared/chargenow.ts";
 import { parseChargeNowCabinetStatus, type ParsedCabinetStatus } from "../_shared/chargenowStatus.ts";
+import { minimumRentalChargePercent } from "../_shared/cabinetSnapshot.ts";
 import {
   choosePilotBattery,
   DTA_PILOT_STATION_ID,
@@ -344,24 +345,20 @@ Deno.serve(async (req) => {
       await persistPilotStatus(db, provider.parsed);
 
       const requestedSlot = body.slotNum == null ? null : Number(body.slotNum);
-      if (requestedSlot != null && (!Number.isInteger(requestedSlot) || requestedSlot < 1 || requestedSlot > 128)) {
+      if (requestedSlot == null || !Number.isInteger(requestedSlot) || requestedSlot < 1 || requestedSlot > 128) {
         return json({ ok: false, error: "VALID_SLOT_REQUIRED" }, 400);
       }
 
-      const { data: alreadyCycledRows, error: cycledError } = await db.from("hardware_qualification_runs")
-        .select("expected_battery_id,observed_battery_id")
-        .eq("station_id", DTA_PILOT_STATION_ID)
-        .eq("state", "completed");
-      if (cycledError) throw cycledError;
-      const excluded = requestedSlot == null
-        ? new Set((alreadyCycledRows ?? []).flatMap((row) => [row.observed_battery_id, row.expected_battery_id]).filter(Boolean).map(String))
-        : new Set<string>();
+      const excluded = new Set<string>();
       const selected = choosePilotBattery(provider.parsed, requestedSlot, excluded);
       if (!selected?.batteryId || selected.slotNum == null) {
         return json({
           ok: false,
-          error: requestedSlot == null ? "NO_UNTESTED_RENTABLE_BATTERY" : "REQUESTED_SLOT_NOT_RENTABLE",
+          error: "REQUESTED_SLOT_NOT_RENTABLE",
         }, 409);
+      }
+      if (selected.powerLevel == null || selected.powerLevel < minimumRentalChargePercent()) {
+        return json({ ok: false, error: "REQUESTED_SLOT_LOW_CHARGE" }, 409);
       }
 
       const { data: run, error: runError } = await db.from("hardware_qualification_runs").insert({

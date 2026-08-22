@@ -123,6 +123,7 @@ function Guard({ ok, label }: { ok: boolean; label: string }) {
 export default function AdminBatteryQualification() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [qualificationSlot, setQualificationSlot] = useState("");
   const [selectedBatteryId, setSelectedBatteryId] = useState("");
   const [method, setMethod] = useState("label_verification");
   const [modelCode, setModelCode] = useState("");
@@ -220,6 +221,10 @@ export default function AdminBatteryQualification() {
   const { station, campaign, guards, batteries, runs } = dashboard;
   const connectionState = stationConnectionState(station ?? { status: null, online: null });
   const connectionLabel = stationConnectionLabel(station ?? { status: null, online: null });
+  const rentableSlots = batteries
+    .filter((battery) => battery.station_id === station?.station_id && battery.slot_num != null && battery.status === "in_station")
+    .sort((left, right) => Number(left.slot_num) - Number(right.slot_num));
+  const qualificationBattery = rentableSlots.find((battery) => String(battery.slot_num) === qualificationSlot) ?? null;
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -315,21 +320,40 @@ export default function AdminBatteryQualification() {
           </div>
         ) : (
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button className="w-full sm:w-auto" disabled={!guardsReady || busy !== null || !station?.online}>
-                <BatteryCharging className="mr-2 h-4 w-4" />Éjecter la prochaine batterie non testée
-              </Button>
-            </AlertDialogTrigger>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="grid gap-1 text-sm font-medium">
+                Slot à qualifier
+                <select
+                  aria-label="Slot à qualifier"
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={qualificationSlot}
+                  onChange={(event) => setQualificationSlot(event.target.value)}
+                  disabled={busy !== null}
+                >
+                  <option value="">Sélectionner un slot</option>
+                  {rentableSlots.map((battery) => (
+                    <option key={battery.battery_id} value={String(battery.slot_num)}>
+                      Slot {battery.slot_num} · {battery.battery_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <AlertDialogTrigger asChild>
+                <Button className="w-full sm:w-auto" disabled={!guardsReady || busy !== null || !station?.online || !qualificationBattery}>
+                  <BatteryCharging className="mr-2 h-4 w-4" />Éjecter le slot sélectionné
+                </Button>
+              </AlertDialogTrigger>
+            </div>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Lancer une éjection FreePay réelle ?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Vérifiez que vous êtes devant la borne. Retirez uniquement la batterie indiquée, notez son étiquette, puis rendez-la à DTA21269 avant de poursuivre.
+                  Vérifiez que vous êtes devant la borne. Cette commande cible uniquement le slot {qualificationBattery?.slot_num} et la batterie {qualificationBattery?.battery_id}. Retirez uniquement cette batterie, notez son étiquette, puis rendez-la à DTA21269 avant de poursuivre.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => invoke("start_freepay")}>Éjecter une batterie</AlertDialogAction>
+                <AlertDialogAction onClick={() => invoke("start_freepay", { slotNum: Number(qualificationSlot) })}>Éjecter le slot {qualificationBattery?.slot_num}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
