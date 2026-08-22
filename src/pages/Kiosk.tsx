@@ -31,6 +31,7 @@ import { authoritativeKioskSlot } from "@/lib/kioskSlotContract";
 import { KioskHolographicFloor, PowerbankScene, SlotReleaseScene } from "@/components/kiosk/PowerbankScene";
 import { KioskPaymentMarks } from "@/components/kiosk/KioskPaymentMarks";
 import { KioskPaymentRailStage } from "@/components/kiosk/KioskPaymentRailStage";
+import { rentalProgressUrl } from "@/lib/rentalProgressLink";
 
 type Station = {
   station_id: string; name: string; location_name: string | null;
@@ -517,6 +518,9 @@ export default function Kiosk() {
   const remainingMs = expiresAt ? Math.max(0, expiresAt - now) : 0;
   const mm = String(Math.floor(remainingMs / 60000)).padStart(2, "0");
   const ss = String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, "0");
+  const customerRentalProgressUrl = sessionId && publicCode
+    ? rentalProgressUrl(window.location.origin, sessionId, publicCode, lang)
+    : undefined;
 
   const releaseCopy = {
     fr: {
@@ -530,6 +534,7 @@ export default function Kiosk() {
       marketing: "Vous êtes prêt. Restez chargé, où que vous alliez.",
       active: "Location active",
       home: "Retour à l’accueil automatique",
+      follow: "Scannez pour suivre la durée, le retour et le reçu sur votre téléphone.",
     },
     en: {
       preparingEyebrow: "PAYMENT CONFIRMED",
@@ -542,6 +547,7 @@ export default function Kiosk() {
       marketing: "You’re ready. Stay charged wherever you go.",
       active: "Rental active",
       home: "Returning to home automatically",
+      follow: "Scan to follow the duration, return and receipt on your phone.",
     },
     de: {
       preparingEyebrow: "ZAHLUNG BESTÄTIGT",
@@ -554,6 +560,7 @@ export default function Kiosk() {
       marketing: "Bereit. Bleib geladen, wohin du auch gehst.",
       active: "Miete aktiv",
       home: "Automatische Rückkehr zum Start",
+      follow: "Scannen, um Dauer, Rückgabe und Beleg auf dem Smartphone zu verfolgen.",
     },
   }[lang];
 
@@ -803,6 +810,10 @@ export default function Kiosk() {
                     <div><p className="text-sm font-bold uppercase tracking-[.18em] text-cyan-100/60">{t("kiosk.slot.label", { slot: slotNum })}</p><p className="mt-1 text-xl font-bold text-white">{releaseCopy.marketing}</p></div>
                   </motion.div>
                 )}
+                {customerRentalProgressUrl && <div className="relative mt-5 flex items-center gap-4 rounded-2xl border border-emerald-200/15 bg-emerald-300/[.06] p-3">
+                  <div className="shrink-0 rounded-xl bg-white p-2"><QRCodeSVG value={customerRentalProgressUrl} size={84} level="M" includeMargin={false} /></div>
+                  <p className="max-w-sm text-base font-semibold leading-snug text-emerald-50">{releaseCopy.follow}</p>
+                </div>}
                 <div className="relative mt-7 flex items-center justify-between gap-4"><span className="inline-flex items-center gap-2 font-bold text-emerald-300"><span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,.9)]" />{releaseCopy.active}</span><span className="text-sm text-muted-foreground">{releaseCopy.home}</span></div>
               </div>
             </motion.div>

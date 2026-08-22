@@ -10,6 +10,7 @@ import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
 import { isServerCancelledPayment, isServerConfirmedPayment, isServerReleasePending } from "@/lib/paymentPresentation";
 import { kioskPaymentPresentation } from "@/lib/kioskPaymentState";
+import { rentalProgressPath, shouldShowRentalProgress } from "@/lib/rentalProgressLink";
 
 type PayStatus = {
   state?: string;
@@ -34,6 +35,10 @@ export default function Pay() {
       const { data } = await supabase.rpc("kiosk_session_status", { p_id: rentalSessionId, p_code: sessionCode });
       if (cancelled) return;
       const r = data as PayStatus | null;
+      if (rentalSessionId && shouldShowRentalProgress(r?.state)) {
+        window.location.replace(rentalProgressPath(rentalSessionId, sessionCode, lang));
+        return;
+      }
       setStatus({
         state: r?.state ?? "unknown",
         checkout_url: r?.checkout_url ?? null,
@@ -44,7 +49,7 @@ export default function Pay() {
     void load();
     const i = window.setInterval(() => void load(), 800);
     return () => { cancelled = true; window.clearInterval(i); };
-  }, [rentalSessionId, sessionCode]);
+  }, [rentalSessionId, sessionCode, lang]);
 
   const state = status.state ?? "unknown";
   const paid = isServerConfirmedPayment(state);
