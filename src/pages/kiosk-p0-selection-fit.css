@@ -1,31 +1,87 @@
 /*
- * Chargeurs.ch — kiosk V3 selection fit.
+ * Chargeurs.ch — kiosk V3 selection fit and full-screen scale.
  *
- * Presentation only. This late rule resolves the historical contradiction
- * between the two-column selection layout and the previous fixed-width slot
- * grid. It intentionally does NOT depend on an exact CSS viewport size because
- * Android WebView CSS pixels may differ slightly from the physical 1280×720
- * panel. No pricing, payment, rental, inventory or hardware behavior lives here.
+ * Presentation only. This late rule owns the selection scene geometry across
+ * native kiosk WebViews. It deliberately avoids exact viewport equality so the
+ * physical 1280×720 panel remains robust when Android reports slightly different
+ * CSS pixels. No pricing, payment, rental, inventory or hardware behavior lives
+ * here.
  */
-html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > main > div {
+
+/* The base Kiosk.tsx main uses min-height: calc(100vh - 5rem) after a real
+ * header has already consumed vertical space. On the physical panel that makes
+ * the visual center too low. Give the selection scene its actual usable height
+ * between header and footer instead. */
+html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > main {
   box-sizing: border-box !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
+  min-height: 0 !important;
+  height: calc(100dvh - 118px) !important;
+  max-height: calc(100dvh - 118px) !important;
+  padding-top: 0 !important;
+  padding-bottom: 42px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
 }
 
+html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > main > div {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: visible !important;
+}
+
+/* One coherent panel: title across the top, four slots on the left, action on
+ * the right. The slight upward shift restores optical centering on the actual
+ * cabinet screen while leaving the fixed payment/status footer untouched. */
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
   box-sizing: border-box !important;
-  width: min(1160px, calc(100% - 32px)) !important;
-  max-width: min(1160px, calc(100% - 32px)) !important;
+  width: min(1184px, calc(100% - 24px)) !important;
+  max-width: min(1184px, calc(100% - 24px)) !important;
   min-width: 0 !important;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px) !important;
-  column-gap: 16px !important;
+  min-height: min(500px, calc(100dvh - 166px)) !important;
+  max-height: calc(100dvh - 154px) !important;
+  padding: 22px 24px 24px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(286px, 318px) !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  column-gap: 20px !important;
+  row-gap: 16px !important;
+  align-items: stretch !important;
+  align-content: center !important;
+  transform: translateY(-18px) !important;
   overflow: hidden !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  gap: 4px !important;
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 {
+  font-size: clamp(38px, 3.35vw, 48px) !important;
+  line-height: .92 !important;
+  letter-spacing: -.035em !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p {
+  font-size: clamp(16px, 1.45vw, 20px) !important;
+  line-height: 1.15 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero > div {
+  font-size: clamp(20px, 1.7vw, 24px) !important;
+  line-height: 1.05 !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
@@ -33,6 +89,46 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  gap: 14px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+  align-self: stretch !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 14px 16px !important;
+  border-radius: 22px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl {
+  font-size: clamp(36px, 3vw, 44px) !important;
+  line-height: .95 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl {
+  font-size: clamp(18px, 1.55vw, 22px) !important;
+  line-height: 1.05 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base {
+  font-size: clamp(15px, 1.25vw, 18px) !important;
+  line-height: 1.1 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xs {
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .h-3 {
+  height: 10px !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
@@ -40,7 +136,15 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
-  padding: 18px !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  padding: 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 14px !important;
+  align-self: stretch !important;
   overflow: hidden !important;
 }
 
@@ -49,15 +153,24 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
+  min-height: 62px !important;
   margin: 0 !important;
-  padding-left: 14px !important;
-  padding-right: 14px !important;
-  font-size: 16px !important;
-  line-height: 1.15 !important;
+  padding: 14px 18px !important;
+  border-radius: 18px !important;
+  font-size: clamp(18px, 1.55vw, 21px) !important;
+  font-weight: 800 !important;
+  line-height: 1.08 !important;
   white-space: normal !important;
   overflow-wrap: anywhere !important;
   text-align: center !important;
   transform: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta > span {
+  font-size: clamp(17px, 1.4vw, 20px) !important;
+  line-height: 1.1 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:hover,
@@ -65,4 +178,29 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus,
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus-visible,
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:active {
   transform: none !important;
+}
+
+/* Shorter WebView height fallback: keep everything visible rather than allowing
+ * any footer or CTA clipping. */
+@media (max-height: 680px) {
+  html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > main {
+    height: calc(100dvh - 104px) !important;
+    max-height: calc(100dvh - 104px) !important;
+    padding-bottom: 34px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+    min-height: 0 !important;
+    padding: 16px 20px 18px !important;
+    row-gap: 10px !important;
+    transform: translateY(-10px) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
+    gap: 10px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card {
+    padding: 10px 14px !important;
+  }
 }
