@@ -155,6 +155,7 @@ export function KioskPaymentRailStage(props: Props) {
   const terminalCancellationHandledRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
+  const initialReaderProbeRef = useRef<string | null>(null);
 
   useEffect(() => {
     terminalCancellationHandledRef.current = false;
@@ -174,6 +175,32 @@ export function KioskPaymentRailStage(props: Props) {
       window.clearInterval(interval);
     };
   }, [native, nativeBridge, inProgress]);
+
+  /*
+   * DTA21269 currently runs the older 1.0.35 native shell. On that build an
+   * already connected WisePad can briefly project ABSENT before the USB reader
+   * lifecycle is re-probed. Do one non-financial refresh per rental session
+   * before treating that snapshot as a definitive physical absence.
+   */
+  useEffect(() => {
+    if (!terminalStation || !nativeBridge || inProgress || !native?.refreshPaymentReader) return;
+    if (initialReaderProbeRef.current === rentalSessionId) return;
+
+    const currentState = typeof reader?.readerState === "string" ? reader.readerState : "UNAVAILABLE";
+    initialReaderProbeRef.current = rentalSessionId;
+    if (currentState === "READY" || currentState === "BUSY") return;
+
+    setReaderGraceExpired(false);
+    qrAutoStartedRef.current = false;
+    setReaderProbeGeneration((generation) => generation + 1);
+    try {
+      const next = parseProjection(native.refreshPaymentReader());
+      if (next) setReader(next);
+    } catch {
+      // Polling below remains the source of truth. A refresh bridge failure must
+      // not claim Terminal availability and must not affect rental/payment state.
+    }
+  }, [terminalStation, nativeBridge, inProgress, native, rentalSessionId, reader?.readerState]);
 
   useEffect(() => {
     if (!nativeBridge || inProgress) {
@@ -236,15 +263,16 @@ export function KioskPaymentRailStage(props: Props) {
     && model.reader.capability === "QR_ONLY"
     && TRANSIENT_READER_STATES.has(readerState)
     && !inProgress;
-  const readerConfirmedUnavailable = readerState === "ABSENT" || readerState === "ERROR";
+  const explicitlyUnavailableReader = readerState === "ABSENT" || readerState === "ERROR";
+  const readerConfirmedUnavailable = explicitlyUnavailableReader && readerGraceExpired;
 
   const terminalReaderUnavailable = terminalStation
     && model.reader.capability === "QR_ONLY"
     && !inProgress;
   const waitingForReader = terminalReaderUnavailable
     && nativeBridge
-    && transientReader
-    && !readerGraceExpired;
+    && !readerGraceExpired
+    && (transientReader || explicitlyUnavailableReader);
   const readerNeedsDecision = terminalReaderUnavailable
     && nativeBridge
     && !readerConfirmedUnavailable
@@ -257,9 +285,11 @@ export function KioskPaymentRailStage(props: Props) {
   /*
    * Payment-rail invariant:
    * - READY => Terminal + QR on the terminal-equipped cabinet;
-   * - explicit ABSENT/ERROR or no native bridge => direct QR fallback, including
-   *   DTA21269, because an unavailable reader must never strand the customer;
-   * - transient discovery/connect/reconnect/update gets a bounded grace window,
+   * - a terminal-equipped cabinet with a native bridge gets one bounded reader
+   *   probe window, even if its first snapshot is ABSENT/ERROR;
+   * - only a still-ABSENT/ERROR reader after that window may auto-fallback to QR;
+   * - no native bridge => direct QR fallback;
+   * - transient discovery/connect/reconnect/update gets the same bounded window,
    *   then an explicit Retry + QR choice without silently claiming a rail.
    */
   useEffect(() => {
