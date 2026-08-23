@@ -24,10 +24,11 @@ final class StripeTerminalBackendClient {
         this.config = config;
     }
 
-    ConnectionTokenResult fetchConnectionToken() throws IOException {
+    ConnectionTokenResult fetchConnectionToken(boolean simulatedReader) throws IOException {
         JSONObject response = post(body(
             "action", "connection_token",
-            "stationId", config.stationId()
+            "stationId", config.stationId(),
+            "simulatedReader", simulatedReader
         ));
         String secret = response.optString("secret", "");
         if (secret.isBlank()) throw new IOException("CONNECTION_TOKEN_MISSING");
@@ -38,10 +39,11 @@ final class StripeTerminalBackendClient {
         );
     }
 
-    PaymentIntentResult createPaymentIntent(String rentalSessionId) throws IOException {
+    PaymentIntentResult createPaymentIntent(String rentalSessionId, boolean simulatedReader) throws IOException {
         JSONObject response = post(body(
             "action", "create_payment_intent",
-            "rentalSessionId", rentalSessionId
+            "rentalSessionId", rentalSessionId,
+            "simulatedReader", simulatedReader
         ));
         String clientSecret = response.optString("clientSecret", "");
         String paymentIntentId = response.optString("paymentIntentId", "");
@@ -63,6 +65,25 @@ final class StripeTerminalBackendClient {
     PaymentStateResult getPaymentState(String rentalSessionId, boolean reconcile) throws IOException {
         JSONObject response = post(body(
             "action", reconcile ? "reconcile_payment_intent" : "get_payment_state",
+            "rentalSessionId", rentalSessionId
+        ));
+        return new PaymentStateResult(
+            response.optString("rail", "NONE"),
+            response.optString("railState", "UNCLAIMED"),
+            response.optBoolean("serverConfirmed", false),
+            response.optBoolean("recoveryRequired", false),
+            response.optString("correlationId", "")
+        );
+    }
+
+    /**
+     * Cancels an unconfirmed Terminal intent on the server. The server re-reads
+     * Stripe first and refuses rather than guessing when a payment side effect
+     * might already exist.
+     */
+    PaymentStateResult cancelPaymentIntent(String rentalSessionId) throws IOException {
+        JSONObject response = post(body(
+            "action", "cancel_payment_intent",
             "rentalSessionId", rentalSessionId
         ));
         return new PaymentStateResult(

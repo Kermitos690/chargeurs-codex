@@ -17,6 +17,13 @@ val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBacken
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
+// This must be opted into for each APK build. The ordinary STAGING artifact
+// continues to use the physical WisePad lane.
+val stagingSimulatedTerminalReaderEnabled = providers
+    .gradleProperty("chargeursStripeTerminalSimulatedReader")
+    .map { it.equals("true", ignoreCase = true) }
+    .orElse(false)
+val stagingSimulatedTerminalReaderVersion = stagingSimulatedTerminalReaderEnabled.get()
 val releaseStorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orElse("")
 val releaseStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse("")
 val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orElse("")
@@ -53,8 +60,15 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = 132
-        versionName = "1.0.32-terminal-v222-restore"
+        // The DTA21269 currently runs versionCode 141. A normal Android
+        // upgrade must increase this value; no downgrade install is permitted.
+        // 1.0.50 is a temporary STAGING simulator build.  1.0.51 is the
+        // normal WisePad build that can restore it in-place afterwards.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 151
+        versionName = if (stagingSimulatedTerminalReaderVersion)
+            "1.0.50-terminal-simulated-reader-reconcile"
+        else
+            "1.0.51-terminal-simulated-reader-restore"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -73,6 +87,7 @@ android {
         buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
         manifestPlaceholders["kioskHomeEnabled"] = "true"
         manifestPlaceholders["bootReceiverEnabled"] = "true"
+        manifestPlaceholders["terminalDiagnosticExported"] = "false"
     }
 
     buildFeatures {
@@ -140,6 +155,7 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "false"
             manifestPlaceholders["bootReceiverEnabled"] = "false"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
         }
         create("staging") {
             initWith(getByName("debug"))
@@ -147,7 +163,11 @@ android {
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
-            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
+            buildConfigField(
+                "boolean",
+                "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED",
+                if (stagingSimulatedTerminalReaderVersion) "true" else "false",
+            )
             buildConfigField(
                 "String",
                 "KIOSK_PUBLIC_BASE_URL",
@@ -165,6 +185,7 @@ android {
             )
             manifestPlaceholders["kioskHomeEnabled"] = "true"
             manifestPlaceholders["bootReceiverEnabled"] = "true"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
         }
         release {
@@ -193,15 +214,19 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
         warningsAsErrors = true
-        disable += setOf("OldTargetApi", "GradleDependency")
+        // The wrapper version is pinned for reproducible signed staging APKs;
+        // availability of a newer Gradle patch must not hide application lint.
+        disable += setOf("OldTargetApi", "GradleDependency", "AndroidGradlePluginVersion")
     }
 }
 
 dependencies {
-    // Exact P0 restoration lane: DTA21269 physically connected its WisePad 3
-    // with Stripe Terminal 2.22.0. Do not upgrade this dependency during the
-    // restoration gate; first re-prove READY / TERMINAL_AND_QR on the device.
-    implementation("com.stripe:stripeterminal:2.22.0")
+    // Needed only to register the narrowly scoped handler for Stripe 3.0.0's
+    // otherwise process-fatal offline-cache undeliverable exception.
+    implementation("io.reactivex.rxjava3:rxjava:3.1.6")
+    // SDK 3.0.0 is Stripe's first Android USB-compatible lane for WisePad 3.
+    // This is a local compile probe only; it is not an installation decision.
+    implementation("com.stripe:stripeterminal:3.0.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
