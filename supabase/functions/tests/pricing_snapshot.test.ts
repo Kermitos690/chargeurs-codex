@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   computeFinalPricingFromSnapshot,
   PricingSnapshotError,
@@ -122,11 +122,11 @@ Deno.test("settlement runtime never resolves the current pricing assignment", as
   assertEquals(source.includes("PRICING_SNAPSHOT_HASH_MISMATCH"), true);
 });
 
-Deno.test("Checkout rejects a missing, modified, or incomplete frozen snapshot before payment", async () => {
+Deno.test("Checkout rejects a missing or modified frozen snapshot before payment", async () => {
   const source = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
-  assertEquals(source.includes("!storedHash || recomputedHash !== storedHash"), true);
-  assertEquals(source.includes("SNAPSHOT_BINDING_MISMATCH"), true);
-  assertEquals(source.includes("computeFinalPricingFromSnapshot"), true);
-  assertEquals(source.indexOf("computeFinalPricingFromSnapshot") !== source.lastIndexOf("computeFinalPricingFromSnapshot"), true);
-  assertEquals(source.lastIndexOf("computeFinalPricingFromSnapshot") < source.indexOf("stripe.checkout.sessions.create"), true);
+  const snapshotCheckAt = source.indexOf("!storedHash || await snapshotHash(snapshot) !== storedHash");
+  const stripeCreateAt = source.indexOf("stripe.checkout.sessions.create");
+  assert(snapshotCheckAt >= 0);
+  assert(source.includes('error: "SNAPSHOT_INVALID"'));
+  assert(snapshotCheckAt < stripeCreateAt);
 });

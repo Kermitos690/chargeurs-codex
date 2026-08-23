@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
     const depositCents = Math.round(Number(session.deposit_amount_cents ?? snapshot?.deposit_cents ?? 0));
     if (!snapshot || !Number.isInteger(depositCents) || depositCents <= 0) return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
     const storedHash = typeof session.pricing_snapshot_hash === "string" ? session.pricing_snapshot_hash : "";
-    if (storedHash && await snapshotHash(snapshot) !== storedHash) return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    if (!storedHash || await snapshotHash(snapshot) !== storedHash) return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
 
     const stripe = new Stripe(secretKey, { apiVersion: "2025-09-30.clover" as any, httpClient: Stripe.createFetchHttpClient() });
 

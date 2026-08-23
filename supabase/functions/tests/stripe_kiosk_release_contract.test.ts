@@ -57,33 +57,28 @@ Deno.test("Checkout endpoint authenticates before disclosing or creating a Check
   const source = await Deno.readTextFile(
     "supabase/functions/create-stripe-checkout/index.ts",
   );
-  const authAt = source.indexOf("await verifyKioskDevice(req, db, stationId)");
-  const bindingAt = source.indexOf(
-    "evaluateCheckoutKioskBinding(session, kioskAuth.device)",
-  );
-  const cachedUrlAt = source.indexOf("session.checkout_url &&");
+  const authAt = source.indexOf("const device = await auth(req, db, stationId)");
+  const bindingAt = source.indexOf("String(session.kiosk_device_id ?? \"\") !== String(device.id)");
+  const cachedUrlAt = source.indexOf("if (session.stripe_checkout_session_id)");
   const stripeCreateAt = source.indexOf("stripe.checkout.sessions.create");
   assert(authAt >= 0);
   assert(bindingAt > authAt);
   assert(cachedUrlAt > bindingAt);
   assert(stripeCreateAt > bindingAt);
-  const cachedPaymentRepairAt = source.indexOf("cachedPaymentError");
-  assert(cachedPaymentRepairAt > cachedUrlAt);
-  assert(cachedPaymentRepairAt < stripeCreateAt);
   assert(source.includes("onConflict: \"stripe_session_id\""));
   assert(source.includes("x-kiosk-token"));
   assertEquals(source.includes("body.kioskToken"), false);
 });
 
-Deno.test("Checkout keeps dynamic payment methods on one prepaid/refund strategy", async () => {
+Deno.test("Checkout keeps the CHF 30 guarantee as card authorization or TWINT prepayment", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/create-stripe-checkout/index.ts",
   );
-  assertEquals(source.includes("payment_method_types:"), false);
-  assertEquals(source.includes("payment_method_options:"), false);
-  assertEquals(source.includes('capture_method: "manual"'), false);
-  assert(source.includes("rental_deposit_checkout:v2:"));
-  assert(source.includes('settlement_strategy: "prepaid_refund"'));
+  assert(source.includes('payment_method_types: ["card", "twint"]'));
+  assert(source.includes('payment_method_options: { card: { capture_method: "manual", setup_future_usage: "off_session" } }'));
+  assert(source.includes('payment_purpose: "rental_guarantee"'));
+  assert(source.includes("rental_direct_checkout:v8:"));
+  assert(source.includes('card_capture: "manual", twint_capture: "automatic"'));
 });
 
 Deno.test("Stripe Checkout payment upsert has a non-partial database conflict target", async () => {

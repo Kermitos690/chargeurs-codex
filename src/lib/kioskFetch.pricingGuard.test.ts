@@ -31,4 +31,8 @@ describe("kiosk pricing safety guard", () => {
       tiers: currentGuestQuote.tiers.map((tier, index) => index === 0 ? { ...tier, total_cents: 200 } : tier),
     })).toBe(false);
   });
+
+  it("rejects a changed rental ceiling", () => {
+    expect(isSafeKioskQuote({ ...currentGuestQuote, total_cap_cents: 2_990 - 1 })).toBe(false);
+  });
 });
