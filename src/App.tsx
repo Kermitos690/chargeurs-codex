@@ -15,6 +15,7 @@ import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
+import { KioskNativeIdleUpdateGuard } from "./components/kiosk/KioskNativeIdleUpdateGuard.tsx";
 import { KioskIdentityGate } from "./components/kiosk/KioskIdentityGate.tsx";
 
 import CityPowerbank from "./pages/CityPowerbank.tsx";
@@ -77,6 +78,7 @@ const App = () => (
           <KioskHelpLauncher />
           <KioskOffersLauncher />
           <KioskOperationalGuard />
+          <KioskNativeIdleUpdateGuard />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
