@@ -4,8 +4,12 @@ const files = {
   client: "supabase/functions/_shared/passStudio.ts",
   wallet: "supabase/functions/_shared/passStudioWallet.ts",
   endpoint: "supabase/functions/account-privacy/index.ts",
+  dispatcher: "supabase/functions/noop/index.ts",
   page: "src/pages/account/AccountPass.tsx",
-  migration: "supabase/migrations/20260823165500_pass_studio_wallet_provider.sql",
+  providerMigration: "supabase/migrations/20260823165500_pass_studio_wallet_provider.sql",
+  realtimeMigration: "supabase/migrations/20260823201500_chargeurs_wallet_realtime_v1.sql",
+  dispatchMigration: "supabase/migrations/20260823204500_wallet_dispatch_10s.sql",
+  permissionsMigration: "supabase/migrations/20260823205000_wallet_realtime_internal_rpc_permissions.sql",
 };
 
 const source = Object.fromEntries(Object.entries(files).map(([key, path]) => [key, fs.readFileSync(path, "utf8")]));
@@ -30,12 +34,31 @@ assert(source.wallet.includes('Plafond journalier : ${values.dailyCap}'), "Walle
 assert(source.wallet.includes('Statut adhésion : ${values.membershipStatus}'), "Wallet must mirror canonical membership status label");
 assert(source.wallet.includes('Crédit adhésion / renouvellement'), "Wallet must support the canonical renewal credit field");
 assert(source.wallet.includes('"Prochaine échéance" | "Fin de l’adhésion"'), "Wallet must mirror canonical membership date semantics");
+assert(source.wallet.includes('customer_wallet_presentation_state'), "manual Wallet sync must consume canonical realtime presentation state");
+assert(source.wallet.includes('applyRealtimePresentation'), "manual Wallet sync must overlay realtime fields before provider update");
 assert(source.client.includes('sendEmail: false'), "app issuance should not force provider email delivery");
 assert(source.wallet.includes('provider: "pass_studio"'), "provider mapping must be persisted server-side");
 assert(source.page.includes('supabase.functions.invoke("account-privacy"'), "Chargeurs+ page must call the authenticated account endpoint");
 assert(source.page.includes('action: "wallet_pass"'), "Chargeurs+ page must request the wallet_pass action");
 assert(source.page.includes("Ajouter à Apple / Google Wallet"), "Wallet CTA missing");
 assert(!source.page.includes("PASS_STUDIO_API_KEY"), "frontend must not know the provider API key");
-assert(source.migration.includes("provider_add_to_wallet_url"), "provider wallet URL persistence missing");
+assert(source.providerMigration.includes("provider_add_to_wallet_url"), "provider wallet URL persistence missing");
+
+assert(source.realtimeMigration.includes("customer_wallet_sync_outbox"), "realtime Wallet outbox missing");
+assert(source.realtimeMigration.includes("enqueue_customer_wallet_sync_event"), "realtime Wallet enqueue contract missing");
+assert(source.realtimeMigration.includes("customer_wallet_presentation_state"), "canonical Wallet presentation RPC missing");
+assert(source.realtimeMigration.includes("queue_due_customer_wallet_price_transitions"), "price-stage scanner missing");
+assert(source.realtimeMigration.includes("'10 seconds'"), "price-stage scanner must run every 10 seconds");
+assert(source.realtimeMigration.includes("price_stage_changed"), "price-stage event missing");
+assert(source.realtimeMigration.includes("daily_cap_reached"), "daily-cap event missing");
+assert(source.realtimeMigration.includes("rental_started"), "rental-start Wallet event missing");
+assert(source.realtimeMigration.includes("return_detected"), "return-detected Wallet event missing");
+assert(source.realtimeMigration.includes("rental_settled"), "settlement Wallet event missing");
+assert(source.realtimeMigration.includes("chargepoints_changed"), "ChargePoints Wallet event missing");
+assert(source.dispatcher.includes("processWalletOutbox"), "existing dispatcher must process Wallet outbox");
+assert(source.dispatcher.includes('db.rpc("customer_wallet_presentation_state"'), "dispatcher must re-read current presentation before provider push");
+assert(source.dispatcher.includes('status: "delivered"'), "dispatcher must persist delivered outbox state");
+assert(source.dispatchMigration.includes("'10 seconds'"), "Wallet dispatcher cron must run every 10 seconds");
+assert(source.permissionsMigration.includes("revoke all on function public.customer_wallet_presentation_state(uuid) from public, anon, authenticated"), "realtime presentation RPC must remain backend-only");
 
 console.log("[wallet-pass-studio] contract gate PASS");
