@@ -30,6 +30,7 @@ public final class HardwareDiagnosticCollector {
         put(report, "vendorApp", VendorAppCompatibility.inspect(context));
         put(report, "chargeursApp", packageInfo(context, context.getPackageName()));
         put(report, "webView", webViewInfo());
+        put(report, "stripeTerminalReadiness", stripeTerminalReadiness(context));
         SecureConfigStore.StorageHealth storage = new SecureConfigStore(context).inspect();
         put(report, "secureStorage", JsonObjects.of(
             "ready", storage.isReady(),
@@ -53,6 +54,34 @@ public final class HardwareDiagnosticCollector {
         ));
         put(report, "safeReadOnly", true);
         return report;
+    }
+
+    /**
+     * Non-financial Stripe Terminal readiness probe. It can request a short-
+     * lived connection token and perform USB discovery, but it never creates a
+     * PaymentIntent, rental session, cabinet command, or hardware action.
+     */
+    private static JSONObject stripeTerminalReadiness(Context context) {
+        KioskConfig config = new SecureConfigStore(context).load();
+        if (config == null) {
+            return JsonObjects.of("state", "KIOSK_NOT_ENROLLED", "nonFinancialProbe", true);
+        }
+        try {
+            ChargeursKioskApplication application = (ChargeursKioskApplication) context.getApplicationContext();
+            StripeTerminalReaderRuntime runtime = application.terminalRuntime(config);
+            runtime.ensureStarted();
+            try { Thread.sleep(1_000L); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+            JSONObject snapshot = runtime.snapshot();
+            snapshot.put("nonFinancialProbe", true);
+            return snapshot;
+        } catch (Exception error) {
+            return JsonObjects.of(
+                "state", "TERMINAL_DIAGNOSTIC_FAILED",
+                "error", error.getClass().getSimpleName(),
+                "nonFinancialProbe", true
+            );
+        }
     }
 
     private static JSONObject deviceInfo() {

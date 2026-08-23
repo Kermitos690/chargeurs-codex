@@ -72,7 +72,7 @@ public final class NativeBridge {
     @JavascriptInterface
     public String getPaymentReaderStatus() {
         terminalRuntime.ensureStarted();
-        terminalRuntime.refreshPaymentState(false);
+        terminalRuntime.refreshPaymentState(terminalRuntime.shouldReconcilePaymentState());
         return terminalRuntime.snapshot().toString();
     }
 
@@ -90,6 +90,12 @@ public final class NativeBridge {
     @JavascriptInterface
     public String startTerminalPayment(String rentalSessionId) {
         return terminalRuntime.startTerminalPayment(rentalSessionId).toString();
+    }
+
+    /** Stops local card collection and requests safe server-side cancellation. */
+    @JavascriptInterface
+    public String cancelTerminalPayment() {
+        return terminalRuntime.cancelTerminalPayment().toString();
     }
 
     /**
