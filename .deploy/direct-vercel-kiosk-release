@@ -1,5 +1,5 @@
-release=p0-home-terminal-qr-payment-guard-scene-retry
-source_commit=91feb3fa2b9162f3696acba5a175583ec6d8b16c
-triggered_at=2026-08-16T21:54:30Z
+release=p0-terminal-ready-cancelled-ui
+source_commit=479e5b25e6cee8e964fe9e48c64a8abaa4aae18a
+triggered_at=2026-08-23T20:34:00Z
 requested_by=gaetan
-reason=retry-production-release-after-vercel-daily-quota-reset
+reason=deploy-p0-wisepad-ready-cancelled-ui-via-prebuilt-path-after-git-integration-build-rate-limit
