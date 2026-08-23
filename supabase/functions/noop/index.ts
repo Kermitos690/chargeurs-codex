@@ -34,6 +34,16 @@ function passStudioFailure(error: unknown) {
   return error instanceof Error ? error.message.slice(0, 96) : "WALLET_SYNC_FAILED";
 }
 
+function presentationFields(value: unknown) {
+  const presentation = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const rawFields = presentation.fields;
+  const fields = rawFields && typeof rawFields === "object"
+    ? rawFields as Record<string, string | number | boolean | null>
+    : {};
+  if (!("points" in fields) || !("tier" in fields)) throw new Error("WALLET_PRESENTATION_INVALID");
+  return fields;
+}
+
 async function processPushOutbox(db: ReturnType<typeof admin>) {
   const vapidPublic = await secret(db, "customer_push_vapid_public");
   const vapidPrivate = await secret(db, "customer_push_vapid_private");
@@ -189,13 +199,7 @@ async function processWalletOutbox(db: ReturnType<typeof admin>) {
         continue;
       }
 
-      const presentationObject = presentation && typeof presentation === "object"
-        ? presentation as Record<string, unknown> : {};
-      const rawFields = presentationObject.fields;
-      const fields = rawFields && typeof rawFields === "object"
-        ? rawFields as Record<string, string | number | boolean | null> : {};
-      if (!("points" in fields) || !("tier" in fields)) throw new Error("WALLET_PRESENTATION_INVALID");
-
+      const fields = presentationFields(presentation);
       await updatePassStudioInstance(apiKey, providerPass, String(wallet.provider_instance_id), fields);
       const syncedAt = new Date().toISOString();
       await db.from("customer_wallet_passes").update({
@@ -233,6 +237,95 @@ async function processWalletOutbox(db: ReturnType<typeof admin>) {
   return { processed: rows.length, users: userIds.length, delivered, retried, failed, expired };
 }
 
+async function processNativeWalletNotifications(db: ReturnType<typeof admin>) {
+  const now = new Date();
+  const { data: dueRows, error } = await db.from("customer_wallet_native_notifications")
+    .select("id,user_id,message,attempts,expires_at")
+    .eq("status", "pending").lte("next_attempt_at", now.toISOString())
+    .order("created_at", { ascending: true }).limit(20);
+  if (error) throw new Error("WALLET_NATIVE_OUTBOX_READ_FAILED");
+  const rows = dueRows ?? [];
+  if (!rows.length) return { processed: 0, delivered: 0, retried: 0, failed: 0, expired: 0 };
+
+  const apiKey = requirePassStudioApiKey();
+  const providerPass = await resolvePassStudioPass(apiKey);
+  let delivered = 0, retried = 0, failed = 0, expired = 0;
+
+  for (const row of rows) {
+    const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
+    if (expiresAt && expiresAt.getTime() <= now.getTime()) {
+      await db.from("customer_wallet_native_notifications").update({
+        status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString(),
+      }).eq("id", row.id).eq("status", "pending");
+      expired += 1;
+      continue;
+    }
+
+    const attempt = Number(row.attempts ?? 0) + 1;
+    const { data: claimed } = await db.from("customer_wallet_native_notifications")
+      .update({ status: "processing", attempts: attempt, last_error_code: null, updated_at: new Date().toISOString() })
+      .eq("id", row.id).eq("status", "pending").select("id").maybeSingle();
+    if (!claimed) continue;
+
+    try {
+      const [{ data: wallet, error: walletError }, { data: presentation, error: presentationError }] = await Promise.all([
+        db.from("customer_wallet_passes")
+          .select("id,provider_instance_id,pass_revision")
+          .eq("user_id", row.user_id).eq("status", "active").eq("provider", "pass_studio")
+          .not("provider_instance_id", "is", null).is("revoked_at", null)
+          .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        db.rpc("customer_wallet_presentation_state", { p_user_id: row.user_id }),
+      ]);
+      if (walletError || presentationError) throw new Error("WALLET_SOURCE_STATE_UNAVAILABLE");
+      if (!wallet?.provider_instance_id) {
+        await db.from("customer_wallet_native_notifications").update({
+          status: "expired", last_error_code: "WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString(),
+        }).eq("id", row.id);
+        expired += 1;
+        continue;
+      }
+
+      const fields = presentationFields(presentation);
+      const providerResult = await updatePassStudioInstance(
+        apiKey,
+        providerPass,
+        String(wallet.provider_instance_id),
+        fields,
+        String(row.message),
+      );
+
+      const deliveredAt = new Date().toISOString();
+      await db.from("customer_wallet_passes").update({
+        provider_status: "issued", provider_last_error_code: null, last_synced_at: deliveredAt,
+        pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: deliveredAt,
+      }).eq("id", String(wallet.id));
+      await db.from("customer_wallet_native_notifications").update({
+        status: "delivered", delivered_at: deliveredAt, last_error_code: null,
+        metadata: { providerPushed: Boolean(providerResult?.pushed), warnings: providerResult?.warnings ?? [] },
+        updated_at: deliveredAt,
+      }).eq("id", row.id);
+      delivered += 1;
+    } catch (notifyError) {
+      const code = passStudioFailure(notifyError);
+      if (attempt < 5 && (!expiresAt || expiresAt.getTime() > Date.now())) {
+        const retryAt = new Date(Date.now() + Math.min(300, 15 * 2 ** (attempt - 1)) * 1000).toISOString();
+        await db.from("customer_wallet_native_notifications").update({
+          status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString(),
+        }).eq("id", row.id);
+        retried += 1;
+      } else {
+        await db.from("customer_wallet_native_notifications").update({
+          status: "failed", last_error_code: code, updated_at: new Date().toISOString(),
+        }).eq("id", row.id);
+        failed += 1;
+      }
+      console.error("wallet native notification failed", { code, attempt });
+    }
+  }
+
+  return { processed: rows.length, delivered, retried, failed, expired };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   const db = admin();
@@ -242,6 +335,7 @@ Deno.serve(async (req) => {
 
   let push: Record<string, unknown>;
   let wallet: Record<string, unknown>;
+  let nativeWallet: Record<string, unknown>;
   try {
     push = await processPushOutbox(db);
   } catch (error) {
@@ -256,6 +350,13 @@ Deno.serve(async (req) => {
     console.error("wallet dispatch failed", { code });
     wallet = { error: code };
   }
+  try {
+    nativeWallet = await processNativeWalletNotifications(db);
+  } catch (error) {
+    const code = passStudioFailure(error);
+    console.error("wallet native dispatch failed", { code });
+    nativeWallet = { error: code };
+  }
 
-  return json({ ok: true, push, wallet });
+  return json({ ok: true, push, wallet, nativeWallet });
 });
