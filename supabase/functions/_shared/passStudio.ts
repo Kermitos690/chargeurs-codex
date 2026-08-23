@@ -50,6 +50,14 @@ function safeCode(value: unknown): string {
   return text || "PASS_STUDIO_UNAVAILABLE";
 }
 
+function normalizePassName(value: string | null | undefined): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 async function request<T>(apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -93,12 +101,15 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
 
 export async function resolvePassStudioPass(apiKey: string): Promise<PassStudioPass> {
   const configuredId = (Deno.env.get("PASS_STUDIO_PASS_ID") ?? DEFAULT_PASS_STUDIO_PASS_ID).trim();
-  const configuredName = (Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+").trim().toLocaleLowerCase();
+  const configuredName = Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+";
   const passes = await listPassStudioPasses(apiKey);
 
   const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
-  const byName = passes.find((pass) => pass.name?.trim().toLocaleLowerCase() === configuredName);
-  const match = byId ?? byName;
+  const normalizedConfiguredName = normalizePassName(configuredName);
+  const byName = passes.find((pass) => normalizePassName(pass.name) === normalizedConfiguredName);
+  const activePasses = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
+  const onlyActive = activePasses.length === 1 ? activePasses[0] : undefined;
+  const match = byId ?? byName ?? onlyActive;
 
   if (!match) {
     throw new PassStudioError(503, configuredId ? "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
