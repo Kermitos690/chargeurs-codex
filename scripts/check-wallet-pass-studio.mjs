@@ -11,6 +11,7 @@ const files = {
   dispatchMigration: "supabase/migrations/20260823204500_wallet_dispatch_10s.sql",
   permissionsMigration: "supabase/migrations/20260823205000_wallet_realtime_internal_rpc_permissions.sql",
   nativeNotificationMigration: "supabase/migrations/20260823211000_wallet_native_notification_intents.sql",
+  nativeDeliveryMigration: "supabase/migrations/20260823215500_pass_studio_transactional_native_messages.sql",
 };
 
 const source = Object.fromEntries(Object.entries(files).map(([key, path]) => [key, fs.readFileSync(path, "utf8")]));
@@ -26,6 +27,8 @@ assert(source.client.includes("https://www.passstudio.online/api/v1"), "canonica
 assert(source.client.includes('DEFAULT_PASS_STUDIO_PASS_ID = "kBQ15unyR1QPeUhcRWID"'), "active Chargeurs+ Pass Studio template binding missing");
 assert(source.client.includes("/issue"), "issue endpoint contract missing");
 assert(source.client.includes('"/instances/fields"'), "single-holder update contract missing");
+assert(source.client.includes("PassStudioNotificationMessage"), "per-holder native notification message type missing");
+assert(source.client.includes('...(message ? { message } : {})'), "Pass Studio update must forward optional native notification message");
 assert(source.endpoint.includes('db.auth.getUser(token)'), "account endpoint must authenticate the Supabase user");
 assert(source.endpoint.includes('action === "wallet_pass"'), "wallet action must be hosted by account-privacy");
 assert(source.wallet.includes('ACTIVE_MEMBERSHIP_REQUIRED'), "wallet issuance must require an active membership");
@@ -62,11 +65,15 @@ assert(source.dispatcher.includes('status: "delivered"'), "dispatcher must persi
 assert(source.dispatchMigration.includes("'10 seconds'"), "Wallet dispatcher cron must run every 10 seconds");
 assert(source.permissionsMigration.includes("revoke all on function public.customer_wallet_presentation_state(uuid) from public, anon, authenticated"), "realtime presentation RPC must remain backend-only");
 
-assert(source.nativeNotificationMigration.includes("customer_wallet_native_notifications"), "native Wallet notification intent table missing");
-assert(source.nativeNotificationMigration.includes("customer_wallet_native_notification_mirror_trg"), "customer push -> native Wallet intent mirror missing");
-assert(source.nativeNotificationMigration.includes("after insert on public.notifications"), "native intent mirror must follow canonical customer notification creation");
-assert(source.nativeNotificationMigration.includes("provider_capability_blocked"), "unsupported native provider delivery must remain explicit/fail-safe");
-assert(source.nativeNotificationMigration.includes("PASS_STUDIO_TRANSACTIONAL_NOTIFICATION_API_UNAVAILABLE"), "provider capability blocker must be machine-readable");
-assert(!source.client.includes("/campaigns"), "do not invent an undocumented Pass Studio transactional campaign API endpoint");
+assert(source.nativeNotificationMigration.includes("customer_wallet_native_notifications"), "native Wallet notification table missing");
+assert(source.nativeNotificationMigration.includes("customer_wallet_native_notification_mirror_trg"), "customer push -> native Wallet mirror missing");
+assert(source.nativeNotificationMigration.includes("after insert on public.notifications"), "native Wallet mirror must follow canonical customer notification creation");
+assert(source.nativeDeliveryMigration.includes("instances_fields_message"), "native notification delivery must use Pass Studio instances/fields message capability");
+assert(source.nativeDeliveryMigration.includes("SUPERSEDED_BEFORE_TRANSACTIONAL_MESSAGE_SUPPORT"), "historical blocked alerts must expire instead of replaying");
+assert(source.nativeDeliveryMigration.includes("status = 'pending'"), "new native Wallet alerts must be retryable pending work");
+assert(source.dispatcher.includes("processNativeWalletNotifications"), "dispatcher must process native Wallet notification outbox");
+assert(source.dispatcher.includes("String(row.message)"), "native Wallet dispatcher must forward holder-specific message");
+assert(source.dispatcher.includes('status: "processing"'), "native Wallet notification delivery must claim work idempotently");
+assert(!source.client.includes("/campaigns"), "transactional holder notifications must not rely on a global Campaign endpoint");
 
 console.log("[wallet-pass-studio] contract gate PASS");
