@@ -26,17 +26,26 @@ function firstPx(text, property) {
 const stage = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage');
 const title = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1');
 const percentage = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl');
+const slotLabel = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl');
 const status = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base');
+const badge = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xs');
 const cta = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button');
 const visual = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual');
+const card = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card');
+const animatedStrip = block('html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .h-3.overflow-hidden');
 
-if (!stage.includes("1216px")) fail("selection stage must use the wide field layout (1216px cap)");
-if (firstPx(title, "font-size") < 48) fail("selection title is too small for field use");
-if (firstPx(percentage, "font-size") < 42) fail("battery percentage is too small for field use");
-if (firstPx(status, "font-size") < 16) fail("slot status is too small for field use");
-if (firstPx(cta, "font-size") < 20) fail("selection CTA text is too small for field use");
-if (firstPx(cta, "min-height") < 64) fail("selection CTA touch target is too short");
-if (firstPx(visual, "height") < 38) fail("battery status visual is too small");
+if (!stage.includes("1224px")) fail("selection stage must use the full physical product width (1224px cap)");
+if (firstPx(title, "font-size") < 64) fail("selection title is too small for field use");
+if (firstPx(percentage, "font-size") < 60) fail("battery percentage is too small for field use");
+if (firstPx(slotLabel, "font-size") < 24) fail("slot label is too small for field use");
+if (firstPx(status, "font-size") < 19) fail("slot status is too small for field use");
+if (firstPx(badge, "font-size") < 15) fail("slot badge is too small for field use");
+if (firstPx(cta, "font-size") < 26) fail("selection CTA text is too small for field use");
+if (firstPx(cta, "min-height") < 80) fail("selection CTA touch target is too short");
+if (firstPx(visual, "height") < 48) fail("battery status visual is too small");
+if (!/animation\s*:\s*none\s*!important/.test(card)) fail("battery cards must disable CSS animation");
+if (!/transition\s*:\s*none\s*!important/.test(card)) fail("battery cards must disable decorative transitions");
+if (!/display\s*:\s*none\s*!important/.test(animatedStrip)) fail("redundant Framer charge strip must be hidden to prevent width tween flicker");
 
 const sceneStart = scene.indexOf("export function PowerbankScene");
 const sceneEnd = scene.indexOf("export function KioskHolographicFloor");
@@ -47,12 +56,16 @@ if (/<motion\./.test(selectionScene) || /\banimate\s*=/.test(selectionScene)) fa
 
 console.log("[kiosk-selection-readability] PASS");
 console.log(JSON.stringify({
-  stageWidthCap: 1216,
+  stageWidthCap: 1224,
+  stageHeightCap: 576,
   titleMinPx: firstPx(title, "font-size"),
   percentageMinPx: firstPx(percentage, "font-size"),
+  slotLabelMinPx: firstPx(slotLabel, "font-size"),
   statusMinPx: firstPx(status, "font-size"),
+  badgeMinPx: firstPx(badge, "font-size"),
   ctaMinPx: firstPx(cta, "font-size"),
   ctaMinHeightPx: firstPx(cta, "min-height"),
   visualHeightPx: firstPx(visual, "height"),
-  selectionBatteryAnimations: "static",
+  selectionBatteryAnimations: "static-css-and-scene",
+  redundantAnimatedChargeStrip: "hidden",
 }));
