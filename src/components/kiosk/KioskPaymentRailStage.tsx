@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
+import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   buildChargeursPresentationModel,
@@ -8,11 +8,13 @@ import {
   type PaymentRailState,
 } from "@/lib/chargeursPresentationModel";
 import { stationHasPaymentTerminal } from "@/lib/kioskIdentity";
+import { readKioskToken } from "@/lib/kioskFetch";
 
 type NativeTerminalBridge = {
   getPaymentReaderStatus?: () => string;
   refreshPaymentReader?: () => string;
   startTerminalPayment?: (rentalSessionId: string) => string;
+  restartApp?: () => void;
 };
 type NativeWindow = Window & { ChargeursNative?: NativeTerminalBridge };
 type Props = {
@@ -47,8 +49,13 @@ const COPY = {
     slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
     processing: "Paiement sans contact en cours",
     processingSub: "Suivez les instructions affichées sur le terminal.",
+    staleQr: "Ancien paiement QR détecté",
+    staleQrSub: "Ce paiement QR doit être annulé avant de démarrer le terminal sans contact.",
     retry: "Réessayer le lecteur",
     chooseQr: "Payer par QR code",
+    cancel: "Annuler",
+    cancelling: "Annulation…",
+    cancelFailed: "Annulation impossible pour le moment. Réessayez.",
   },
   en: {
     eyebrow: "SECURE PAYMENT",
@@ -64,8 +71,13 @@ const COPY = {
     slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
     processing: "Contactless payment in progress",
     processingSub: "Follow the instructions shown on the payment reader.",
+    staleQr: "Previous QR payment detected",
+    staleQrSub: "That QR payment must be cancelled before starting contactless payment.",
     retry: "Retry reader",
     chooseQr: "Pay by QR code",
+    cancel: "Cancel",
+    cancelling: "Cancelling…",
+    cancelFailed: "Unable to cancel right now. Please try again.",
   },
   de: {
     eyebrow: "SICHERE ZAHLUNG",
@@ -81,8 +93,13 @@ const COPY = {
     slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst die QR-Zahlung.",
     processing: "Kontaktlose Zahlung läuft",
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
+    staleQr: "Vorherige QR-Zahlung erkannt",
+    staleQrSub: "Die QR-Zahlung muss abgebrochen werden, bevor kontaktlos bezahlt werden kann.",
     retry: "Leser erneut verbinden",
     chooseQr: "Per QR-Code bezahlen",
+    cancel: "Abbrechen",
+    cancelling: "Abbruch…",
+    cancelFailed: "Abbruch derzeit nicht möglich. Bitte erneut versuchen.",
   },
 } as const;
 
@@ -120,6 +137,8 @@ export function KioskPaymentRailStage(props: Props) {
   const [nativeError, setNativeError] = useState<string | null>(null);
   const [readerGraceExpired, setReaderGraceExpired] = useState(!nativeBridge);
   const [readerProbeGeneration, setReaderProbeGeneration] = useState(0);
+  const [cancellingPayment, setCancellingPayment] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const confirmedRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
@@ -180,6 +199,11 @@ export function KioskPaymentRailStage(props: Props) {
   };
 
   const readerState = model.reader.state;
+  const rawNativeRail = reader?.payment?.rail === "QR"
+    ? "QR"
+    : reader?.payment?.rail === "TERMINAL"
+      ? "TERMINAL"
+      : "NONE";
   const transientReader = nativeBridge
     && model.reader.capability === "QR_ONLY"
     && TRANSIENT_READER_STATES.has(readerState)
@@ -235,6 +259,7 @@ export function KioskPaymentRailStage(props: Props) {
     if (railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
     railTapLockRef.current = true;
     setNativeError(null);
+    setCancelError(null);
     setLocalRail("TERMINAL");
     setLocalRailState("CLAIMING");
     let accepted = false;
@@ -255,8 +280,72 @@ export function KioskPaymentRailStage(props: Props) {
     onTerminalEngaged();
   };
 
+  const restartCleanly = () => {
+    try {
+      if (native?.restartApp) {
+        native.restartApp();
+        return;
+      }
+    } catch {
+      // Browser fallback below.
+    }
+    window.location.reload();
+  };
+
+  const cancelActivePayment = async () => {
+    if (cancellingPayment) return;
+    const kioskToken = readKioskToken();
+    if (!kioskToken) {
+      setCancelError("KIOSK_AUTH_REQUIRED");
+      return;
+    }
+
+    setCancellingPayment(true);
+    setCancelError(null);
+    try {
+      // A previous auto-QR checkout can survive a reboot and make the native
+      // Terminal runtime project `QR / ENGAGED`. Cancel that rail with the
+      // canonical Checkout endpoint. Otherwise cancel the TEST Terminal intent
+      // through the canonical Terminal backend. Neither path touches pricing,
+      // ejection or the reader configuration.
+      const staleQrRail = rawNativeRail === "QR";
+      const path = staleQrRail ? "/api/kiosk/cancel-checkout" : "/api/kiosk/terminal-payment";
+      const body = staleQrRail
+        ? { rentalSessionId }
+        : { action: "cancel_payment_intent", rentalSessionId };
+      const response = await fetch(path, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Kiosk-Token": kioskToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+      const noTerminalRail = !staleQrRail
+        && response.status === 409
+        && data?.error === "TERMINAL_RAIL_NOT_ENGAGED";
+      if (!response.ok && !noTerminalRail) {
+        setCancelError(data?.error ?? "PAYMENT_CANCEL_FAILED");
+        return;
+      }
+
+      // On APK 1.0.35 there is no public native cancel bridge yet. Restart only
+      // after the server confirms cancellation (or confirms no Terminal rail)
+      // so any local Stripe SDK collection is torn down without leaving a live
+      // server-side authorization behind.
+      restartCleanly();
+    } catch {
+      setCancelError("PAYMENT_CANCEL_NETWORK_FAILED");
+    } finally {
+      setCancellingPayment(false);
+    }
+  };
+
   const retryReader = () => {
     setNativeError(null);
+    setCancelError(null);
     setReaderGraceExpired(false);
     qrAutoStartedRef.current = false;
     setReaderProbeGeneration((generation) => generation + 1);
@@ -265,12 +354,18 @@ export function KioskPaymentRailStage(props: Props) {
   };
 
   if (inProgress || model.payment.rail === "TERMINAL") {
-    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail="TERMINAL" data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
+    const staleQrConflict = rawNativeRail === "QR";
+    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail={staleQrConflict ? "QR_CONFLICT" : "TERMINAL"} data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
       <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
-      <CreditCard className="h-20 w-20 text-cyan-100" />
-      <h2 className="font-display text-5xl font-black tracking-tight">{copy.processing}</h2>
-      <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.processingSub}</p>
+      {staleQrConflict ? <QrCode className="h-20 w-20 text-primary" /> : <CreditCard className="h-20 w-20 text-cyan-100" />}
+      <h2 className="font-display text-5xl font-black tracking-tight">{staleQrConflict ? copy.staleQr : copy.processing}</h2>
+      <p className="max-w-3xl text-xl font-medium text-muted-foreground">{staleQrConflict ? copy.staleQrSub : copy.processingSub}</p>
       <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
+      <Button variant="outline" onClick={() => void cancelActivePayment()} disabled={cancellingPayment} className="h-14 gap-3 rounded-full px-8 text-base font-black">
+        {cancellingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}
+        {cancellingPayment ? copy.cancelling : copy.cancel}
+      </Button>
+      {cancelError && <p className="text-sm font-semibold text-warning">{copy.cancelFailed} <span className="font-mono text-xs">{cancelError}</span></p>}
     </div>;
   }
 
