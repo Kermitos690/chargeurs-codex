@@ -7,7 +7,6 @@ import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import { useKioskIdentity } from "./KioskIdentityGate";
 import { KioskPaymentMarks } from "./KioskPaymentMarks";
 
-
 type GuestPricing = {
   currency?: string;
   daily_cap_cents?: number | null;
@@ -25,7 +24,7 @@ type ConnectionState = "online" | "limited" | "offline" | "checking";
 const COPY = {
   fr: {
     secure: "Paiement sécurisé par Stripe",
-    daily: "Plafond journalier",
+    daily: "Plafond 24 h",
     deposit: "Caution",
     online: "En ligne",
     limited: "Connexion limitée",
@@ -34,7 +33,7 @@ const COPY = {
   },
   en: {
     secure: "Secure payment by Stripe",
-    daily: "Daily cap",
+    daily: "24 h cap",
     deposit: "Deposit",
     online: "Online",
     limited: "Limited connection",
@@ -43,7 +42,7 @@ const COPY = {
   },
   de: {
     secure: "Sichere Zahlung mit Stripe",
-    daily: "Tageslimit",
+    daily: "24-h-Limit",
     deposit: "Garantie",
     online: "Online",
     limited: "Eingeschränkte Verbindung",
@@ -137,34 +136,41 @@ export function KioskSystemFooter() {
         : copy.checking;
 
   return (
-    <footer
-      className="kiosk-system-footer"
-      data-connection={connection}
-      data-station={stationId || "unconfigured"}
-      data-terminal={terminalAvailable ? "true" : "false"}
-      aria-label={`${stationId} · ${statusLabel}`}
-    >
-
-      <div className="kiosk-system-footer__payments">
-        <span className="kiosk-system-footer__secure"><ShieldCheck aria-hidden="true" />{copy.secure}</span>
-        <KioskPaymentMarks cardLabel="" />
-      </div>
-
-      <div className="kiosk-system-footer__commercial">
-        <span><small>{copy.daily}</small><strong>{money(dailyCap, currency)}</strong></span>
-        <i aria-hidden="true" />
-        <span><small>{copy.deposit}</small><strong>{money(deposit, currency)}</strong></span>
-      </div>
-
-      <div className="kiosk-system-footer__runtime">
-        <strong className="kiosk-system-footer__station">{stationId || "DTA—"}</strong>
-        <span className="kiosk-system-footer__time"><Clock3 aria-hidden="true" />{time}</span>
-        <span className="kiosk-system-footer__network">
-          {connection === "offline" ? <WifiOff aria-hidden="true" /> : <Wifi aria-hidden="true" />}
-          <b aria-hidden="true" />
-          {statusLabel}
+    <>
+      <aside className="kiosk-home-pricing-summary" aria-label={`${copy.daily} · ${copy.deposit}`}>
+        <span>
+          <small>{copy.daily}</small>
+          <strong>{money(dailyCap, currency)}</strong>
         </span>
-      </div>
-    </footer>
+        <i aria-hidden="true" />
+        <span>
+          <small>{copy.deposit}</small>
+          <strong>{money(deposit, currency)}</strong>
+        </span>
+      </aside>
+
+      <footer
+        className="kiosk-system-footer"
+        data-connection={connection}
+        data-station={stationId || "unconfigured"}
+        data-terminal={terminalAvailable ? "true" : "false"}
+        aria-label={`${stationId} · ${statusLabel}`}
+      >
+        <div className="kiosk-system-footer__payments">
+          <span className="kiosk-system-footer__secure"><ShieldCheck aria-hidden="true" />{copy.secure}</span>
+          <KioskPaymentMarks cardLabel="" />
+        </div>
+
+        <div className="kiosk-system-footer__runtime">
+          <strong className="kiosk-system-footer__station">{stationId || "DTA—"}</strong>
+          <span className="kiosk-system-footer__time"><Clock3 aria-hidden="true" />{time}</span>
+          <span className="kiosk-system-footer__network">
+            {connection === "offline" ? <WifiOff aria-hidden="true" /> : <Wifi aria-hidden="true" />}
+            <b aria-hidden="true" />
+            {statusLabel}
+          </span>
+        </div>
+      </footer>
+    </>
   );
 }
