@@ -8,6 +8,14 @@ on:
     paths:
       - "android-kiosk/**"
       - ".ci-trigger/dta21269-v3-field-build"
+      - ".github/workflows/dta21269-v3-field-build.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "android-kiosk/**"
+      - ".ci-trigger/dta21269-v3-field-build"
+      - ".github/workflows/dta21269-v3-field-build.yml"
 
 permissions:
   contents: read
