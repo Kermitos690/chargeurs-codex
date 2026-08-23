@@ -1,0 +1,105 @@
+/*
+ * Chargeurs.ch — footer clarity + Home commercial conditions.
+ * Presentation only. Imported after the global legibility authority.
+ *
+ * The system footer is operational HMI: payment acceptance on the left,
+ * station/time/network on the right. Pricing conditions belong on Home.
+ */
+
+html.kiosk-v3 .kiosk-system-footer {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  column-gap: 26px !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer__commercial {
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer__payments {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  justify-content: flex-start !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer__payments .kiosk-payment-marks {
+  min-width: 0 !important;
+  flex: 0 1 auto !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer__runtime {
+  min-width: max-content !important;
+  justify-self: end !important;
+}
+
+/* Home-only pricing conditions live in the unused centre of the topbar.
+ * They are intentionally outside the footer and never appear in transactions. */
+html.kiosk-v3 .kiosk-home-pricing-summary {
+  display: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary {
+  position: fixed !important;
+  z-index: 920 !important;
+  top: 11px !important;
+  left: 47% !important;
+  transform: translateX(-50%) !important;
+  width: 360px !important;
+  height: 50px !important;
+  padding: 5px 15px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 14px !important;
+  border: 1px solid rgba(126, 190, 244, .23) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(180deg, rgba(13, 39, 73, .78), rgba(5, 20, 43, .86)) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.055), 0 10px 28px rgba(0,0,0,.17) !important;
+  backdrop-filter: blur(18px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
+  color: #f8fcff !important;
+  pointer-events: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary > span {
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  text-align: center !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary small {
+  color: rgba(199, 222, 242, .72) !important;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary strong {
+  color: #ffffff !important;
+  font-size: 18px !important;
+  font-weight: 930 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary > i {
+  width: 1px !important;
+  height: 30px !important;
+  background: rgba(132, 181, 226, .22) !important;
+}
+
+@media (max-height: 680px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary {
+    top: 8px !important;
+    width: 338px !important;
+    height: 46px !important;
+    padding: 4px 12px !important;
+    gap: 11px !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary small { font-size: 11px !important; }
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary strong { font-size: 17px !important; }
+}
