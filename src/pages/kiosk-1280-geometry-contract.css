@@ -1,24 +1,23 @@
 /*
  * Chargeurs.ch — deterministic physical 1280×720 geometry contract.
  *
- * This file owns GEOMETRY ONLY and is imported last. Scene-specific visual design
- * remains with the Home/core/selection/confirmation owners. The purpose here is
- * to make physical framing mathematical instead of iterative: canvas → footer →
- * padded product root → header → main workspace. No pricing/payment/rental/
- * hardware behavior lives here.
+ * This file owns GEOMETRY ONLY. Scene-specific visual design remains with the
+ * Home/core/selection/confirmation owners. The purpose here is to make physical
+ * framing mathematical instead of iterative: canvas → footer → padded product
+ * root → header → main workspace. No pricing/payment/rental/hardware behavior.
  */
 
 html.kiosk-v3 {
   --p0-canvas-w: 1280px;
   --p0-canvas-h: 720px;
-  --p0-footer-h: 62px;
-  --p0-root-pad-top: 12px;
-  --p0-root-pad-x: 28px;
-  --p0-root-pad-bottom: 10px;
-  --p0-header-h: 48px;
-  --p0-header-gap: 8px;
+  --p0-footer-h: 82px;
+  --p0-root-pad-top: 6px;
+  --p0-root-pad-x: 22px;
+  --p0-root-pad-bottom: 6px;
+  --p0-header-h: 66px;
+  --p0-header-gap: 7px;
   --p0-pricing-h: 506px;
-  --p0-selection-h: 526px;
+  --p0-selection-h: 510px;
 }
 
 html.kiosk-v3,
@@ -126,12 +125,13 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
   overflow: hidden !important;
 }
 
-/* Every post-selection transaction stage is confined to the same footer-safe workspace. */
+/* Every post-selection transaction stage is confined to the footer-safe workspace. */
 html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main > div,
 html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
 html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
 html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
-html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage {
   width: min(1140px, 100%) !important;
   max-height: 100% !important;
   min-width: 0 !important;
@@ -145,7 +145,8 @@ html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
 html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
 html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
 html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage,
-html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage {
   height: 100% !important;
 }
 
@@ -155,7 +156,7 @@ html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
     height: 720px !important;
   }
   html.kiosk-v3 .kv3-product-layer {
-    height: 658px !important;
-    bottom: 62px !important;
+    height: calc(720px - var(--p0-footer-h)) !important;
+    bottom: var(--p0-footer-h) !important;
   }
 }
