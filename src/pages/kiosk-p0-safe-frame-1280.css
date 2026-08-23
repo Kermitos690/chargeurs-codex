@@ -1,0 +1,455 @@
+/*
+ * Chargeurs.ch — late physical safe-frame authority for the native 1280×720 HMI.
+ * Presentation only. Imported LAST by KioskPremiumGateV3 so older scene CSS
+ * cannot re-expand interactive states beyond the validated receipt footprint.
+ * No pricing, Stripe, Terminal, rental, inventory or hardware behaviour here.
+ */
+
+@media (width: 1280px) and (height: 720px) {
+  html.kiosk-v3 {
+    --p0-safe-stage-w: 1024px;
+    --p0-safe-stage-h: 540px;
+    --p0-safe-panel-radius: 30px;
+    --p0-safe-gap: 18px;
+  }
+
+  html.kiosk-v3 .kv3-product-layer > .kiosk-root > main {
+    padding: 8px 0 10px !important;
+  }
+
+  /* One transaction envelope for every post-home state. */
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage,
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage {
+    box-sizing: border-box !important;
+    width: var(--p0-safe-stage-w) !important;
+    max-width: var(--p0-safe-stage-w) !important;
+    height: min(var(--p0-safe-stage-h), 100%) !important;
+    min-height: 0 !important;
+    max-height: min(var(--p0-safe-stage-h), 100%) !important;
+    margin: auto !important;
+    overflow: hidden !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* BATTERY SELECTION                                                       */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+    width: 1024px !important;
+    max-width: 1024px !important;
+    height: 526px !important;
+    max-height: 526px !important;
+    gap: 8px !important;
+    margin: auto !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero {
+    gap: 5px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 {
+    font-size: 43px !important;
+    line-height: .96 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero > div {
+    font-size: 23px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
+    width: 900px !important;
+    max-width: 900px !important;
+    gap: 10px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card {
+    height: 154px !important;
+    min-height: 154px !important;
+    padding: 11px 13px !important;
+    border-radius: 21px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual {
+    height: 32px !important;
+    margin-top: 4px !important;
+    border-radius: 11px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl {
+    margin-top: 5px !important;
+    font-size: 29px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base {
+    margin-top: 4px !important;
+    font-size: 12px !important;
+    line-height: 1.05 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
+    gap: 3px !important;
+    margin-bottom: 0 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
+    padding: 11px 34px !important;
+    font-size: 17px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta span {
+    font-size: 14px !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* EXPRESS PRICE CONFIRMATION                                              */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
+    display: grid !important;
+    grid-template-rows: 44px minmax(0, 1fr) 62px !important;
+    gap: 12px !important;
+    padding: 0 !important;
+    align-content: stretch !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 {
+    margin: 0 !important;
+    font-size: 38px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    grid-template-columns: 180px minmax(0, 1fr) !important;
+    gap: 20px !important;
+    padding: 18px 22px !important;
+    border-radius: var(--p0-safe-panel-radius) !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child {
+    padding: 12px !important;
+    gap: 8px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child > .grid {
+    width: 112px !important;
+    height: 112px !important;
+    min-width: 112px !important;
+    min-height: 112px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:first-child > .grid span {
+    font-size: 62px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child {
+    padding: 6px 10px !important;
+    gap: 9px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child > .font-display {
+    font-size: 41px !important;
+    line-height: .98 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.text-xl {
+    min-height: 68px !important;
+    padding: 10px 13px !important;
+    font-size: 17px !important;
+    line-height: 1.3 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.mt-7 {
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 {
+    width: min(720px, 100%) !important;
+    height: 62px !important;
+    min-height: 62px !important;
+    grid-template-columns: 170px minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button:first-child,
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button:last-child {
+    height: 54px !important;
+    min-height: 54px !important;
+    font-size: 18px !important;
+    margin: 0 !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* PAYMENT CHOICE / TERMINAL IN PROGRESS                                   */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    gap: 14px !important;
+    padding: 20px 26px !important;
+    border: 1px solid rgba(123, 174, 225, .18) !important;
+    border-radius: var(--p0-safe-panel-radius) !important;
+    background: radial-gradient(circle at 50% 0, rgba(39, 139, 244, .13), transparent 42%), linear-gradient(150deg, rgba(5, 17, 36, .95), rgba(2, 8, 19, .985)) !important;
+    box-shadow: 0 28px 82px rgba(0, 0, 0, .30), inset 0 1px rgba(255,255,255,.04) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > h2 {
+    margin: 0 !important;
+    max-width: 900px !important;
+    font-size: 38px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > p {
+    margin: 0 !important;
+    font-size: 17px !important;
+    line-height: 1.25 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > svg,
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .h-20 {
+    width: 54px !important;
+    height: 54px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid {
+    width: 860px !important;
+    max-width: 100% !important;
+    gap: 14px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button {
+    min-height: 166px !important;
+    height: 166px !important;
+    padding: 20px 22px !important;
+    border-radius: 24px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > svg {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > div {
+    margin-top: 20px !important;
+    font-size: 25px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > p {
+    margin-top: 7px !important;
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > button {
+    min-height: 48px !important;
+    height: 48px !important;
+    padding: 0 26px !important;
+    font-size: 15px !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* QR CHECKOUT                                                             */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage {
+    grid-template-columns: minmax(0, .94fr) minmax(0, 1.06fr) !important;
+    gap: 20px !important;
+    padding: 0 !important;
+    align-items: center !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:first-child > .font-display.text-5xl {
+    font-size: 37px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 {
+    margin-top: 8px !important;
+    font-size: 36px !important;
+    line-height: .98 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 + p {
+    margin-top: 6px !important;
+    font-size: 16px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:first-child > .rounded-\[2rem\] {
+    margin-top: 12px !important;
+    padding: 13px !important;
+    border-radius: 17px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage .kiosk-payment-mark {
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > div.relative > .glass-strong {
+    padding: 14px !important;
+    border-radius: 22px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child svg[width="380"],
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child .glass-strong > svg {
+    width: 268px !important;
+    height: 268px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-6 {
+    margin-top: 8px !important;
+    font-size: 13px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-4 {
+    margin-top: 5px !important;
+    font-size: 13px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage button {
+    min-height: 42px !important;
+    height: 42px !important;
+    font-size: 14px !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* RELEASE / SUPPORT / SUCCESS                                             */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, .96fr) !important;
+    gap: 20px !important;
+    padding: 0 !important;
+    align-items: center !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > :first-child,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :first-child,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :first-child {
+    width: 100% !important;
+    max-height: 390px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > :nth-child(2),
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2),
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :nth-child(2) {
+    min-height: 0 !important;
+    max-height: 390px !important;
+    padding: 22px 24px !important;
+    border-radius: 28px !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > :nth-child(2) h2,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) h2,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :nth-child(2) h2 {
+    margin-top: 15px !important;
+    font-size: 38px !important;
+    line-height: .98 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > :nth-child(2) > p,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) > p,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :nth-child(2) > p {
+    margin-top: 9px !important;
+    font-size: 17px !important;
+    line-height: 1.25 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage > :nth-child(2) > div,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage > :nth-child(2) > div,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :nth-child(2) > div {
+    margin-top: 14px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage > :nth-child(2) span.h-24 {
+    width: 68px !important;
+    height: 68px !important;
+    font-size: 38px !important;
+    border-radius: 17px !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* GATE-LEVEL CONNECT / MEMBER SCREENS                                     */
+  /* ---------------------------------------------------------------------- */
+  html.kiosk-v3 .ck2-connected-grid {
+    width: 1024px !important;
+    max-width: 1024px !important;
+    top: 72px !important;
+    bottom: 14px !important;
+    gap: 18px !important;
+  }
+
+  html.kiosk-v3 .ck2-connected-copy,
+  html.kiosk-v3 .ck2-connected-benefits {
+    padding: 23px !important;
+    border-radius: 25px !important;
+  }
+
+  html.kiosk-v3 .ck2-connected-copy h1 {
+    font-size: 43px !important;
+  }
+
+  html.kiosk-v3 .ck2-connected-benefit-grid article {
+    min-height: 92px !important;
+    padding: 13px !important;
+  }
+
+  html.kiosk-v3 .ck2-connected-cta {
+    min-height: 58px !important;
+    margin-top: 10px !important;
+  }
+
+  html.kiosk-v3 .ck2-member-grid {
+    height: calc(100% - 66px) !important;
+    padding: 12px 64px 10px !important;
+    gap: 34px !important;
+  }
+
+  html.kiosk-v3 .ck2-member-copy h1 {
+    font-size: 48px !important;
+  }
+
+  html.kiosk-v3 .ck2-member-copy > p {
+    font-size: 15px !important;
+  }
+
+  html.kiosk-v3 .ck2-member-rate {
+    font-size: 40px !important;
+  }
+
+  html.kiosk-v3 .ck2-qr-card {
+    max-height: 442px !important;
+  }
+
+  /* Translated labels must never escape their controls. */
+  html.kiosk-v3 button {
+    max-width: 100% !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    line-height: 1.1 !important;
+  }
+}
