@@ -224,11 +224,11 @@ export function KioskPaymentRailStage(props: Props) {
     && TRANSIENT_READER_STATES.has(readerState)
     && !inProgress;
 
-  // DTA21269 is physically terminal-equipped. A temporary reader projection
-  // must never silently convert that cabinet into QR-only. Keep the rail
-  // unclaimed until the reader is READY, then present the normal Terminal + QR
-  // choice. If recovery takes too long (or reports ABSENT/ERROR), allow an
-  // explicit retry-or-QR decision instead of auto-starting Checkout.
+  // A known terminal-equipped station may briefly report a transient state while
+  // the WisePad reconnects. Give that bounded recovery time to become READY.
+  // An explicit ABSENT/ERROR (or no native reader bridge at all) is different:
+  // there is no usable terminal for this payment attempt, so QR becomes the
+  // immediate fail-safe even on DTA21269.
   const terminalReaderUnavailable = terminalStation
     && model.reader.capability === "QR_ONLY"
     && !inProgress;
@@ -237,8 +237,10 @@ export function KioskPaymentRailStage(props: Props) {
     && transientReader
     && !readerGraceExpired;
   const readerNeedsDecision = terminalReaderUnavailable
-    && (!nativeBridge || readerGraceExpired || readerState === "ABSENT" || readerState === "ERROR");
-  const confirmedQrOnly = !terminalStation && (
+    && nativeBridge
+    && transientReader
+    && readerGraceExpired;
+  const confirmedQrOnly = model.reader.capability === "QR_ONLY" && (
     !nativeBridge
     || readerState === "ABSENT"
     || readerState === "ERROR"
@@ -246,17 +248,15 @@ export function KioskPaymentRailStage(props: Props) {
 
   /*
    * Payment-rail invariant:
-   * - DTA21269 never auto-claims QR: it owns the physical WisePad and must
-   *   preserve the Terminal + QR choice whenever the reader becomes READY;
-   * - non-terminal cabinets may auto-fallback to QR when the bridge/reader is
-   *   explicitly unavailable;
-   * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING never claim QR merely
-   *   because the bounded reader grace elapsed.
+   * - READY reader => offer Terminal + QR;
+   * - explicitly absent/error reader (or no native bridge) => claim QR directly,
+   *   including on DTA21269;
+   * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING stay unclaimed during
+   *   the bounded grace window, then expose Retry + QR instead of guessing.
    */
   useEffect(() => {
     if (
       inProgress
-      || terminalStation
       || model.reader.capability !== "QR_ONLY"
       || !confirmedQrOnly
       || !model.payment.canChooseQr
@@ -267,7 +267,7 @@ export function KioskPaymentRailStage(props: Props) {
     setLocalRail("QR");
     setLocalRailState("CLAIMING");
     onChooseQr();
-  }, [inProgress, terminalStation, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
+  }, [inProgress, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
 
   const chooseTerminal = () => {
     if (!terminalStation) return;
