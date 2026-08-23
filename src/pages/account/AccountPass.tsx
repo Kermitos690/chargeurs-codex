@@ -35,6 +35,7 @@ type State = {
 };
 
 type ManageAction = "portal" | "cancel_at_period_end" | "resume";
+type WalletAction = "issue" | "sync";
 
 const initial: State = {
   loading: true,
@@ -51,6 +52,9 @@ export default function AccountPass() {
   const [managementAction, setManagementAction] = useState<ManageAction | null>(null);
   const [managementMessage, setManagementMessage] = useState<string | null>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
+  const [walletAction, setWalletAction] = useState<WalletAction | null>(null);
+  const [walletMessage, setWalletMessage] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const membershipReturn = useMemo(() => new URLSearchParams(window.location.search).get("membership"), []);
 
   const load = useCallback(async () => {
@@ -84,16 +88,16 @@ export default function AccountPass() {
 
   const providerStatus = state.walletPass?.provider_status ?? "not_issued";
   const providerLabel = providerStatus === "issued"
-    ? "Émis"
+    ? "Pass Wallet prêt"
     : providerStatus === "pending"
       ? "Émission en cours"
       : providerStatus === "update_pending"
         ? "Mise à jour en cours"
         : providerStatus === "error"
-          ? "À vérifier"
+          ? "À resynchroniser"
           : providerStatus === "revoked"
-            ? "Révoqué"
-            : "Émission Wallet non activée";
+            ? "Pass révoqué"
+            : "Prêt à être ajouté";
 
   const subscribe = async () => {
     if (subscribing) return;
@@ -149,6 +153,31 @@ export default function AccountPass() {
     }
   };
 
+  const addToWallet = async () => {
+    if (!membershipActive || walletAction) return;
+    const action: WalletAction = providerStatus === "issued" ? "sync" : "issue";
+    setWalletAction(action);
+    setWalletError(null);
+    setWalletMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("account-privacy", {
+        body: { action: "wallet_pass", walletAction: action },
+      });
+      if (error || !data?.ok) throw new Error(String(data?.error ?? "WALLET_PASS_UNAVAILABLE"));
+      const addToWalletUrl = String(data.addToWalletUrl ?? "");
+      if (!/^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl)) {
+        throw new Error("WALLET_URL_INVALID");
+      }
+      setWalletMessage(action === "sync" ? "Pass synchronisé. Ouverture du Wallet…" : "Pass créé. Ouverture du Wallet…");
+      await load();
+      window.location.assign(addToWalletUrl);
+    } catch {
+      setWalletError("Le Pass Wallet n’a pas pu être émis pour le moment. Votre adhésion Chargeurs+ reste inchangée.");
+    } finally {
+      setWalletAction(null);
+    }
+  };
+
   if (state.loading) {
     return <div className="glass mt-6 grid min-h-[50vh] place-items-center rounded-3xl"><Loader2 className="h-9 w-9 animate-spin text-primary" /></div>;
   }
@@ -182,6 +211,8 @@ export default function AccountPass() {
       )}
       {managementMessage && <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm text-success">{managementMessage}</div>}
       {managementError && <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">{managementError}</div>}
+      {walletMessage && <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm text-success">{walletMessage}</div>}
+      {walletError && <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">{walletError}</div>}
 
       <section className="overflow-hidden rounded-[2rem] border border-violet-300/20 bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,.22),transparent_35%),linear-gradient(145deg,rgba(9,6,20,.98),rgba(3,7,16,.98))] p-6 shadow-[0_30px_80px_rgba(0,0,0,.45)] sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
@@ -256,11 +287,20 @@ export default function AccountPass() {
           <div className="flex items-center gap-3"><Smartphone className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Apple Wallet / Google Wallet</h2></div>
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {providerStatus === "issued"
-              ? "Le backend indique qu’un objet Wallet a été émis."
-              : "Le modèle de Pass est prêt, mais aucun bouton d’ajout n’est affiché tant que les certificats et identifiants plateforme nécessaires ne sont pas configurés côté serveur."}
+            {membershipActive
+              ? "Ajoutez votre Chargeurs+ Pass au Wallet natif. Chargeurs.ch reste la source de vérité pour le statut, le tarif et les ChargePoints."
+              : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}
           </p>
-          {state.walletPass ? <p className="mt-4 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
+          <Button
+            className="mt-5 w-full rounded-2xl bg-black py-6 text-base font-bold text-white hover:bg-black/85"
+            disabled={!membershipActive || Boolean(walletAction)}
+            onClick={() => void addToWallet()}
+          >
+            {walletAction ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <WalletCards className="mr-2 h-5 w-5" />}
+            {providerStatus === "issued" ? "Ouvrir / synchroniser mon Wallet" : "Ajouter à Apple / Google Wallet"}
+          </Button>
+          <p className="mt-3 text-xs text-muted-foreground">Le lien d’ajout est généré côté serveur. La clé Pass Studio n’est jamais envoyée au navigateur.</p>
+          {state.walletPass ? <p className="mt-3 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
         </article>
 
         <article className="glass rounded-3xl p-6">
