@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/check-kiosk-geometry.mjs && node scripts/materialize-cinematic-art.mjs",
+    "prebuild": "node scripts/check-kiosk-geometry.mjs && node scripts/check-kiosk-safe-frame.mjs && node scripts/materialize-cinematic-art.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
@@ -16,7 +16,7 @@
     "test:unit": "vitest run src/test/roles.test.ts src/test/rentalState.test.ts",
     "test:state": "vitest run src/test/rentalState.test.ts",
     "test:roles": "vitest run src/test/roles.test.ts",
-    "test:kiosk-geometry": "node scripts/check-kiosk-geometry.mjs",
+    "test:kiosk-geometry": "node scripts/check-kiosk-geometry.mjs && node scripts/check-kiosk-safe-frame.mjs",
     "test:db": "psql -v ON_ERROR_STOP=1 -f supabase/tests/db-tests.sql && psql -v ON_ERROR_STOP=1 -f supabase/tests/pricing-snapshot-hardening.sql",
     "test:stripe": "deno test --allow-net --allow-env --allow-read --no-check supabase/functions/tests/stripe.test.ts",
     "test:chargenow": "deno test --allow-net --allow-env --allow-read --no-check supabase/functions/tests/chargenow_contract.test.ts",
