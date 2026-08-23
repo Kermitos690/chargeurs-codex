@@ -1,5 +1,5 @@
 release=p0-terminal-ready-cancelled-ui
-source_commit=479e5b25e6cee8e964fe9e48c64a8abaa4aae18a
-triggered_at=2026-08-23T20:34:00Z
+source_commit=fdd7a42ef77c60e84968a46fe916c9ab7a92883b
+triggered_at=2026-08-24T00:09:00+02:00
 requested_by=gaetan
-reason=deploy-p0-wisepad-ready-cancelled-ui-via-prebuilt-path-after-git-integration-build-rate-limit
+reason=force-production-vercel-convergence-to-latest-functional-main
