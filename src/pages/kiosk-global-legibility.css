@@ -17,42 +17,30 @@ html.kiosk-v3 {
   --p0-root-pad-bottom: 8px;
 }
 
-/* -------------------------------------------------------------------------- */
-/* GLOBAL SHELL / HEADER                                                       */
-/* -------------------------------------------------------------------------- */
-html.kiosk-v3 .kv3-product-layer {
-  bottom: var(--p0-footer-h) !important;
-}
-
+/* GLOBAL SHELL / HEADER */
+html.kiosk-v3 .kv3-product-layer { bottom: var(--p0-footer-h) !important; }
 html.kiosk-v3 .kv3-product-layer > .kiosk-root {
   padding: var(--p0-root-pad-top) var(--p0-root-pad-x) var(--p0-root-pad-bottom) !important;
   grid-template-rows: var(--p0-header-h) minmax(0, 1fr) !important;
   row-gap: var(--p0-header-gap) !important;
 }
-
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header {
   height: var(--p0-header-h) !important;
   min-height: var(--p0-header-h) !important;
   max-height: var(--p0-header-h) !important;
   gap: 12px !important;
 }
-
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child {
   min-width: 170px !important;
   display: flex !important;
   align-items: center !important;
 }
-
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child img,
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child svg {
   max-height: 38px !important;
   width: auto !important;
 }
-
-html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div {
-  gap: 10px !important;
-}
-
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div { gap: 10px !important; }
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button {
   min-height: 48px !important;
   padding: 0 18px !important;
@@ -60,17 +48,8 @@ html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button {
   line-height: 1 !important;
   font-weight: 800 !important;
 }
-
-html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button svg {
-  width: 22px !important;
-  height: 22px !important;
-}
-
-html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full {
-  padding: 5px !important;
-  gap: 4px !important;
-}
-
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button svg { width: 22px !important; height: 22px !important; }
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full { padding: 5px !important; gap: 4px !important; }
 html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full > button {
   min-width: 52px !important;
   min-height: 40px !important;
@@ -79,9 +58,7 @@ html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-ful
   line-height: 1 !important;
 }
 
-/* -------------------------------------------------------------------------- */
-/* SYSTEM FOOTER — readable from normal standing distance                      */
-/* -------------------------------------------------------------------------- */
+/* SYSTEM FOOTER */
 html.kiosk-v3 .kiosk-system-footer {
   height: var(--p0-footer-h) !important;
   min-height: var(--p0-footer-h) !important;
@@ -90,15 +67,9 @@ html.kiosk-v3 .kiosk-system-footer {
   gap: 20px !important;
   padding: 0 24px !important;
 }
-
 html.kiosk-v3 .kiosk-system-footer__payments { gap: 12px !important; }
-html.kiosk-v3 .kiosk-system-footer__secure {
-  gap: 7px !important;
-  font-size: 13px !important;
-  font-weight: 760 !important;
-}
+html.kiosk-v3 .kiosk-system-footer__secure { gap: 7px !important; font-size: 13px !important; font-weight: 760 !important; }
 html.kiosk-v3 .kiosk-system-footer__secure svg { width: 18px !important; height: 18px !important; }
-
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-marks { gap: 7px !important; }
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark {
   min-width: 50px !important;
@@ -111,39 +82,20 @@ html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark {
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark img { max-height: 24px !important; }
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark svg { max-height: 23px !important; }
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark > span { font-size: 11px !important; }
-
 html.kiosk-v3 .kiosk-system-footer__commercial { gap: 18px !important; }
 html.kiosk-v3 .kiosk-system-footer__commercial > span { gap: 3px !important; }
-html.kiosk-v3 .kiosk-system-footer__commercial small {
-  font-size: 12px !important;
-  line-height: 1 !important;
-  font-weight: 760 !important;
-}
-html.kiosk-v3 .kiosk-system-footer__commercial strong {
-  font-size: 16px !important;
-  line-height: 1 !important;
-  font-weight: 920 !important;
-}
+html.kiosk-v3 .kiosk-system-footer__commercial small { font-size: 12px !important; line-height: 1 !important; font-weight: 760 !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial strong { font-size: 16px !important; line-height: 1 !important; font-weight: 920 !important; }
 html.kiosk-v3 .kiosk-system-footer__commercial > i { height: 34px !important; }
-
 html.kiosk-v3 .kiosk-system-footer__runtime { gap: 13px !important; }
-html.kiosk-v3 .kiosk-system-footer__station {
-  font-size: 15px !important;
-  font-weight: 920 !important;
-}
+html.kiosk-v3 .kiosk-system-footer__station { font-size: 15px !important; font-weight: 920 !important; }
 html.kiosk-v3 .kiosk-system-footer__time,
-html.kiosk-v3 .kiosk-system-footer__network {
-  gap: 6px !important;
-  font-size: 13px !important;
-  font-weight: 800 !important;
-}
+html.kiosk-v3 .kiosk-system-footer__network { gap: 6px !important; font-size: 13px !important; font-weight: 800 !important; }
 html.kiosk-v3 .kiosk-system-footer__time svg,
 html.kiosk-v3 .kiosk-system-footer__network svg { width: 16px !important; height: 16px !important; }
 html.kiosk-v3 .kiosk-system-footer__network b { width: 9px !important; height: 9px !important; }
 
-/* -------------------------------------------------------------------------- */
-/* HOME                                                                        */
-/* -------------------------------------------------------------------------- */
+/* HOME */
 html.kiosk-v3 .ck2-home .ck2-reference-home-main {
   top: 70px !important;
   bottom: 10px !important;
@@ -152,141 +104,77 @@ html.kiosk-v3 .ck2-home .ck2-reference-home-main {
   gap: 14px !important;
 }
 html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
-html.kiosk-v3 .ck2-home .ck2-home-title {
-  font-size: 50px !important;
-  line-height: .98 !important;
-}
-html.kiosk-v3 .ck2-home .ck2-reference-heading p {
-  margin-top: 7px !important;
-  font-size: 19px !important;
-  line-height: 1.22 !important;
-  font-weight: 600 !important;
-}
-html.kiosk-v3 .ck2-home .ck2-reference-card {
-  padding: 25px 28px 64px !important;
-}
+html.kiosk-v3 .ck2-home .ck2-home-title { font-size: 50px !important; line-height: .98 !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-heading p { margin-top: 7px !important; font-size: 19px !important; line-height: 1.22 !important; font-weight: 600 !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-card { padding: 25px 28px 64px !important; }
 html.kiosk-v3 .ck2-home .ck2-reference-card > strong { font-size: 38px !important; }
-html.kiosk-v3 .ck2-home .ck2-reference-card > small {
-  margin-top: 9px !important;
-  font-size: 18px !important;
-  line-height: 1.3 !important;
-}
+html.kiosk-v3 .ck2-home .ck2-reference-card > small { margin-top: 9px !important; font-size: 18px !important; line-height: 1.3 !important; }
 html.kiosk-v3 .ck2-home .ck2-choice-icon { width: 62px !important; height: 62px !important; }
 html.kiosk-v3 .ck2-home .ck2-reference-rate em { font-size: 14px !important; }
 html.kiosk-v3 .ck2-home .ck2-reference-rate b { font-size: 32px !important; }
 html.kiosk-v3 .ck2-home .ck2-choice-member:disabled .ck2-reference-rate b { font-size: 24px !important; }
 
-/* -------------------------------------------------------------------------- */
-/* CONNECTED / MEMBER SURFACES                                                 */
-/* -------------------------------------------------------------------------- */
+/* CONNECTED / MEMBER */
 html.kiosk-v3 :is(.ck2-connected, .ck2-member) h1,
-html.kiosk-v3 :is(.ck2-connected, .ck2-member) h2 {
-  font-size: clamp(42px, 3.6vw, 50px) !important;
-  line-height: 1 !important;
-}
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) h2 { font-size: clamp(42px, 3.6vw, 50px) !important; line-height: 1 !important; }
 html.kiosk-v3 :is(.ck2-connected, .ck2-member) p,
-html.kiosk-v3 :is(.ck2-connected, .ck2-member) small {
-  font-size: 18px !important;
-  line-height: 1.28 !important;
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) small { font-size: 18px !important; line-height: 1.28 !important; }
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) button { min-height: 52px !important; font-size: 18px !important; }
+
+/* STARTING */
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main .h-20.w-20 {
+  width: 88px !important;
+  height: 88px !important;
 }
-html.kiosk-v3 :is(.ck2-connected, .ck2-member) button {
-  min-height: 52px !important;
-  font-size: 18px !important;
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main p {
+  font-size: 30px !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
 }
 
-/* -------------------------------------------------------------------------- */
-/* PRICING                                                                     */
-/* -------------------------------------------------------------------------- */
-html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 {
-  font-size: 44px !important;
-}
-html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child > .font-display {
-  font-size: 45px !important;
-}
-html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.text-xl {
-  font-size: 19px !important;
-  line-height: 1.24 !important;
-}
-html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.mt-7 {
-  font-size: 16px !important;
-  line-height: 1.2 !important;
-}
-html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button {
-  min-height: 56px !important;
-  font-size: 20px !important;
-}
+/* PRICING */
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 { font-size: 44px !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child > .font-display { font-size: 45px !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.text-xl { font-size: 19px !important; line-height: 1.24 !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.mt-7 { font-size: 16px !important; line-height: 1.2 !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button { min-height: 56px !important; font-size: 20px !important; }
 
-/* -------------------------------------------------------------------------- */
-/* PAYMENT CHOICE                                                              */
-/* -------------------------------------------------------------------------- */
-html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > h2 {
-  font-size: 44px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > p {
-  font-size: 19px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > div {
-  font-size: 28px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > p {
-  font-size: 17px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > button {
-  min-height: 50px !important;
-  font-size: 17px !important;
-}
+/* PAYMENT CHOICE */
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > h2 { font-size: 44px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > p { font-size: 19px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > div { font-size: 28px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > p { font-size: 17px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > button { min-height: 50px !important; font-size: 17px !important; }
 
-/* -------------------------------------------------------------------------- */
-/* QR PAYMENT                                                                  */
-/* -------------------------------------------------------------------------- */
-html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:first-child > .font-display.text-5xl {
-  font-size: 42px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 {
-  font-size: 42px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 + p {
-  font-size: 18px !important;
-  line-height: 1.25 !important;
-}
+/* QR PAYMENT */
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:first-child > .font-display.text-5xl { font-size: 42px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 { font-size: 42px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 + p { font-size: 18px !important; line-height: 1.25 !important; }
 html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-6,
-html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-4 {
-  font-size: 15px !important;
-}
-html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage button {
-  min-height: 46px !important;
-  font-size: 16px !important;
-}
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-4 { font-size: 15px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage button { min-height: 46px !important; font-size: 16px !important; }
 
-/* -------------------------------------------------------------------------- */
-/* RELEASE / SUPPORT / SUCCESS                                                 */
-/* -------------------------------------------------------------------------- */
-html.kiosk-v3 :is(
-  [data-kiosk-scene="release"],
-  [data-kiosk-scene="support"],
-  [data-kiosk-scene="success"]
-) :is(.kiosk-release-stage, .kiosk-ready-stage) h2 {
+/* RELEASE / SUPPORT / SUCCESS — data-kiosk-scene lives on html itself. */
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage h2,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage h2 {
   font-size: clamp(42px, 3.6vw, 50px) !important;
   line-height: 1 !important;
 }
-html.kiosk-v3 :is(
-  [data-kiosk-scene="release"],
-  [data-kiosk-scene="support"],
-  [data-kiosk-scene="success"]
-) :is(.kiosk-release-stage, .kiosk-ready-stage) p {
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage p,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage p,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage p {
   font-size: 18px !important;
   line-height: 1.25 !important;
 }
-html.kiosk-v3 :is(
-  [data-kiosk-scene="release"],
-  [data-kiosk-scene="support"],
-  [data-kiosk-scene="success"]
-) :is(.kiosk-release-stage, .kiosk-ready-stage) button {
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage button,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage button,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage button {
   min-height: 50px !important;
   font-size: 18px !important;
 }
 
-/* If Android exposes fewer CSS pixels, compress spacing before typography. */
+/* Compress spacing before typography on shorter Android CSS viewports. */
 @media (max-height: 680px) {
   html.kiosk-v3 {
     --p0-footer-h: 68px;
