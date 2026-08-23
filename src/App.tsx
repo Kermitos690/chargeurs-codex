@@ -15,6 +15,8 @@ import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
+import { KioskIdentityGate } from "./components/kiosk/KioskIdentityGate.tsx";
+
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
