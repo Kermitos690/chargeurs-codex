@@ -15,24 +15,22 @@ export function PowerbankScene({ charge, selected, recommended, rentable, return
     ? "text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,.95)]"
     : "text-amber-200";
 
+  // Selection cards must read like physical status indicators, not animated
+  // decorative objects. Keep this visual deliberately static: repeated opacity,
+  // rotation or bounce loops looked like unstable hardware state on the field HMI.
   return (
-    <div className="kiosk-slot-visual relative mt-2 flex h-11 items-center justify-between overflow-hidden rounded-2xl border border-white/15 bg-slate-950/25 px-3" aria-hidden="true">
-      <motion.div
+    <div className={`kiosk-slot-visual relative mt-2 flex h-11 items-center justify-between overflow-hidden rounded-2xl border bg-slate-950/25 px-3 ${selected ? "border-cyan-200/40 shadow-[inset_0_0_18px_rgba(34,211,238,.09)]" : "border-white/15"}`} aria-hidden="true">
+      <div
         className="absolute inset-y-0 left-0 rounded-r-2xl bg-gradient-to-r from-cyan-400/35 via-blue-500/20 to-violet-500/5"
-        animate={{ width: `${level}%`, opacity: rentable ? [0.5, 0.85, 0.5] : 0.3 }}
-        transition={{ duration: rentable ? 2.4 : 0.35, repeat: rentable ? Infinity : 0, ease: "easeInOut" }}
+        style={{ width: `${level}%`, opacity: rentable ? 0.72 : 0.3 }}
       />
-      <motion.div
-        className="relative z-10"
-        animate={selected ? { y: [0, -2, 0], rotate: [0, -3, 0] } : undefined}
-        transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-      >
+      <div className="relative z-10">
         {rentable ? <BatteryCharging className={`h-7 w-7 ${iconClass}`} strokeWidth={2.4} /> : returnAvailable ? <CornerDownLeft className="h-7 w-7 text-cyan-100 drop-shadow-[0_0_14px_rgba(34,211,238,.95)]" strokeWidth={2.4} /> : <AlertTriangle className="h-6 w-6 text-amber-200" strokeWidth={2.3} />}
-      </motion.div>
-      <div className="relative z-10 flex gap-1">
-        {[25, 50, 75, 100].map((threshold) => <span key={threshold} className={`h-1.5 w-1.5 rounded-full ${level >= threshold ? "bg-cyan-100 shadow-[0_0_8px_rgba(103,232,249,1)]" : "bg-white/20"}`} />)}
       </div>
-      {recommended && <Zap className="relative z-10 h-5 w-5 text-lime-200 drop-shadow-[0_0_10px_rgba(190,242,100,.85)]" />}
+      <div className="relative z-10 flex gap-1.5">
+        {[25, 50, 75, 100].map((threshold) => <span key={threshold} className={`h-2 w-2 rounded-full ${level >= threshold ? "bg-cyan-100 shadow-[0_0_7px_rgba(103,232,249,.8)]" : "bg-white/20"}`} />)}
+      </div>
+      {recommended && <Zap className="relative z-10 h-6 w-6 text-lime-200 drop-shadow-[0_0_8px_rgba(190,242,100,.65)]" />}
     </div>
   );
 }
@@ -49,13 +47,9 @@ export function KioskHolographicFloor() {
       <motion.div
         className="absolute inset-x-[-25%] top-[-44%] h-[82%] rotate-[16deg] bg-[linear-gradient(90deg,transparent,rgba(103,232,249,.075),transparent)] blur-2xl"
         animate={{ x: ["-26%", "82%"] }}
-        transition={{ duration: 9, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
+        transition={{ duration: 12, repeat: Infinity, repeatDelay: 5, ease: "easeInOut" }}
       />
-      <motion.div
-        className="absolute left-1/2 top-[52%] h-[52%] w-[68%] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.11),rgba(37,99,235,.03)_48%,transparent_70%)]"
-        animate={{ scale: [1, 1.025, 1], opacity: [.62, .9, .62] }}
-        transition={{ duration: 5.4, repeat: Infinity, ease: "easeInOut" }}
-      />
+      <div className="absolute left-1/2 top-[52%] h-[52%] w-[68%] -translate-x-1/2 rounded-[50%] border border-cyan-200/10 bg-[radial-gradient(ellipse_at_center,rgba(14,165,233,.11),rgba(37,99,235,.03)_48%,transparent_70%)] opacity-75" />
     </div>
   );
 }
