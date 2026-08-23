@@ -14,6 +14,7 @@ type NativeTerminalBridge = {
   getPaymentReaderStatus?: () => string;
   refreshPaymentReader?: () => string;
   startTerminalPayment?: (rentalSessionId: string) => string;
+  cancelTerminalPayment?: () => string;
   restartApp?: () => void;
 };
 type NativeWindow = Window & { ChargeursNative?: NativeTerminalBridge };
@@ -90,7 +91,7 @@ const COPY = {
     qrOnlySub: "Zahlung auf dem Smartphone wird vorbereitet…",
     checking: "Zahlungsterminal wird verbunden…",
     checkingSub: "Das Terminal dieser Station wird geprüft, bevor die Zahlungsarten angezeigt werden.",
-    slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst die QR-Zahlung.",
+    slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst den QR-Code.",
     processing: "Kontaktlose Zahlung läuft",
     processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
     staleQr: "Vorherige QR-Zahlung erkannt",
@@ -111,6 +112,17 @@ function parseProjection(raw: string | undefined): NativeReaderProjection | null
   } catch {
     return null;
   }
+}
+
+function isCanonicalTerminalCancellation(reader: NativeReaderProjection | null): boolean {
+  const payment = reader?.payment;
+  return Boolean(
+    payment
+    && payment.rail === "NONE"
+    && (payment.railState === "CANCELLED" || payment.railState === "EXPIRED")
+    && payment.serverConfirmed !== true
+    && payment.recoveryRequired !== true
+  );
 }
 
 export function KioskPaymentRailStage(props: Props) {
@@ -140,8 +152,13 @@ export function KioskPaymentRailStage(props: Props) {
   const [cancellingPayment, setCancellingPayment] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const confirmedRef = useRef(false);
+  const terminalCancellationHandledRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
+
+  useEffect(() => {
+    terminalCancellationHandledRef.current = false;
+  }, [rentalSessionId]);
 
   useEffect(() => {
     if (!nativeBridge) return;
@@ -151,7 +168,7 @@ export function KioskPaymentRailStage(props: Props) {
       if (!cancelled && next) setReader(next);
     };
     refresh();
-    const interval = window.setInterval(refresh, inProgress ? 650 : 700);
+    const interval = window.setInterval(refresh, inProgress ? 350 : 700);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -190,6 +207,17 @@ export function KioskPaymentRailStage(props: Props) {
     onServerConfirmed();
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
+  useEffect(() => {
+    if (terminalCancellationHandledRef.current || !isCanonicalTerminalCancellation(reader)) return;
+    terminalCancellationHandledRef.current = true;
+    railTapLockRef.current = false;
+    setCancellingPayment(false);
+    setCancelError(null);
+    setLocalRail("NONE");
+    setLocalRailState(reader?.payment?.railState === "EXPIRED" ? "EXPIRED" : "CANCELLED");
+    window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
+  }, [reader]);
+
   const chooseQr = () => {
     if (railTapLockRef.current || !model.payment.canChooseQr) return;
     railTapLockRef.current = true;
@@ -208,12 +236,8 @@ export function KioskPaymentRailStage(props: Props) {
     && model.reader.capability === "QR_ONLY"
     && TRANSIENT_READER_STATES.has(readerState)
     && !inProgress;
+  const readerConfirmedUnavailable = readerState === "ABSENT" || readerState === "ERROR";
 
-  // DTA21269 is physically terminal-equipped. A temporary reader projection
-  // must never silently convert that cabinet into QR-only. Keep the rail
-  // unclaimed until the reader is READY, then present the normal Terminal + QR
-  // choice. If recovery takes too long (or reports ABSENT/ERROR), allow an
-  // explicit retry-or-QR decision instead of auto-starting Checkout.
   const terminalReaderUnavailable = terminalStation
     && model.reader.capability === "QR_ONLY"
     && !inProgress;
@@ -222,26 +246,25 @@ export function KioskPaymentRailStage(props: Props) {
     && transientReader
     && !readerGraceExpired;
   const readerNeedsDecision = terminalReaderUnavailable
-    && (!nativeBridge || readerGraceExpired || readerState === "ABSENT" || readerState === "ERROR");
-  const confirmedQrOnly = !terminalStation && (
+    && nativeBridge
+    && !readerConfirmedUnavailable
+    && readerGraceExpired;
+  const confirmedQrOnly = model.reader.capability === "QR_ONLY" && (
     !nativeBridge
-    || readerState === "ABSENT"
-    || readerState === "ERROR"
+    || readerConfirmedUnavailable
   );
 
   /*
    * Payment-rail invariant:
-   * - DTA21269 never auto-claims QR: it owns the physical WisePad and must
-   *   preserve the Terminal + QR choice whenever the reader becomes READY;
-   * - non-terminal cabinets may auto-fallback to QR when the bridge/reader is
-   *   explicitly unavailable;
-   * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING never claim QR merely
-   *   because the bounded reader grace elapsed.
+   * - READY => Terminal + QR on the terminal-equipped cabinet;
+   * - explicit ABSENT/ERROR or no native bridge => direct QR fallback, including
+   *   DTA21269, because an unavailable reader must never strand the customer;
+   * - transient discovery/connect/reconnect/update gets a bounded grace window,
+   *   then an explicit Retry + QR choice without silently claiming a rail.
    */
   useEffect(() => {
     if (
       inProgress
-      || terminalStation
       || model.reader.capability !== "QR_ONLY"
       || !confirmedQrOnly
       || !model.payment.canChooseQr
@@ -252,11 +275,12 @@ export function KioskPaymentRailStage(props: Props) {
     setLocalRail("QR");
     setLocalRailState("CLAIMING");
     onChooseQr();
-  }, [inProgress, terminalStation, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
+  }, [inProgress, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
 
   const chooseTerminal = () => {
     if (!terminalStation) return;
     if (railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
+    terminalCancellationHandledRef.current = false;
     railTapLockRef.current = true;
     setNativeError(null);
     setCancelError(null);
@@ -294,20 +318,35 @@ export function KioskPaymentRailStage(props: Props) {
 
   const cancelActivePayment = async () => {
     if (cancellingPayment) return;
-    const kioskToken = readKioskToken();
-    if (!kioskToken) {
-      setCancelError("KIOSK_AUTH_REQUIRED");
-      return;
-    }
-
     setCancellingPayment(true);
     setCancelError(null);
+    let keepCancelling = false;
+
     try {
-      // A previous auto-QR checkout can survive a reboot and make the native
-      // Terminal runtime project `QR / ENGAGED`. Cancel that rail with the
-      // canonical Checkout endpoint. Otherwise cancel the TEST Terminal intent
-      // through the canonical Terminal backend. Neither path touches pricing,
-      // ejection or the reader configuration.
+      // New native APK path: stop Stripe collection on the WisePad first, then
+      // let the runtime perform the same authoritative backend cancellation.
+      // Polling below keeps the kiosk on CANCELLING until the server rail is
+      // actually released, so screen and reader cannot diverge.
+      if (rawNativeRail !== "QR" && native?.cancelTerminalPayment) {
+        const ack = JSON.parse(native.cancelTerminalPayment()) as { ok?: boolean; code?: string };
+        if (ack?.ok === true || ack?.code === "TERMINAL_CANCEL_IN_PROGRESS") {
+          keepCancelling = true;
+          setLocalRail("TERMINAL");
+          setLocalRailState("CANCELLING");
+          return;
+        }
+        setCancelError(ack?.code ?? "TERMINAL_CANCEL_FAILED");
+        return;
+      }
+
+      // Backward-compatible fallback for the currently installed 1.0.35 APK,
+      // which does not expose cancelTerminalPayment(). This is retained only so
+      // a stale QR rail or older native shell can still be released safely.
+      const kioskToken = readKioskToken();
+      if (!kioskToken) {
+        setCancelError("KIOSK_AUTH_REQUIRED");
+        return;
+      }
       const staleQrRail = rawNativeRail === "QR";
       const path = staleQrRail ? "/api/kiosk/cancel-checkout" : "/api/kiosk/terminal-payment";
       const body = staleQrRail
@@ -330,16 +369,11 @@ export function KioskPaymentRailStage(props: Props) {
         setCancelError(data?.error ?? "PAYMENT_CANCEL_FAILED");
         return;
       }
-
-      // On APK 1.0.35 there is no public native cancel bridge yet. Restart only
-      // after the server confirms cancellation (or confirms no Terminal rail)
-      // so any local Stripe SDK collection is torn down without leaving a live
-      // server-side authorization behind.
       restartCleanly();
     } catch {
       setCancelError("PAYMENT_CANCEL_NETWORK_FAILED");
     } finally {
-      setCancellingPayment(false);
+      if (!keepCancelling) setCancellingPayment(false);
     }
   };
 
