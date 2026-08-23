@@ -1,0 +1,5 @@
+issue=288
+field_station=DTA21269
+stripe_terminal_sdk=3.0.0
+no_payment_card=true
+no_ejection=true
