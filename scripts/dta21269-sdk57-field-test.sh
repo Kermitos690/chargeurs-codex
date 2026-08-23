@@ -15,6 +15,65 @@ if [[ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]]; then
   exit 2
 fi
 
+# Gradle/AGP requires a real JDK. macOS can have Android Studio installed while
+# /usr/bin/java still reports that no Java runtime exists, so resolve a JDK 17+
+# explicitly before invoking the wrapper. Prefer the JBR bundled with Android
+# Studio because it is already validated for Android builds.
+java_major_for_home() {
+  local home="$1" version major rest
+  [[ -x "$home/bin/java" ]] || return 1
+  version="$("$home/bin/java" -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p')"
+  [[ -n "$version" ]] || return 1
+  major="${version%%.*}"
+  if [[ "$major" == "1" ]]; then
+    rest="${version#1.}"
+    major="${rest%%.*}"
+  fi
+  [[ "$major" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "$major"
+}
+
+pick_java_home() {
+  local candidate major
+  local -a candidates=()
+
+  [[ -n "${JAVA_HOME:-}" ]] && candidates+=("$JAVA_HOME")
+  candidates+=(
+    "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    "/Applications/Android Studio Preview.app/Contents/jbr/Contents/Home"
+    "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+    "$HOME/Applications/Android Studio Preview.app/Contents/jbr/Contents/Home"
+  )
+
+  for candidate in /Library/Java/JavaVirtualMachines/*/Contents/Home; do
+    [[ -d "$candidate" ]] && candidates+=("$candidate")
+  done
+  for candidate in "$HOME"/Library/Java/JavaVirtualMachines/*/Contents/Home; do
+    [[ -d "$candidate" ]] && candidates+=("$candidate")
+  done
+
+  for candidate in "${candidates[@]}"; do
+    major="$(java_major_for_home "$candidate" || true)"
+    if [[ -n "$major" && "$major" -ge 17 ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+JAVA_HOME="$(pick_java_home || true)"
+if [[ -z "$JAVA_HOME" ]]; then
+  echo "ERROR: no JDK 17+ found." >&2
+  echo "Android Studio's bundled JDK was checked first, followed by standard macOS JDK locations." >&2
+  echo "JAVA_REQUIRED_FOR_BUILD" >&2
+  exit 22
+fi
+export JAVA_HOME
+export PATH="$JAVA_HOME/bin:$PATH"
+JAVA_MAJOR="$(java_major_for_home "$JAVA_HOME")"
+echo "Java: $JAVA_HOME (major $JAVA_MAJOR)"
+
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 find_build_tool() {
   local name="$1"
