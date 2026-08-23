@@ -11,8 +11,9 @@ const paymentStatePath = path.join(root, 'src/lib/kioskPaymentState.ts');
 const adsSyncPath = path.join(root, 'src/components/kiosk/KioskAdvertisingSynchronizedLayer.tsx');
 const adsPartnerBridgePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPartnerBridge.tsx');
 const adsPartnerCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-partner-panel.css');
-const adsPortraitRuntimePath = path.join(root, 'src/components/kiosk/KioskAdvertisingPortraitFocus.tsx');
-const adsPortraitCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-portrait-focus.css');
+const adsSmartCropRuntimePath = path.join(root, 'src/components/kiosk/KioskAdvertisingSmartCrop.tsx');
+const adsSmartCropCssPath = path.join(root, 'src/components/kiosk/kiosk-advertising-smart-crop.css');
+const adsFocalPath = path.join(root, 'src/lib/adFocalPoint.ts');
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
 const supportCss = fs.readFileSync(supportCssPath, 'utf8');
@@ -22,8 +23,9 @@ const paymentState = fs.readFileSync(paymentStatePath, 'utf8');
 const adsSync = fs.readFileSync(adsSyncPath, 'utf8');
 const adsPartnerBridge = fs.readFileSync(adsPartnerBridgePath, 'utf8');
 const adsPartnerCss = fs.readFileSync(adsPartnerCssPath, 'utf8');
-const adsPortraitRuntime = fs.readFileSync(adsPortraitRuntimePath, 'utf8');
-const adsPortraitCss = fs.readFileSync(adsPortraitCssPath, 'utf8');
+const adsSmartCropRuntime = fs.readFileSync(adsSmartCropRuntimePath, 'utf8');
+const adsSmartCropCss = fs.readFileSync(adsSmartCropCssPath, 'utf8');
+const adsFocal = fs.readFileSync(adsFocalPath, 'utf8');
 
 function pxVar(name) {
   const match = css.match(new RegExp(`${name}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`));
@@ -155,12 +157,12 @@ for (const marker of partnerRuntimeMarkers) {
   if (!adsSync.includes(marker)) failures.push(`missing partner Ads runtime marker: ${marker}`);
 }
 
-const portraitRuntimeMarkers = [
-  'import { KioskAdvertisingPortraitFocus } from "./KioskAdvertisingPortraitFocus";',
-  '<KioskAdvertisingPortraitFocus />',
+const landscapeRuntimeMarkers = [
+  'import { KioskAdvertisingSmartCrop } from "./KioskAdvertisingSmartCrop";',
+  '<KioskAdvertisingSmartCrop />',
 ];
-for (const marker of portraitRuntimeMarkers) {
-  if (!adsSync.includes(marker)) failures.push(`missing portrait Ads runtime marker: ${marker}`);
+for (const marker of landscapeRuntimeMarkers) {
+  if (!adsSync.includes(marker)) failures.push(`missing landscape Ads runtime marker: ${marker}`);
 }
 
 const partnerBoundaryMarkers = [
@@ -186,37 +188,52 @@ for (const marker of partnerCssMarkers) {
   if (!adsPartnerCss.includes(marker)) failures.push(`missing partner Ads presentation marker: ${marker}`);
 }
 
-const portraitCssMarkers = [
-  '.kiosk-ad-split .kiosk-ad-media',
+const landscapeCssMarkers = [
+  '[data-smart-landscape="true"]',
+  '--kiosk-ad-landscape-height',
   'object-fit: cover !important',
-  'object-position: var(--kiosk-ad-focus-x, 50%) var(--kiosk-ad-focus-y, 45%) !important',
-  '.kiosk-ad-split .kiosk-ad-media-backdrop',
-  'display: none !important',
-  '.kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media',
-  'height: calc(100% - 158px) !important',
-  'height: calc(100% - 142px) !important',
-  'bottom: auto !important',
+  'object-position: var(--kiosk-ad-focus-x) var(--kiosk-ad-focus-y) !important',
+  '.kiosk-ad-partner-panel--split',
+  'top: calc(var(--kiosk-ad-landscape-height) + 20px) !important',
+  'data-media-layout="adaptive"',
 ];
-for (const marker of portraitCssMarkers) {
-  if (!adsPortraitCss.includes(marker)) failures.push(`missing portrait Ads presentation marker: ${marker}`);
+for (const marker of landscapeCssMarkers) {
+  if (!adsSmartCropCss.includes(marker)) failures.push(`missing landscape Ads presentation marker: ${marker}`);
 }
 
-const portraitIsolationMarkers = [
-  'const SAMPLE_SIZE = 56',
-  'const FALLBACK_FOCUS = { x: 50, y: 45 }',
-  'querySelectorAll<HTMLImageElement>(".kiosk-ad-split img.kiosk-ad-media")',
-  'Never let smart cropping affect the Advertising runtime or kiosk shell',
+const landscapeIsolationMarkers = [
+  'class AdvertisingSmartCropBoundary',
+  'estimateAdFocalPoint',
+  'split.dataset.smartLandscape = "true"',
+  'split.dataset.smartCrop = "fallback"',
+  'Ads enhancement only. Never propagate to the kiosk shell.',
   'return null;',
 ];
-for (const marker of portraitIsolationMarkers) {
-  if (!adsPortraitRuntime.includes(marker)) failures.push(`missing portrait Ads isolation marker: ${marker}`);
+for (const marker of landscapeIsolationMarkers) {
+  if (!adsSmartCropRuntime.includes(marker)) failures.push(`missing landscape Ads isolation marker: ${marker}`);
+}
+
+const focalMarkers = [
+  'detectLargestFace',
+  'saliencyFocus',
+  'gradient * 1.15',
+  'source: "saliency"',
+  'source: "fallback"',
+  'fetch(url',
+  'cache: "force-cache"',
+];
+for (const marker of focalMarkers) {
+  if (!adsFocal.includes(marker)) failures.push(`missing automatic focal-point marker: ${marker}`);
 }
 
 if (runtime.includes('KioskAdvertisingPartnerBridge')) {
   failures.push('partner QR bridge must never mount in the global kiosk runtime');
 }
-if (runtime.includes('KioskAdvertisingPortraitFocus')) {
-  failures.push('portrait focus must never mount in the global kiosk runtime');
+if (runtime.includes('KioskAdvertisingSmartCrop')) {
+  failures.push('landscape smart crop must never mount in the global kiosk runtime');
+}
+if (adsSync.includes('KioskAdvertisingPortraitFocus')) {
+  failures.push('retired portrait focus owner must not remain mounted');
 }
 
 if (failures.length) {
@@ -231,6 +248,6 @@ console.log(JSON.stringify({
   transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
   partnerQrIsolated: true, partnerQrSingleOwner: true,
-  portraitAdsFullBleed: true, portraitAdsFocalCrop: true, portraitAdsExplicitHeight: true,
+  homeAdsLandscape: true, homeAdsAutomaticFocalCrop: true, portraitAdsOwnerRemoved: true,
   protectedSupportPolling: true, supportRestartSuppressed: true,
 }));
