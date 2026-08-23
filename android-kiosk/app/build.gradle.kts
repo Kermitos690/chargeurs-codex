@@ -60,15 +60,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // The DTA21269 currently runs versionCode 141. A normal Android
-        // upgrade must increase this value; no downgrade install is permitted.
-        // 1.0.50 is a temporary STAGING simulator build.  1.0.51 is the
-        // normal WisePad build that can restore it in-place afterwards.
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 151
+        // DTA21269 currently runs versionCode 151. Keep the simulator and
+        // physical field APKs strictly upgrade-only.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 156 else 157
         versionName = if (stagingSimulatedTerminalReaderVersion)
-            "1.0.50-terminal-simulated-reader-reconcile"
+            "1.0.56-terminal-sdk570-simulated"
         else
-            "1.0.51-terminal-simulated-reader-restore"
+            "1.0.57-terminal-sdk570-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -92,6 +90,15 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // Keep the proven 3.0.0 runtime source in history for rollback, but compile
+    // the isolated 5.7.0 implementation in StripeTerminalReaderRuntime57.java.
+    // The replacement class intentionally keeps the same package-private class
+    // name/API so no payment/backend/ejection owner outside the reader layer is
+    // changed by this field migration.
+    sourceSets {
+        getByName("main").java.exclude("ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java")
     }
 
     signingConfigs {
@@ -221,12 +228,13 @@ android {
 }
 
 dependencies {
-    // Needed only to register the narrowly scoped handler for Stripe 3.0.0's
-    // otherwise process-fatal offline-cache undeliverable exception.
+    // Retained because ChargeursKioskApplication contains a narrow process-level
+    // guard for the historical offline-cache crash; it does not enable offline
+    // payments and can be removed only after field validation of the new lane.
     implementation("io.reactivex.rxjava3:rxjava:3.1.6")
-    // SDK 3.0.0 is Stripe's first Android USB-compatible lane for WisePad 3.
-    // This is a local compile probe only; it is not an installation decision.
-    implementation("com.stripe:stripeterminal:3.0.0")
+    // Stripe 5.7.0 includes the USB/Bluetooth auto-reconnect hang fix shipped in
+    // 5.5.0 and is the current supported Android Terminal release for this test.
+    implementation("com.stripe:stripeterminal:5.7.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
