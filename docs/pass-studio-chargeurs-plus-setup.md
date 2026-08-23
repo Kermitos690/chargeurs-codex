@@ -6,7 +6,7 @@ Pass Studio is only the Wallet presentation/distribution provider. Chargeurs.ch 
 
 Create one active Pass Studio pass named exactly `Chargeurs+` (or set `PASS_STUDIO_PASS_ID` / `PASS_STUDIO_PASS_NAME` server-side).
 
-The public Pass Studio REST API currently lists, issues and updates passes; creation/design is performed in the Pass Studio studio UI.
+The public Pass Studio REST API currently lists, issues and updates passes; creation/design is performed in the Pass Studio studio UI. There is no documented REST endpoint for creating the visual template itself.
 
 ## Required editable per-holder field keys
 
@@ -44,7 +44,7 @@ Never expose these through Vite variables, browser storage, HTML, logs or Git.
 ## Runtime flow
 
 1. Authenticated customer opens `/compte/pass`.
-2. The UI calls `customer-wallet-pass`.
+2. The UI calls the already-deployed `account-privacy` Edge Function with `action: "wallet_pass"`.
 3. Edge Function verifies the Supabase account and active Chargeurs+ membership.
 4. Edge Function resolves the active Pass Studio template.
 5. First issue uses `POST /passes/{passId}/issue` with `sendEmail:false`.
@@ -52,6 +52,8 @@ Never expose these through Vite variables, browser storage, HTML, logs or Git.
 7. The instance is immediately synchronized with `PATCH /instances/fields` because Pass Studio documents that fields are not reapplied on a dedupe hit.
 8. Chargeurs persists only provider IDs, barcode and the hosted `addToWalletUrl`; never the provider API key.
 9. Browser receives only the safe hosted Add-to-Wallet URL and navigates to it.
+
+`account-privacy` is intentionally reused because the current Supabase project has reached its Edge Function count limit. No function is deleted and no paid plan upgrade is required for this integration.
 
 ## Failure behavior
 
