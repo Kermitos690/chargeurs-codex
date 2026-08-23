@@ -3,3 +3,5 @@ field_station=DTA21269
 stripe_terminal_sdk=3.0.0
 no_payment_card=true
 no_ejection=true
+triggered_at=2026-08-23T19:55:00+02:00
+purpose=v3_reconnect_apk_build
