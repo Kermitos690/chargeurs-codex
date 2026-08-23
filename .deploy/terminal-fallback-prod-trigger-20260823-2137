@@ -1,0 +1,6 @@
+purpose=vercel-production-redeploy
+source_pr=292
+merge_commit=ca05e8b7907182df127aca972f9e49fa3ce8a7ec
+station=DTA21269
+reason=deploy web terminal absence fallback to production
+requested_at=2026-08-23T21:37:00+02:00
