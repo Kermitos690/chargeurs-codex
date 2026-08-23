@@ -15,10 +15,9 @@ if [[ "$CURRENT_BRANCH" != "$EXPECTED_BRANCH" ]]; then
   exit 2
 fi
 
-# Gradle/AGP requires a real JDK. macOS can have Android Studio installed while
-# /usr/bin/java still reports that no Java runtime exists, so resolve a JDK 17+
-# explicitly before invoking the wrapper. Prefer the JBR bundled with Android
-# Studio because it is already validated for Android builds.
+# Gradle/AGP requires a real JDK. Prefer an already installed JDK 17+, then
+# bootstrap an isolated Temurin 21 into the user's cache. Nothing is installed
+# system-wide and no sudo/admin access is required.
 java_major_for_home() {
   local home="$1" version major rest
   [[ -x "$home/bin/java" ]] || return 1
@@ -51,6 +50,9 @@ pick_java_home() {
   for candidate in "$HOME"/Library/Java/JavaVirtualMachines/*/Contents/Home; do
     [[ -d "$candidate" ]] && candidates+=("$candidate")
   done
+  for candidate in "$HOME"/Library/Caches/chargeurs-jdk/temurin21-*/unpack/*/Contents/Home; do
+    [[ -d "$candidate" ]] && candidates+=("$candidate")
+  done
 
   for candidate in "${candidates[@]}"; do
     major="$(java_major_for_home "$candidate" || true)"
@@ -62,10 +64,78 @@ pick_java_home() {
   return 1
 }
 
+bootstrap_temurin21() {
+  command -v curl >/dev/null 2>&1 || { echo "ERROR: curl is required to bootstrap Java" >&2; return 1; }
+  command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 is required to verify Temurin metadata" >&2; return 1; }
+  command -v shasum >/dev/null 2>&1 || { echo "ERROR: shasum is required to verify Temurin" >&2; return 1; }
+
+  local machine arch cache meta download_url expected_sha archive actual_sha home
+  machine="$(uname -m)"
+  case "$machine" in
+    arm64|aarch64) arch="aarch64" ;;
+    x86_64|amd64) arch="x64" ;;
+    *) echo "ERROR: unsupported macOS architecture: $machine" >&2; return 1 ;;
+  esac
+
+  cache="$HOME/Library/Caches/chargeurs-jdk/temurin21-$arch"
+  home="$(find "$cache/unpack" -type f -path '*/Contents/Home/bin/java' -print -quit 2>/dev/null | sed 's#/bin/java$##' || true)"
+  if [[ -n "$home" ]] && [[ "$(java_major_for_home "$home" || true)" -ge 17 ]]; then
+    printf '%s' "$home"
+    return 0
+  fi
+
+  mkdir -p "$cache"
+  meta="$cache/assets.json"
+  archive="$cache/temurin21.tar.gz"
+
+  echo "No JDK 17+ found; downloading a verified local Eclipse Temurin 21 JDK ($arch)..." >&2
+  curl -fsSL --retry 3 --retry-delay 2 \
+    "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=$arch&image_type=jdk&os=mac&vendor=eclipse&heap_size=normal" \
+    -o "$meta"
+
+  download_url="$(python3 - "$meta" <<'PY'
+import json, sys
+assets=json.load(open(sys.argv[1], encoding='utf-8'))
+if not assets:
+    raise SystemExit(2)
+print(assets[0]['binary']['package']['link'])
+PY
+)"
+  expected_sha="$(python3 - "$meta" <<'PY'
+import json, sys
+assets=json.load(open(sys.argv[1], encoding='utf-8'))
+if not assets:
+    raise SystemExit(2)
+print(assets[0]['binary']['package']['checksum'].lower())
+PY
+)"
+  [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]] || { echo "ERROR: invalid Temurin checksum metadata" >&2; return 1; }
+
+  curl -fL --retry 3 --retry-delay 2 "$download_url" -o "$archive"
+  actual_sha="$(shasum -a 256 "$archive" | awk '{print tolower($1)}')"
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    echo "ERROR: Temurin SHA-256 verification failed" >&2
+    echo "actual=$actual_sha expected=$expected_sha" >&2
+    rm -f "$archive"
+    return 1
+  fi
+  echo "Temurin SHA-256 verified: $actual_sha" >&2
+
+  rm -rf "$cache/unpack"
+  mkdir -p "$cache/unpack"
+  tar -xzf "$archive" -C "$cache/unpack"
+  home="$(find "$cache/unpack" -type f -path '*/Contents/Home/bin/java' -print -quit | sed 's#/bin/java$##')"
+  [[ -n "$home" ]] || { echo "ERROR: Temurin archive did not contain a macOS JDK home" >&2; return 1; }
+  [[ "$(java_major_for_home "$home" || true)" -ge 17 ]] || { echo "ERROR: downloaded Temurin is not JDK 17+" >&2; return 1; }
+  printf '%s' "$home"
+}
+
 JAVA_HOME="$(pick_java_home || true)"
 if [[ -z "$JAVA_HOME" ]]; then
-  echo "ERROR: no JDK 17+ found." >&2
-  echo "Android Studio's bundled JDK was checked first, followed by standard macOS JDK locations." >&2
+  JAVA_HOME="$(bootstrap_temurin21 || true)"
+fi
+if [[ -z "$JAVA_HOME" ]]; then
+  echo "ERROR: unable to obtain a JDK 17+ for the build." >&2
   echo "JAVA_REQUIRED_FOR_BUILD" >&2
   exit 22
 fi
