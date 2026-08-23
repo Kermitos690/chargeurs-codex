@@ -16,8 +16,8 @@ Create these editable fields on the Chargeurs+ template:
 | --- | --- | --- |
 | `membership_status` | `customer_memberships.status` | `Pass actif` |
 | `membership_name` | `customer_membership_plans.name` | `Chargeurs+` |
-| `member_rate` | active membership plan | `CHF 0.75 / h` |
-| `daily_cap` | active membership plan | `CHF 9.00 / jour` |
+| `member_rate` | active membership plan | formatted backend member rate |
+| `daily_cap` | active membership plan | formatted backend daily cap |
 | `chargepoints` | `customer_chargepoints_balances.balance` | `155` |
 | `valid_until` | membership period end | `30.09.2027` |
 
@@ -54,6 +54,22 @@ Never expose these through Vite variables, browser storage, HTML, logs or Git.
 9. Browser receives only the safe hosted Add-to-Wallet URL and navigates to it.
 
 `account-privacy` is intentionally reused because the current Supabase project has reached its Edge Function count limit. No function is deleted and no paid plan upgrade is required for this integration.
+
+## Activation gate before production merge
+
+The code may merge to production only after all of the following are true:
+
+- [x] provider columns exist in `customer_wallet_passes`
+- [x] `account-privacy` with `wallet_pass` is deployed and JWT-protected
+- [x] Chargeurs+ frontend preview builds successfully
+- [ ] an active Pass Studio template named `Chargeurs+` exists
+- [ ] its six holder fields above are editable
+- [ ] a Pass Studio API key exists in the provider account
+- [ ] `PASS_STUDIO_API_KEY` is configured as a Supabase Edge Function secret
+- [ ] one real authenticated Chargeurs+ account successfully receives `addToWalletUrl`
+- [ ] the resulting pass opens in Apple Wallet or Google Wallet on a physical phone
+
+Until the unchecked provider items are complete, keep the frontend PR out of production. The backend fails closed with a provider configuration error and never mutates membership, pricing, rentals, payment, ejection or return state.
 
 ## Failure behavior
 
