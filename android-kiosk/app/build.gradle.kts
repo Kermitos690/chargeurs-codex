@@ -17,8 +17,6 @@ val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBacken
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
-// This must be opted into for each APK build. The ordinary STAGING artifact
-// continues to use the physical WisePad lane.
 val stagingSimulatedTerminalReaderEnabled = providers
     .gradleProperty("chargeursStripeTerminalSimulatedReader")
     .map { it.equals("true", ignoreCase = true) }
@@ -32,9 +30,6 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
-// Field STAGING builds must keep a durable signing identity so DTA21269 can be
-// upgraded in place. CI may materialize the known staging key into RUNNER_TEMP;
-// local validation builds can still fall back to Android's debug signer.
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
 val stagingStorePassword = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PASSWORD").orElse("")
 val stagingKeyAlias = providers.environmentVariable("CHARGEURS_STAGING_KEY_ALIAS").orElse("")
@@ -60,8 +55,6 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // DTA21269 currently runs versionCode 151. Keep the simulator and
-        // physical field APKs strictly upgrade-only.
         versionCode = if (stagingSimulatedTerminalReaderVersion) 156 else 157
         versionName = if (stagingSimulatedTerminalReaderVersion)
             "1.0.56-terminal-sdk570-simulated"
@@ -90,15 +83,6 @@ android {
 
     buildFeatures {
         buildConfig = true
-    }
-
-    // Keep the proven 3.0.0 runtime source in history for rollback, but compile
-    // the isolated 5.7.0 implementation in StripeTerminalReaderRuntime57.java.
-    // The replacement class intentionally keeps the same package-private class
-    // name/API so no payment/backend/ejection owner outside the reader layer is
-    // changed by this field migration.
-    sourceSets {
-        getByName("main").java.exclude("ch/chargeurs/kiosk/StripeTerminalReaderRuntime.java")
     }
 
     signingConfigs {
@@ -221,19 +205,12 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
         warningsAsErrors = true
-        // The wrapper version is pinned for reproducible signed staging APKs;
-        // availability of a newer Gradle patch must not hide application lint.
         disable += setOf("OldTargetApi", "GradleDependency", "AndroidGradlePluginVersion")
     }
 }
 
 dependencies {
-    // Retained because ChargeursKioskApplication contains a narrow process-level
-    // guard for the historical offline-cache crash; it does not enable offline
-    // payments and can be removed only after field validation of the new lane.
     implementation("io.reactivex.rxjava3:rxjava:3.1.6")
-    // Stripe 5.7.0 includes the USB/Bluetooth auto-reconnect hang fix shipped in
-    // 5.5.0 and is the current supported Android Terminal release for this test.
     implementation("com.stripe:stripeterminal:5.7.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
