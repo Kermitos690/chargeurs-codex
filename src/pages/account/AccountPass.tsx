@@ -160,7 +160,9 @@ export default function AccountPass() {
     setWalletError(null);
     setWalletMessage(null);
     try {
-      const { data, error } = await supabase.functions.invoke("customer-wallet-pass", { body: { action } });
+      const { data, error } = await supabase.functions.invoke("account-privacy", {
+        body: { action: "wallet_pass", walletAction: action },
+      });
       if (error || !data?.ok) throw new Error(String(data?.error ?? "WALLET_PASS_UNAVAILABLE"));
       const addToWalletUrl = String(data.addToWalletUrl ?? "");
       if (!/^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl)) {
