@@ -6,11 +6,11 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-/** Keeps the field diagnostics aligned with the SDK pinned in build.gradle.kts. */
+/** Keeps the DTA21269 field diagnostics aligned with the SDK pinned in build.gradle.kts. */
 public final class StripeTerminalReaderRuntimeTest {
     @Test
     public void reportsThePinnedTerminalSdkVersion() {
-        assertEquals("3.0.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
+        assertEquals("5.7.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
     }
 
     @Test
@@ -48,7 +48,7 @@ public final class StripeTerminalReaderRuntimeTest {
     }
 
     @Test
-    public void doesNotAutoReconnectAReaderAfterAnyConnectionError() {
+    public void preservesExplicitErrorGateWhileAllowingNormalReconnectStates() {
         assertFalse(StripeTerminalReaderRuntime.shouldAutoReconnectReader("ERROR"));
         assertTrue(StripeTerminalReaderRuntime.shouldAutoReconnectReader("DISCOVERING"));
         assertTrue(StripeTerminalReaderRuntime.shouldAutoReconnectReader("RECONNECTING"));
