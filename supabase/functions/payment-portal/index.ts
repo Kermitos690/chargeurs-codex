@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { ensureGuestWalletPass, getGuestWalletForRental, guestWalletEnabled } from "../_shared/guestWallet.ts";
 
 const admin = () => createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -7,16 +8,9 @@ const admin = () => createClient(
 );
 
 const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[char]!));
-
-const money = (value: unknown, currency = "CHF") =>
-  `${(Math.round(Number(value ?? 0)) / 100).toFixed(2)} ${escapeHtml(currency)}`;
-
+const money = (value: unknown, currency = "CHF") => `${(Math.round(Number(value ?? 0)) / 100).toFixed(2)} ${escapeHtml(currency)}`;
 const langOf = (value: string | null) => value === "de" || value === "en" ? value : "fr";
 const APP_URL = (Deno.env.get("PUBLIC_APP_URL") ?? "https://chargeurs-ch-staging.vercel.app").replace(/\/$/, "");
 
@@ -28,8 +22,8 @@ body:before{content:"";position:fixed;inset:-30%;pointer-events:none;background:
 main{position:relative;z-index:1;width:min(100%,820px);margin:auto;padding:22px 16px 46px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 4px 22px}.brand{display:flex;align-items:center;gap:10px;font-size:27px;font-weight:950;letter-spacing:-1.2px}.brandMark{display:grid;place-items:center;width:42px;height:42px;border-radius:15px;background:linear-gradient(145deg,#6b63ff,#3da4ff);box-shadow:0 0 34px rgba(78,128,255,.48);font-size:23px}.brandDot{color:#52dafa}.secure{display:inline-flex;align-items:center;gap:7px;color:#d5e5fa;font-size:13px;font-weight:750;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.055);padding:9px 12px;border-radius:999px}
 .glass{background:linear-gradient(145deg,rgba(17,38,86,.88),rgba(12,19,57,.78));border:1px solid var(--line);box-shadow:0 28px 90px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.08);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:30px}.hero{padding:30px 24px;text-align:center}.eyebrow{color:var(--cyan);font-weight:900;letter-spacing:.04em;text-transform:uppercase;font-size:13px}.hero h1{margin:8px auto 11px;max-width:640px;font-size:clamp(38px,9vw,62px);line-height:.98;letter-spacing:-2.6px;font-weight:950}.hero p{margin:0 auto;max-width:620px;color:var(--muted);font-size:18px;line-height:1.5}.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:24px}.fact{padding:12px 8px;border:1px solid rgba(255,255,255,.11);border-radius:18px;background:rgba(255,255,255,.045)}.fact span{display:block;color:#92a8c9;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}.fact strong{display:block;margin-top:5px;font-size:16px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px}.payCard{position:relative;padding:22px;overflow:hidden}.payCard:after{content:"";position:absolute;inset:auto -20% -55% 25%;height:170px;background:radial-gradient(circle,rgba(61,181,255,.22),transparent 65%);pointer-events:none}.recommended{display:inline-flex;padding:6px 10px;border-radius:999px;background:rgba(86,255,151,.13);color:#9dffb2;font-weight:900;font-size:11px;letter-spacing:.04em;text-transform:uppercase}.logos{position:relative;z-index:1;display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-height:48px;margin:14px 0 16px}.logo{display:inline-flex;height:43px;align-items:center;justify-content:center;padding:0 13px;border-radius:12px;background:#fff;color:#07111f;font-weight:900;box-shadow:0 8px 22px rgba(0,0,0,.18)}.apple{font-size:20px;letter-spacing:-.5px}.gpay{font-size:18px}.gpay .g{font-weight:950;background:linear-gradient(90deg,#4285F4 0 25%,#EA4335 25% 48%,#FBBC05 48% 72%,#34A853 72%);-webkit-background-clip:text;color:transparent}.cardIcon{gap:8px}.cardIcon svg{width:26px;height:20px}.twintLogo{gap:10px;font-size:21px;letter-spacing:.5px}.twintMark{width:24px;height:24px;display:inline-grid;grid-template-columns:1fr 1fr;gap:2px;transform:rotate(45deg)}.twintMark i{display:block;border-radius:2px}.twintMark i:nth-child(1){background:#ff5a76}.twintMark i:nth-child(2){background:#65d9ee}.twintMark i:nth-child(3){background:#5be58a}.twintMark i:nth-child(4){background:#fac449}
-.payCard h2{position:relative;z-index:1;margin:4px 0 8px;font-size:25px;letter-spacing:-.7px}.copy{position:relative;z-index:1;margin:0;color:var(--muted);font-size:15px;line-height:1.52}.button{position:relative;z-index:1;display:block;width:100%;border:0;border-radius:18px;padding:17px 16px;margin-top:19px;font:inherit;font-size:17px;font-weight:950;cursor:pointer;color:#031021;background:linear-gradient(110deg,#64ecff,#5899ff,#a786ff);box-shadow:0 12px 32px rgba(63,137,255,.26)}.button.twint{background:#fff;color:#111827}.button:active{transform:scale(.985)}
-.legal{display:flex;align-items:flex-start;gap:11px;margin-top:14px;padding:16px 17px;font-size:13px;line-height:1.45;color:#bdc9db}.legal input{flex:0 0 auto;width:21px;height:21px;margin:0;accent-color:#63dfff}.legal a{color:#78e9ff;font-weight:850}.error{margin:14px 3px 0;padding:13px 15px;border-radius:16px;background:rgba(244,63,94,.12);border:1px solid rgba(251,113,133,.24);color:#fecdd3;font-weight:800;text-align:center}.foot{text-align:center;color:#91a4bf;font-size:12px;margin:17px 0 0}.price{font-size:clamp(52px,13vw,76px);font-weight:950;letter-spacing:-3px;background:linear-gradient(90deg,#69efff,#83b8ff,#c4aaff);-webkit-background-clip:text;color:transparent}.rows{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:24px}.row{padding:15px;border-radius:17px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);text-align:left}.label{font-size:10px;text-transform:uppercase;color:#8ca3c4;font-weight:900;letter-spacing:.07em}.value{margin-top:6px;font-size:17px;font-weight:900;word-break:break-word}.icon{width:82px;height:82px;border-radius:999px;display:grid;place-items:center;margin:auto;background:rgba(68,255,131,.13);border:1px solid rgba(111,255,151,.23);color:#99ffb1;font-size:38px}.spin{width:62px;height:62px;border-radius:50%;border:6px solid rgba(255,255,255,.12);border-top-color:#65eaff;animation:spin 1s linear infinite;margin:18px auto}@keyframes spin{to{transform:rotate(360deg)}}.faq{margin-top:14px;padding:18px 20px}.faq summary{cursor:pointer;font-weight:900;font-size:15px}.faq p{color:var(--muted);font-size:14px;line-height:1.5;margin:10px 0 2px}
+.payCard h2{position:relative;z-index:1;margin:4px 0 8px;font-size:25px;letter-spacing:-.7px}.copy{position:relative;z-index:1;margin:0;color:var(--muted);font-size:15px;line-height:1.52}.button{position:relative;z-index:1;display:block;width:100%;border:0;border-radius:18px;padding:17px 16px;margin-top:19px;font:inherit;font-size:17px;font-weight:950;cursor:pointer;color:#031021;background:linear-gradient(110deg,#64ecff,#5899ff,#a786ff);box-shadow:0 12px 32px rgba(63,137,255,.26);text-decoration:none;text-align:center}.button.twint{background:#fff;color:#111827}.button:active{transform:scale(.985)}
+.legal{display:flex;align-items:flex-start;gap:11px;margin-top:14px;padding:16px 17px;font-size:13px;line-height:1.45;color:#bdc9db}.legal input{flex:0 0 auto;width:21px;height:21px;margin:0;accent-color:#63dfff}.legal a{color:#78e9ff;font-weight:850}.error{margin:14px 3px 0;padding:13px 15px;border-radius:16px;background:rgba(244,63,94,.12);border:1px solid rgba(251,113,133,.24);color:#fecdd3;font-weight:800;text-align:center}.foot{text-align:center;color:#91a4bf;font-size:12px;margin:17px 0 0}.price{font-size:clamp(52px,13vw,76px);font-weight:950;letter-spacing:-3px;background:linear-gradient(90deg,#69efff,#83b8ff,#c4aaff);-webkit-background-clip:text;color:transparent}.rows{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:24px}.row{padding:15px;border-radius:17px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);text-align:left}.label{font-size:10px;text-transform:uppercase;color:#8ca3c4;font-weight:900;letter-spacing:.07em}.value{margin-top:6px;font-size:17px;font-weight:900;word-break:break-word}.icon{width:82px;height:82px;border-radius:999px;display:grid;place-items:center;margin:auto;background:rgba(68,255,131,.13);border:1px solid rgba(111,255,151,.23);color:#99ffb1;font-size:38px}.spin{width:62px;height:62px;border-radius:50%;border:6px solid rgba(255,255,255,.12);border-top-color:#65eaff;animation:spin 1s linear infinite;margin:18px auto}@keyframes spin{to{transform:rotate(360deg)}}.faq{margin-top:14px;padding:18px 20px}.faq summary{cursor:pointer;font-weight:900;font-size:15px}.faq p{color:var(--muted);font-size:14px;line-height:1.5;margin:10px 0 2px}.walletBox{margin-top:15px;padding:22px;text-align:left}.walletBox h2{margin:4px 0 8px;font-size:24px}.walletBox p{margin:0;color:var(--muted);line-height:1.5}.walletBadge{display:inline-flex;padding:6px 10px;border-radius:999px;background:rgba(92,233,255,.12);border:1px solid rgba(92,233,255,.2);color:#9cf2ff;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}.walletNote{display:block;margin-top:10px;color:#8fa6c6;font-size:12px;line-height:1.45}
 @media(max-width:650px){main{padding:17px 13px 36px}.top{margin-bottom:15px}.brand{font-size:23px}.brandMark{width:38px;height:38px}.secure{font-size:11px;padding:8px 9px}.hero{padding:25px 18px}.hero h1{font-size:clamp(37px,11vw,54px)}.hero p{font-size:16px}.facts{grid-template-columns:1fr 1fr}.grid,.rows{grid-template-columns:1fr}.payCard{padding:20px}.button{font-size:17px;padding:17px}.logo{height:41px}}
 `;
 
@@ -40,30 +34,25 @@ function documentHtml(title: string, body: string, lang: string, refreshSeconds?
 
 function htmlResponse(html: string, status = 200) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  return new Response(blob, {
-    status,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      "Pragma": "no-cache",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-    },
-  });
+  return new Response(blob, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0", "Pragma": "no-cache", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" } });
 }
+function durationMinutes(start: unknown, end: unknown) { if (!start || !end) return 0; return Math.max(0, Math.ceil((Date.parse(String(end)) - Date.parse(String(start))) / 60000)); }
+function logosCard() { return `<div class="logos" aria-label="Carte, Apple Pay et Google Pay"><span class="logo apple"> Pay</span><span class="logo gpay"><span class="g">G</span>&nbsp;Pay</span><span class="logo cardIcon"><svg viewBox="0 0 32 22" aria-hidden="true"><rect x="1" y="1" width="30" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 7h28" stroke="currentColor" stroke-width="2"/></svg>Carte</span></div>`; }
+function logoTwint() { return `<div class="logos" aria-label="TWINT"><span class="logo twintLogo"><span class="twintMark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>TWINT</span></div>`; }
+function safeWalletUrl(value: unknown) { const v = String(value ?? ""); return v.startsWith("https://www.passstudio.online/") ? v : ""; }
 
-function durationMinutes(start: unknown, end: unknown) {
-  if (!start || !end) return 0;
-  return Math.max(0, Math.ceil((Date.parse(String(end)) - Date.parse(String(start))) / 60000));
-}
-
-function logosCard() {
-  return `<div class="logos" aria-label="Carte, Apple Pay et Google Pay"><span class="logo apple"> Pay</span><span class="logo gpay"><span class="g">G</span>&nbsp;Pay</span><span class="logo cardIcon"><svg viewBox="0 0 32 22" aria-hidden="true"><rect x="1" y="1" width="30" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2 7h28" stroke="currentColor" stroke-width="2"/></svg>Carte</span></div>`;
-}
-
-function logoTwint() {
-  return `<div class="logos" aria-label="TWINT"><span class="logo twintLogo"><span class="twintMark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>TWINT</span></div>`;
+function walletOfferHtml(lang: "fr" | "de" | "en", walletUrl: string, walletError: string) {
+  const copy = lang === "de" ? {
+    badge: "Chargeurs Express", title: "Miete in Wallet verfolgen", text: "Preis, Rückgabe und Abschluss direkt in Apple Wallet oder Google Wallet verfolgen und wichtige Hinweise erhalten.", add: "Zu Apple / Google Wallet hinzufügen", open: "Wallet-Pass öffnen", note: "Die beim Bezahlen verwendete E-Mail dient dazu, denselben Express-Pass bei Ihrer nächsten Miete wiederzufinden.", error: "Der Wallet-Pass konnte gerade nicht vorbereitet werden. Ihre Miete läuft normal weiter.",
+  } : lang === "en" ? {
+    badge: "Chargeurs Express", title: "Track your rental in Wallet", text: "Follow the price, return and completion directly in Apple Wallet or Google Wallet and receive important updates.", add: "Add to Apple / Google Wallet", open: "Open Wallet pass", note: "The email used for payment lets us reconnect the same Express pass on your next rental.", error: "The Wallet pass could not be prepared right now. Your rental continues normally.",
+  } : {
+    badge: "Chargeurs Express", title: "Suivre ma location dans Wallet", text: "Suivez le prix, le retour et la fin de location directement dans Apple Wallet ou Google Wallet, avec les alertes importantes.", add: "Ajouter à Apple / Google Wallet", open: "Ouvrir mon pass Wallet", note: "L’e-mail utilisé pour le paiement permet de retrouver ce même pass Express lors de vos prochaines locations.", error: "Le pass Wallet n’a pas pu être préparé maintenant. Votre location continue normalement.",
+  };
+  const action = walletUrl
+    ? `<a class="button" href="${escapeHtml(walletUrl)}" rel="noopener">${copy.open}</a>`
+    : `<form method="post"><input type="hidden" name="action" value="wallet"><button class="button" type="submit">${copy.add}</button></form>`;
+  return `<section class="glass walletBox"><span class="walletBadge">${copy.badge}</span><h2>${copy.title}</h2><p>${copy.text}</p>${walletError ? `<div class="error">${copy.error}</div>` : ""}${action}<small class="walletNote">${copy.note}</small></section>`;
 }
 
 Deno.serve(async (req) => {
@@ -74,41 +63,35 @@ Deno.serve(async (req) => {
   const view = url.searchParams.get("view") ?? "choose";
   const db = admin();
 
-  if (!id || code.length < 4) {
-    return htmlResponse(documentHtml("Session invalide", `<section class="glass hero"><div class="icon">!</div><h1>Session indisponible</h1><p>Cette location n’est plus accessible.</p></section>`, lang), 400);
-  }
-
-  const { data: rental, error: rentalError } = await db.from("rental_sessions")
-    .select("*")
-    .eq("id", id)
-    .eq("public_session_code", code)
-    .maybeSingle();
-
-  if (rentalError || !rental) {
-    return htmlResponse(documentHtml("Session invalide", `<section class="glass hero"><div class="icon">!</div><h1>Session indisponible</h1><p>Vérifiez le QR affiché sur la borne.</p></section>`, lang), 404);
-  }
+  if (!id || code.length < 4) return htmlResponse(documentHtml("Session invalide", `<section class="glass hero"><div class="icon">!</div><h1>Session indisponible</h1><p>Cette location n’est plus accessible.</p></section>`, lang), 400);
+  const { data: rental, error: rentalError } = await db.from("rental_sessions").select("*").eq("id", id).eq("public_session_code", code).maybeSingle();
+  if (rentalError || !rental) return htmlResponse(documentHtml("Session invalide", `<section class="glass hero"><div class="icon">!</div><h1>Session indisponible</h1><p>Vérifiez le QR affiché sur la borne.</p></section>`, lang), 404);
 
   if (req.method === "POST") {
     const form = await req.formData();
-    const mode = form.get("paymentMode") === "twint_prepaid" ? "twint_prepaid" : "card_hold";
-    const accepted = form.get("accepted") === "yes";
-    if (!accepted) {
-      return new Response(null, { status: 303, headers: { Location: `${url.origin}${url.pathname}?rental=${encodeURIComponent(id)}&c=${encodeURIComponent(code)}&lang=${lang}&error=terms` } });
+    if (form.get("action") === "wallet") {
+      const back = `${url.origin}${url.pathname}?rental=${encodeURIComponent(id)}&c=${encodeURIComponent(code)}&lang=${lang}&view=${encodeURIComponent(view || "progress")}`;
+      if (!rental.paid_at || String(rental.customer_segment ?? "") !== "guest") return new Response(null, { status: 303, headers: { Location: `${back}&walletError=not-ready` } });
+      try {
+        const wallet = await ensureGuestWalletPass(db, rental);
+        const target = safeWalletUrl(wallet.addToWalletUrl);
+        if (!target) throw new Error("GUEST_WALLET_URL_INVALID");
+        return new Response(null, { status: 303, headers: { Location: target } });
+      } catch (error) {
+        const code = error instanceof Error ? error.message.slice(0, 80) : "GUEST_WALLET_FAILED";
+        console.error("guest wallet issue failed", { code, rentalId: id });
+        return new Response(null, { status: 303, headers: { Location: `${back}&walletError=${encodeURIComponent(code)}` } });
+      }
     }
 
+    const mode = form.get("paymentMode") === "twint_prepaid" ? "twint_prepaid" : "card_hold";
+    const accepted = form.get("accepted") === "yes";
+    if (!accepted) return new Response(null, { status: 303, headers: { Location: `${url.origin}${url.pathname}?rental=${encodeURIComponent(id)}&c=${encodeURIComponent(code)}&lang=${lang}&error=terms` } });
     const target = `${(Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "")}/functions/v1/public-stripe-checkout`;
-    const response = await fetch(target, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rentalSessionId: id, publicCode: code, paymentMode: mode, accepted: true, language: lang }),
-    });
+    const response = await fetch(target, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rentalSessionId: id, publicCode: code, paymentMode: mode, accepted: true, language: lang }) });
     const out = await response.json().catch(() => null) as Record<string, unknown> | null;
-    if (response.ok && typeof out?.checkoutUrl === "string") {
-      return new Response(null, { status: 303, headers: { Location: out.checkoutUrl } });
-    }
-    if (response.ok && typeof out?.progressUrl === "string") {
-      return new Response(null, { status: 303, headers: { Location: out.progressUrl } });
-    }
+    if (response.ok && typeof out?.checkoutUrl === "string") return new Response(null, { status: 303, headers: { Location: out.checkoutUrl } });
+    if (response.ok && typeof out?.progressUrl === "string") return new Response(null, { status: 303, headers: { Location: out.progressUrl } });
     const error = typeof out?.error === "string" ? out.error : "payment";
     return new Response(null, { status: 303, headers: { Location: `${url.origin}${url.pathname}?rental=${encodeURIComponent(id)}&c=${encodeURIComponent(code)}&lang=${lang}&error=${encodeURIComponent(error)}` } });
   }
@@ -123,79 +106,40 @@ Deno.serve(async (req) => {
   const nonReturn = Number(snap.unreturned_fee_cents ?? 9900);
 
   if (view === "choose" && !rental.paid_at) {
-    const copy = lang === "de" ? {
-      eyebrow: "Sicher · schnell · transparent",
-      title: "Zahlungsart wählen",
-      sub: "Der Mietpreis bleibt gleich. Nur die Behandlung der CHF-30-Garantie hängt von der Zahlungsart ab.",
-      cardTitle: "Karte & Wallet",
-      cardText: `${money(deposit, currency)} werden vorübergehend bei Ihrer Bank reserviert. Bei Rückgabe wird nur der tatsächliche Mietpreis belastet und der Rest freigegeben.`,
-      twintTitle: "TWINT",
-      twintText: `${money(deposit, currency)} werden zu Beginn belastet. Nach Rückgabe wird der tatsächliche Preis berechnet und die Differenz automatisch zurückerstattet.`,
-      cardButton: "Mit Karte oder Wallet fortfahren",
-      twintButton: "Mit TWINT fortfahren",
-      legal: "Ich akzeptiere die Nutzungsbedingungen und habe die Datenschutzerklärung gelesen.",
-    } : lang === "en" ? {
-      eyebrow: "Secure · fast · transparent",
-      title: "Choose how to pay",
-      sub: "The rental price is identical. Only the CHF 30 guarantee mechanism changes with the payment method.",
-      cardTitle: "Card & wallet",
-      cardText: `${money(deposit, currency)} is temporarily authorised by your bank. On return, only the actual rental price is captured and the remainder is released.`,
-      twintTitle: "TWINT",
-      twintText: `${money(deposit, currency)} is charged at the start. On return, the actual price is calculated and the difference is automatically refunded.`,
-      cardButton: "Continue with card or wallet",
-      twintButton: "Continue with TWINT",
-      legal: "I accept the Terms of Use and have read the Privacy Policy.",
-    } : {
-      eyebrow: "Simple · rapide · transparent",
-      title: "Choisissez comment payer",
-      sub: "Le tarif ne change pas. Seul le fonctionnement de la garantie de 30 CHF dépend du moyen choisi.",
-      cardTitle: "Carte & wallet",
-      cardText: `${money(deposit, currency)} sont temporairement réservés auprès de votre banque. Au retour, seul le prix réel de la location est prélevé et le solde est libéré.`,
-      twintTitle: "TWINT",
-      twintText: `${money(deposit, currency)} sont débités au départ. Au retour, le prix réel est calculé et la différence est automatiquement remboursée.`,
-      cardButton: "Continuer avec carte ou wallet",
-      twintButton: "Continuer avec TWINT",
-      legal: "J’accepte les Conditions d’utilisation et reconnais avoir lu la Politique de confidentialité.",
-    };
-
+    const copy = lang === "de" ? { eyebrow: "Sicher · schnell · transparent", title: "Zahlungsart wählen", sub: "Der Mietpreis bleibt gleich. Nur die Behandlung der CHF-30-Garantie hängt von der Zahlungsart ab.", cardTitle: "Karte & Wallet", cardText: `${money(deposit, currency)} werden vorübergehend bei Ihrer Bank reserviert. Bei Rückgabe wird nur der tatsächliche Mietpreis belastet und der Rest freigegeben.`, twintTitle: "TWINT", twintText: `${money(deposit, currency)} werden zu Beginn belastet. Nach Rückgabe wird der tatsächliche Preis berechnet und die Differenz automatisch zurückerstattet.`, cardButton: "Mit Karte oder Wallet fortfahren", twintButton: "Mit TWINT fortfahren", legal: "Ich akzeptiere die Nutzungsbedingungen und habe die Datenschutzerklärung gelesen." }
+      : lang === "en" ? { eyebrow: "Secure · fast · transparent", title: "Choose how to pay", sub: "The rental price is identical. Only the CHF 30 guarantee mechanism changes with the payment method.", cardTitle: "Card & wallet", cardText: `${money(deposit, currency)} is temporarily authorised by your bank. On return, only the actual rental price is captured and the remainder is released.`, twintTitle: "TWINT", twintText: `${money(deposit, currency)} is charged at the start. On return, the actual price is calculated and the difference is automatically refunded.`, cardButton: "Continue with card or wallet", twintButton: "Continue with TWINT", legal: "I accept the Terms of Use and have read the Privacy Policy." }
+      : { eyebrow: "Simple · rapide · transparent", title: "Choisissez comment payer", sub: "Le tarif ne change pas. Seul le fonctionnement de la garantie de 30 CHF dépend du moyen choisi.", cardTitle: "Carte & wallet", cardText: `${money(deposit, currency)} sont temporairement réservés auprès de votre banque. Au retour, seul le prix réel de la location est prélevé et le solde est libéré.`, twintTitle: "TWINT", twintText: `${money(deposit, currency)} sont débités au départ. Au retour, le prix réel est calculé et la différence est automatiquement remboursée.`, cardButton: "Continuer avec carte ou wallet", twintButton: "Continuer avec TWINT", legal: "J’accepte les Conditions d’utilisation et reconnais avoir lu la Politique de confidentialité." };
     const errorParam = url.searchParams.get("error");
     const errorHtml = errorParam ? `<div class="error">${errorParam === "terms" ? "Veuillez accepter les conditions pour continuer." : "Le paiement n’a pas pu être préparé. Réessayez depuis cette page."}</div>` : "";
-    const legalTerms = `${APP_URL}/legal/conditions`;
-    const legalPrivacy = `${APP_URL}/legal/confidentialite`;
-
+    const legalTerms = `${APP_URL}/legal/conditions`, legalPrivacy = `${APP_URL}/legal/confidentialite`;
     const body = `<section class="glass hero"><div class="eyebrow">${copy.eyebrow}</div><h1>${copy.title}</h1><p>${copy.sub}</p><div class="facts"><div class="fact"><span>Tarif</span><strong>${money(hourly, currency)} / h</strong></div><div class="fact"><span>Garantie</span><strong>${money(deposit, currency)}</strong></div><div class="fact"><span>Plafond / jour</span><strong>${money(daily, currency)}</strong></div><div class="fact"><span>Non-retour</span><strong>${money(nonReturn, currency)}</strong></div></div></section>${errorHtml}<form method="post"><div class="grid"><section class="glass payCard"><span class="recommended">Recommandé</span>${logosCard()}<h2>${copy.cardTitle}</h2><p class="copy">${copy.cardText}</p><button class="button" name="paymentMode" value="card_hold">${copy.cardButton}</button></section><section class="glass payCard">${logoTwint()}<h2>${copy.twintTitle}</h2><p class="copy">${copy.twintText}</p><button class="button twint" name="paymentMode" value="twint_prepaid">${copy.twintButton}</button></section></div><label class="glass legal"><input type="checkbox" name="accepted" value="yes" required><span>${copy.legal} <a href="${legalTerms}" target="_blank" rel="noopener">Conditions</a> · <a href="${legalPrivacy}" target="_blank" rel="noopener">Confidentialité</a></span></label></form><details class="glass faq"><summary>Comment fonctionne la location ?</summary><p>Scannez le QR, choisissez votre moyen de paiement, validez la garantie puis revenez devant la borne. La location commence uniquement après la sortie physique confirmée de la batterie. Au retour, le prix exact est calculé automatiquement et un récapitulatif est affiché.</p></details>`;
     return htmlResponse(documentHtml(copy.title, body, lang));
+  }
+
+  let walletHtml = "";
+  if (String(rental.customer_segment ?? "") === "guest" && rental.paid_at && rental.customer_email && await guestWalletEnabled(db)) {
+    const existingWallet = await getGuestWalletForRental(db, id);
+    walletHtml = walletOfferHtml(lang, safeWalletUrl(existingWallet?.provider_add_to_wallet_url), url.searchParams.get("walletError") ?? "");
   }
 
   const state = String(rental.state ?? "");
   const settled = state === "completed" && rental.settlement_status === "settled";
   if (settled) {
-    const final = Number(rental.final_amount_cents ?? 0);
-    const captured = Number(rental.captured_amount_cents ?? 0);
-    const refunded = Number(rental.refunded_amount_cents ?? 0);
+    const final = Number(rental.final_amount_cents ?? 0), captured = Number(rental.captured_amount_cents ?? 0), refunded = Number(rental.refunded_amount_cents ?? 0);
     const released = rental.settlement_strategy === "manual_capture" ? Math.max(0, deposit - captured) : 0;
     const method = rental.checkout_payment_mode === "twint_prepaid" ? "TWINT" : "Carte / wallet";
     const duration = durationMinutes(rental.started_at, rental.returned_at);
     const title = lang === "de" ? "Miete abgeschlossen" : lang === "en" ? "Rental completed" : "Location terminée";
-    const body = `<section class="glass hero"><div class="icon">✓</div><h1>${title}</h1><div class="price">${money(final, currency)}</div><p>Prix final confirmé</p><div class="rows"><div class="row"><div class="label">Durée</div><div class="value">${duration} min</div></div><div class="row"><div class="label">Moyen</div><div class="value">${method}</div></div><div class="row"><div class="label">Garantie</div><div class="value">${money(deposit, currency)}</div></div><div class="row"><div class="label">Montant capturé</div><div class="value">${money(captured, currency)}</div></div><div class="row"><div class="label">${rental.settlement_strategy === "manual_capture" ? "Autorisation libérée" : "Remboursement"}</div><div class="value">${money(rental.settlement_strategy === "manual_capture" ? released : refunded, currency)}</div></div><div class="row"><div class="label">Borne de retour</div><div class="value">${escapeHtml(rental.return_station_id ?? "—")}</div></div><div class="row"><div class="label">Slot</div><div class="value">${escapeHtml(rental.returned_slot_num ?? "—")}</div></div><div class="row"><div class="label">Référence</div><div class="value">${escapeHtml(rental.public_session_code)}</div></div></div></section>`;
+    const body = `<section class="glass hero"><div class="icon">✓</div><h1>${title}</h1><div class="price">${money(final, currency)}</div><p>Prix final confirmé</p><div class="rows"><div class="row"><div class="label">Durée</div><div class="value">${duration} min</div></div><div class="row"><div class="label">Moyen</div><div class="value">${method}</div></div><div class="row"><div class="label">Garantie</div><div class="value">${money(deposit, currency)}</div></div><div class="row"><div class="label">Montant capturé</div><div class="value">${money(captured, currency)}</div></div><div class="row"><div class="label">${rental.settlement_strategy === "manual_capture" ? "Autorisation libérée" : "Remboursement"}</div><div class="value">${money(rental.settlement_strategy === "manual_capture" ? released : refunded, currency)}</div></div><div class="row"><div class="label">Borne de retour</div><div class="value">${escapeHtml(rental.return_station_id ?? "—")}</div></div><div class="row"><div class="label">Slot</div><div class="value">${escapeHtml(rental.returned_slot_num ?? "—")}</div></div><div class="row"><div class="label">Référence</div><div class="value">${escapeHtml(rental.public_session_code)}</div></div></div></section>${walletHtml}`;
     return htmlResponse(documentHtml(title, body, lang, 30));
   }
 
   let title = lang === "de" ? "Garantie bestätigt" : lang === "en" ? "Guarantee confirmed" : "Garantie confirmée";
   let text = lang === "de" ? "Die Station bereitet Ihre Batterie vor." : lang === "en" ? "The station is preparing your powerbank." : "La borne prépare votre batterie.";
   let spinner = true;
-  if (["ejected", "active_rental", "battery_taken"].includes(state)) {
-    title = lang === "de" ? "Miete läuft" : lang === "en" ? "Rental in progress" : "Location en cours";
-    text = lang === "de" ? "Die Batterie wurde ausgegeben. Der Tarif läuft bis zur Rückgabe." : lang === "en" ? "The powerbank has been released. Pricing continues until return." : "La batterie est sortie. Le tarif continue jusqu’à son retour.";
-    spinner = false;
-  } else if (state === "battery_returned") {
-    title = lang === "de" ? "Rückgabe erkannt" : lang === "en" ? "Return detected" : "Retour détecté";
-    text = lang === "de" ? "Der genaue Betrag wird berechnet." : lang === "en" ? "The exact amount is being calculated." : "Le montant exact est calculé et le règlement finalisé.";
-  } else if (state === "needs_support") {
-    title = lang === "de" ? "Prüfung erforderlich" : lang === "en" ? "Review required" : "Vérification nécessaire";
-    text = lang === "de" ? "Die Rückgabe oder Abrechnung wird geprüft." : lang === "en" ? "The return or settlement is being reviewed." : "Le retour ou le règlement nécessite une vérification.";
-    spinner = false;
-  }
-  const body = `<section class="glass hero">${spinner ? '<div class="spin"></div>' : '<div class="icon">✓</div>'}<h1>${title}</h1><p>${text}</p><div class="fact" style="display:inline-block;margin-top:18px"><strong>${escapeHtml(rental.public_session_code)}</strong></div></section>`;
+  if (["ejected", "active_rental", "battery_taken"].includes(state)) { title = lang === "de" ? "Miete läuft" : lang === "en" ? "Rental in progress" : "Location en cours"; text = lang === "de" ? "Die Batterie wurde ausgegeben. Der Tarif läuft bis zur Rückgabe." : lang === "en" ? "The powerbank has been released. Pricing continues until return." : "La batterie est sortie. Le tarif continue jusqu’à son retour."; spinner = false; }
+  else if (state === "battery_returned") { title = lang === "de" ? "Rückgabe erkannt" : lang === "en" ? "Return detected" : "Retour détecté"; text = lang === "de" ? "Der genaue Betrag wird berechnet." : lang === "en" ? "The exact amount is being calculated." : "Le montant exact est calculé et le règlement finalisé."; }
+  else if (state === "needs_support") { title = lang === "de" ? "Prüfung erforderlich" : lang === "en" ? "Review required" : "Vérification nécessaire"; text = lang === "de" ? "Die Rückgabe oder Abrechnung wird geprüft." : lang === "en" ? "The return or settlement is being reviewed." : "Le retour ou le règlement nécessite une vérification."; spinner = false; }
+  const body = `<section class="glass hero">${spinner ? '<div class="spin"></div>' : '<div class="icon">✓</div>'}<h1>${title}</h1><p>${text}</p><div class="fact" style="display:inline-block;margin-top:18px"><strong>${escapeHtml(rental.public_session_code)}</strong></div></section>${walletHtml}`;
   return htmlResponse(documentHtml(title, body, lang, 3));
 });
