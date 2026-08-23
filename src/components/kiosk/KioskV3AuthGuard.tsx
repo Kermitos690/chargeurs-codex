@@ -9,6 +9,8 @@ import { KIOSK_AUTH_REQUIRED_EVENT } from "@/lib/kioskEdgeProxy";
 type Language = "fr" | "en" | "de";
 type NativeWindow = Window & { ChargeursNative?: unknown };
 
+const AUTO_RECOVERY_KEY = "chargeurs_kiosk_auth_auto_recovery_attempted";
+
 type Copy = {
   eyebrow: string;
   title: string;
@@ -62,6 +64,34 @@ function nativeSessionCredentialMissing(): boolean {
   }
 }
 
+function localCredentialReady(): boolean {
+  return Boolean(readKioskToken()) && !nativeSessionCredentialMissing();
+}
+
+function authRecoveryAlreadyAttempted(): boolean {
+  try {
+    return window.sessionStorage.getItem(AUTO_RECOVERY_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markAuthRecoveryAttempted(): void {
+  try {
+    window.sessionStorage.setItem(AUTO_RECOVERY_KEY, "1");
+  } catch {
+    // Fail closed: lack of storage must never create a reload loop.
+  }
+}
+
+function clearAuthRecoveryAttempt(): void {
+  try {
+    window.sessionStorage.removeItem(AUTO_RECOVERY_KEY);
+  } catch {
+    // Best effort only.
+  }
+}
+
 export function shouldShowKioskAuthGuard(input: {
   runtimeTokenPresent: boolean;
   nativeWrapper: boolean;
@@ -86,6 +116,26 @@ export function KioskV3AuthGuard() {
     window.addEventListener(KIOSK_AUTH_REQUIRED_EVENT, rejected);
     return () => window.removeEventListener(KIOSK_AUTH_REQUIRED_EVENT, rejected);
   }, []);
+
+  // A reboot can briefly race the Android credential injection against the
+  // first authenticated web requests. If the secure kiosk credential is now
+  // present locally, recover exactly once by reloading the shell. A persistent
+  // invalid/revoked credential still fails closed because the session marker
+  // prevents a reload loop and the guard remains visible after the retry.
+  useEffect(() => {
+    if (!authenticationRejected || !localCredentialReady() || authRecoveryAlreadyAttempted()) return;
+    markAuthRecoveryAttempted();
+    const timer = window.setTimeout(() => window.location.reload(), 350);
+    return () => window.clearTimeout(timer);
+  }, [authenticationRejected]);
+
+  // Once the page remains healthy for a few seconds, allow a future isolated
+  // startup race to self-heal again without weakening persistent auth failures.
+  useEffect(() => {
+    if (authenticationRejected || !localCredentialReady()) return;
+    const timer = window.setTimeout(clearAuthRecoveryAttempt, 5000);
+    return () => window.clearTimeout(timer);
+  }, [authenticationRejected, retryNonce]);
 
   const state = useMemo(() => {
     const runtimeTokenPresent = Boolean(readKioskToken());
@@ -113,11 +163,11 @@ export function KioskV3AuthGuard() {
   if (!state.active) return null;
 
   const retry = () => {
+    clearAuthRecoveryAttempt();
     setAuthenticationRejected(false);
     setRetryNonce((value) => value + 1);
     window.setTimeout(() => {
-      const nativeMissing = nativeSessionCredentialMissing();
-      if (readKioskToken() && !nativeMissing) window.location.reload();
+      if (localCredentialReady()) window.location.reload();
     }, 80);
   };
 
