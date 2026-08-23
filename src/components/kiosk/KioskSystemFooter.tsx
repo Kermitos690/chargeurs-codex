@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock3, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { useParams } from "react-router-dom";
 import { useI18n } from "@/i18n/i18n";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
+import { useKioskIdentity } from "./KioskIdentityGate";
 import { KioskPaymentMarks } from "./KioskPaymentMarks";
+
 
 type GuestPricing = {
   currency?: string;
