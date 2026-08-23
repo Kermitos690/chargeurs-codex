@@ -16,6 +16,7 @@ import "@/components/kiosk/kiosk-advertising-p0-safe.css";
 import "./kiosk-p0-support-safe.css";
 import "./kiosk-p0-safe-frame-1280.css";
 import "./kiosk-p0-selection-fit.css";
+import "./kiosk-global-legibility.css";
 
 const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
 
@@ -86,9 +87,6 @@ export default function KioskPremiumGateV3() {
         }
       }
 
-      // Physical P0 golden is authoritative for the French Home. Keep the
-      // product state machine in React; this guard only prevents presentation
-      // regressions such as the DTA21269 proof showing the old question copy.
       if (home && (root.lang || "fr").toLowerCase().startsWith("fr")) {
         const title = home.querySelector<HTMLElement>(".ck2-home-title");
         if (title && title.textContent !== GOLDEN_FR_HOME_TITLE) {
