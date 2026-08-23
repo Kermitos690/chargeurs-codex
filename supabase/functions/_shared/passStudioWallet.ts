@@ -2,6 +2,7 @@ import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@
 import { auditLog } from "./db.ts";
 import {
   PassStudioError,
+  type PassStudioPass,
   issuePassStudioPass,
   requirePassStudioApiKey,
   resolvePassStudioPass,
@@ -25,6 +26,64 @@ function safeProviderError(error: unknown) {
     return { status, code: error.code };
   }
   return { status: 502, code: "PASS_STUDIO_UNAVAILABLE" };
+}
+
+function normalizeFieldKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function firstEditableField(pass: PassStudioPass, aliases: string[]) {
+  const templateOwned = new Set((pass.templateOwnedFieldKeys ?? []).map(normalizeFieldKey));
+  const aliasSet = new Set(aliases.map(normalizeFieldKey));
+  return (pass.fieldKeys ?? []).find((key) => {
+    const normalized = normalizeFieldKey(key);
+    return aliasSet.has(normalized) && !templateOwned.has(normalized);
+  });
+}
+
+function buildChargeursPassFields(
+  pass: PassStudioPass,
+  values: {
+    membershipName: string;
+    memberRate: string;
+    dailyCap: string;
+    chargePoints: number;
+    validUntil: string;
+  },
+) {
+  const fields: Record<string, string | number | boolean | null> = {};
+  const assign = (aliases: string[], value: string | number | boolean | null) => {
+    const key = firstEditableField(pass, aliases);
+    if (key && fields[key] === undefined) fields[key] = value;
+  };
+
+  // Native membership templates usually populate holder name and member number themselves.
+  // We intentionally do not overwrite those provider-owned identity fields.
+  assign(["chargepoints", "charge_points", "points", "points_balance", "pointsBalance", "loyalty_points", "solde_points", "solde_de_points"], values.chargePoints);
+  assign(["membership_name", "membership_level", "tier", "level", "niveau"], values.membershipName);
+  assign(
+    ["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"],
+    `Pass actif · ${values.memberRate} · plafond ${values.dailyCap}`,
+  );
+  assign(
+    ["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"],
+    "Avantages valables tant que l’adhésion Chargeurs+ est active.",
+  );
+  assign(
+    ["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"],
+    values.validUntil,
+  );
+
+  // Backward-compatible aliases if a custom Chargeurs template already uses the original keys.
+  assign(["membership_status", "status_membre"], "Pass actif");
+  assign(["member_rate", "tarif_membre"], values.memberRate);
+  assign(["daily_cap", "plafond_journalier"], values.dailyCap);
+
+  return fields;
 }
 
 export async function handlePassStudioWallet(
@@ -65,23 +124,26 @@ export async function handlePassStudioWallet(
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
 
-  const validUntil = membership.stripe_current_period_end ?? membership.ends_at ?? null;
-  const fields: Record<string, string | number | boolean | null> = {
-    membership_status: "Pass actif",
-    membership_name: String(plan.name ?? "Chargeurs+"),
-    member_rate: `${cents(Number(plan.hourly_cents ?? 0), String(plan.currency ?? "CHF"))} / h`,
-    daily_cap: `${cents(Number(plan.daily_cap_cents ?? 0), String(plan.currency ?? "CHF"))} / jour`,
-    chargepoints: Number(pointsResult.data?.balance ?? 0),
-    valid_until: validUntil ? new Date(validUntil).toLocaleDateString("fr-CH") : "Actif",
-  };
+  const validUntilRaw = membership.stripe_current_period_end ?? membership.ends_at ?? null;
+  const memberRate = `${cents(Number(plan.hourly_cents ?? 0), String(plan.currency ?? "CHF"))} / h`;
+  const dailyCap = `${cents(Number(plan.daily_cap_cents ?? 0), String(plan.currency ?? "CHF"))} / jour`;
+  const validUntil = validUntilRaw ? new Date(validUntilRaw).toLocaleDateString("fr-CH") : "Actif";
 
-  let providerPass;
+  let providerPass: PassStudioPass;
   try {
     providerPass = await resolvePassStudioPass(apiKey);
   } catch (error) {
     const providerError = safeProviderError(error);
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
+
+  const fields = buildChargeursPassFields(providerPass, {
+    membershipName: String(plan.name ?? "Chargeurs+"),
+    memberRate,
+    dailyCap,
+    chargePoints: Number(pointsResult.data?.balance ?? 0),
+    validUntil,
+  });
 
   const existing = walletResult.data as Record<string, unknown> | null;
   const existingInstanceId = String(existing?.provider_instance_id ?? "").trim();
@@ -112,7 +174,7 @@ export async function handlePassStudioWallet(
       return { ok: false, status: 502, body: { ok: false, error: "PASS_STUDIO_ISSUE_RESPONSE_INVALID" } };
     }
 
-    if ((providerPass.fieldKeys ?? []).length > 0) {
+    if (Object.keys(fields).length > 0) {
       await updatePassStudioInstance(apiKey, providerPass, instanceId, fields);
     }
 
@@ -161,6 +223,7 @@ export async function handlePassStudioWallet(
         provider_pass_id: providerPass.passId,
         provider_instance_id: instanceId,
         already_existed: alreadyExisted,
+        updated_fields: Object.keys(fields),
       },
     });
 
