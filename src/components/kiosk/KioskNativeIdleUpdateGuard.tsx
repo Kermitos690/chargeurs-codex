@@ -41,7 +41,10 @@ async function currentlyServedBundle(): Promise<string | null> {
 function safeToReload() {
   const root = document.documentElement;
   const scene = root.dataset.kioskScene ?? "";
-  const returnOverlay = document.querySelector('[data-kiosk-return-overlay="true"]');
+  // The return/settlement UI is rendered outside the V3 product scene as a
+  // high-priority fixed overlay. Any visible z-[120] full-screen overlay means
+  // the customer flow is not idle yet, even if the product layer says Home.
+  const returnOverlay = document.querySelector('div.fixed.inset-0[class*="z-[120]"]');
   return scene === "home" && !returnOverlay;
 }
 
