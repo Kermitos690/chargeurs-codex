@@ -113,6 +113,7 @@ export function KioskPaymentRailStage(props: Props) {
   const copy = COPY[lang];
   const native = (window as NativeWindow).ChargeursNative;
   const nativeBridge = Boolean(native?.getPaymentReaderStatus && native?.startTerminalPayment);
+  const terminalStation = stationHasPaymentTerminal(stationId);
   const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
   const [localRail, setLocalRail] = useState<PaymentRail>(inProgress ? "TERMINAL" : "NONE");
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
@@ -183,25 +184,40 @@ export function KioskPaymentRailStage(props: Props) {
     && model.reader.capability === "QR_ONLY"
     && TRANSIENT_READER_STATES.has(readerState)
     && !inProgress;
-  const waitingForReader = transientReader && !readerGraceExpired;
-  const readerNeedsDecision = transientReader && readerGraceExpired;
-  const confirmedQrOnly = !nativeBridge
+
+  // DTA21269 is physically terminal-equipped. A temporary reader projection
+  // must never silently convert that cabinet into QR-only. Keep the rail
+  // unclaimed until the reader is READY, then present the normal Terminal + QR
+  // choice. If recovery takes too long (or reports ABSENT/ERROR), allow an
+  // explicit retry-or-QR decision instead of auto-starting Checkout.
+  const terminalReaderUnavailable = terminalStation
+    && model.reader.capability === "QR_ONLY"
+    && !inProgress;
+  const waitingForReader = terminalReaderUnavailable
+    && nativeBridge
+    && transientReader
+    && !readerGraceExpired;
+  const readerNeedsDecision = terminalReaderUnavailable
+    && (!nativeBridge || readerGraceExpired || readerState === "ABSENT" || readerState === "ERROR");
+  const confirmedQrOnly = !terminalStation && (
+    !nativeBridge
     || readerState === "ABSENT"
-    || readerState === "ERROR";
+    || readerState === "ERROR"
+  );
 
   /*
    * Payment-rail invariant:
-   * - only an absent bridge or an explicitly ABSENT/ERROR reader may trigger
-   *   automatic QR fallback;
+   * - DTA21269 never auto-claims QR: it owns the physical WisePad and must
+   *   preserve the Terminal + QR choice whenever the reader becomes READY;
+   * - non-terminal cabinets may auto-fallback to QR when the bridge/reader is
+   *   explicitly unavailable;
    * - DISCOVERING / CONNECTING / RECONNECTING / UPDATING never claim QR merely
-   *   because the bounded reader grace elapsed;
-   * - after the grace window, the customer receives an explicit choice to retry
-   *   the reader or intentionally choose QR. This leaves the rental rail
-   *   UNCLAIMED while the physical WisePad is still recovering.
+   *   because the bounded reader grace elapsed.
    */
   useEffect(() => {
     if (
       inProgress
+      || terminalStation
       || model.reader.capability !== "QR_ONLY"
       || !confirmedQrOnly
       || !model.payment.canChooseQr
@@ -212,11 +228,7 @@ export function KioskPaymentRailStage(props: Props) {
     setLocalRail("QR");
     setLocalRailState("CLAIMING");
     onChooseQr();
-  }, [inProgress, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
-
-  // Terminal presence is a physical fact of the cabinet: only DTA21269 has a
-  // reader. This guard never alters the Stripe integration itself.
-  const terminalStation = stationHasPaymentTerminal(stationId);
+  }, [inProgress, terminalStation, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
 
   const chooseTerminal = () => {
     if (!terminalStation) return;
@@ -273,13 +285,13 @@ export function KioskPaymentRailStage(props: Props) {
   }
 
   if (readerNeedsDecision) {
-    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-6 px-5 text-center" data-payment-capability="READER_RETRY_OR_QR" data-reader-state={readerState} data-native-payment-bridge="true">
+    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-6 px-5 text-center" data-payment-capability="READER_RETRY_OR_QR" data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
       <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
       <CreditCard className="h-16 w-16 text-cyan-100" />
       <h2 className="font-display text-4xl font-black tracking-tight">{copy.checking}</h2>
       <p className="max-w-3xl text-lg font-medium text-muted-foreground">{copy.slow}</p>
       <div className="grid w-full max-w-3xl grid-cols-2 gap-4">
-        <Button variant="outline" onClick={retryReader} className="h-16 gap-3 rounded-2xl text-base font-black"><RefreshCw className="h-5 w-5" />{copy.retry}</Button>
+        <Button variant="outline" onClick={retryReader} disabled={!nativeBridge} className="h-16 gap-3 rounded-2xl text-base font-black"><RefreshCw className="h-5 w-5" />{copy.retry}</Button>
         <Button onClick={chooseQr} disabled={!model.payment.canChooseQr} className="h-16 gap-3 rounded-2xl text-base font-black"><QrCode className="h-5 w-5" />{copy.chooseQr}</Button>
       </div>
       {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}
