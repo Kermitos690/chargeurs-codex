@@ -9,6 +9,11 @@ on:
       - "src/pages/kiosk-da-master.css"
       - "src/components/LanguageSwitcher.tsx"
       - "src/i18n/**"
+      - "src/pages/account/AccountPass.tsx"
+      - "supabase/functions/customer-wallet-pass/**"
+      - "supabase/functions/_shared/passStudio.ts"
+      - "supabase/migrations/*pass_studio_wallet_provider.sql"
+      - "scripts/check-wallet-pass-studio.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/kiosk-ui-ci.yml"
@@ -21,6 +26,11 @@ on:
       - "src/pages/kiosk-da-master.css"
       - "src/components/LanguageSwitcher.tsx"
       - "src/i18n/**"
+      - "src/pages/account/AccountPass.tsx"
+      - "supabase/functions/customer-wallet-pass/**"
+      - "supabase/functions/_shared/passStudio.ts"
+      - "supabase/migrations/*pass_studio_wallet_provider.sql"
+      - "scripts/check-wallet-pass-studio.mjs"
 
 permissions:
   contents: read
@@ -40,6 +50,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Wallet provider contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE 'ps_live_[A-Za-z0-9_-]+' -- . ':!package-lock.json'; then
+            echo "::error::A Pass Studio live key is present in tracked source"
+            exit 1
+          fi
+          node scripts/check-wallet-pass-studio.mjs
       - name: TypeScript
         run: npm run typecheck
       - name: Frontend tests
