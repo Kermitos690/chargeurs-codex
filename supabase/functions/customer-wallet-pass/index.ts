@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     db.from("customer_memberships")
       .select("id,status,ends_at,stripe_current_period_end,customer_membership_plans(id,name,currency,hourly_cents,daily_cap_cents)")
       .eq("user_id", user.id)
-      .in("status", ["active", "trialing"])
+      .eq("status", "active")
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
