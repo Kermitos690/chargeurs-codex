@@ -83,8 +83,9 @@ const App = () => (
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<KioskPremiumGateV3 />} />
-            <Route path="/kiosk/station/:stationId" element={<KioskPremiumGateV3 />} />
+            <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
+            <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
+
             <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
             <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
