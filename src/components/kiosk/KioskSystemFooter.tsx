@@ -58,9 +58,13 @@ function money(cents: number | null | undefined, currency = "CHF") {
 }
 
 export function KioskSystemFooter() {
-  const { stationId = "" } = useParams();
+  // Canonical identity only: the footer must show exactly the cabinet used for
+  // backend calls, never a route/cache leftover from another installation.
+  const { stationId: canonicalStation, terminalAvailable } = useKioskIdentity();
+  const stationId = canonicalStation ?? "";
   const { lang } = useI18n();
   const net = useOnlineStatus();
+
   const copy = COPY[lang];
   const [options, setOptions] = useState<CustomerOptions | null>(null);
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
