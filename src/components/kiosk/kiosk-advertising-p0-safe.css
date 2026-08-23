@@ -14,9 +14,9 @@ html.kiosk-v3[data-kiosk-ads-split="true"] {
 }
 
 html.kiosk-v3 .kiosk-ad-split {
-  top: 84px !important;
+  top: calc(var(--p0-header-h, 66px) + 18px) !important;
   right: 0 !important;
-  bottom: 62px !important;
+  bottom: var(--p0-footer-h, 82px) !important;
   width: var(--p0-ads-rail-width, min(25vw, 320px)) !important;
   min-width: 280px !important;
   max-width: 320px !important;
