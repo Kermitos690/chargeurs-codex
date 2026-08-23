@@ -10,6 +10,7 @@ const files = {
   realtimeMigration: "supabase/migrations/20260823201500_chargeurs_wallet_realtime_v1.sql",
   dispatchMigration: "supabase/migrations/20260823204500_wallet_dispatch_10s.sql",
   permissionsMigration: "supabase/migrations/20260823205000_wallet_realtime_internal_rpc_permissions.sql",
+  nativeNotificationMigration: "supabase/migrations/20260823211000_wallet_native_notification_intents.sql",
 };
 
 const source = Object.fromEntries(Object.entries(files).map(([key, path]) => [key, fs.readFileSync(path, "utf8")]));
@@ -60,5 +61,12 @@ assert(source.dispatcher.includes('db.rpc("customer_wallet_presentation_state"')
 assert(source.dispatcher.includes('status: "delivered"'), "dispatcher must persist delivered outbox state");
 assert(source.dispatchMigration.includes("'10 seconds'"), "Wallet dispatcher cron must run every 10 seconds");
 assert(source.permissionsMigration.includes("revoke all on function public.customer_wallet_presentation_state(uuid) from public, anon, authenticated"), "realtime presentation RPC must remain backend-only");
+
+assert(source.nativeNotificationMigration.includes("customer_wallet_native_notifications"), "native Wallet notification intent table missing");
+assert(source.nativeNotificationMigration.includes("customer_wallet_native_notification_mirror_trg"), "customer push -> native Wallet intent mirror missing");
+assert(source.nativeNotificationMigration.includes("after insert on public.notifications"), "native intent mirror must follow canonical customer notification creation");
+assert(source.nativeNotificationMigration.includes("provider_capability_blocked"), "unsupported native provider delivery must remain explicit/fail-safe");
+assert(source.nativeNotificationMigration.includes("PASS_STUDIO_TRANSACTIONAL_NOTIFICATION_API_UNAVAILABLE"), "provider capability blocker must be machine-readable");
+assert(!source.client.includes("/campaigns"), "do not invent an undocumented Pass Studio transactional campaign API endpoint");
 
 console.log("[wallet-pass-studio] contract gate PASS");
