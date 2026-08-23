@@ -52,7 +52,7 @@ if (safeIndex < 0 || geometryIndex < 0 || safeIndex < geometryIndex) {
   failures.push('safe frame must load after base geometry CSS');
 }
 
-// Presentation-only guard: this file must never grow into business/runtime code.
+// Presentation-only guard: inspect effective CSS, not explanatory comments.
 const forbiddenTokens = [
   'stripe',
   'paymentintent',
@@ -63,9 +63,9 @@ const forbiddenTokens = [
   'localstorage',
   'sessionstorage',
 ];
-const lowerCss = css.toLowerCase();
+const executableCss = css.replace(/\/\*[\s\S]*?\*\//g, '').toLowerCase();
 for (const token of forbiddenTokens) {
-  if (lowerCss.includes(token)) failures.push(`business/runtime token forbidden in safe-frame CSS: ${token}`);
+  if (executableCss.includes(token)) failures.push(`business/runtime token forbidden in safe-frame CSS: ${token}`);
 }
 
 if (failures.length) {
