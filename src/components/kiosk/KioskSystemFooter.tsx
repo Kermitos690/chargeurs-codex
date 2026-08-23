@@ -137,7 +137,14 @@ export function KioskSystemFooter() {
         : copy.checking;
 
   return (
-    <footer className="kiosk-system-footer" data-connection={connection} aria-label={`${stationId} · ${statusLabel}`}>
+    <footer
+      className="kiosk-system-footer"
+      data-connection={connection}
+      data-station={stationId || "unconfigured"}
+      data-terminal={terminalAvailable ? "true" : "false"}
+      aria-label={`${stationId} · ${statusLabel}`}
+    >
+
       <div className="kiosk-system-footer__payments">
         <span className="kiosk-system-footer__secure"><ShieldCheck aria-hidden="true" />{copy.secure}</span>
         <KioskPaymentMarks cardLabel="" />
