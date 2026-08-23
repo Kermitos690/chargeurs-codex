@@ -1,5 +1,6 @@
 const PASS_STUDIO_BASE_URL = "https://www.passstudio.online/api/v1";
 const REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_PASS_STUDIO_PASS_ID = "kBQ15unyR1QPeUhcRWID";
 
 export type PassStudioPass = {
   passId: string;
@@ -91,7 +92,7 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
 }
 
 export async function resolvePassStudioPass(apiKey: string): Promise<PassStudioPass> {
-  const configuredId = (Deno.env.get("PASS_STUDIO_PASS_ID") ?? "").trim();
+  const configuredId = (Deno.env.get("PASS_STUDIO_PASS_ID") ?? DEFAULT_PASS_STUDIO_PASS_ID).trim();
   const configuredName = (Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+").trim().toLocaleLowerCase();
   const passes = await listPassStudioPasses(apiKey);
   const match = configuredId
