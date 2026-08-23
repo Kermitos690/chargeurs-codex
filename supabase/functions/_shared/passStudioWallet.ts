@@ -20,6 +20,18 @@ function cents(centsValue: number | null | undefined, currency = "CHF") {
   return new Intl.NumberFormat("fr-CH", { style: "currency", currency }).format(Number(centsValue) / 100);
 }
 
+function accountDate(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("fr-CH", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function isoDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
 function safeProviderError(error: unknown) {
   if (error instanceof PassStudioError) {
     const status = error.status === 401 || error.status === 403 ? 503 : error.status;
@@ -49,10 +61,14 @@ function buildChargeursPassFields(
   pass: PassStudioPass,
   values: {
     membershipName: string;
+    membershipStatus: string;
     memberRate: string;
     dailyCap: string;
     chargePoints: number;
-    validUntil: string;
+    renewalCredit: string | null;
+    nextDateLabel: "Prochaine échéance" | "Fin de l’adhésion";
+    nextDateDisplay: string;
+    nextDateIso: string | null;
   },
 ) {
   const fields: Record<string, string | number | boolean | null> = {};
@@ -61,27 +77,27 @@ function buildChargeursPassFields(
     if (key && fields[key] === undefined) fields[key] = value;
   };
 
-  // Native membership templates usually populate holder name and member number themselves.
-  // We intentionally do not overwrite those provider-owned identity fields.
+  const offerDetails = `Tarif membre : ${values.memberRate} · Plafond journalier : ${values.dailyCap}`;
+  const conditions = [
+    `Statut adhésion : ${values.membershipStatus}`,
+    values.renewalCredit ? `Crédit adhésion / renouvellement : ${values.renewalCredit}` : null,
+    `${values.nextDateLabel} : ${values.nextDateDisplay}`,
+  ].filter(Boolean).join(" · ");
+
+  // Holder name and member number remain provider-managed identity fields.
+  // Wallet values mirror the same backend fields rendered by /compte/pass.
   assign(["chargepoints", "charge_points", "points", "points_balance", "pointsBalance", "loyalty_points", "solde_points", "solde_de_points"], values.chargePoints);
   assign(["membership_name", "membership_level", "tier", "level", "niveau"], values.membershipName);
-  assign(
-    ["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"],
-    `Pass actif · ${values.memberRate} · plafond ${values.dailyCap}`,
-  );
-  assign(
-    ["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"],
-    "Avantages valables tant que l’adhésion Chargeurs+ est active.",
-  );
-  assign(
-    ["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"],
-    values.validUntil,
-  );
+  assign(["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"], offerDetails);
+  assign(["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"], conditions);
+  assign(["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"], values.nextDateIso);
 
-  // Backward-compatible aliases if a custom Chargeurs template already uses the original keys.
-  assign(["membership_status", "status_membre"], "Pass actif");
+  // Backward-compatible custom Chargeurs+ aliases.
+  assign(["membership_status", "status_membre"], values.membershipStatus);
   assign(["member_rate", "tarif_membre"], values.memberRate);
   assign(["daily_cap", "plafond_journalier"], values.dailyCap);
+  assign(["renewal_credit", "credit_adhesion_renouvellement"], values.renewalCredit);
+  assign(["next_due", "prochaine_echeance", "membership_end", "fin_adhesion"], values.nextDateDisplay);
 
   return fields;
 }
@@ -95,9 +111,9 @@ export async function handlePassStudioWallet(
 
   const [membershipResult, profileResult, pointsResult, walletResult] = await Promise.all([
     db.from("customer_memberships")
-      .select("id,status,ends_at,stripe_current_period_end,customer_membership_plans(id,name,currency,hourly_cents,daily_cap_cents)")
+      .select("id,status,renews_at,ends_at,cancel_at_period_end,stripe_current_period_end,customer_membership_plans(id,name,currency,renewal_credit_cents,hourly_cents,daily_cap_cents)")
       .eq("user_id", user.id)
-      .eq("status", "active")
+      .in("status", ["active", "trialing"])
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -124,10 +140,17 @@ export async function handlePassStudioWallet(
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
 
-  const validUntilRaw = membership.stripe_current_period_end ?? membership.ends_at ?? null;
-  const memberRate = `${cents(Number(plan.hourly_cents ?? 0), String(plan.currency ?? "CHF"))} / h`;
-  const dailyCap = `${cents(Number(plan.daily_cap_cents ?? 0), String(plan.currency ?? "CHF"))} / jour`;
-  const validUntil = validUntilRaw ? new Date(validUntilRaw).toLocaleDateString("fr-CH") : "Actif";
+  const currency = String(plan.currency ?? "CHF");
+  const memberRate = `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`;
+  const dailyCap = `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`;
+  const renewalCreditCents = Number(plan.renewal_credit_cents ?? 0);
+  const renewalCredit = renewalCreditCents > 0 ? cents(renewalCreditCents, currency) : null;
+  const cancellationScheduled = Boolean(membership.cancel_at_period_end);
+  const periodEnd = membership.stripe_current_period_end ?? membership.ends_at ?? null;
+  const nextDateRaw = cancellationScheduled ? periodEnd : membership.renews_at;
+  const nextDateLabel = cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance";
+  const nextDateDisplay = accountDate(nextDateRaw);
+  const nextDateIso = isoDate(nextDateRaw);
 
   let providerPass: PassStudioPass;
   try {
@@ -139,10 +162,14 @@ export async function handlePassStudioWallet(
 
   const fields = buildChargeursPassFields(providerPass, {
     membershipName: String(plan.name ?? "Chargeurs+"),
+    membershipStatus: String(membership.status ?? "active"),
     memberRate,
     dailyCap,
     chargePoints: Number(pointsResult.data?.balance ?? 0),
-    validUntil,
+    renewalCredit,
+    nextDateLabel,
+    nextDateDisplay,
+    nextDateIso,
   });
 
   const existing = walletResult.data as Record<string, unknown> | null;
