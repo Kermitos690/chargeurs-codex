@@ -15,6 +15,7 @@ import "./kiosk-1280-geometry-contract.css";
 import "@/components/kiosk/kiosk-advertising-p0-safe.css";
 import "./kiosk-p0-support-safe.css";
 import "./kiosk-p0-safe-frame-1280.css";
+import "./kiosk-p0-selection-fit.css";
 
 const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
 
