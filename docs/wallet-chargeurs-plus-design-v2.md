@@ -73,9 +73,12 @@ During rental, backend may replace the tier field with canonical realtime presen
 ## Notification architecture
 
 - Per-holder `PATCH /instances/fields` remains the canonical automatic live update path.
-- Pass Studio Campaigns are verified to produce native Apple Wallet lock-screen notifications.
-- Transactional per-holder lock-screen notification is not currently exposed in Pass Studio's public REST API; request sent to provider for an instance-scoped notification capability.
-- Do not fake transactional notifications through redemption, Journey transitions, or loyalty rewards because those mutate real business state.
+- Pass Studio confirmed that the same endpoint accepts an optional `message` parameter for one specific `instanceId`.
+- Apple Wallet shows that message as a native lock-screen banner and under `Latest update` on the pass back.
+- Google Wallet sends a Wallet notification; Google caps visible notifications at 3 per pass/day, while later messages still remain inside the pass.
+- Chargeurs.ch mirrors canonical customer notification events into `customer_wallet_native_notifications` and dispatches them asynchronously with retry/idempotency.
+- Transactional rental alerts never use global Campaign audience segments.
+- Campaigns remain appropriate for intentional broadcast/promotional messages.
 
 ## Visual acceptance gate
 
