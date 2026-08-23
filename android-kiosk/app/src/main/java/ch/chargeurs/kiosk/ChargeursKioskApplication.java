@@ -1,13 +1,10 @@
 package ch.chargeurs.kiosk;
 
 import android.app.Application;
-import android.util.Log;
 
 import com.stripe.stripeterminal.TerminalApplicationDelegate;
 
 import java.util.Locale;
-
-import io.reactivex.rxjava3.plugins.RxJavaPlugins;
 
 /**
  * Process owner for the TEST-only Stripe Terminal USB runtime.
@@ -17,7 +14,6 @@ import io.reactivex.rxjava3.plugins.RxJavaPlugins;
  * create a PaymentIntent, or perform any payment by itself.
  */
 public final class ChargeursKioskApplication extends Application {
-    private static final String TAG = "ChargeursStripeV2";
     private StripeTerminalReaderRuntime terminalRuntime;
 
     synchronized StripeTerminalReaderRuntime terminalRuntime(KioskConfig config) {
@@ -30,27 +26,19 @@ public final class ChargeursKioskApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        // Stripe 3.0.0 can publish this particular offline-cache decryption
-        // error after the connection callback has already failed. RxJava then
-        // treats it as undeliverable and kills the kiosk process. Keep the
-        // reader in its explicit ERROR/retry path instead. Every other RxJava
-        // error is delegated to the platform's uncaught-exception handler.
-        RxJavaPlugins.setErrorHandler(error -> {
-            if (isRecoverableStripeOfflineCacheError(error)) {
-                Log.e(TAG, "Stripe offline credential cache needs explicit reader repair", error);
-                reportOfflineCredentialCacheFailure();
-                return;
-            }
-            Thread.UncaughtExceptionHandler handler = Thread.currentThread().getUncaughtExceptionHandler();
-            if (handler != null) handler.uncaughtException(Thread.currentThread(), error);
-        });
+        // Stripe Terminal 5.7.0 owns its reader/offline lifecycle internally.
+        // Do not install the old 3.0.0 global RxJava undeliverable-error hook:
+        // carrying that process-wide workaround forward could mask unrelated
+        // failures in the newer SDK. Reader recovery is handled explicitly by
+        // StripeTerminalReaderRuntime and MobileReaderListener instead.
         TerminalApplicationDelegate.onCreate(this);
     }
 
-    private synchronized void reportOfflineCredentialCacheFailure() {
-        if (terminalRuntime != null) terminalRuntime.requireOfflineCredentialCacheRepair();
-    }
-
+    /**
+     * Retained as a pure regression helper for the historical 3.0.0 failure.
+     * It is deliberately not registered as a process-wide exception handler in
+     * the 5.7.0 field build.
+     */
     static boolean isRecoverableStripeOfflineCacheError(Throwable error) {
         for (Throwable current = error; current != null; current = current.getCause()) {
             String type = current.getClass().getName().toLowerCase(Locale.ROOT);
