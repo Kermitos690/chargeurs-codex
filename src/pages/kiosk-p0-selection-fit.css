@@ -1,50 +1,68 @@
 /*
- * Chargeurs.ch — final 1280×720 selection fit.
+ * Chargeurs.ch — kiosk V3 selection fit.
+ *
  * Presentation only. This late rule resolves the historical contradiction
- * between the two-column selection layout and the previous fixed 900px slot
- * grid. No pricing, payment, rental, inventory or hardware behavior lives here.
+ * between the two-column selection layout and the previous fixed-width slot
+ * grid. It intentionally does NOT depend on an exact CSS viewport size because
+ * Android WebView CSS pixels may differ slightly from the physical 1280×720
+ * panel. No pricing, payment, rental, inventory or hardware behavior lives here.
  */
-@media (width: 1280px) and (height: 720px) {
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
-    grid-template-columns: minmax(0, 1fr) 300px !important;
-    column-gap: 16px !important;
-  }
+html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > main > div {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
 
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
-    box-sizing: border-box !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-  }
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+  box-sizing: border-box !important;
+  width: min(1160px, calc(100% - 32px)) !important;
+  max-width: min(1160px, calc(100% - 32px)) !important;
+  min-width: 0 !important;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px) !important;
+  column-gap: 16px !important;
+  overflow: hidden !important;
+}
 
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
-    box-sizing: border-box !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    padding: 18px !important;
-    overflow: hidden !important;
-  }
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
 
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
-    box-sizing: border-box !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    margin: 0 !important;
-    padding-left: 16px !important;
-    padding-right: 16px !important;
-    font-size: 17px !important;
-    line-height: 1.1 !important;
-    white-space: normal !important;
-    overflow-wrap: anywhere !important;
-    text-align: center !important;
-    transform: none !important;
-  }
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  padding: 18px !important;
+  overflow: hidden !important;
+}
 
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:hover,
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus,
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus-visible {
-    transform: none !important;
-  }
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+  font-size: 16px !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  text-align: center !important;
+  transform: none !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:hover,
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus,
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:focus-visible,
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:active {
+  transform: none !important;
 }
