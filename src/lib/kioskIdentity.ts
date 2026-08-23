@@ -19,6 +19,21 @@ export type PilotStationId = (typeof PILOT_STATION_IDS)[number];
 /** Cabinets physically equipped with a payment terminal. */
 const TERMINAL_STATION_IDS: readonly string[] = ["DTA21269"];
 
+/**
+ * FIELD_REPAIR — temporary provisioning repair for the physical DTA22032 tablet.
+ *
+ * Backend evidence on 2026-08-23 showed this exact device was enrolled as
+ * DTA21269 while the real DTA21269 Terminal device remained independently
+ * active. Until the native APK is re-provisioned, the web runtime must repair
+ * this one known device identity instead of trusting its stale native station.
+ *
+ * This is deliberately keyed by the immutable per-install devicePublicId and
+ * MUST NEVER be used as a generic fallback for unknown devices.
+ */
+const FIELD_REPAIR_STATION_BY_DEVICE_ID: Readonly<Record<string, PilotStationId>> = {
+  "aceb691f-e88d-4332-b667-b53ad313a832": "DTA22032",
+};
+
 export type KioskIdentityError =
   | "STATION_MISSING"
   | "STATION_NOT_IN_PILOT_FLEET"
@@ -38,6 +53,7 @@ export type KioskIdentity = {
 
 type NativeStationBridge = { getStationBinding?: () => string };
 type NativeWindow = Window & { ChargeursNative?: NativeStationBridge };
+type NativeBinding = { stationId: PilotStationId | null; deviceId: string | null };
 
 export function normalizeStationId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -56,21 +72,32 @@ export function stationHasPaymentTerminal(stationId: unknown): boolean {
   return normalized !== null && TERMINAL_STATION_IDS.includes(normalized);
 }
 
-export function readNativeStationBinding(win: Window = window): PilotStationId | null {
+function readNativeBinding(win: Window = window): NativeBinding | null {
   const bridge = (win as NativeWindow).ChargeursNative;
   if (!bridge?.getStationBinding) return null;
   try {
-    const parsed = JSON.parse(bridge.getStationBinding()) as { stationId?: unknown };
-    return isPilotStationId(parsed?.stationId) ? (normalizeStationId(parsed.stationId) as PilotStationId) : null;
+    const parsed = JSON.parse(bridge.getStationBinding()) as { stationId?: unknown; deviceId?: unknown };
+    const stationId = isPilotStationId(parsed?.stationId)
+      ? (normalizeStationId(parsed.stationId) as PilotStationId)
+      : null;
+    const deviceId = typeof parsed?.deviceId === "string" && parsed.deviceId.trim().length > 0
+      ? parsed.deviceId.trim().toLowerCase()
+      : null;
+    return { stationId, deviceId };
   } catch {
     return null;
   }
 }
 
+export function readNativeStationBinding(win: Window = window): PilotStationId | null {
+  return readNativeBinding(win)?.stationId ?? null;
+}
+
 /**
  * Resolve the one identity in force for this tablet.
  *
- * Precedence: native wrapper configuration > route param > persisted lock.
+ * Precedence: explicit field repair for a known physical device > native
+ * wrapper configuration > route param > persisted lock.
  * The winning identity is written back to the lock, wiping any inconsistent
  * legacy value so a cloned tablet image can never contaminate a cabinet.
  */
@@ -78,20 +105,58 @@ export function resolveKioskIdentity(
   routeStationId: string | null | undefined,
   win: Window = window,
 ): KioskIdentity {
-  const native = readNativeStationBinding(win);
+  const nativeBinding = readNativeBinding(win);
+  const nativeReported = nativeBinding?.stationId ?? null;
+  const repairedStation = nativeBinding?.deviceId
+    ? FIELD_REPAIR_STATION_BY_DEVICE_ID[nativeBinding.deviceId] ?? null
+    : null;
+  const canonicalNative = repairedStation ?? nativeReported;
   const route = normalizeStationId(routeStationId);
   const locked = normalizeStationId(getLockedStation());
 
-  const base = { nativeStationId: native, redirectTo: null, terminalAvailable: false } as const;
+  const base = { nativeStationId: nativeReported, redirectTo: null, terminalAvailable: false } as const;
 
-  // A native cabinet configuration is authoritative and self-healing.
-  if (native) {
-    if (locked && locked !== native) clearLockedStation();
-    forceSetStation(native);
-    if (route && route !== native) {
-      return { ...base, stationId: native, redirectTo: `/kiosk/${native}`, terminalAvailable: stationHasPaymentTerminal(native), error: null };
+  // A known field-repair device must override its stale native station binding.
+  // This is what repairs the physical DTA22032 tablet currently reporting 21269.
+  if (repairedStation) {
+    if (locked && locked !== repairedStation) clearLockedStation();
+    forceSetStation(repairedStation);
+    if (route !== repairedStation) {
+      return {
+        ...base,
+        stationId: repairedStation,
+        redirectTo: `/kiosk/${repairedStation}`,
+        terminalAvailable: stationHasPaymentTerminal(repairedStation),
+        error: null,
+      };
     }
-    return { ...base, stationId: native, terminalAvailable: stationHasPaymentTerminal(native), error: null };
+    return {
+      ...base,
+      stationId: repairedStation,
+      terminalAvailable: stationHasPaymentTerminal(repairedStation),
+      error: null,
+    };
+  }
+
+  // A normal native cabinet configuration is authoritative and self-healing.
+  if (canonicalNative) {
+    if (locked && locked !== canonicalNative) clearLockedStation();
+    forceSetStation(canonicalNative);
+    if (route && route !== canonicalNative) {
+      return {
+        ...base,
+        stationId: canonicalNative,
+        redirectTo: `/kiosk/${canonicalNative}`,
+        terminalAvailable: stationHasPaymentTerminal(canonicalNative),
+        error: null,
+      };
+    }
+    return {
+      ...base,
+      stationId: canonicalNative,
+      terminalAvailable: stationHasPaymentTerminal(canonicalNative),
+      error: null,
+    };
   }
 
   // Browser/PWA installation: the explicit route identity wins over any lock.
@@ -101,12 +166,23 @@ export function resolveKioskIdentity(
     }
     if (locked && locked !== route) clearLockedStation();
     forceSetStation(route);
-    return { ...base, stationId: route as PilotStationId, terminalAvailable: stationHasPaymentTerminal(route), error: null };
+    return {
+      ...base,
+      stationId: route as PilotStationId,
+      terminalAvailable: stationHasPaymentTerminal(route),
+      error: null,
+    };
   }
 
   // No explicit identity: only a valid pilot lock may be reused, never a default.
   if (locked && isPilotStationId(locked)) {
-    return { ...base, stationId: locked as PilotStationId, redirectTo: `/kiosk/${locked}`, terminalAvailable: stationHasPaymentTerminal(locked), error: null };
+    return {
+      ...base,
+      stationId: locked as PilotStationId,
+      redirectTo: `/kiosk/${locked}`,
+      terminalAvailable: stationHasPaymentTerminal(locked),
+      error: null,
+    };
   }
   if (locked) clearLockedStation();
   return { ...base, stationId: null, error: "STATION_MISSING" };
