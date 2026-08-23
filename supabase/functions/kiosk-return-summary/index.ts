@@ -176,6 +176,13 @@ Deno.serve(async (req) => {
     const tiers = rawTiers
       .filter((tier: any) => tier && Number.isInteger(tier.upper_minutes) && tier.upper_minutes > 0)
       .map((tier: any) => ({ upper_minutes: cents(tier.upper_minutes), total_cents: cents(tier.total_cents) }));
+    const totalMinutes = cents(finalPricing?.total_minutes);
+    const tierUpperMinutes = tiered
+      ? tiers
+        .map((tier: { upper_minutes: number }) => tier.upper_minutes)
+        .sort((a: number, b: number) => a - b)
+        .find((upperMinutes: number) => totalMinutes <= upperMinutes) ?? null
+      : null;
 
     return json({
       ok: true,
@@ -206,15 +213,18 @@ Deno.serve(async (req) => {
         refundedCents: refunded,
         releasedAuthorizationCents: released,
         supplementalCents: cents(selected.supplemental_amount_cents),
-        totalMinutes: cents(finalPricing?.total_minutes),
+        totalMinutes,
         billedPeriods: cents(finalPricing?.billed_periods),
         periodMinutes: cents(finalPricing?.period_minutes ?? selected.pricing_snapshot?.period_minutes),
         pricePerPeriodCents: cents(finalPricing?.price_per_period_cents ?? selected.pricing_snapshot?.price_per_period_cents),
         dailyCapCents: cents(selected.pricing_snapshot?.daily_cap_cents),
         failureCode: selected.failure_code ?? null,
         failureMessage: selected.failure_message ?? null,
+        // Keep both contracts while kiosks on older APK/web bundles are still in the field.
         tiered,
         tiers,
+        tieredPricing: tiered,
+        tierUpperMinutes,
       },
     });
   } catch (error) {
