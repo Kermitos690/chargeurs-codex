@@ -1,5 +1,6 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
+import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -39,7 +40,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
       .limit(1)
       .maybeSingle(),
     db.from("customer_wallet_passes")
-      .select("id,membership_id,public_pass_id,status,provider_status,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
+      .select("id,membership_id,public_pass_id,status,provider_status,provider,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -70,7 +71,8 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     incidents = incidentsResult.data ?? [];
   }
 
-  // Deliberately omit Stripe customer/subscription/checkout IDs and Wallet token hashes.
+  // Deliberately omit Stripe customer/subscription/checkout IDs, Wallet token
+  // hashes, provider holder identifiers and provider-hosted delivery URLs.
   return {
     profile: profileResult.data ?? null,
     rentals,
@@ -95,6 +97,12 @@ Deno.serve(async (req) => {
   if (authError || !user || !user.email_confirmed_at) return json({ ok: false, error: "VERIFIED_ACCOUNT_REQUIRED" }, 401);
   const body = await req.json().catch(() => ({}));
   const action = String(body.action ?? "summary");
+
+  if (action === "wallet_pass") {
+    const walletAction = body.walletAction === "sync" ? "sync" : "issue";
+    const result = await handlePassStudioWallet(db, user, walletAction);
+    return json(result.body, result.status);
+  }
 
   if (action === "summary" || action === "export") {
     let data: Awaited<ReturnType<typeof customerData>>;
