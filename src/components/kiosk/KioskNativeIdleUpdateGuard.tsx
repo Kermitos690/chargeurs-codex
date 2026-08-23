@@ -13,18 +13,28 @@ function isNativeKioskSurface() {
   return "ChargeursNative" in window;
 }
 
-function entryBundle(doc: Document): string | null {
-  const scripts = Array.from(doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]'));
-  const entry = scripts.find((script) => /\/assets\/index-[^/?]+\.js(?:$|[?#])/.test(script.src));
-  if (!entry?.src) return null;
+function normalizedAssetPath(raw: string): string | null {
   try {
-    return new URL(entry.src, window.location.origin).pathname;
+    return new URL(raw, window.location.origin).pathname;
   } catch {
     return null;
   }
 }
 
-async function currentlyServedBundle(): Promise<string | null> {
+function assetSignature(doc: Document): string | null {
+  const scripts = Array.from(doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]'))
+    .map((script) => normalizedAssetPath(script.src))
+    .filter((path): path is string => Boolean(path && /\/assets\/index-[^/?]+\.js$/.test(path)));
+
+  const styles = Array.from(doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]'))
+    .map((link) => normalizedAssetPath(link.href))
+    .filter((path): path is string => Boolean(path && /\/assets\/index-[^/?]+\.css$/.test(path)));
+
+  const assets = [...scripts, ...styles].sort();
+  return assets.length ? assets.join("|") : null;
+}
+
+async function currentlyServedSignature(): Promise<string | null> {
   const url = `/index.html?__chargeurs_kiosk_build_probe=${Date.now()}`;
   const response = await fetch(url, {
     method: "GET",
@@ -35,7 +45,7 @@ async function currentlyServedBundle(): Promise<string | null> {
   if (!response.ok) return null;
   const html = await response.text();
   const parsed = new DOMParser().parseFromString(html, "text/html");
-  return entryBundle(parsed);
+  return assetSignature(parsed);
 }
 
 function safeToReload() {
@@ -50,10 +60,10 @@ function safeToReload() {
 
 /**
  * Native Android kiosks deliberately do not register the PWA service worker.
- * They can therefore stay on an old in-memory bundle for days after a staging
- * deployment. This guard compares the loaded Vite entry hash with the entry
- * hash currently served by Vercel. A mismatch is applied only after the kiosk
- * is back on Home and no return/receipt overlay is visible.
+ * They can therefore stay on old in-memory JS or CSS assets after a staging
+ * deployment. This guard compares the complete loaded Vite entry signature
+ * (JS + CSS) with what Vercel currently serves. A mismatch is applied only
+ * after the kiosk is back on Home and no return/receipt overlay is visible.
  *
  * Presentation/deployment lifecycle only: no rental, payment, pricing, stock,
  * ChargeNow or hardware command is issued from this component.
@@ -64,8 +74,8 @@ export function KioskNativeIdleUpdateGuard() {
 
   useEffect(() => {
     if (!isNativeKioskSurface()) return;
-    const loadedBundle = entryBundle(document);
-    if (!loadedBundle) return;
+    const loadedSignature = assetSignature(document);
+    if (!loadedSignature) return;
 
     const applyIfSafe = () => {
       if (!pendingRef.current || reloadingRef.current || !safeToReload()) return;
@@ -76,8 +86,8 @@ export function KioskNativeIdleUpdateGuard() {
     const probe = async () => {
       if (reloadingRef.current) return;
       try {
-        const servedBundle = await currentlyServedBundle();
-        if (servedBundle && servedBundle !== loadedBundle) {
+        const servedSignature = await currentlyServedSignature();
+        if (servedSignature && servedSignature !== loadedSignature) {
           pendingRef.current = true;
           applyIfSafe();
         }
