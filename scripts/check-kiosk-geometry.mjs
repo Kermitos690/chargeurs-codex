@@ -48,12 +48,12 @@ const spareSelection = mainH - selectionH;
 const failures = [];
 if (canvasH !== 720) failures.push(`canvas must stay 720px, got ${canvasH}`);
 if (footerH <= 0 || footerH >= canvasH) failures.push(`invalid footer height ${footerH}`);
-if (productH !== 658) failures.push(`product budget must be 658px, got ${productH}`);
-if (mainH < 560) failures.push(`main workspace too small: ${mainH}px`);
+if (productH !== 638) failures.push(`product budget must be 638px, got ${productH}`);
+if (mainH < 545) failures.push(`main workspace too small: ${mainH}px`);
 if (pricingH > mainH) failures.push(`pricing scene ${pricingH}px exceeds main ${mainH}px`);
 if (selectionH > mainH) failures.push(`selection scene ${selectionH}px exceeds main ${mainH}px`);
-if (sparePricing < 24) failures.push(`pricing safety margin too small: ${sparePricing}px`);
-if (spareSelection < 24) failures.push(`selection safety margin too small: ${spareSelection}px`);
+if (sparePricing < 36) failures.push(`pricing safety margin too small: ${sparePricing}px`);
+if (spareSelection < 36) failures.push(`selection safety margin too small: ${spareSelection}px`);
 
 const requiredContracts = [
   'grid-template-rows: var(--p0-header-h) minmax(0, 1fr)',
@@ -82,7 +82,7 @@ for (const marker of requiredTransactionMarkers) {
 }
 
 const requiredAdsMarkers = [
-  'bottom: 62px !important',
+  'bottom: var(--p0-footer-h, 82px) !important',
   'html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-ad-split',
   '.ck2-reference-home-main',
   '--p0-ads-rail-width',
