@@ -84,15 +84,12 @@ function buildChargeursPassFields(
     `${values.nextDateLabel} : ${values.nextDateDisplay}`,
   ].filter(Boolean).join(" · ");
 
-  // Holder name and member number remain provider-managed identity fields.
-  // Wallet values mirror the same backend fields rendered by /compte/pass.
   assign(["chargepoints", "charge_points", "points", "points_balance", "pointsBalance", "loyalty_points", "solde_points", "solde_de_points"], values.chargePoints);
   assign(["membership_name", "membership_level", "tier", "level", "niveau"], values.membershipName);
   assign(["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"], offerDetails);
   assign(["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"], conditions);
   assign(["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"], values.nextDateIso);
 
-  // Backward-compatible custom Chargeurs+ aliases.
   assign(["membership_status", "status_membre"], values.membershipStatus);
   assign(["member_rate", "tarif_membre"], values.memberRate);
   assign(["daily_cap", "plafond_journalier"], values.dailyCap);
@@ -132,11 +129,31 @@ export async function handlePassStudioWallet(
   const plan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
   if (!plan) return { ok: false, status: 409, body: { ok: false, error: "MEMBERSHIP_PLAN_UNAVAILABLE" } };
 
+  const existing = walletResult.data as Record<string, unknown> | null;
+  const now = new Date().toISOString();
+  const recordProviderFailure = async (code: string, stage: "configuration" | "template" | "issuance") => {
+    if (existing?.id) {
+      await db.from("customer_wallet_passes").update({
+        provider: "pass_studio",
+        provider_status: "error",
+        provider_last_error_code: code,
+        updated_at: now,
+      }).eq("id", String(existing.id));
+    }
+    await auditLog(db, {
+      actor: user.id,
+      action: "wallet.pass_provider_failed",
+      target: membership.id,
+      data: { provider: "pass_studio", code, stage },
+    });
+  };
+
   let apiKey: string;
   try {
     apiKey = requirePassStudioApiKey();
   } catch (error) {
     const providerError = safeProviderError(error);
+    await recordProviderFailure(providerError.code, "configuration");
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
 
@@ -157,6 +174,7 @@ export async function handlePassStudioWallet(
     providerPass = await resolvePassStudioPass(apiKey);
   } catch (error) {
     const providerError = safeProviderError(error);
+    await recordProviderFailure(providerError.code, "template");
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
 
@@ -172,9 +190,7 @@ export async function handlePassStudioWallet(
     nextDateIso,
   });
 
-  const existing = walletResult.data as Record<string, unknown> | null;
   const existingInstanceId = String(existing?.provider_instance_id ?? "").trim();
-  const now = new Date().toISOString();
 
   try {
     let instanceId = existingInstanceId;
@@ -198,6 +214,7 @@ export async function handlePassStudioWallet(
     }
 
     if (!instanceId || !addToWalletUrl) {
+      await recordProviderFailure("PASS_STUDIO_ISSUE_RESPONSE_INVALID", "issuance");
       return { ok: false, status: 502, body: { ok: false, error: "PASS_STUDIO_ISSUE_RESPONSE_INVALID" } };
     }
 
@@ -268,19 +285,7 @@ export async function handlePassStudioWallet(
     };
   } catch (error) {
     const providerError = safeProviderError(error);
-    if (existing?.id) {
-      await db.from("customer_wallet_passes").update({
-        provider_status: "error",
-        provider_last_error_code: providerError.code,
-        updated_at: now,
-      }).eq("id", String(existing.id));
-    }
-    await auditLog(db, {
-      actor: user.id,
-      action: "wallet.pass_provider_failed",
-      target: membership.id,
-      data: { provider: "pass_studio", code: providerError.code },
-    });
+    await recordProviderFailure(providerError.code, "issuance");
     return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
   }
 }
