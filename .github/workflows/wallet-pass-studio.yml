@@ -1,0 +1,50 @@
+name: Wallet Pass Studio
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/account/AccountPass.tsx"
+      - "supabase/functions/customer-wallet-pass/**"
+      - "supabase/functions/_shared/passStudio.ts"
+      - "supabase/migrations/*pass_studio_wallet_provider.sql"
+      - "scripts/check-wallet-pass-studio.mjs"
+      - ".github/workflows/wallet-pass-studio.yml"
+  push:
+    branches:
+      - "agent/wallet/pass-studio-v1"
+    paths:
+      - "src/pages/account/AccountPass.tsx"
+      - "supabase/functions/customer-wallet-pass/**"
+      - "supabase/functions/_shared/passStudio.ts"
+      - "supabase/migrations/*pass_studio_wallet_provider.sql"
+      - "scripts/check-wallet-pass-studio.mjs"
+      - ".github/workflows/wallet-pass-studio.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Reject committed Pass Studio live keys
+        shell: bash
+        run: |
+          if git grep -nE 'ps_live_[A-Za-z0-9_-]+' -- . ':!package-lock.json'; then
+            echo "A Pass Studio live key is present in tracked source." >&2
+            exit 1
+          fi
+      - name: Provider contract gate
+        run: node scripts/check-wallet-pass-studio.mjs
+      - name: Frontend lint
+        run: npx eslint src/pages/account/AccountPass.tsx
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
