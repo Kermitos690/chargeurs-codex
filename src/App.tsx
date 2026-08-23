@@ -15,6 +15,8 @@ import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
+import { KioskIdentityGate } from "./components/kiosk/KioskIdentityGate.tsx";
+
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
 import Support from "./pages/Support.tsx";
@@ -83,8 +85,9 @@ const App = () => (
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<KioskPremiumGateV3 />} />
-            <Route path="/kiosk/station/:stationId" element={<KioskPremiumGateV3 />} />
+            <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
+            <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
+
             <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
             <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />

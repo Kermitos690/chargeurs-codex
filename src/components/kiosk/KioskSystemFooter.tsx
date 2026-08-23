@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Clock3, ShieldCheck, Wifi, WifiOff } from "lucide-react";
-import { useParams } from "react-router-dom";
 import { useI18n } from "@/i18n/i18n";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
+import { useKioskIdentity } from "./KioskIdentityGate";
 import { KioskPaymentMarks } from "./KioskPaymentMarks";
+
 
 type GuestPricing = {
   currency?: string;
@@ -57,9 +58,13 @@ function money(cents: number | null | undefined, currency = "CHF") {
 }
 
 export function KioskSystemFooter() {
-  const { stationId = "" } = useParams();
+  // Canonical identity only: the footer must show exactly the cabinet used for
+  // backend calls, never a route/cache leftover from another installation.
+  const { stationId: canonicalStation, terminalAvailable } = useKioskIdentity();
+  const stationId = canonicalStation ?? "";
   const { lang } = useI18n();
   const net = useOnlineStatus();
+
   const copy = COPY[lang];
   const [options, setOptions] = useState<CustomerOptions | null>(null);
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
@@ -132,7 +137,14 @@ export function KioskSystemFooter() {
         : copy.checking;
 
   return (
-    <footer className="kiosk-system-footer" data-connection={connection} aria-label={`${stationId} · ${statusLabel}`}>
+    <footer
+      className="kiosk-system-footer"
+      data-connection={connection}
+      data-station={stationId || "unconfigured"}
+      data-terminal={terminalAvailable ? "true" : "false"}
+      aria-label={`${stationId} · ${statusLabel}`}
+    >
+
       <div className="kiosk-system-footer__payments">
         <span className="kiosk-system-footer__secure"><ShieldCheck aria-hidden="true" />{copy.secure}</span>
         <KioskPaymentMarks cardLabel="" />

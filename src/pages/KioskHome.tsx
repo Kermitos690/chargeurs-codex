@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Loader2, ShieldAlert, Wrench } from "lucide-react";
-import { getLockedStation } from "@/lib/kioskLock";
+import { resolveKioskIdentity } from "@/lib/kioskIdentity";
 import { LiquidBackground } from "@/components/LiquidBackground";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/i18n/i18n";
@@ -44,7 +44,7 @@ export default function KioskHome() {
   const copy = COPY[lang === "de" || lang === "en" ? lang : "fr"];
 
   useEffect(() => {
-    setLocked(getLockedStation());
+    setLocked(resolveKioskIdentity(null).stationId);
   }, []);
 
   if (locked === undefined) {
