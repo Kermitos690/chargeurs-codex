@@ -99,6 +99,23 @@ function buildChargeursPassFields(
   return fields;
 }
 
+function applyRealtimePresentation(
+  pass: PassStudioPass,
+  fields: Record<string, string | number | boolean | null>,
+  presentation: unknown,
+) {
+  if (!presentation || typeof presentation !== "object") return fields;
+  const rawFields = (presentation as Record<string, unknown>).fields;
+  if (!rawFields || typeof rawFields !== "object") return fields;
+
+  for (const [sourceKey, rawValue] of Object.entries(rawFields as Record<string, unknown>)) {
+    if (rawValue !== null && typeof rawValue !== "string" && typeof rawValue !== "number" && typeof rawValue !== "boolean") continue;
+    const providerKey = firstEditableField(pass, [sourceKey]);
+    if (providerKey) fields[providerKey] = rawValue as string | number | boolean | null;
+  }
+  return fields;
+}
+
 export async function handlePassStudioWallet(
   db: SupabaseClient,
   user: User,
@@ -190,6 +207,15 @@ export async function handlePassStudioWallet(
     nextDateIso,
   });
 
+  const { data: realtimePresentation, error: realtimePresentationError } = await db.rpc(
+    "customer_wallet_presentation_state",
+    { p_user_id: user.id },
+  );
+  if (realtimePresentationError) {
+    return { ok: false, status: 500, body: { ok: false, error: "WALLET_PRESENTATION_UNAVAILABLE" } };
+  }
+  applyRealtimePresentation(providerPass, fields, realtimePresentation);
+
   const existingInstanceId = String(existing?.provider_instance_id ?? "").trim();
 
   try {
@@ -268,6 +294,7 @@ export async function handlePassStudioWallet(
         provider_instance_id: instanceId,
         already_existed: alreadyExisted,
         updated_fields: Object.keys(fields),
+        realtime_presentation: true,
       },
     });
 
