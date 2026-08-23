@@ -32,6 +32,11 @@ export type PassStudioInstanceUpdateResult = {
 };
 
 export type PassStudioNotificationMessage = string | Record<string, string>;
+export type ResolvePassStudioPassOptions = {
+  passId?: string | null;
+  passName?: string | null;
+  allowSoleActiveFallback?: boolean;
+};
 
 export class PassStudioError extends Error {
   readonly status: number;
@@ -102,20 +107,33 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
   return Array.isArray(payload.passes) ? payload.passes : [];
 }
 
-export async function resolvePassStudioPass(apiKey: string): Promise<PassStudioPass> {
-  const configuredId = (Deno.env.get("PASS_STUDIO_PASS_ID") ?? DEFAULT_PASS_STUDIO_PASS_ID).trim();
-  const configuredName = Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+";
+export async function resolvePassStudioPass(
+  apiKey: string,
+  options: ResolvePassStudioPassOptions = {},
+): Promise<PassStudioPass> {
+  const hasExplicitId = Object.prototype.hasOwnProperty.call(options, "passId");
+  const hasExplicitName = Object.prototype.hasOwnProperty.call(options, "passName");
+  const configuredId = String(
+    hasExplicitId ? options.passId ?? "" : Deno.env.get("PASS_STUDIO_PASS_ID") ?? DEFAULT_PASS_STUDIO_PASS_ID,
+  ).trim();
+  const configuredName = String(
+    hasExplicitName ? options.passName ?? "" : Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+",
+  ).trim();
   const passes = await listPassStudioPasses(apiKey);
 
   const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
   const normalizedConfiguredName = normalizePassName(configuredName);
-  const byName = passes.find((pass) => normalizePassName(pass.name) === normalizedConfiguredName);
+  const byName = normalizedConfiguredName
+    ? passes.find((pass) => normalizePassName(pass.name) === normalizedConfiguredName)
+    : undefined;
   const activePasses = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
-  const onlyActive = activePasses.length === 1 ? activePasses[0] : undefined;
+  const onlyActive = options.allowSoleActiveFallback === false
+    ? undefined
+    : activePasses.length === 1 ? activePasses[0] : undefined;
   const match = byId ?? byName ?? onlyActive;
 
   if (!match) {
-    throw new PassStudioError(503, configuredId ? "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
+    throw new PassStudioError(503, configuredId || configuredName ? "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
   }
   if (String(match.status ?? "active").toLowerCase() !== "active") {
     throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
