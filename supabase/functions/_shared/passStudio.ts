@@ -28,7 +28,10 @@ export type PassStudioInstanceUpdateResult = {
   instanceId: string;
   updatedFields: string[];
   pushed: boolean;
+  warnings?: unknown[];
 };
+
+export type PassStudioNotificationMessage = string | Record<string, string>;
 
 export class PassStudioError extends Error {
   readonly status: number;
@@ -156,12 +159,14 @@ export async function updatePassStudioInstance(
   pass: PassStudioPass,
   instanceId: string,
   fields: Record<string, string | number | boolean | null>,
+  message?: PassStudioNotificationMessage | null,
 ): Promise<PassStudioInstanceUpdateResult> {
   return await request<PassStudioInstanceUpdateResult>(apiKey, "/instances/fields", {
     method: "PATCH",
     body: JSON.stringify({
       instanceId,
       fields: editableFields(pass, fields),
+      ...(message ? { message } : {}),
     }),
   });
 }
