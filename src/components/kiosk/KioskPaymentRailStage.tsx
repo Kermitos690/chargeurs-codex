@@ -116,13 +116,20 @@ function parseProjection(raw: string | undefined): NativeReaderProjection | null
 
 function isCanonicalTerminalCancellation(reader: NativeReaderProjection | null): boolean {
   const payment = reader?.payment;
-  return Boolean(
-    payment
-    && payment.rail === "NONE"
-    && (payment.railState === "CANCELLED" || payment.railState === "EXPIRED")
+  if (!payment) return false;
+
+  const cancelled = (payment.railState === "CANCELLED" || payment.railState === "EXPIRED")
     && payment.serverConfirmed !== true
-    && payment.recoveryRequired !== true
-  );
+    && payment.recoveryRequired !== true;
+  if (!cancelled) return false;
+
+  // Canonical current runtime releases the rail to NONE. Older/native-lagging
+  // projections can briefly keep TERMINAL while the WisePad itself has already
+  // returned READY with a final CANCELLED/EXPIRED state. That is still a safe,
+  // terminal-side final cancellation and must release the kiosk UI instead of
+  // leaving a stale Cancel button on screen.
+  return payment.rail === "NONE"
+    || (payment.rail === "TERMINAL" && reader?.readerState === "READY");
 }
 
 export function KioskPaymentRailStage(props: Props) {
