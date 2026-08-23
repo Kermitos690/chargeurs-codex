@@ -55,8 +55,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private static final String TAG = "ChargeursStripeV2";
     private static final String PREFS = "stripe_terminal_reader";
     private static final String LAST_READER_ID = "last_reader_id";
-    // Kept package-visible so the build contract can prevent diagnostics from
-    // drifting away from the pinned SDK dependency.
     static final String SDK_COMPAT = "3.0.0-test-only";
 
     private final Context context;
@@ -66,9 +64,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
-    // Stripe rejects a second connectUsbReader call while the first one is in
-    // flight. WebView diagnostics poll frequently, so readerState alone cannot
-    // provide the required mutual exclusion.
     private final AtomicBoolean connectionRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentCancellationRunning = new AtomicBoolean(false);
@@ -93,9 +88,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     private volatile boolean serverConfirmed;
     private volatile boolean recoveryRequired;
     private volatile boolean bindingMismatchBlocked;
-    // Set only after Stripe has reported its specific offline-cache decryption
-    // failure. It allows an explicit user retry to clear credentials even when
-    // Stripe failed before delivering the ordinary connection callback.
     private volatile boolean offlineCredentialRepairRequired;
     private volatile String correlationId;
     private Cancelable discoveryCancelable;
@@ -124,19 +116,12 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             if (!"BUSY".equals(readerState) && !"UPDATING".equals(readerState)) readerState = "ABSENT";
             return;
         }
-        // Reader failures, including Stripe's offline-cache fault, must not
-        // be retried by status polling. The kiosk presents an explicit retry
-        // control instead, preventing connection loops and preserving a
-        // deterministic recovery boundary.
         if (!shouldAutoReconnectReader(readerState)) return;
         if (bindingMismatchBlocked) {
             readerState = "ERROR";
             safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
             return;
         }
-        // The Stripe offline cache is corrupted. Do not automatically start a
-        // second connection attempt: it would repeat the same failure and can
-        // race the explicit, safe credential-repair action exposed to the UI.
         if (shouldHoldReaderForExplicitOfflineCacheRepair(offlineCredentialRepairRequired)) {
             readerState = "ERROR";
             safeErrorCode = "STRIPE_OFFLINE_CREDENTIAL_CACHE_REPAIR_REQUIRED";
@@ -155,6 +140,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             if (!ensureTerminalInitialized()) return;
             Reader connected = Terminal.getInstance().getConnectedReader();
             if (connected != null && readerMatchesBinding(connected)) {
+                connectionRunning.set(false);
                 acceptConnectedReader(connected);
                 return;
             }
@@ -163,9 +149,16 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
     }
 
     /**
-     * Explicit operator/UI reconnect request. A stale discovery task is
-     * invalidated and replaced, but an active payment or healthy reader is never
-     * disconnected. No PaymentIntent or other financial side effect is created.
+     * Explicit operator/UI reconnect request.
+     *
+     * A field regression on DTA21269 showed that Stripe 3.0.0 can leave the
+     * local connect guard stuck in CONNECTING across a reboot/retry boundary.
+     * The old implementation returned immediately whenever connectionRunning
+     * was true, making the Retry button a permanent no-op. A customer-requested
+     * retry is allowed to invalidate that stale local generation when no payment
+     * is active. Any late callback from the previous generation is ignored; if
+     * Stripe actually completed the old connection, ensureStarted() observes
+     * the connected reader and adopts it safely.
      */
     void requestReconnect() {
         if (!BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) {
@@ -176,12 +169,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             readerState = "ABSENT";
             return;
         }
-        if (paymentRunning.get()
-            || (connectionRunning.get()
-                && !canOverrideStuckConnectionForOfflineCacheRepair(
-                    offlineCredentialRepairRequired,
-                    paymentRunning.get()
-                ))) return;
+        if (paymentRunning.get()) return;
 
         main.post(() -> {
             if (!ensureTerminalInitialized()) return;
@@ -189,17 +177,21 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             if (!offlineCredentialRepairRequired
                 && connected != null
                 && readerMatchesBinding(connected)) {
+                connectionRunning.set(false);
+                discoveryRunning.set(false);
                 acceptConnectedReader(connected);
                 return;
             }
+
+            // Always invalidate stale discovery/connect callbacks on explicit
+            // Retry. This is local state only: no PaymentIntent, capture,
+            // settlement or hardware operation is touched.
+            discoveryGeneration.incrementAndGet();
+            cancelDiscoverySilently();
+            discoveryRunning.set(false);
+            connectionRunning.set(false);
+
             if (offlineCredentialRepairRequired) {
-                // Stripe did not invoke ReaderCallback.onFailure for this
-                // cache failure. Invalidate its stale operation before the
-                // user-requested repair, never while a payment is active.
-                discoveryGeneration.incrementAndGet();
-                cancelDiscoverySilently();
-                discoveryRunning.set(false);
-                connectionRunning.set(false);
                 if (connected != null) {
                     disconnectForOfflineCredentialRepair();
                     return;
@@ -207,20 +199,13 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                 if (!clearCachedCredentialsForOfflineRepair()) return;
             }
 
-            discoveryGeneration.incrementAndGet();
-            cancelDiscoverySilently();
-            discoveryRunning.set(false);
             safeErrorCode = null;
             readerState = "RECONNECTING";
-            main.postDelayed(this::ensureStarted, 250L);
+            Log.i(TAG, "Explicit WisePad retry invalidated stale USB connect/discovery state");
+            main.postDelayed(this::ensureStarted, 350L);
         });
     }
 
-    /**
-     * Called by the application-level RxJava handler only for Stripe's known
-     * offline-cache decryption error. This records a fail-closed reader ERROR;
-     * credentials are still cleared only after a user explicitly retries.
-     */
     void requireOfflineCredentialCacheRepair() {
         offlineCredentialRepairRequired = true;
         main.post(() -> {
@@ -324,13 +309,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CLAIMING");
     }
 
-    /**
-     * Customer-requested cancellation before a confirmed payment. We first
-     * cancel local collection so the reader cannot still accept a card while
-     * the server is cancelling the PaymentIntent. The backend then checks the
-     * authoritative Stripe status; any raced/confirmed side effect remains
-     * fail-closed and is surfaced as recovery rather than retried.
-     */
     JSONObject cancelTerminalPayment() {
         String rental = activeRentalSessionId;
         if (rental == null || rental.isBlank()) {
@@ -339,9 +317,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         if (!paymentCancellationRunning.compareAndSet(false, true)) {
             return JsonObjects.of("ok", false, "code", "TERMINAL_CANCEL_IN_PROGRESS");
         }
-        // Every collect/confirm callback created by the previous operation is
-        // now stale. It must never overwrite the authoritative cancellation
-        // result after the WisePad has acknowledged cancellation.
         paymentOperationGeneration.incrementAndGet();
         localPaymentState = "CANCELLING";
         paymentRail = "TERMINAL";
@@ -351,11 +326,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             collection.cancel(new Callback() {
                 @Override public void onSuccess() { cancelTerminalIntentOnServer(rental); }
                 @Override public void onFailure(TerminalException error) {
-                    // A reader may report an already-ended/cancelled collection
-                    // while the server rail is still engaged. The server is the
-                    // authority for cancelling the PaymentIntent and releasing
-                    // that rail, so a local callback failure must not strand the
-                    // kiosk in BUSY/ENGAGED.
                     safeErrorCode = safeTerminalCode(error);
                     cancelTerminalIntentOnServer(rental);
                 }
@@ -370,9 +340,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         String rental = activeRentalSessionId;
         if (rental == null || rental.isBlank()) return;
         if (!paymentCancellationRunning.compareAndSet(false, true)) return;
-        // The reader has already ended collection. Do not invoke cancel() a
-        // second time; invalidate callbacks and move directly to the same
-        // authoritative server cancellation used by the kiosk button.
         paymentOperationGeneration.incrementAndGet();
         localPaymentState = "CANCELLING";
         paymentRail = "TERMINAL";
@@ -399,9 +366,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                     safeErrorCode = null;
                     readerState = readerTransportPresent() && Terminal.isInitialized() && Terminal.getInstance().getConnectedReader() != null ? "READY" : "ERROR";
                 } else {
-                    // Never pretend that a local stop released a server claim.
-                    // An ambiguous Stripe state needs the recovery UI rather
-                    // than a second payment attempt or any hardware action.
                     localPaymentState = "RECOVERY_REQUIRED";
                     recoveryRequired = true;
                     paymentRunning.set(false);
@@ -425,9 +389,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         io.execute(() -> {
             try {
                 StripeTerminalBackendClient.PaymentStateResult state = backend.getPaymentState(rental, reconcile);
-                // State reads are queued while the WebView polls. A response
-                // that began before a cancellation must not resurrect the
-                // released TERMINAL rail after the cancellation is confirmed.
                 if (!shouldApplyPaymentState(
                     operationGeneration,
                     paymentOperationGeneration.get(),
@@ -444,9 +405,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                     && "CANCELLED".equals(paymentRailState)
                     && !serverConfirmed
                     && !recoveryRequired) {
-                    // The simulated authorization has been voided by the
-                    // server. Forget this test attempt so a later real
-                    // WisePad payment starts from an unclaimed rail.
                     localPaymentState = "SIMULATED_AUTHORIZATION_VOIDED";
                     activePaymentIntentId = null;
                     activeRentalSessionId = null;
@@ -460,11 +418,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         });
     }
 
-    /**
-     * Physical WisePad payments keep their normal webhook/reconciliation path.
-     * A simulated reader has no physical rental side effect, so its completed
-     * TEST authorization is explicitly reconciled and voided by the server.
-     */
     boolean shouldReconcilePaymentState() {
         return simulatedReaderEnabled()
             && "SDK_SUCCEEDED".equals(localPaymentState)
@@ -575,10 +528,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                             if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
                             paymentCancelable = null;
                             if (isCancellation(error)) {
-                                // STOP on the WisePad reaches this callback. It
-                                // has the same two-phase cancellation contract
-                                // as the kiosk button: invalidate callbacks,
-                                // then let the backend safely cancel/release.
                                 cancelAfterReaderStop();
                                 return;
                             }
@@ -683,10 +632,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         String remembered = preferences.getString(LAST_READER_ID, null);
         if (expected != null) {
             for (Reader reader : readers) if (expected.equals(reader.getId())) return reader;
-            // USB discovery supplies no Stripe reader ID until after a physical
-            // connection on some WisePad 3 firmware. A single attached reader
-            // is safe to connect non-financially; its Stripe ID is verified in
-            // the connection callback before it can become READY.
             if (readers.size() == 1 && blankToNull(readers.get(0).getId()) == null) return readers.get(0);
             return null;
         }
@@ -754,6 +699,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             if (blankToNull(stripeReaderId) != null) preferences.edit().putString(LAST_READER_ID, stripeReaderId).apply();
             else if (blankToNull(stripeReaderSerial) != null) preferences.edit().putString(LAST_READER_ID, stripeReaderSerial).apply();
         }
+        connectionRunning.set(false);
         safeErrorCode = null;
         readerState = paymentRunning.get() ? "BUSY" : "READY";
         Log.i(TAG, (simulatedReaderEnabled() ? "Simulated reader" : "WisePad USB")
@@ -820,9 +766,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             return false;
         }
         try {
-            // Explicit retry only, after a disconnected reader. Stripe
-            // credentials are the sole cleared data: kiosk storage, payment
-            // state and hardware controls remain untouched.
             Terminal.getInstance().clearCachedCredentials();
             prefetchedConnectionTokenSecret = null;
             offlineCredentialRepairRequired = false;
@@ -838,7 +781,6 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         return WisePadUsbProbe.snapshot(context).optBoolean("present", false);
     }
 
-    /** A simulated reader is available only in an explicitly opted-in STAGING APK. */
     static boolean simulatedReaderEnabledForBuild(boolean stagingBuild, boolean simulationFlag) {
         return stagingBuild && simulationFlag;
     }
@@ -955,6 +897,8 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
         public void onUnexpectedReaderDisconnect(Reader reader) {
             stripeReaderId = null;
             stripeReaderSerial = null;
+            connectionRunning.set(false);
+            discoveryRunning.set(false);
             discoveryGeneration.incrementAndGet();
             cancelDiscoverySilently();
             if (bindingMismatchBlocked) {
@@ -972,10 +916,13 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
             switch (status.name()) {
                 case "CONNECTING" -> readerState = "CONNECTING";
                 case "CONNECTED" -> {
+                    connectionRunning.set(false);
                     Reader connected = Terminal.getInstance().getConnectedReader();
                     if (connected != null && readerMatchesBinding(connected)) acceptConnectedReader(connected);
                 }
                 case "NOT_CONNECTED" -> {
+                    connectionRunning.set(false);
+                    discoveryRunning.set(false);
                     if (bindingMismatchBlocked) {
                         readerState = "ERROR";
                         safeErrorCode = "TERMINAL_READER_BINDING_MISMATCH";
@@ -984,7 +931,7 @@ final class StripeTerminalReaderRuntime implements ReaderListener {
                     if (!paymentRunning.get()) {
                         if (readerTransportPresent()) {
                             readerState = "RECONNECTING";
-                            if (!discoveryRunning.get()) main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 250L);
+                            main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 250L);
                         } else {
                             readerState = "ABSENT";
                         }
