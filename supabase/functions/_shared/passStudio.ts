@@ -94,11 +94,13 @@ export async function resolvePassStudioPass(apiKey: string): Promise<PassStudioP
   const configuredId = (Deno.env.get("PASS_STUDIO_PASS_ID") ?? "").trim();
   const configuredName = (Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+").trim().toLocaleLowerCase();
   const passes = await listPassStudioPasses(apiKey);
-  const active = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
   const match = configuredId
-    ? active.find((pass) => pass.passId === configuredId)
-    : active.find((pass) => pass.name.trim().toLocaleLowerCase() === configuredName);
+    ? passes.find((pass) => pass.passId === configuredId)
+    : passes.find((pass) => pass.name.trim().toLocaleLowerCase() === configuredName);
   if (!match) throw new PassStudioError(503, configuredId ? "PASS_STUDIO_PASS_ID_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
+  if (String(match.status ?? "active").toLowerCase() !== "active") {
+    throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
+  }
   return match;
 }
 
