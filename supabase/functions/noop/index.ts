@@ -7,6 +7,7 @@ import {
   resolvePassStudioPass,
   updatePassStudioInstance,
 } from "../_shared/passStudio.ts";
+import { guestPresentationFields, resolveExpressPass } from "../_shared/guestWallet.ts";
 
 const admin = () => createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -140,7 +141,6 @@ async function processPushOutbox(db: ReturnType<typeof admin>) {
       failed += 1;
     }
   }
-
   return { configured: true, processed: (rows ?? []).length, sent, failed, skipped };
 }
 
@@ -161,88 +161,57 @@ async function processWalletOutbox(db: ReturnType<typeof admin>) {
 
   for (const userId of userIds) {
     const candidates = rows.filter((row) => String(row.user_id) === userId);
-    const expiredIds = candidates
-      .filter((row) => row.expires_at && new Date(String(row.expires_at)).getTime() <= now.getTime())
-      .map((row) => String(row.id));
+    const expiredIds = candidates.filter((row) => row.expires_at && new Date(String(row.expires_at)).getTime() <= now.getTime()).map((row) => String(row.id));
     if (expiredIds.length) {
-      await db.from("customer_wallet_sync_outbox").update({
-        status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString(),
-      }).in("id", expiredIds).eq("status", "pending");
+      await db.from("customer_wallet_sync_outbox").update({ status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString() }).in("id", expiredIds).eq("status", "pending");
       expired += expiredIds.length;
     }
-
     const live = candidates.filter((row) => !expiredIds.includes(String(row.id)));
     if (!live.length) continue;
     const nextAttempt = Math.max(...live.map((row) => Number(row.attempts ?? 0))) + 1;
     const ids = live.map((row) => String(row.id));
-    const { data: claimed } = await db.from("customer_wallet_sync_outbox")
-      .update({ status: "processing", attempts: nextAttempt, last_error_code: null, updated_at: new Date().toISOString() })
-      .in("id", ids).eq("status", "pending").select("id");
+    const { data: claimed } = await db.from("customer_wallet_sync_outbox").update({ status: "processing", attempts: nextAttempt, last_error_code: null, updated_at: new Date().toISOString() }).in("id", ids).eq("status", "pending").select("id");
     if (!claimed?.length) continue;
     const claimedIds = claimed.map((row) => String(row.id));
 
     try {
       const [{ data: wallet, error: walletError }, { data: presentation, error: presentationError }] = await Promise.all([
-        db.from("customer_wallet_passes")
-          .select("id,provider_instance_id,pass_revision")
-          .eq("user_id", userId).eq("status", "active").eq("provider", "pass_studio")
-          .not("provider_instance_id", "is", null).is("revoked_at", null)
-          .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        db.from("customer_wallet_passes").select("id,provider_instance_id,pass_revision").eq("user_id", userId).eq("status", "active").eq("provider", "pass_studio").not("provider_instance_id", "is", null).is("revoked_at", null).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         db.rpc("customer_wallet_presentation_state", { p_user_id: userId }),
       ]);
       if (walletError || presentationError) throw new Error("WALLET_SOURCE_STATE_UNAVAILABLE");
       if (!wallet?.provider_instance_id) {
-        await db.from("customer_wallet_sync_outbox").update({
-          status: "expired", last_error_code: "WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString(),
-        }).in("id", claimedIds);
+        await db.from("customer_wallet_sync_outbox").update({ status: "expired", last_error_code: "WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString() }).in("id", claimedIds);
         expired += claimedIds.length;
         continue;
       }
-
       const fields = presentationFields(presentation);
       await updatePassStudioInstance(apiKey, providerPass, String(wallet.provider_instance_id), fields);
       const syncedAt = new Date().toISOString();
-      await db.from("customer_wallet_passes").update({
-        provider_status: "issued", provider_last_error_code: null, last_synced_at: syncedAt,
-        pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: syncedAt,
-      }).eq("id", String(wallet.id));
-      await db.from("customer_wallet_sync_outbox").update({
-        status: "delivered", delivered_at: syncedAt, last_error_code: null, updated_at: syncedAt,
-      }).in("id", claimedIds);
+      await db.from("customer_wallet_passes").update({ provider_status: "issued", provider_last_error_code: null, last_synced_at: syncedAt, pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: syncedAt }).eq("id", String(wallet.id));
+      await db.from("customer_wallet_sync_outbox").update({ status: "delivered", delivered_at: syncedAt, last_error_code: null, updated_at: syncedAt }).in("id", claimedIds);
       delivered += claimedIds.length;
     } catch (syncError) {
       const code = passStudioFailure(syncError);
       if (nextAttempt < 5) {
         const retryAt = new Date(Date.now() + Math.min(300, 15 * 2 ** (nextAttempt - 1)) * 1000).toISOString();
-        await db.from("customer_wallet_sync_outbox").update({
-          status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString(),
-        }).in("id", claimedIds);
-        await db.from("customer_wallet_passes").update({
-          provider_status: "update_pending", updated_at: new Date().toISOString(),
-        }).eq("user_id", userId).eq("provider", "pass_studio").eq("status", "active");
+        await db.from("customer_wallet_sync_outbox").update({ status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString() }).in("id", claimedIds);
+        await db.from("customer_wallet_passes").update({ provider_status: "update_pending", updated_at: new Date().toISOString() }).eq("user_id", userId).eq("provider", "pass_studio").eq("status", "active");
         retried += claimedIds.length;
       } else {
-        await db.from("customer_wallet_sync_outbox").update({
-          status: "failed", last_error_code: code, updated_at: new Date().toISOString(),
-        }).in("id", claimedIds);
-        await db.from("customer_wallet_passes").update({
-          provider_status: "error", provider_last_error_code: code, updated_at: new Date().toISOString(),
-        }).eq("user_id", userId).eq("provider", "pass_studio").eq("status", "active");
+        await db.from("customer_wallet_sync_outbox").update({ status: "failed", last_error_code: code, updated_at: new Date().toISOString() }).in("id", claimedIds);
+        await db.from("customer_wallet_passes").update({ provider_status: "error", provider_last_error_code: code, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("provider", "pass_studio").eq("status", "active");
         failed += claimedIds.length;
       }
       console.error("wallet realtime sync failed", { code, attempt: nextAttempt });
     }
   }
-
   return { processed: rows.length, users: userIds.length, delivered, retried, failed, expired };
 }
 
 async function processNativeWalletNotifications(db: ReturnType<typeof admin>) {
   const now = new Date();
-  const { data: dueRows, error } = await db.from("customer_wallet_native_notifications")
-    .select("id,user_id,message,attempts,expires_at")
-    .eq("status", "pending").lte("next_attempt_at", now.toISOString())
-    .order("created_at", { ascending: true }).limit(20);
+  const { data: dueRows, error } = await db.from("customer_wallet_native_notifications").select("id,user_id,message,attempts,expires_at").eq("status", "pending").lte("next_attempt_at", now.toISOString()).order("created_at", { ascending: true }).limit(20);
   if (error) throw new Error("WALLET_NATIVE_OUTBOX_READ_FAILED");
   const rows = dueRows ?? [];
   if (!rows.length) return { processed: 0, delivered: 0, retried: 0, failed: 0, expired: 0 };
@@ -250,79 +219,119 @@ async function processNativeWalletNotifications(db: ReturnType<typeof admin>) {
   const apiKey = requirePassStudioApiKey();
   const providerPass = await resolvePassStudioPass(apiKey);
   let delivered = 0, retried = 0, failed = 0, expired = 0;
-
   for (const row of rows) {
     const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
     if (expiresAt && expiresAt.getTime() <= now.getTime()) {
-      await db.from("customer_wallet_native_notifications").update({
-        status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString(),
-      }).eq("id", row.id).eq("status", "pending");
+      await db.from("customer_wallet_native_notifications").update({ status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending");
       expired += 1;
       continue;
     }
-
     const attempt = Number(row.attempts ?? 0) + 1;
-    const { data: claimed } = await db.from("customer_wallet_native_notifications")
-      .update({ status: "processing", attempts: attempt, last_error_code: null, updated_at: new Date().toISOString() })
-      .eq("id", row.id).eq("status", "pending").select("id").maybeSingle();
+    const { data: claimed } = await db.from("customer_wallet_native_notifications").update({ status: "processing", attempts: attempt, last_error_code: null, updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending").select("id").maybeSingle();
     if (!claimed) continue;
-
     try {
       const [{ data: wallet, error: walletError }, { data: presentation, error: presentationError }] = await Promise.all([
-        db.from("customer_wallet_passes")
-          .select("id,provider_instance_id,pass_revision")
-          .eq("user_id", row.user_id).eq("status", "active").eq("provider", "pass_studio")
-          .not("provider_instance_id", "is", null).is("revoked_at", null)
-          .order("updated_at", { ascending: false }).limit(1).maybeSingle(),
+        db.from("customer_wallet_passes").select("id,provider_instance_id,pass_revision").eq("user_id", row.user_id).eq("status", "active").eq("provider", "pass_studio").not("provider_instance_id", "is", null).is("revoked_at", null).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
         db.rpc("customer_wallet_presentation_state", { p_user_id: row.user_id }),
       ]);
       if (walletError || presentationError) throw new Error("WALLET_SOURCE_STATE_UNAVAILABLE");
       if (!wallet?.provider_instance_id) {
-        await db.from("customer_wallet_native_notifications").update({
-          status: "expired", last_error_code: "WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString(),
-        }).eq("id", row.id);
+        await db.from("customer_wallet_native_notifications").update({ status: "expired", last_error_code: "WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString() }).eq("id", row.id);
         expired += 1;
         continue;
       }
-
       const fields = presentationFields(presentation);
-      const providerResult = await updatePassStudioInstance(
-        apiKey,
-        providerPass,
-        String(wallet.provider_instance_id),
-        fields,
-        String(row.message),
-      );
-
+      const providerResult = await updatePassStudioInstance(apiKey, providerPass, String(wallet.provider_instance_id), fields, String(row.message));
       const deliveredAt = new Date().toISOString();
-      await db.from("customer_wallet_passes").update({
-        provider_status: "issued", provider_last_error_code: null, last_synced_at: deliveredAt,
-        pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: deliveredAt,
-      }).eq("id", String(wallet.id));
-      await db.from("customer_wallet_native_notifications").update({
-        status: "delivered", delivered_at: deliveredAt, last_error_code: null,
-        metadata: { providerPushed: Boolean(providerResult?.pushed), warnings: providerResult?.warnings ?? [] },
-        updated_at: deliveredAt,
-      }).eq("id", row.id);
+      await db.from("customer_wallet_passes").update({ provider_status: "issued", provider_last_error_code: null, last_synced_at: deliveredAt, pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: deliveredAt }).eq("id", String(wallet.id));
+      await db.from("customer_wallet_native_notifications").update({ status: "delivered", delivered_at: deliveredAt, last_error_code: null, metadata: { providerPushed: Boolean(providerResult?.pushed), warnings: providerResult?.warnings ?? [] }, updated_at: deliveredAt }).eq("id", row.id);
       delivered += 1;
     } catch (notifyError) {
       const code = passStudioFailure(notifyError);
       if (attempt < 5 && (!expiresAt || expiresAt.getTime() > Date.now())) {
         const retryAt = new Date(Date.now() + Math.min(300, 15 * 2 ** (attempt - 1)) * 1000).toISOString();
-        await db.from("customer_wallet_native_notifications").update({
-          status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString(),
-        }).eq("id", row.id);
+        await db.from("customer_wallet_native_notifications").update({ status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.id);
         retried += 1;
       } else {
-        await db.from("customer_wallet_native_notifications").update({
-          status: "failed", last_error_code: code, updated_at: new Date().toISOString(),
-        }).eq("id", row.id);
+        await db.from("customer_wallet_native_notifications").update({ status: "failed", last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.id);
         failed += 1;
       }
       console.error("wallet native notification failed", { code, attempt });
     }
   }
+  return { processed: rows.length, delivered, retried, failed, expired };
+}
 
+async function processGuestWalletOutbox(db: ReturnType<typeof admin>) {
+  const now = new Date();
+  const { data: rows, error } = await db.from("guest_wallet_outbox")
+    .select("id,guest_wallet_pass_id,rental_id,message,attempts,expires_at")
+    .eq("status", "pending").lte("next_attempt_at", now.toISOString())
+    .order("created_at", { ascending: true }).limit(30);
+  if (error) throw new Error("GUEST_WALLET_OUTBOX_READ_FAILED");
+  if (!rows?.length) return { processed: 0, delivered: 0, retried: 0, failed: 0, expired: 0 };
+
+  const apiKey = requirePassStudioApiKey();
+  const providerPass = await resolveExpressPass(apiKey);
+  let delivered = 0, retried = 0, failed = 0, expired = 0;
+
+  for (const row of rows) {
+    const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
+    if (expiresAt && expiresAt.getTime() <= now.getTime()) {
+      await db.from("guest_wallet_outbox").update({ status: "expired", last_error_code: "EVENT_EXPIRED", updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending");
+      expired += 1;
+      continue;
+    }
+    const attempt = Number(row.attempts ?? 0) + 1;
+    const { data: claimed } = await db.from("guest_wallet_outbox").update({ status: "processing", attempts: attempt, last_error_code: null, updated_at: new Date().toISOString() }).eq("id", row.id).eq("status", "pending").select("id").maybeSingle();
+    if (!claimed) continue;
+
+    try {
+      const [{ data: wallet, error: walletError }, { data: presentation, error: presentationError }] = await Promise.all([
+        db.from("guest_wallet_passes").select("id,provider_instance_id,pass_revision").eq("id", row.guest_wallet_pass_id).eq("status", "active").eq("provider", "pass_studio").not("provider_instance_id", "is", null).is("revoked_at", null).maybeSingle(),
+        db.rpc("guest_wallet_presentation_state", { p_rental_id: row.rental_id }),
+      ]);
+      if (walletError || presentationError) throw new Error("GUEST_WALLET_SOURCE_STATE_UNAVAILABLE");
+      if (!wallet?.provider_instance_id) {
+        await db.from("guest_wallet_outbox").update({ status: "expired", last_error_code: "GUEST_WALLET_INSTANCE_NOT_AVAILABLE", updated_at: new Date().toISOString() }).eq("id", row.id);
+        expired += 1;
+        continue;
+      }
+
+      const fields = guestPresentationFields(providerPass, presentation);
+      const providerResult = await updatePassStudioInstance(
+        apiKey,
+        providerPass,
+        String(wallet.provider_instance_id),
+        fields,
+        row.message ? String(row.message) : null,
+      );
+      const deliveredAt = new Date().toISOString();
+      await db.from("guest_wallet_passes").update({
+        provider_status: "issued", provider_last_error_code: null, current_rental_id: row.rental_id,
+        last_synced_at: deliveredAt, pass_revision: Number(wallet.pass_revision ?? 0) + 1, updated_at: deliveredAt,
+      }).eq("id", String(wallet.id));
+      await db.from("guest_wallet_outbox").update({
+        status: "delivered", delivered_at: deliveredAt, last_error_code: null,
+        metadata: { providerPushed: Boolean(providerResult?.pushed), warnings: providerResult?.warnings ?? [] },
+        updated_at: deliveredAt,
+      }).eq("id", row.id);
+      delivered += 1;
+    } catch (guestError) {
+      const code = passStudioFailure(guestError);
+      if (attempt < 5 && (!expiresAt || expiresAt.getTime() > Date.now())) {
+        const retryAt = new Date(Date.now() + Math.min(300, 15 * 2 ** (attempt - 1)) * 1000).toISOString();
+        await db.from("guest_wallet_outbox").update({ status: "pending", next_attempt_at: retryAt, last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.id);
+        await db.from("guest_wallet_passes").update({ provider_status: "update_pending", provider_last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.guest_wallet_pass_id);
+        retried += 1;
+      } else {
+        await db.from("guest_wallet_outbox").update({ status: "failed", last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.id);
+        await db.from("guest_wallet_passes").update({ provider_status: "error", provider_last_error_code: code, updated_at: new Date().toISOString() }).eq("id", row.guest_wallet_pass_id);
+        failed += 1;
+      }
+      console.error("guest wallet dispatch failed", { code, attempt });
+    }
+  }
   return { processed: rows.length, delivered, retried, failed, expired };
 }
 
@@ -336,27 +345,15 @@ Deno.serve(async (req) => {
   let push: Record<string, unknown>;
   let wallet: Record<string, unknown>;
   let nativeWallet: Record<string, unknown>;
-  try {
-    push = await processPushOutbox(db);
-  } catch (error) {
-    const code = error instanceof Error ? error.message.slice(0, 96) : "PUSH_DISPATCH_FAILED";
-    console.error("push dispatch failed", { code });
-    push = { error: code };
-  }
-  try {
-    wallet = await processWalletOutbox(db);
-  } catch (error) {
-    const code = passStudioFailure(error);
-    console.error("wallet dispatch failed", { code });
-    wallet = { error: code };
-  }
-  try {
-    nativeWallet = await processNativeWalletNotifications(db);
-  } catch (error) {
-    const code = passStudioFailure(error);
-    console.error("wallet native dispatch failed", { code });
-    nativeWallet = { error: code };
-  }
+  let guestWallet: Record<string, unknown>;
+  try { push = await processPushOutbox(db); }
+  catch (error) { const code = error instanceof Error ? error.message.slice(0, 96) : "PUSH_DISPATCH_FAILED"; console.error("push dispatch failed", { code }); push = { error: code }; }
+  try { wallet = await processWalletOutbox(db); }
+  catch (error) { const code = passStudioFailure(error); console.error("wallet dispatch failed", { code }); wallet = { error: code }; }
+  try { nativeWallet = await processNativeWalletNotifications(db); }
+  catch (error) { const code = passStudioFailure(error); console.error("wallet native dispatch failed", { code }); nativeWallet = { error: code }; }
+  try { guestWallet = await processGuestWalletOutbox(db); }
+  catch (error) { const code = passStudioFailure(error); console.error("guest wallet dispatch failed", { code }); guestWallet = { error: code }; }
 
-  return json({ ok: true, push, wallet, nativeWallet });
+  return json({ ok: true, push, wallet, nativeWallet, guestWallet });
 });
