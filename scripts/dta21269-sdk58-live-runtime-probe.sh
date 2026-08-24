@@ -73,6 +73,7 @@ TMP="$(mktemp -d /tmp/dta21269-sdk58-live.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 "$ADB" -s "$SERIAL" shell cat /sdcard/chargeurs-sdk58-live.xml > "$TMP/window.xml" 2>/dev/null || true
 
+set +e
 python3 - "$TMP/window.xml" "$EXPECTED_SDK" <<'PY'
 import json, sys, xml.etree.ElementTree as ET
 path, expected = sys.argv[1:]
@@ -151,6 +152,7 @@ print('LIVE_RUNTIME_RESULT=UNCLASSIFIED_NOT_READY')
 raise SystemExit(23)
 PY
 STATUS=$?
+set -e
 
 # Always surface fresh relevant logs without exposing kiosk tokens.
 echo "== Fresh Chargeurs / Stripe logs =="
