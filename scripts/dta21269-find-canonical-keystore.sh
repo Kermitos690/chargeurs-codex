@@ -6,6 +6,8 @@ EXPECTED_ALIAS="androiddebugkey"
 EXPECTED_STOREPASS="android"
 ROOT="$(git rev-parse --show-toplevel)"
 
+echo "Keystore scan started (bounded local search; Spotlight disabled)."
+
 find_keytool() {
   local kt
   kt="$(command -v keytool || true)"
@@ -27,49 +29,59 @@ if [[ -z "$KEYTOOL" ]]; then
   exit 2
 fi
 
+echo "keytool ready."
+
 TMP="$(mktemp -d /tmp/chargeurs-keystore-scan.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 CANDIDATES="$TMP/candidates.txt"
 : > "$CANDIDATES"
 
-# Spotlight is fast and read-only on macOS. It may return nothing if indexing is disabled.
-if command -v mdfind >/dev/null 2>&1; then
-  mdfind '((kMDItemFSName == "*.keystore"cd) || (kMDItemFSName == "*.jks"cd))' 2>/dev/null \
-    | awk -v home="$HOME/" 'index($0, home)==1' >> "$CANDIDATES" || true
-fi
+add_if_file() {
+  local file="$1"
+  [[ -f "$file" ]] && printf '%s\n' "$file" >> "$CANDIDATES"
+}
 
-# Target the places where previous Chargeurs builds/clones and Android signing files are most likely to live.
-for base in \
-  "$HOME/.android" \
-  "$HOME/Downloads" \
-  "$HOME/Desktop" \
-  "$HOME/Documents" \
-  "$HOME/chargeurs-sdk57-test" \
-  "$HOME/chargeurs-simulator-1.0.25-preview"
-do
-  [[ -d "$base" ]] || continue
-  find "$base" -maxdepth 7 -type f \
-    \( -name 'debug.keystore' -o -name '*.keystore' -o -name '*.jks' \) \
-    -print 2>/dev/null >> "$CANDIDATES" || true
-done
+scan_dir() {
+  local label="$1" base="$2" depth="$3"
+  [[ -d "$base" ]] || return 0
+  echo "Scanning: $label"
+  find "$base" -maxdepth "$depth" \
+    \( -type d \( -name .git -o -name node_modules -o -name .gradle -o -name build \) -prune \) -o \
+    \( -type f \( -name 'debug.keystore' -o -name '*.keystore' -o -name '*.jks' \) -print \) \
+    2>/dev/null >> "$CANDIDATES" || true
+}
 
-# Also inspect other top-level Chargeurs-related folders without traversing the whole home directory.
+# Highest-probability exact locations first.
+echo "Checking exact Android signing locations..."
+add_if_file "$HOME/.android/debug.keystore"
+add_if_file "$ROOT/android-kiosk/debug.keystore"
+add_if_file "$ROOT/debug.keystore"
+
+# Current and known historical Chargeurs clones. These are local-only and bounded.
+scan_dir "current Chargeurs clone" "$ROOT" 6
+scan_dir "historical simulator clone" "$HOME/chargeurs-simulator-1.0.25-preview" 6
+
+# Other top-level Chargeurs/kiosk folders, without traversing the entire home directory.
+echo "Discovering other top-level Chargeurs folders..."
 while IFS= read -r dir; do
-  [[ -d "$dir" ]] || continue
-  find "$dir" -maxdepth 6 -type f \
-    \( -name 'debug.keystore' -o -name '*.keystore' -o -name '*.jks' \) \
-    -print 2>/dev/null >> "$CANDIDATES" || true
+  [[ "$dir" == "$ROOT" || "$dir" == "$HOME/chargeurs-simulator-1.0.25-preview" ]] && continue
+  scan_dir "$(basename "$dir")" "$dir" 5
 done < <(find "$HOME" -maxdepth 1 -type d \( -iname '*chargeur*' -o -iname '*kiosk*' \) -print 2>/dev/null)
+
+# User download/desktop folders are searched shallowly only; no Spotlight/iCloud-wide scan.
+scan_dir "Downloads (shallow)" "$HOME/Downloads" 3
+scan_dir "Desktop (shallow)" "$HOME/Desktop" 3
 
 sort -u "$CANDIDATES" -o "$CANDIDATES"
 TOTAL="$(wc -l < "$CANDIDATES" | tr -d ' ')"
-echo "Checking $TOTAL local keystore candidate(s) without modifying them..."
+echo "Found $TOTAL candidate file(s). Verifying certificate fingerprints..."
 
 MATCH=""
 CHECKED=0
 while IFS= read -r file; do
   [[ -f "$file" ]] || continue
   CHECKED=$((CHECKED + 1))
+  echo "Verifying candidate $CHECKED/$TOTAL: $file"
   OUT="$TMP/keytool-$CHECKED.txt"
   if "$KEYTOOL" -list -v \
       -keystore "$file" \
