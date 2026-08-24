@@ -1,11 +1,10 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   // The embedded tablet runs Android 8+ (minSdk 26), whose System WebView
   // can be substantially older than Vite's moving browser baseline.  Keep
   // the kiosk bundle compatible with Chromium 61 instead of shipping syntax
@@ -25,7 +24,6 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
     VitePWA({
       // The kiosk wrapper (src/pwa/registerSW.ts) is the ONLY registrar.
       injectRegister: null,
@@ -104,7 +102,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
     }),
-  ].filter(Boolean),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
