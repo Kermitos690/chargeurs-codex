@@ -6,7 +6,7 @@ EXPECTED_ALIAS="androiddebugkey"
 EXPECTED_STOREPASS="android"
 ROOT="$(git rev-parse --show-toplevel)"
 
-echo "Keystore scan started (bounded local search; Spotlight disabled)."
+echo "Keystore scan started (targeted local search; Desktop/Downloads disabled)."
 
 find_keytool() {
   local kt
@@ -57,28 +57,66 @@ scan_dir() {
   return 0
 }
 
+add_history_candidates() {
+  local history
+  echo "Checking shell history for previously used keystore paths..."
+  for history in "$HOME/.zsh_history" "$HOME/.bash_history" "$HOME/.local/share/fish/fish_history"; do
+    [[ -f "$history" ]] || continue
+    python3 - "$history" "$CANDIDATES" "$HOME" <<'PY'
+from pathlib import Path
+import re, sys
+history = Path(sys.argv[1])
+out = Path(sys.argv[2])
+home = sys.argv[3]
+try:
+    text = history.read_text(encoding='utf-8', errors='ignore')
+except Exception:
+    raise SystemExit(0)
+patterns = [
+    r'CHARGEURS_STAGING_KEYSTORE_PATH[= ]+["\']?([^"\'\s;]+)',
+    r'([~/][^\s"\';]*(?:debug\.keystore|[^/\s"\';]+\.(?:keystore|jks)))',
+]
+found = set()
+for pattern in patterns:
+    for raw in re.findall(pattern, text, flags=re.IGNORECASE):
+        value = raw.strip().replace('\\ ', ' ')
+        if value.startswith('~/'):
+            value = home + value[1:]
+        p = Path(value).expanduser()
+        if p.is_file():
+            found.add(str(p))
+if found:
+    with out.open('a', encoding='utf-8') as fh:
+        for item in sorted(found):
+            fh.write(item + '\n')
+PY
+  done
+  return 0
+}
+
 # Highest-probability exact locations first.
 echo "Checking exact Android signing locations..."
 add_if_file "$HOME/.android/debug.keystore"
 add_if_file "$ROOT/android-kiosk/debug.keystore"
 add_if_file "$ROOT/debug.keystore"
 
-# Current and known historical Chargeurs clones. These are local-only and bounded.
+# Current and known historical Chargeurs locations only.
 scan_dir "current Chargeurs clone" "$ROOT" 6
+scan_dir "local Actions runner" "$HOME/actions-runner-chargeurs" 6
+scan_dir "Chargeurs ADB state" "$HOME/.chargeurs-adb" 5
 scan_dir "historical simulator clone" "$HOME/chargeurs-simulator-1.0.25-preview" 6
 
-# Other top-level Chargeurs/kiosk folders, without traversing the entire home directory.
+# Other top-level Chargeurs/kiosk folders, without traversing the whole home directory.
 echo "Discovering other top-level Chargeurs folders..."
 while IFS= read -r dir; do
-  if [[ "$dir" == "$ROOT" || "$dir" == "$HOME/chargeurs-simulator-1.0.25-preview" ]]; then
+  [[ -d "$dir" ]] || continue
+  if [[ "$dir" == "$ROOT" || "$dir" == "$HOME/actions-runner-chargeurs" || "$dir" == "$HOME/.chargeurs-adb" || "$dir" == "$HOME/chargeurs-simulator-1.0.25-preview" ]]; then
     continue
   fi
   scan_dir "$(basename "$dir")" "$dir" 5
 done < <(find "$HOME" -maxdepth 1 -type d \( -iname '*chargeur*' -o -iname '*kiosk*' \) -print 2>/dev/null || true)
 
-# User download/desktop folders are searched shallowly only; no Spotlight/iCloud-wide scan.
-scan_dir "Downloads (shallow)" "$HOME/Downloads" 3
-scan_dir "Desktop (shallow)" "$HOME/Desktop" 3
+add_history_candidates
 
 sort -u "$CANDIDATES" -o "$CANDIDATES"
 TOTAL="$(wc -l < "$CANDIDATES" | tr -d ' ')"
@@ -87,9 +125,7 @@ echo "Found $TOTAL candidate file(s). Verifying certificate fingerprints..."
 MATCH=""
 CHECKED=0
 while IFS= read -r file; do
-  if [[ ! -f "$file" ]]; then
-    continue
-  fi
+  [[ -f "$file" ]] || continue
   CHECKED=$((CHECKED + 1))
   echo "Verifying candidate $CHECKED/$TOTAL: $file"
   OUT="$TMP/keytool-$CHECKED.txt"
