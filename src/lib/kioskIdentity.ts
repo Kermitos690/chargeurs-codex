@@ -2,7 +2,7 @@
 //
 // PHYSICAL SOURCE OF TRUTH (pilot fleet):
 //   DTA21269 — cabinet WITH a payment terminal (Stripe Terminal / WisePad).
-//   DTA21277 — cabinet WITHOUT a payment terminal.
+//   DTA21277 — cabinet WITH a payment terminal (Stripe Terminal / WisePad).
 //   DTA22032 — cabinet WITHOUT a payment terminal.
 //
 // A single cabinet id must never appear on two tablets. Historically the route
@@ -17,7 +17,7 @@ export const PILOT_STATION_IDS = ["DTA21269", "DTA21277", "DTA22032"] as const;
 export type PilotStationId = (typeof PILOT_STATION_IDS)[number];
 
 /** Cabinets physically equipped with a payment terminal. */
-const TERMINAL_STATION_IDS: readonly string[] = ["DTA21269"];
+const TERMINAL_STATION_IDS: readonly string[] = ["DTA21269", "DTA21277"];
 
 /**
  * FIELD_REPAIR — temporary provisioning repair for the physical DTA22032 tablet.
