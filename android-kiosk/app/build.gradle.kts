@@ -55,11 +55,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 156 else 157
+        // Physical DTA21269 lane is always upgrade-only. 5.8.0 is the first
+        // field build using processPaymentIntent() and the SDK v5 reconnect state.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 158
         versionName = if (stagingSimulatedTerminalReaderVersion)
-            "1.0.56-terminal-sdk570-simulated"
+            "1.0.57-terminal-sdk580-simulated"
         else
-            "1.0.57-terminal-sdk570-reconnect"
+            "1.0.58-terminal-sdk580-process-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -211,7 +213,10 @@ android {
 
 dependencies {
     implementation("io.reactivex.rxjava3:rxjava:3.1.6")
-    implementation("com.stripe:stripeterminal:5.7.0")
+    // Stripe Terminal Android 5.8.0 (2026-08-17): includes all v5 unified
+    // payment/cancellation behavior, the USB auto-reconnect fixes from the 5.x
+    // line, Keystore init hardening, and mobile-reader update timeout fixes.
+    implementation("com.stripe:stripeterminal:5.8.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
