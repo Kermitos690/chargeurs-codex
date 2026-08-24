@@ -11,6 +11,17 @@ import sys
 src=Path(sys.argv[1]).read_text(encoding='utf-8')
 out=Path(sys.argv[2])
 
+# The b37d... fingerprint was the historical CI cache signer, not a field-
+# verified fingerprint of the APK currently installed on DTA21269. For this
+# side-by-side probe, use the actual certificate of the exact installed package
+# to derive its LEGACY_DEVICE_BOUND key. Still fail closed on package identity,
+# debuggability and encrypted config structure below.
+old_signer='''OLD_SIGNER="$(cert_sha "$TMP/old.apk")"\n[[ "$OLD_SIGNER" == "$EXPECTED_OLD_SIGNER" ]] || {\n  echo "ERROR: installed canonical app signer changed; refusing probe" >&2\n  exit 15\n}'''
+new_signer='''OLD_BADGING="$($AAPT dump badging "$TMP/old.apk" | head -1)"\necho "$OLD_BADGING" | grep -q "package: name='$OLD_PKG'" || {\n  echo "ERROR: pulled APK package is not $OLD_PKG; refusing probe" >&2\n  exit 15\n}\nOLD_SIGNER="$(cert_sha "$TMP/old.apk")"\n[[ -n "$OLD_SIGNER" ]] || { echo "ERROR: installed staging signer unavailable" >&2; exit 151; }\necho "Installed staging signer: $OLD_SIGNER"\nif [[ "$OLD_SIGNER" != "$EXPECTED_OLD_SIGNER" ]]; then\n  echo "NOTE: installed signer differs from historical CI fingerprint; using the field APK signer for local encrypted-config rewrap."\nfi'''
+if old_signer not in src:
+    raise SystemExit('ERROR: historical signer guard marker not found')
+src=src.replace(old_signer,new_signer,1)
+
 old='''# Remove only an earlier probe package. The canonical staging package is never uninstalled.\nif "$ADB" -s "$SERIAL" shell pm path "$NEW_PKG" | grep -q '^package:'; then\n  echo "Removing previous side-by-side probe package only..."\n  "$ADB" -s "$SERIAL" uninstall "$NEW_PKG" >/dev/null\nfi\n\necho "Installing side-by-side SDK 5.8 probe (canonical app remains installed)..."\n"$ADB" -s "$SERIAL" install "$APK" >/dev/null'''
 new='''# Install/update only the side-by-side probe. `-r` preserves an already-granted\n# USB permission on retries. It never touches the canonical staging package.\necho "Installing/updating side-by-side SDK 5.8 probe (canonical app remains installed)..."\n"$ADB" -s "$SERIAL" install -r "$APK" >/dev/null\n# Runtime location permission is package-specific. Grant it explicitly on this\n# diagnostic package; USB permission itself remains Android-controlled.\n"$ADB" -s "$SERIAL" shell pm grant "$NEW_PKG" android.permission.ACCESS_FINE_LOCATION >/dev/null 2>&1 || true\necho "Probe location permission requested via ADB."\necho "IMPORTANT: if the tablet shows an Android USB access dialog for WisePad 3, tap Allow once."'''
 if old not in src:
