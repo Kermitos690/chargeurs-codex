@@ -1,5 +1,6 @@
 package ch.chargeurs.kiosk;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
@@ -17,7 +18,13 @@ import java.util.concurrent.Executors;
  * ordinary third-party apps cannot. It never accepts or persists a reusable
  * backend secret from ADB; it only consumes the same one-time six-digit
  * pairing code as the normal ProvisioningActivity.
+ *
+ * SharedPreferences.commit() is deliberate here: the field migration harness
+ * reads the result immediately after this Activity exits, so synchronous
+ * persistence avoids a race with an asynchronous apply(). The hard-coded
+ * status string is also deliberately staging-only operator UI.
  */
+@SuppressLint({"ApplySharedPref", "SetTextI18n"})
 public final class StagingMigrationEnrollmentActivity extends Activity {
     private static final String TAG = "ChargeursMigration";
     private static final String RESULT_PREFS = "chargeurs_migration_result";
