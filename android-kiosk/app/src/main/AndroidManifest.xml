@@ -31,6 +31,7 @@
         tools:targetApi="s">
 
         <activity android:name=".ProvisioningActivity" android:exported="false" />
+        <activity android:name=".StagingMigrationEnrollmentActivity" android:exported="false" />
         <activity android:name=".HardwareDiagnosticActivity" android:exported="${terminalDiagnosticExported}" />
 
         <activity
