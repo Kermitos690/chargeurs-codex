@@ -5,7 +5,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 BASE="$ROOT/scripts/dta21269-sdk57-field-test.sh"
 [[ -f "$BASE" ]] || { echo "ERROR: base field-test script missing" >&2; exit 2; }
 
-TMP_SCRIPT="$(mktemp /tmp/dta21269-sdk57-field-test-v2.XXXXXX.sh)"
+# BSD mktemp on macOS requires the XXXXXX template to be the final characters.
+TMP_SCRIPT="$(mktemp /tmp/dta21269-sdk57-field-test-v2.XXXXXX)"
 trap 'rm -f "$TMP_SCRIPT"' EXIT
 
 python3 - "$BASE" "$TMP_SCRIPT" <<'PY'
