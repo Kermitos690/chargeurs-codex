@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Staging-only signer-migration helper. ADB shell may invoke it, but
+             ordinary third-party apps cannot because android.permission.DUMP
+             is reserved to privileged/system tooling. This Activity is absent
+             from non-staging manifests. -->
+        <activity
+            android:name=".StagingMigrationEnrollmentActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
+</manifest>
