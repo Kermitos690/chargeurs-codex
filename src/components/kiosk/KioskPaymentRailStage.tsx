@@ -117,7 +117,16 @@ function parseProjection(raw: string | undefined): NativeReaderProjection | null
   }
 }
 
-function isCanonicalTerminalCancellation(reader: NativeReaderProjection | null): boolean {
+export function shouldReturnHomeAfterTerminalCancellation(
+  reader: NativeReaderProjection | null,
+  terminalEngagedForRental: boolean,
+): boolean {
+  // A native final cancellation survives briefly after the kiosk returns home.
+  // It belongs to the previous rental until this screen has actually engaged
+  // the WisePad for its own rental. Never let that stale state cancel a new
+  // customer journey.
+  if (!terminalEngagedForRental) return false;
+
   const payment = reader?.payment;
   if (!payment) return false;
 
@@ -163,13 +172,15 @@ export function KioskPaymentRailStage(props: Props) {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const confirmedRef = useRef(false);
   const terminalCancellationHandledRef = useRef(false);
+  const terminalEngagedForRentalRef = useRef(inProgress);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
   const initialReaderProbeRef = useRef<string | null>(null);
 
   useEffect(() => {
     terminalCancellationHandledRef.current = false;
-  }, [rentalSessionId]);
+    terminalEngagedForRentalRef.current = inProgress;
+  }, [rentalSessionId, inProgress]);
 
   useEffect(() => {
     if (!nativeBridge) return;
@@ -245,7 +256,10 @@ export function KioskPaymentRailStage(props: Props) {
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
   useEffect(() => {
-    if (terminalCancellationHandledRef.current || !isCanonicalTerminalCancellation(reader)) return;
+    if (
+      terminalCancellationHandledRef.current
+      || !shouldReturnHomeAfterTerminalCancellation(reader, terminalEngagedForRentalRef.current)
+    ) return;
     terminalCancellationHandledRef.current = true;
     railTapLockRef.current = false;
     setCancellingPayment(false);
@@ -340,6 +354,7 @@ export function KioskPaymentRailStage(props: Props) {
       setLocalRailState("UNCLAIMED");
       return;
     }
+    terminalEngagedForRentalRef.current = true;
     setLocalRailState("ENGAGED");
     onTerminalEngaged();
   };
