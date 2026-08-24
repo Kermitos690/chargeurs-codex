@@ -10,7 +10,7 @@ import org.junit.Test;
 public final class StripeTerminalReaderRuntimeTest {
     @Test
     public void reportsThePinnedTerminalSdkVersion() {
-        assertEquals("5.7.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
+        assertEquals("5.8.0-test-only", StripeTerminalReaderRuntime.SDK_COMPAT);
     }
 
     @Test
@@ -32,6 +32,15 @@ public final class StripeTerminalReaderRuntimeTest {
         assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, true, false));
         assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(true, false, false));
         assertFalse(StripeTerminalReaderRuntime.canStartUsbDiscovery(false, false, true));
+    }
+
+    @Test
+    public void letsTheStripeSdkOwnAllConnectionTransitionStates() {
+        assertTrue(StripeTerminalReaderRuntime.sdkOwnsConnectionTransition("DISCOVERING"));
+        assertTrue(StripeTerminalReaderRuntime.sdkOwnsConnectionTransition("CONNECTING"));
+        assertTrue(StripeTerminalReaderRuntime.sdkOwnsConnectionTransition("RECONNECTING"));
+        assertFalse(StripeTerminalReaderRuntime.sdkOwnsConnectionTransition("CONNECTED"));
+        assertFalse(StripeTerminalReaderRuntime.sdkOwnsConnectionTransition("NOT_CONNECTED"));
     }
 
     @Test
