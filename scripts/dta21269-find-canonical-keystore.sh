@@ -38,17 +38,23 @@ CANDIDATES="$TMP/candidates.txt"
 
 add_if_file() {
   local file="$1"
-  [[ -f "$file" ]] && printf '%s\n' "$file" >> "$CANDIDATES"
+  if [[ -f "$file" ]]; then
+    printf '%s\n' "$file" >> "$CANDIDATES"
+  fi
+  return 0
 }
 
 scan_dir() {
   local label="$1" base="$2" depth="$3"
-  [[ -d "$base" ]] || return 0
+  if [[ ! -d "$base" ]]; then
+    return 0
+  fi
   echo "Scanning: $label"
   find "$base" -maxdepth "$depth" \
     \( -type d \( -name .git -o -name node_modules -o -name .gradle -o -name build \) -prune \) -o \
     \( -type f \( -name 'debug.keystore' -o -name '*.keystore' -o -name '*.jks' \) -print \) \
     2>/dev/null >> "$CANDIDATES" || true
+  return 0
 }
 
 # Highest-probability exact locations first.
@@ -64,9 +70,11 @@ scan_dir "historical simulator clone" "$HOME/chargeurs-simulator-1.0.25-preview"
 # Other top-level Chargeurs/kiosk folders, without traversing the entire home directory.
 echo "Discovering other top-level Chargeurs folders..."
 while IFS= read -r dir; do
-  [[ "$dir" == "$ROOT" || "$dir" == "$HOME/chargeurs-simulator-1.0.25-preview" ]] && continue
+  if [[ "$dir" == "$ROOT" || "$dir" == "$HOME/chargeurs-simulator-1.0.25-preview" ]]; then
+    continue
+  fi
   scan_dir "$(basename "$dir")" "$dir" 5
-done < <(find "$HOME" -maxdepth 1 -type d \( -iname '*chargeur*' -o -iname '*kiosk*' \) -print 2>/dev/null)
+done < <(find "$HOME" -maxdepth 1 -type d \( -iname '*chargeur*' -o -iname '*kiosk*' \) -print 2>/dev/null || true)
 
 # User download/desktop folders are searched shallowly only; no Spotlight/iCloud-wide scan.
 scan_dir "Downloads (shallow)" "$HOME/Downloads" 3
@@ -79,7 +87,9 @@ echo "Found $TOTAL candidate file(s). Verifying certificate fingerprints..."
 MATCH=""
 CHECKED=0
 while IFS= read -r file; do
-  [[ -f "$file" ]] || continue
+  if [[ ! -f "$file" ]]; then
+    continue
+  fi
   CHECKED=$((CHECKED + 1))
   echo "Verifying candidate $CHECKED/$TOTAL: $file"
   OUT="$TMP/keytool-$CHECKED.txt"
