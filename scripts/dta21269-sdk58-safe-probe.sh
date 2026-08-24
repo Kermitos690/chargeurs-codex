@@ -31,6 +31,27 @@ if marker not in src:
     raise SystemExit('ERROR: runtime gate marker not found')
 src=src.replace(marker,replacement,1)
 
+# Never leave the operator staring at a silent Gradle command. Show dependency
+# resolution live while retaining a copy for the Stripe 5.8 gate, and announce
+# task discovery explicitly.
+old_dep='''./gradlew --no-daemon -q :app:dependencies --configuration sdk58ProbeRuntimeClasspath > "$TMP/deps.txt"'''
+new_dep='''echo "[1/4] Resolving SDK 5.8 probe dependencies (live output)..."\n./gradlew --no-daemon --console=plain :app:dependencies --configuration sdk58ProbeRuntimeClasspath | tee "$TMP/deps.txt"\necho "[1/4] Dependency resolution complete."'''
+if old_dep not in src:
+    raise SystemExit('ERROR: dependency-resolution marker not found')
+src=src.replace(old_dep,new_dep,1)
+
+old_tasks='''TASKS="$(./gradlew --no-daemon -q :app:tasks --all)"'''
+new_tasks='''echo "[2/4] Discovering Gradle tasks..."\nTASKS="$(./gradlew --no-daemon -q :app:tasks --all)"\necho "[2/4] Task discovery complete."'''
+if old_tasks not in src:
+    raise SystemExit('ERROR: task-discovery marker not found')
+src=src.replace(old_tasks,new_tasks,1)
+
+old_build='''./gradlew --no-daemon clean :app:testDebugUnitTest "$LINT_TASK" :app:assembleSdk58Probe'''
+new_build='''echo "[3/4] Running unit tests + lint + SDK 5.8 probe APK build..."\n./gradlew --no-daemon --console=plain clean :app:testDebugUnitTest "$LINT_TASK" :app:assembleSdk58Probe\necho "[3/4] APK build complete."'''
+if old_build not in src:
+    raise SystemExit('ERROR: build marker not found')
+src=src.replace(old_build,new_build,1)
+
 out.write_text(src,encoding='utf-8')
 PY
 chmod +x "$TMP"
