@@ -40,11 +40,19 @@ async function safeMemberSummary(db: ReturnType<typeof adminClient>, userId: str
     const planEnd = plan.valid_to ? Date.parse(String(plan.valid_to)) : Infinity;
     if (!(planStart <= nowMs && planEnd > nowMs)) continue;
 
-    const { data: walletPass } = await db.from("customer_wallet_passes")
-      .select("status,provider_status")
-      .eq("user_id", userId)
-      .eq("membership_id", row.id)
-      .maybeSingle();
+    const [{ data: walletPass, error: walletPassError }, { data: rentalCredit, error: rentalCreditError }] = await Promise.all([
+      db.from("customer_wallet_passes")
+        .select("status,provider_status")
+        .eq("user_id", userId)
+        .eq("membership_id", row.id)
+        .maybeSingle(),
+      db.from("customer_membership_credit_balances")
+        .select("balance_cents,currency,next_expiry_at")
+        .eq("user_id", userId)
+        .eq("currency", "CHF")
+        .maybeSingle(),
+    ]);
+    if (walletPassError || rentalCreditError) throw walletPassError ?? rentalCreditError;
 
     return {
       planCode: String(plan.code ?? ""),
@@ -54,6 +62,9 @@ async function safeMemberSummary(db: ReturnType<typeof adminClient>, userId: str
       dailyCapCents: Number(plan.daily_cap_cents ?? 0),
       includedMinutes: plan.included_minutes == null ? null : Number(plan.included_minutes),
       renewalCreditCents: Number(plan.renewal_credit_cents ?? 0),
+      rentalCreditCents: Number(rentalCredit?.balance_cents ?? 0),
+      rentalCreditCurrency: String(rentalCredit?.currency ?? "CHF"),
+      rentalCreditExpiresAt: rentalCredit?.next_expiry_at ?? null,
       renewsAt: row.renews_at ?? null,
       walletPassActive: walletPass?.status === "active",
       walletProviderStatus: walletPass?.provider_status ?? "not_issued",

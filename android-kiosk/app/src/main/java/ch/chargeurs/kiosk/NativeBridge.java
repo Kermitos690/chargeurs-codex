@@ -99,6 +99,24 @@ public final class NativeBridge {
     }
 
     /**
+     * Explicit unattended-reader maintenance action. It is rejected while a
+     * payment/update is active and has no pricing, capture or ejection effect.
+     */
+    @JavascriptInterface
+    public String rebootPaymentReader() {
+        return terminalRuntime.rebootPaymentReader().toString();
+    }
+
+    /**
+     * Installs a Stripe-reported optional reader update only when idle. Required
+     * reader updates remain owned by the SDK connection lifecycle.
+     */
+    @JavascriptInterface
+    public String installPaymentReaderUpdate() {
+        return terminalRuntime.installPaymentReaderUpdate().toString();
+    }
+
+    /**
      * Metadata-only provider compatibility state for the hidden diagnostics
      * view. It cannot see or take over another app's network/serial session.
      */

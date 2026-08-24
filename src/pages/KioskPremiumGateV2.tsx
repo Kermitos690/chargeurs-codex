@@ -85,6 +85,9 @@ type MemberSummary = {
   dailyCapCents?: number | null;
   includedMinutes?: number | null;
   renewalCreditCents?: number | null;
+  rentalCreditCents?: number | null;
+  rentalCreditCurrency?: string | null;
+  rentalCreditExpiresAt?: string | null;
   renewsAt?: string | null;
   walletPassActive?: boolean;
   walletProviderStatus?: string;
@@ -122,6 +125,8 @@ type Copy = {
   connectedRate: string;
   connectedCap: string;
   connectedMinutes: string;
+  connectedCredit: string;
+  connectedCreditNote: string;
   connectedWallet: string;
   connectedWalletLocal: string;
   connectedCta: string;
@@ -181,7 +186,7 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
   fr: {
     refresh: "Actualiser", help: "FAQ / Aide", cancel: "Annuler", returnHome: "Retour accueil", back: "Retour",
     connectedKicker: "PASS RECONNU", connectedTitle: "CONNEXION RÉUSSIE", connectedSubtitle: "Vos avantages Client Chargeurs actifs sont chargés depuis votre compte.",
-    connectedBenefits: "Vos avantages actifs", connectedRate: "Tarif membre", connectedCap: "Plafond journalier", connectedMinutes: "Minutes incluses", connectedWallet: "Pass Wallet", connectedWalletLocal: "Pass compte actif",
+    connectedBenefits: "Vos avantages actifs", connectedRate: "Tarif membre", connectedCap: "Plafond journalier", connectedMinutes: "Minutes incluses", connectedCredit: "Crédit location", connectedCreditNote: "Déduit du prix final de la location. La garantie reste distincte ; un règlement à vérifier réserve le crédit concerné.", connectedWallet: "Pass Wallet", connectedWalletLocal: "Pass compte actif",
     connectedCta: "COMMENCER UNE LOCATION", connectedCtaSub: "Choisissez ensuite votre batterie sur cette borne.",
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
@@ -199,7 +204,7 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
   en: {
     refresh: "Refresh", help: "FAQ / Help", cancel: "Cancel", returnHome: "Back home", back: "Back",
     connectedKicker: "PASS RECOGNISED", connectedTitle: "CONNECTION SUCCESSFUL", connectedSubtitle: "Your active Chargeurs member benefits are loaded from your account.",
-    connectedBenefits: "Your active benefits", connectedRate: "Member rate", connectedCap: "Daily cap", connectedMinutes: "Included minutes", connectedWallet: "Wallet Pass", connectedWalletLocal: "Account Pass active",
+    connectedBenefits: "Your active benefits", connectedRate: "Member rate", connectedCap: "Daily cap", connectedMinutes: "Included minutes", connectedCredit: "Rental credit", connectedCreditNote: "Deducted from the final rental price. The guarantee remains separate; a payment under review reserves its credit.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Account Pass active",
     connectedCta: "START A RENTAL", connectedCtaSub: "Choose your powerbank next on this kiosk.",
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
@@ -217,7 +222,7 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
   de: {
     refresh: "Aktualisieren", help: "FAQ / Hilfe", cancel: "Abbrechen", returnHome: "Zur Startseite", back: "Zurück",
     connectedKicker: "PASS ERKANNT", connectedTitle: "VERBINDUNG ERFOLGREICH", connectedSubtitle: "Ihre aktiven Chargeurs-Kundenvorteile werden aus Ihrem Konto geladen.",
-    connectedBenefits: "Ihre aktiven Vorteile", connectedRate: "Kundentarif", connectedCap: "Tageslimit", connectedMinutes: "Inklusive Minuten", connectedWallet: "Wallet Pass", connectedWalletLocal: "Konto-Pass aktiv",
+    connectedBenefits: "Ihre aktiven Vorteile", connectedRate: "Kundentarif", connectedCap: "Tageslimit", connectedMinutes: "Inklusive Minuten", connectedCredit: "Mietguthaben", connectedCreditNote: "Wird vom endgültigen Mietpreis abgezogen. Die Garantie bleibt getrennt; bei einer Zahlungsprüfung bleibt das Guthaben reserviert.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Konto-Pass aktiv",
     connectedCta: "MIETE STARTEN", connectedCtaSub: "Wählen Sie anschließend Ihre Powerbank an dieser Station.",
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
@@ -643,8 +648,10 @@ export default function KioskPremiumGateV2() {
               <article><Zap /><span>{copy.connectedRate}</span><strong>{money(hourly, currency)} {copy.perHour}</strong></article>
               <article><Clock3 /><span>{copy.connectedCap}</span><strong>{money(dailyCapValue, currency)}</strong></article>
               {Number(member?.includedMinutes ?? 0) > 0 && <article><Clock3 /><span>{copy.connectedMinutes}</span><strong>{member?.includedMinutes} min</strong></article>}
+              <article><WalletCards /><span>{copy.connectedCredit}</span><strong>{money(member?.rentalCreditCents, member?.rentalCreditCurrency ?? currency)}</strong></article>
               {member?.walletPassActive && <article><WalletCards /><span>{copy.connectedWallet}</span><strong>{member.walletProviderStatus === "issued" ? copy.connectedWallet : copy.connectedWalletLocal}</strong></article>}
             </div>
+            <p className="ck2-connected-credit-note">{copy.connectedCreditNote}</p>
             <button type="button" className="ck2-connected-cta" onClick={continueMember}><Zap /><span><strong>{copy.connectedCta}</strong><small>{copy.connectedCtaSub}</small></span><b>→</b></button>
           </section>
         </main>

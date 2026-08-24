@@ -17,8 +17,6 @@ val terminalBackendUrl = providers.gradleProperty("chargeursStripeTerminalBacken
 val ejectionPublicKey = providers.gradleProperty("chargeursEjectionPublicKeyBase64")
     .orElse(providers.environmentVariable("CHARGEURS_EJECTION_PUBLIC_KEY_BASE64"))
     .orElse("")
-// This must be opted into for each APK build. The ordinary STAGING artifact
-// continues to use the physical WisePad lane.
 val stagingSimulatedTerminalReaderEnabled = providers
     .gradleProperty("chargeursStripeTerminalSimulatedReader")
     .map { it.equals("true", ignoreCase = true) }
@@ -32,9 +30,6 @@ val releaseSigningReady = listOf(
     releaseStorePath.get(), releaseStorePassword.get(), releaseKeyAlias.get(), releaseKeyPassword.get(),
 ).all { it.isNotBlank() } && file(releaseStorePath.get()).isFile
 
-// Field STAGING builds must keep a durable signing identity so DTA21269 can be
-// upgraded in place. CI may materialize the known staging key into RUNNER_TEMP;
-// local validation builds can still fall back to Android's debug signer.
 val stagingStorePath = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PATH").orElse("")
 val stagingStorePassword = providers.environmentVariable("CHARGEURS_STAGING_KEYSTORE_PASSWORD").orElse("")
 val stagingKeyAlias = providers.environmentVariable("CHARGEURS_STAGING_KEY_ALIAS").orElse("")
@@ -60,15 +55,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // The DTA21269 currently runs versionCode 141. A normal Android
-        // upgrade must increase this value; no downgrade install is permitted.
-        // 1.0.50 is a temporary STAGING simulator build.  1.0.51 is the
-        // normal WisePad build that can restore it in-place afterwards.
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 151
+        // Physical DTA21269 lane is always upgrade-only. 5.8.0 is the first
+        // field build using processPaymentIntent() and the SDK v5 reconnect state.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 158
         versionName = if (stagingSimulatedTerminalReaderVersion)
-            "1.0.50-terminal-simulated-reader-reconcile"
+            "1.0.57-terminal-sdk580-simulated"
         else
-            "1.0.51-terminal-simulated-reader-restore"
+            "1.0.58-terminal-sdk580-process-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
@@ -188,6 +181,24 @@ android {
             manifestPlaceholders["terminalDiagnosticExported"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
         }
+        create("sdk58Probe") {
+            // Side-by-side diagnostic package for field validation only. It
+            // never replaces the canonical staging package and deliberately
+            // keeps HOME/boot takeover disabled.
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".sdk58probe"
+            versionNameSuffix = "-staging-diagnostic"
+            buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
+            buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
+            buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(stagingKioskPublicBaseUrl))
+            buildConfigField("String", "KIOSK_WEB_BASE_URL", quotedBuildConfig(stagingKioskWebBaseUrl))
+            buildConfigField("String", "STRIPE_TERMINAL_BACKEND_URL", quotedBuildConfig(stagingTerminalBackendUrl))
+            manifestPlaceholders["kioskHomeEnabled"] = "false"
+            manifestPlaceholders["bootReceiverEnabled"] = "false"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
+        }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
@@ -214,19 +225,16 @@ android {
         abortOnError = true
         checkReleaseBuilds = true
         warningsAsErrors = true
-        // The wrapper version is pinned for reproducible signed staging APKs;
-        // availability of a newer Gradle patch must not hide application lint.
         disable += setOf("OldTargetApi", "GradleDependency", "AndroidGradlePluginVersion")
     }
 }
 
 dependencies {
-    // Needed only to register the narrowly scoped handler for Stripe 3.0.0's
-    // otherwise process-fatal offline-cache undeliverable exception.
     implementation("io.reactivex.rxjava3:rxjava:3.1.6")
-    // SDK 3.0.0 is Stripe's first Android USB-compatible lane for WisePad 3.
-    // This is a local compile probe only; it is not an installation decision.
-    implementation("com.stripe:stripeterminal:3.0.0")
+    // Stripe Terminal Android 5.8.0 (2026-08-17): includes all v5 unified
+    // payment/cancellation behavior, the USB auto-reconnect fixes from the 5.x
+    // line, Keystore init hardening, and mobile-reader update timeout fixes.
+    implementation("com.stripe:stripeterminal:5.8.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.webkit:webkit:1.14.0")
     testImplementation("junit:junit:4.13.2")
