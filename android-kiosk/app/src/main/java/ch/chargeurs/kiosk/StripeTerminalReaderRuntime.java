@@ -20,7 +20,8 @@ import com.stripe.stripeterminal.external.callable.PaymentIntentCallback;
 import com.stripe.stripeterminal.external.callable.ReaderCallback;
 import com.stripe.stripeterminal.external.callable.TerminalListener;
 import com.stripe.stripeterminal.external.models.BatteryStatus;
-import com.stripe.stripeterminal.external.models.CollectConfiguration;
+import com.stripe.stripeterminal.external.models.CollectPaymentIntentConfiguration;
+import com.stripe.stripeterminal.external.models.ConfirmPaymentIntentConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionConfiguration;
 import com.stripe.stripeterminal.external.models.ConnectionStatus;
 import com.stripe.stripeterminal.external.models.ConnectionTokenException;
@@ -48,21 +49,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * TEST-only Stripe Terminal 5.7.0 USB runtime for DTA21269.
+ * TEST-only Stripe Terminal 5.8.0 USB runtime for DTA21269.
  *
- * Scope is deliberately restricted to the WisePad reader lifecycle. Pricing,
- * deposit/caution, PaymentIntent ownership, capture/settlement and battery
- * ejection remain owned by the existing backend and kiosk layers.
- *
- * Stripe 5.x provides the mobile-reader auto reconnect state machine. We keep
- * only enough local generation state to reject stale callbacks when an explicit
- * kiosk Retry invalidates an older discovery/connect attempt.
+ * Scope is deliberately restricted to the WisePad lifecycle. Pricing, deposit,
+ * capture/settlement and battery ejection remain owned by the existing backend
+ * and kiosk layers. The runtime uses Stripe's v5 unified processPaymentIntent()
+ * flow so card collection + confirmation have one cancelable operation.
  */
 final class StripeTerminalReaderRuntime implements MobileReaderListener {
-    private static final String TAG = "ChargeursStripe57";
+    private static final String TAG = "ChargeursStripe58";
     private static final String PREFS = "stripe_terminal_reader";
     private static final String LAST_READER_ID = "last_reader_id";
-    static final String SDK_COMPAT = "5.7.0-test-only";
+    static final String SDK_COMPAT = "5.8.0-test-only";
 
     private final Context context;
     private final KioskConfig config;
@@ -70,6 +68,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private final SharedPreferences preferences;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+
     private final AtomicBoolean discoveryRunning = new AtomicBoolean(false);
     private final AtomicBoolean connectionRunning = new AtomicBoolean(false);
     private final AtomicBoolean paymentRunning = new AtomicBoolean(false);
@@ -87,6 +86,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private volatile String stripeLocationId;
     private volatile String expectedReaderId;
     private volatile String prefetchedConnectionTokenSecret;
+
     private volatile String localPaymentState = "IDLE";
     private volatile String activeRentalSessionId;
     private volatile String activePaymentIntentId;
@@ -97,6 +97,18 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     private volatile boolean bindingMismatchBlocked;
     private volatile boolean offlineCredentialRepairRequired;
     private volatile String correlationId;
+
+    private volatile boolean reconnectFailed;
+    private volatile boolean firmwareUpdateInProgress;
+    private volatile float firmwareUpdateProgress;
+    private volatile boolean availableUpdatePresent;
+    private volatile boolean readerRebootInProgress;
+    private volatile String lastDisconnectReason;
+    private volatile float readerBatteryLevel = -1f;
+    private volatile String readerBatteryStatus;
+    private volatile boolean readerCharging;
+    private volatile boolean lowBatteryWarning;
+
     private Cancelable discoveryCancelable;
     private Cancelable paymentCancelable;
     private Cancelable reconnectCancelable;
@@ -121,7 +133,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             return;
         }
         if (!readerTransportPresent()) {
-            if (!"BUSY".equals(readerState) && !"UPDATING".equals(readerState)) readerState = "ABSENT";
+            if (!paymentRunning.get() && !firmwareUpdateInProgress) readerState = "ABSENT";
             return;
         }
         if (bindingMismatchBlocked) {
@@ -146,29 +158,22 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             if (!ensureTerminalInitialized()) return;
             Reader connected = Terminal.getInstance().getConnectedReader();
             if (connected != null && readerMatchesBinding(connected)) {
-                connectionRunning.set(false);
-                discoveryRunning.set(false);
                 acceptConnectedReader(connected);
                 return;
             }
 
-            ConnectionStatus status = Terminal.getInstance().getConnectionStatus();
-            if (status != null && "RECONNECTING".equals(status.name())) {
-                readerState = "RECONNECTING";
+            String sdkStatus = terminalConnectionStatusName();
+            if (sdkOwnsConnectionTransition(sdkStatus)) {
+                readerState = sdkStatus;
                 return;
             }
-            if (status != null && "CONNECTING".equals(status.name())) {
-                readerState = "CONNECTING";
-                return;
-            }
-
             if (canStartUsbDiscovery(discoveryRunning.get(), connectionRunning.get(), paymentRunning.get())) {
                 startDiscovery();
             }
         });
     }
 
-    /** Explicit, non-financial reader retry from the kiosk UI. */
+    /** Explicit non-financial retry. Never fights an SDK-owned auto reconnect. */
     void requestReconnect() {
         if (!BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) {
             readerState = "UNAVAILABLE";
@@ -178,7 +183,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             readerState = "ABSENT";
             return;
         }
-        if (paymentRunning.get()) return;
+        if (paymentRunning.get() || firmwareUpdateInProgress || readerRebootInProgress) return;
 
         main.post(() -> {
             if (!ensureTerminalInitialized()) return;
@@ -188,14 +193,21 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 return;
             }
 
+            String sdkStatus = terminalConnectionStatusName();
+            if (!offlineCredentialRepairRequired && sdkOwnsConnectionTransition(sdkStatus)) {
+                readerState = sdkStatus;
+                return;
+            }
+
             discoveryGeneration.incrementAndGet();
             cancelDiscoverySilently();
-            cancelReconnectSilently();
             discoveryRunning.set(false);
             connectionRunning.set(false);
             safeErrorCode = null;
+            reconnectFailed = false;
 
             if (offlineCredentialRepairRequired) {
+                cancelReconnectSilently();
                 if (connected != null) {
                     disconnectForOfflineCredentialRepair();
                     return;
@@ -203,9 +215,8 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 if (!clearCachedCredentialsForOfflineRepair()) return;
             }
 
-            readerState = "RECONNECTING";
-            Log.i(TAG, "Explicit WisePad retry reset local discovery state; SDK 5.7 will reconnect/discover");
-            main.postDelayed(this::ensureStarted, 300L);
+            readerState = "DISCOVERING";
+            main.postDelayed(this::ensureStarted, 250L);
         });
     }
 
@@ -214,7 +225,6 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         main.post(() -> {
             discoveryGeneration.incrementAndGet();
             cancelDiscoverySilently();
-            cancelReconnectSilently();
             connectionRunning.set(false);
             discoveryRunning.set(false);
             safeErrorCode = "STRIPE_OFFLINE_CREDENTIAL_CACHE_REPAIR_REQUIRED";
@@ -225,11 +235,12 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     JSONObject snapshot() {
         boolean present = readerTransportPresent();
         if (!BuildConfig.STRIPE_TERMINAL_USB_TEST_ENABLED) readerState = "UNAVAILABLE";
-        else if (!present && !paymentRunning.get() && !"UPDATING".equals(readerState)) readerState = "ABSENT";
+        else if (!present && !paymentRunning.get() && !firmwareUpdateInProgress) readerState = "ABSENT";
         else if (present && "ABSENT".equals(readerState)) ensureStarted();
 
         JSONObject usb = WisePadUsbProbe.snapshot(context);
-        String capability = "READY".equals(readerState) && bindingValidated()
+        boolean maintenance = firmwareUpdateInProgress || readerRebootInProgress;
+        String capability = "READY".equals(readerState) && !maintenance && bindingValidated()
             ? "TERMINAL_AND_QR"
             : "QR_ONLY";
         return JsonObjects.of(
@@ -246,6 +257,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             "diagnostics", JsonObjects.of(
                 "transport", simulatedReaderEnabled() ? "simulated" : "usb",
                 "stripeSdk", SDK_COMPAT,
+                "paymentApi", "processPaymentIntent",
                 "compatibilityLane", true,
                 "simulatedReader", simulatedReaderEnabled(),
                 "usbPresent", usb.optBoolean("present", false),
@@ -256,6 +268,16 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 "connectionRunning", connectionRunning.get(),
                 "discoveryGeneration", discoveryGeneration.get(),
                 "autoReconnect", true,
+                "reconnectFailed", reconnectFailed,
+                "firmwareUpdateInProgress", firmwareUpdateInProgress,
+                "firmwareUpdateProgress", firmwareUpdateProgress,
+                "availableUpdatePresent", availableUpdatePresent,
+                "readerRebootInProgress", readerRebootInProgress,
+                "lastDisconnectReason", nullableJson(lastDisconnectReason),
+                "readerBatteryLevel", readerBatteryLevel,
+                "readerBatteryStatus", nullableJson(readerBatteryStatus),
+                "readerCharging", readerCharging,
+                "lowBatteryWarning", lowBatteryWarning,
                 "targetVid", "15a2",
                 "targetPid", "0101",
                 "stripeReaderId", nullableJson(stripeReaderId),
@@ -273,6 +295,12 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         if (rentalSessionId == null || !rentalSessionId.matches("^[0-9a-fA-F-]{36}$")) {
             return JsonObjects.of("ok", false, "code", "INVALID_RENTAL_SESSION");
         }
+        if (recoveryRequired) {
+            return JsonObjects.of("ok", false, "code", "PAYMENT_RECONCILIATION_REQUIRED");
+        }
+        if (firmwareUpdateInProgress || readerRebootInProgress) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_MAINTENANCE_IN_PROGRESS");
+        }
         if (!"READY".equals(readerState) || !bindingValidated()) {
             return JsonObjects.of("ok", false, "code", "TERMINAL_NOT_READY");
         }
@@ -288,6 +316,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         serverConfirmed = false;
         recoveryRequired = false;
         correlationId = null;
+        safeErrorCode = null;
         readerState = "BUSY";
 
         io.execute(() -> {
@@ -305,8 +334,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 if (blankToNull(result.locationId()) != null) stripeLocationId = result.locationId();
                 if (blankToNull(result.expectedReaderId()) != null) expectedReaderId = result.expectedReaderId();
                 localPaymentState = "RETRIEVING_INTENT";
-                String clientSecret = result.clientSecret();
-                main.post(() -> retrieveAndCollect(clientSecret, operationGeneration));
+                main.post(() -> retrieveAndProcess(result.clientSecret(), operationGeneration));
             } catch (Exception error) {
                 if (isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) {
                     finishPaymentFailure(StripeTerminalBackendClient.safeCode(error.getMessage()));
@@ -325,6 +353,9 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             return JsonObjects.of("ok", false, "code", "TERMINAL_CANCEL_IN_PROGRESS");
         }
 
+        // Invalidate every SDK callback from the old operation first. In v5.6+
+        // Cancelable.onSuccess runs only after the operation failure callback,
+        // so backend cancellation happens after local processing has stopped.
         paymentOperationGeneration.incrementAndGet();
         localPaymentState = "CANCELLING";
         paymentRail = "TERMINAL";
@@ -332,16 +363,90 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         Cancelable operation = paymentCancelable;
         if (operation != null && !operation.isCompleted()) {
             operation.cancel(new Callback() {
-                @Override public void onSuccess() { cancelTerminalIntentOnServer(rental); }
+                @Override public void onSuccess() {
+                    paymentCancelable = null;
+                    cancelTerminalIntentOnServer(rental);
+                }
+
                 @Override public void onFailure(TerminalException error) {
+                    paymentCancelable = null;
                     safeErrorCode = safeTerminalCode(error);
+                    // Backend is authoritative and will refuse cancellation if
+                    // Stripe reports that a payment side effect may exist.
                     cancelTerminalIntentOnServer(rental);
                 }
             });
         } else {
+            paymentCancelable = null;
             cancelTerminalIntentOnServer(rental);
         }
         return JsonObjects.of("ok", true, "accepted", true, "rail", "TERMINAL", "railState", "CANCELLING");
+    }
+
+    JSONObject rebootPaymentReader() {
+        if (paymentRunning.get() || paymentCancellationRunning.get()) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_PAYMENT_ACTIVE");
+        }
+        if (firmwareUpdateInProgress) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_UPDATE_IN_PROGRESS");
+        }
+        if (!isReaderConnected()) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_NOT_CONNECTED");
+        }
+        if (readerRebootInProgress) {
+            return JsonObjects.of("ok", true, "accepted", true, "state", "REBOOTING");
+        }
+
+        readerRebootInProgress = true;
+        reconnectFailed = false;
+        readerState = "REBOOTING";
+        try {
+            Terminal.getInstance().rebootReader(new Callback() {
+                @Override public void onSuccess() {
+                    readerState = "RECONNECTING";
+                }
+
+                @Override public void onFailure(TerminalException error) {
+                    readerRebootInProgress = false;
+                    setError(safeTerminalCode(error));
+                }
+            });
+            return JsonObjects.of("ok", true, "accepted", true, "state", "REBOOTING");
+        } catch (RuntimeException error) {
+            readerRebootInProgress = false;
+            setError("STRIPE_READER_REBOOT_FAILED");
+            return JsonObjects.of("ok", false, "code", "STRIPE_READER_REBOOT_FAILED");
+        }
+    }
+
+    JSONObject installPaymentReaderUpdate() {
+        if (paymentRunning.get() || paymentCancellationRunning.get()) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_PAYMENT_ACTIVE");
+        }
+        if (readerRebootInProgress) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_REBOOT_IN_PROGRESS");
+        }
+        if (!isReaderConnected()) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_NOT_CONNECTED");
+        }
+        if (!availableUpdatePresent && !firmwareUpdateInProgress) {
+            return JsonObjects.of("ok", false, "code", "TERMINAL_UPDATE_NOT_AVAILABLE");
+        }
+        if (firmwareUpdateInProgress) {
+            return JsonObjects.of("ok", true, "accepted", true, "state", "UPDATING");
+        }
+
+        try {
+            firmwareUpdateInProgress = true;
+            firmwareUpdateProgress = 0f;
+            readerState = "UPDATING";
+            Terminal.getInstance().installAvailableUpdate();
+            return JsonObjects.of("ok", true, "accepted", true, "state", "UPDATING");
+        } catch (RuntimeException error) {
+            firmwareUpdateInProgress = false;
+            setError("STRIPE_READER_UPDATE_START_FAILED");
+            return JsonObjects.of("ok", false, "code", "STRIPE_READER_UPDATE_START_FAILED");
+        }
     }
 
     void refreshPaymentState(boolean reconcile) {
@@ -362,6 +467,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 serverConfirmed = state.serverConfirmed();
                 recoveryRequired = state.recoveryRequired();
                 correlationId = blankToNull(state.correlationId());
+                if (isBackendCancellationConfirmed(state)) resetAfterCancellation();
             } catch (IOException error) {
                 safeErrorCode = StripeTerminalBackendClient.safeCode(error.getMessage());
             }
@@ -369,8 +475,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     }
 
     boolean shouldReconcilePaymentState() {
-        return simulatedReaderEnabled()
-            && "SDK_SUCCEEDED".equals(localPaymentState)
+        return "SDK_SUCCEEDED".equals(localPaymentState)
             && activeRentalSessionId != null
             && !activeRentalSessionId.isBlank();
     }
@@ -385,6 +490,12 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
 
     static boolean canStartUsbDiscovery(boolean discoveryRunning, boolean connectionRunning, boolean paymentRunning) {
         return !discoveryRunning && !connectionRunning && !paymentRunning;
+    }
+
+    static boolean sdkOwnsConnectionTransition(String status) {
+        return "DISCOVERING".equals(status)
+            || "CONNECTING".equals(status)
+            || "RECONNECTING".equals(status);
     }
 
     static boolean canOverrideStuckConnectionForOfflineCacheRepair(
@@ -433,7 +544,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             && !state.recoveryRequired();
     }
 
-    private void retrieveAndCollect(String clientSecret, int operationGeneration) {
+    private void retrieveAndProcess(String clientSecret, int operationGeneration) {
         if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
         if (!Terminal.isInitialized() || Terminal.getInstance().getConnectedReader() == null) {
             finishPaymentFailure("TERMINAL_DISCONNECTED");
@@ -444,42 +555,27 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             @Override
             public void onSuccess(PaymentIntent paymentIntent) {
                 if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
-                localPaymentState = "COLLECTING";
+                localPaymentState = "PROCESSING";
                 paymentRailState = "PROCESSING";
-                CollectConfiguration collect = new CollectConfiguration.Builder()
+                CollectPaymentIntentConfiguration collect = new CollectPaymentIntentConfiguration.Builder()
                     .skipTipping(true)
                     .build();
-                paymentCancelable = Terminal.getInstance().collectPaymentMethod(
+                ConfirmPaymentIntentConfiguration confirm = new ConfirmPaymentIntentConfiguration.Builder().build();
+                paymentCancelable = Terminal.getInstance().processPaymentIntent(
                     paymentIntent,
+                    collect,
+                    confirm,
                     new PaymentIntentCallback() {
                         @Override
-                        public void onSuccess(PaymentIntent collected) {
+                        public void onSuccess(PaymentIntent processed) {
                             if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
-                            localPaymentState = "PROCESSING";
-                            paymentCancelable = Terminal.getInstance().confirmPaymentIntent(
-                                collected,
-                                new PaymentIntentCallback() {
-                                    @Override
-                                    public void onSuccess(PaymentIntent processed) {
-                                        if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
-                                        paymentCancelable = null;
-                                        activePaymentIntentId = processed.getId();
-                                        localPaymentState = "SDK_SUCCEEDED";
-                                        paymentRailState = "PROCESSING";
-                                        paymentRunning.set(false);
-                                        readerState = "READY";
-                                        refreshPaymentState(true);
-                                    }
-
-                                    @Override
-                                    public void onFailure(TerminalException error) {
-                                        if (!isCurrentPaymentOperation(operationGeneration, paymentOperationGeneration.get())) return;
-                                        paymentCancelable = null;
-                                        finishPaymentFailure(safeTerminalCode(error));
-                                        refreshPaymentState(true);
-                                    }
-                                }
-                            );
+                            paymentCancelable = null;
+                            activePaymentIntentId = processed.getId();
+                            localPaymentState = "SDK_SUCCEEDED";
+                            paymentRailState = "PROCESSING";
+                            paymentRunning.set(false);
+                            readerState = idleReaderState();
+                            refreshPaymentState(true);
                         }
 
                         @Override
@@ -493,8 +589,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                             finishPaymentFailure(safeTerminalCode(error));
                             refreshPaymentState(true);
                         }
-                    },
-                    collect
+                    }
                 );
             }
 
@@ -520,8 +615,8 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             }
             return true;
         } catch (Exception error) {
-            Log.e(TAG, "Stripe Terminal 5.7.0 init failed", error);
-            setError("STRIPE_TERMINAL_57_INIT_FAILED");
+            Log.e(TAG, "Stripe Terminal 5.8.0 init failed", error);
+            setError("STRIPE_TERMINAL_58_INIT_FAILED");
             return false;
         }
     }
@@ -536,14 +631,26 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             setError("STRIPE_FINE_LOCATION_PERMISSION_REQUIRED");
             return;
         }
+        if (!ensureTerminalInitialized()) return;
+        Reader connected = Terminal.getInstance().getConnectedReader();
+        if (connected != null && readerMatchesBinding(connected)) {
+            acceptConnectedReader(connected);
+            return;
+        }
+        String sdkStatus = terminalConnectionStatusName();
+        if (sdkOwnsConnectionTransition(sdkStatus)) {
+            readerState = sdkStatus;
+            return;
+        }
         if (connectionRunning.get() || !discoveryRunning.compareAndSet(false, true)) return;
 
         final int generation = discoveryGeneration.incrementAndGet();
         readerState = "DISCOVERING";
         safeErrorCode = null;
+        reconnectFailed = false;
         discoveredReaderId = null;
         discoveredReaderSerial = null;
-        Log.i(TAG, "USB discovery started with Stripe Terminal 5.7.0");
+        Log.i(TAG, "USB discovery started with Stripe Terminal 5.8.0");
 
         DiscoveryConfiguration discoveryConfig = new DiscoveryConfiguration.UsbDiscoveryConfiguration(
             0,
@@ -561,8 +668,6 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                         discoveredReaderSerial = first.getSerialNumber();
                     }
                     Reader candidate = chooseReader(readers);
-                    Log.i(TAG, "USB discovery update count=" + (readers == null ? 0 : readers.size())
-                        + " candidate=" + (candidate != null));
                     if (candidate != null) connect(candidate, generation);
                 }
             },
@@ -572,10 +677,11 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                     if (generation != discoveryGeneration.get()) return;
                     discoveryCancelable = null;
                     discoveryRunning.set(false);
-                    Reader connected = Terminal.getInstance().getConnectedReader();
-                    if (connected != null && readerMatchesBinding(connected)) {
-                        acceptConnectedReader(connected);
-                    } else if (readerTransportPresent() && !connectionRunning.get()) {
+                    Reader current = Terminal.getInstance().getConnectedReader();
+                    if (current != null && readerMatchesBinding(current)) {
+                        acceptConnectedReader(current);
+                    } else if (readerTransportPresent() && !connectionRunning.get()
+                        && !sdkOwnsConnectionTransition(terminalConnectionStatusName())) {
                         setError("STRIPE_READER_NOT_DISCOVERED");
                     }
                 }
@@ -661,7 +767,9 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
 
     private void acceptConnectedReader(Reader reader) {
         bindingMismatchBlocked = false;
+        reconnectFailed = false;
         reconnectCancelable = null;
+        readerRebootInProgress = false;
         stripeReaderId = reader.getId();
         stripeReaderSerial = reader.getSerialNumber();
         if (!simulatedReaderEnabled() && reader.getLocation() != null && reader.getLocation().getId() != null) {
@@ -674,8 +782,8 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         connectionRunning.set(false);
         discoveryRunning.set(false);
         safeErrorCode = null;
-        readerState = paymentRunning.get() ? "BUSY" : "READY";
-        Log.i(TAG, "WisePad USB connected through Stripe Terminal 5.7.0");
+        readerState = firmwareUpdateInProgress ? "UPDATING" : (paymentRunning.get() ? "BUSY" : "READY");
+        Log.i(TAG, "WisePad USB connected through Stripe Terminal 5.8.0");
     }
 
     private boolean readerMatchesBinding(Reader reader) {
@@ -719,28 +827,36 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 recoveryRequired = state.recoveryRequired();
                 correlationId = blankToNull(state.correlationId());
                 if (isBackendCancellationConfirmed(state)) {
-                    localPaymentState = "CANCELLED";
-                    activePaymentIntentId = null;
-                    activeRentalSessionId = null;
-                    paymentCancelable = null;
-                    paymentRunning.set(false);
-                    safeErrorCode = null;
-                    readerState = isReaderConnected() ? "READY" : (readerTransportPresent() ? "RECONNECTING" : "ABSENT");
+                    resetAfterCancellation();
                 } else {
                     localPaymentState = "RECOVERY_REQUIRED";
                     recoveryRequired = true;
                     paymentRunning.set(false);
                     safeErrorCode = "PAYMENT_RECONCILIATION_REQUIRED";
-                    readerState = isReaderConnected() ? "READY" : "ERROR";
+                    readerState = idleReaderState();
                 }
             } catch (IOException error) {
+                localPaymentState = "RECOVERY_REQUIRED";
                 recoveryRequired = true;
+                paymentRunning.set(false);
                 paymentRailState = "RECOVERY_REQUIRED";
                 safeErrorCode = StripeTerminalBackendClient.safeCode(error.getMessage());
+                readerState = idleReaderState();
             } finally {
                 paymentCancellationRunning.set(false);
             }
         });
+    }
+
+    private void resetAfterCancellation() {
+        localPaymentState = "CANCELLED";
+        activePaymentIntentId = null;
+        activeRentalSessionId = null;
+        paymentCancelable = null;
+        paymentRunning.set(false);
+        recoveryRequired = false;
+        safeErrorCode = null;
+        readerState = idleReaderState();
     }
 
     private void disconnectForBindingMismatch() {
@@ -763,7 +879,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 @Override public void onSuccess() {
                     if (!offlineCredentialRepairRequired) return;
                     if (!clearCachedCredentialsForOfflineRepair()) return;
-                    main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 300L);
+                    main.postDelayed(StripeTerminalReaderRuntime.this::ensureStarted, 250L);
                 }
 
                 @Override public void onFailure(TerminalException error) {
@@ -825,7 +941,17 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         if (!"RECOVERY_REQUIRED".equals(paymentRailState)) paymentRailState = "FAILED";
         paymentCancelable = null;
         paymentRunning.set(false);
-        readerState = isReaderConnected() ? "READY" : (readerTransportPresent() ? "ERROR" : "ABSENT");
+        readerState = idleReaderState();
+    }
+
+    private String idleReaderState() {
+        if (firmwareUpdateInProgress) return "UPDATING";
+        if (readerRebootInProgress) return "RECONNECTING";
+        if (!readerTransportPresent()) return "ABSENT";
+        String sdkStatus = terminalConnectionStatusName();
+        if ("CONNECTED".equals(sdkStatus) && isReaderConnected()) return "READY";
+        if (sdkOwnsConnectionTransition(sdkStatus)) return sdkStatus;
+        return reconnectFailed ? "ERROR" : "DISCOVERING";
     }
 
     private void setError(String code) {
@@ -846,8 +972,6 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                 expectedReaderId = simulatedReaderEnabled() ? null : blankToNull(result.expectedReaderId());
                 prefetchedConnectionTokenSecret = result.secret();
                 safeErrorCode = null;
-                Log.i(TAG, "Terminal binding fetched; locationBound=" + (stripeLocationId != null)
-                    + ", readerBound=" + (expectedReaderId != null));
             } catch (Exception error) {
                 prefetchedConnectionTokenSecret = null;
                 setError(StripeTerminalBackendClient.safeCode(error.getMessage()));
@@ -885,13 +1009,9 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
         @Override
         public void onConnectionStatusChange(ConnectionStatus status) {
             if (status == null) return;
-            switch (status.name()) {
-                case "DISCOVERING" -> readerState = "DISCOVERING";
-                case "CONNECTING" -> readerState = "CONNECTING";
-                case "RECONNECTING" -> {
-                    connectionRunning.set(false);
-                    readerState = "RECONNECTING";
-                }
+            String name = status.name();
+            switch (name) {
+                case "DISCOVERING", "CONNECTING", "RECONNECTING" -> readerState = name;
                 case "CONNECTED" -> {
                     connectionRunning.set(false);
                     discoveryRunning.set(false);
@@ -905,8 +1025,14 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
                     stripeReaderSerial = null;
                     if (bindingMismatchBlocked) {
                         setError("TERMINAL_READER_BINDING_MISMATCH");
+                    } else if (firmwareUpdateInProgress) {
+                        readerState = "UPDATING";
+                    } else if (readerRebootInProgress || reconnectCancelable != null) {
+                        readerState = "RECONNECTING";
+                    } else if (!readerTransportPresent()) {
+                        readerState = "ABSENT";
                     } else if (!paymentRunning.get()) {
-                        readerState = readerTransportPresent() ? "RECONNECTING" : "ABSENT";
+                        readerState = reconnectFailed ? "ERROR" : "DISCOVERING";
                     }
                 }
                 default -> { }
@@ -918,7 +1044,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             if (status == null) return;
             String name = status.name();
             if ("PROCESSING".equals(name) || "WAITING_FOR_INPUT".equals(name)) readerState = "BUSY";
-            else if (!paymentRunning.get() && isReaderConnected()) readerState = "READY";
+            else if (!paymentRunning.get() && !firmwareUpdateInProgress) readerState = idleReaderState();
         }
     }
 
@@ -933,21 +1059,26 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
     @Override
     public void onReaderReconnectStarted(Reader reader, Cancelable cancelReconnect, DisconnectReason reason) {
         reconnectCancelable = cancelReconnect;
+        reconnectFailed = false;
         connectionRunning.set(false);
-        readerState = "RECONNECTING";
+        readerState = firmwareUpdateInProgress ? "UPDATING" : "RECONNECTING";
         safeErrorCode = null;
-        Log.i(TAG, "WisePad SDK auto-reconnect started; reason=" + (reason == null ? "UNKNOWN" : reason.name()));
+        lastDisconnectReason = reason == null ? null : reason.name();
     }
 
     @Override
     public void onReaderReconnectSucceeded(Reader reader) {
         reconnectCancelable = null;
+        reconnectFailed = false;
+        readerRebootInProgress = false;
         acceptConnectedReader(reader);
     }
 
     @Override
     public void onReaderReconnectFailed(Reader reader) {
         reconnectCancelable = null;
+        reconnectFailed = true;
+        readerRebootInProgress = false;
         connectionRunning.set(false);
         discoveryRunning.set(false);
         setError("STRIPE_READER_RECONNECT_FAILED");
@@ -955,6 +1086,7 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
 
     @Override
     public void onDisconnect(DisconnectReason reason) {
+        lastDisconnectReason = reason == null ? null : reason.name();
         stripeReaderId = null;
         stripeReaderSerial = null;
         connectionRunning.set(false);
@@ -963,23 +1095,59 @@ final class StripeTerminalReaderRuntime implements MobileReaderListener {
             setError("TERMINAL_READER_BINDING_MISMATCH");
             return;
         }
-        if (!paymentRunning.get()) {
-            readerState = readerTransportPresent() ? "RECONNECTING" : "ABSENT";
+        if (firmwareUpdateInProgress) {
+            readerState = "UPDATING";
+            return;
         }
+        if (readerRebootInProgress || reconnectCancelable != null) {
+            readerState = "RECONNECTING";
+            return;
+        }
+        if (!readerTransportPresent()) {
+            readerState = "ABSENT";
+            return;
+        }
+        if (!paymentRunning.get()) readerState = reconnectFailed ? "ERROR" : "RECONNECTING";
     }
 
-    @Override public void onStartInstallingUpdate(ReaderSoftwareUpdate update, Cancelable cancelable) { readerState = "UPDATING"; }
-    @Override public void onReportReaderSoftwareUpdateProgress(float progress) { readerState = "UPDATING"; }
-    @Override public void onFinishInstallingUpdate(ReaderSoftwareUpdate update, TerminalException error) {
-        if (error != null) setError(safeTerminalCode(error));
-        else readerState = isReaderConnected() ? "READY" : (readerTransportPresent() ? "RECONNECTING" : "ABSENT");
+    @Override
+    public void onStartInstallingUpdate(ReaderSoftwareUpdate update, Cancelable cancelable) {
+        firmwareUpdateInProgress = true;
+        firmwareUpdateProgress = 0f;
+        availableUpdatePresent = true;
+        readerState = "UPDATING";
     }
-    @Override public void onRequestReaderInput(ReaderInputOptions options) { readerState = "BUSY"; }
-    @Override public void onRequestReaderDisplayMessage(ReaderDisplayMessage message) { readerState = "BUSY"; }
-    @Override public void onReportAvailableUpdate(ReaderSoftwareUpdate update) { }
+
+    @Override
+    public void onReportReaderSoftwareUpdateProgress(float progress) {
+        firmwareUpdateInProgress = true;
+        firmwareUpdateProgress = Math.max(0f, Math.min(1f, progress));
+        readerState = "UPDATING";
+    }
+
+    @Override
+    public void onFinishInstallingUpdate(ReaderSoftwareUpdate update, TerminalException error) {
+        firmwareUpdateInProgress = false;
+        if (error != null) {
+            setError(safeTerminalCode(error));
+            return;
+        }
+        firmwareUpdateProgress = 1f;
+        availableUpdatePresent = false;
+        readerState = idleReaderState();
+    }
+
+    @Override public void onRequestReaderInput(ReaderInputOptions options) { if (paymentRunning.get()) readerState = "BUSY"; }
+    @Override public void onRequestReaderDisplayMessage(ReaderDisplayMessage message) { if (paymentRunning.get()) readerState = "BUSY"; }
+    @Override public void onReportAvailableUpdate(ReaderSoftwareUpdate update) { availableUpdatePresent = update != null; }
     @Override public void onReportReaderEvent(ReaderEvent event) { }
-    @Override public void onReportLowBatteryWarning() { }
-    @Override public void onBatteryLevelUpdate(float batteryLevel, BatteryStatus batteryStatus, boolean isCharging) { }
+    @Override public void onReportLowBatteryWarning() { lowBatteryWarning = true; }
+    @Override public void onBatteryLevelUpdate(float batteryLevel, BatteryStatus batteryStatus, boolean isCharging) {
+        readerBatteryLevel = batteryLevel;
+        readerBatteryStatus = batteryStatus == null ? null : batteryStatus.name();
+        readerCharging = isCharging;
+        if (batteryLevel > 0.5f) lowBatteryWarning = false;
+    }
 
     private boolean usbPresent() {
         return WisePadUsbProbe.snapshot(context).optBoolean("present", false);
