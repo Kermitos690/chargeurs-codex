@@ -84,11 +84,26 @@ async function ensureWalletPass(db: DB, membership: MembershipRow) {
   if (error) throw error;
 }
 
+async function grantRentalCreditForPaidPeriod(
+  db: DB,
+  membershipId: string,
+  periodStart: string | null,
+) {
+  if (!periodStart) throw new Error("MEMBERSHIP_CREDIT_PERIOD_START_MISSING");
+  const { error } = await db.rpc("grant_customer_membership_period_credit", {
+    p_membership_id: membershipId,
+    p_period_start: periodStart,
+    p_source: "stripe_paid_period",
+  });
+  if (error) throw error;
+}
+
 export async function syncMembershipSubscription(
   db: DB,
   subscription: any,
   eventId: string,
   deleted = false,
+  grantCreditForPaidPeriod = false,
 ): Promise<boolean> {
   const metadataMembershipId = typeof subscription?.metadata?.membership_id === "string"
     ? subscription.metadata.membership_id
@@ -131,7 +146,10 @@ export async function syncMembershipSubscription(
   }).eq("id", membership.id);
   if (error) throw error;
 
-  if (status === "active") await ensureWalletPass(db, membership);
+  if (status === "active") {
+    await ensureWalletPass(db, membership);
+    if (grantCreditForPaidPeriod) await grantRentalCreditForPaidPeriod(db, membership.id, currentStart ?? startsAt);
+  }
   if (terminal) {
     await db.from("customer_wallet_passes")
       .update({ status: "revoked", provider_status: "revoked", revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -183,7 +201,7 @@ export async function fulfilMembershipCheckout(
 
   if (!subscriptionId) return true;
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  return syncMembershipSubscription(db, subscription, eventId);
+  return syncMembershipSubscription(db, subscription, eventId, false, true);
 }
 
 export async function syncMembershipFromInvoice(
@@ -197,5 +215,5 @@ export async function syncMembershipFromInvoice(
     : typeof invoice?.subscription?.id === "string" ? invoice.subscription.id : null;
   if (!subscriptionId) return false;
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  return syncMembershipSubscription(db, subscription, eventId);
+  return syncMembershipSubscription(db, subscription, eventId, false, true);
 }

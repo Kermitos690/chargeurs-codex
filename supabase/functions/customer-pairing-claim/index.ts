@@ -55,6 +55,20 @@ async function activeMembership(db: ReturnType<typeof adminClient>, userId: stri
   return null;
 }
 
+async function rentalCreditSummary(db: ReturnType<typeof adminClient>, userId: string) {
+  const { data, error } = await db.from("customer_membership_credit_balances")
+    .select("balance_cents,currency,next_expiry_at")
+    .eq("user_id", userId)
+    .eq("currency", "CHF")
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    rentalCreditCents: Number(data?.balance_cents ?? 0),
+    rentalCreditCurrency: String(data?.currency ?? "CHF"),
+    rentalCreditExpiresAt: data?.next_expiry_at ?? null,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const correlationId = crypto.randomUUID();
@@ -113,6 +127,7 @@ Deno.serve(async (req) => {
       includedMinutes: membership.plan.included_minutes,
       renewalCreditCents: membership.plan.renewal_credit_cents,
       renewsAt: membership.renews_at ?? null,
+      ...await rentalCreditSummary(db, user.id),
     };
 
     if (current.state === "claimed" && current.customer_user_id === user.id) {
