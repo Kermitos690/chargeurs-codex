@@ -14,6 +14,8 @@ ADB="${ADB:-$ANDROID_HOME/platform-tools/adb}"
 [[ -x "$ADB" ]] || ADB="$(command -v adb || true)"
 [[ -x "$ADB" ]] || fail "adb not found"
 
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 pick_serial() {
   local s endpoint
   s="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
@@ -38,7 +40,6 @@ echo "No payment, ejection, USB reset command, or app-data deletion will be perf
 echo "Rebooting DTA21269 with WisePad left connected..."
 "$ADB" -s "$SERIAL" reboot
 
-# Wait for the old connection to disappear first.
 for _ in $(seq 1 30); do
   if ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then break; fi
   sleep 1
@@ -47,20 +48,15 @@ done
 echo "Waiting for Android/ADB to return..."
 NEW_SERIAL=""
 for sec in $(seq 1 240); do
-  # Reuse the previous mDNS serial if it comes back.
   if "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
     NEW_SERIAL="$SERIAL"
     break
   fi
-
-  # Try any already-connected device.
   candidate="$("$ADB" devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
   if [[ -n "$candidate" ]]; then
     NEW_SERIAL="$candidate"
     break
   fi
-
-  # Refresh mDNS discovery every 5 seconds.
   if (( sec % 5 == 0 )); then
     endpoint="$("$ADB" mdns services 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' | head -1 || true)"
     if [[ -n "$endpoint" ]]; then
@@ -82,8 +78,6 @@ done
 }
 SERIAL="$NEW_SERIAL"
 echo "ADB device after reboot: $SERIAL"
-
-# Give boot services and USB host stack time to settle.
 sleep 12
 
 echo "== Kernel USB target check =="
@@ -91,7 +85,9 @@ TARGET_PATH=""
 for d in /sys/bus/usb/devices/*; do
   vendor="$("$ADB" -s "$SERIAL" shell "cat '$d/idVendor' 2>/dev/null" | tr -d '\r\n' || true)"
   product="$("$ADB" -s "$SERIAL" shell "cat '$d/idProduct' 2>/dev/null" | tr -d '\r\n' || true)"
-  if [[ "${vendor,,}" == "$TARGET_VENDOR_HEX" && "${product,,}" == "$TARGET_PRODUCT_HEX" ]]; then
+  vendor_lc="$(lower "$vendor")"
+  product_lc="$(lower "$product")"
+  if [[ "$vendor_lc" == "$TARGET_VENDOR_HEX" && "$product_lc" == "$TARGET_PRODUCT_HEX" ]]; then
     TARGET_PATH="$d"
     echo "$d ${vendor}:${product}"
     break
@@ -108,8 +104,6 @@ if [[ -z "$TARGET_PATH" ]]; then
 fi
 
 echo "USB_REBOOT_RESULT=TARGET_ENUMERATED_AFTER_FULL_REBOOT"
-
-# Start the already-installed diagnostics activity. This is non-financial.
 "$ADB" -s "$SERIAL" shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION >/dev/null 2>&1 || true
 "$ADB" -s "$SERIAL" shell am start -n "$PKG/ch.chargeurs.kiosk.HardwareDiagnosticActivity" >/dev/null 2>&1 || true
 
