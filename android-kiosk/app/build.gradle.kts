@@ -181,6 +181,24 @@ android {
             manifestPlaceholders["terminalDiagnosticExported"] = "true"
             buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
         }
+        create("sdk58Probe") {
+            // Side-by-side diagnostic package for field validation only. It
+            // never replaces the canonical staging package and deliberately
+            // keeps HOME/boot takeover disabled.
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".sdk58probe"
+            versionNameSuffix = "-staging-diagnostic"
+            buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")
+            buildConfigField("boolean", "LEGACY_DEVICE_BOUND_STORAGE_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")
+            buildConfigField("boolean", "STRIPE_TERMINAL_SIMULATED_TEST_ENABLED", "false")
+            buildConfigField("String", "KIOSK_PUBLIC_BASE_URL", quotedBuildConfig(stagingKioskPublicBaseUrl))
+            buildConfigField("String", "KIOSK_WEB_BASE_URL", quotedBuildConfig(stagingKioskWebBaseUrl))
+            buildConfigField("String", "STRIPE_TERMINAL_BACKEND_URL", quotedBuildConfig(stagingTerminalBackendUrl))
+            manifestPlaceholders["kioskHomeEnabled"] = "false"
+            manifestPlaceholders["bootReceiverEnabled"] = "false"
+            manifestPlaceholders["terminalDiagnosticExported"] = "true"
+        }
         release {
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
