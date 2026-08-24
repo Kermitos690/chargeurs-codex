@@ -1,0 +1,3 @@
+Force Vercel retry for DTA21277 terminal UI fix.
+Source functional commit: c55be48d8eb0e72525de7833124b66bb7338e1f7
+Reason: previous Vercel build was rejected by build-rate-limit.
