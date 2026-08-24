@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { CreditCard, Loader2, Nfc, QrCode, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   buildChargeursPresentationModel,
@@ -40,7 +40,8 @@ const COPY = {
     eyebrow: "PAIEMENT SÉCURISÉ",
     ready: "Comment souhaitez-vous payer ?",
     terminal: "Sans contact",
-    terminalSub: "Présentez votre carte ou votre téléphone sur le terminal",
+    terminalSub: "Présentez votre téléphone ou votre carte de paiement sans contact sur le logo sans contact de la borne.",
+    terminalReservation: "Carte / wallet : 30 CHF sont temporairement réservés par votre banque — ils ne sont pas débités au départ. Au retour, seul le prix réel est capturé et le solde est libéré.",
     qr: "QR code",
     qrSub: "Scannez et payez sur votre téléphone",
     qrOnly: "Paiement par QR code",
@@ -49,7 +50,7 @@ const COPY = {
     checkingSub: "Nous vérifions le lecteur de cette borne avant de vous proposer le paiement.",
     slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
     processing: "Paiement sans contact en cours",
-    processingSub: "Suivez les instructions affichées sur le terminal.",
+    processingSub: "Présentez maintenant votre téléphone ou votre carte de paiement sans contact sur le logo sans contact de la borne.",
     staleQr: "Ancien paiement QR détecté",
     staleQrSub: "Ce paiement QR doit être annulé avant de démarrer le terminal sans contact.",
     retry: "Réessayer le lecteur",
@@ -62,7 +63,8 @@ const COPY = {
     eyebrow: "SECURE PAYMENT",
     ready: "How would you like to pay?",
     terminal: "Contactless",
-    terminalSub: "Tap your card or phone on the payment reader",
+    terminalSub: "Present your contactless phone or payment card to the kiosk contactless symbol.",
+    terminalReservation: "Card / wallet: CHF 30 is temporarily authorised by your bank — it is not charged at the start. On return, only the actual rental price is captured and the remaining authorisation is released.",
     qr: "QR code",
     qrSub: "Scan and pay on your phone",
     qrOnly: "Pay by QR code",
@@ -71,7 +73,7 @@ const COPY = {
     checkingSub: "We are checking this kiosk reader before showing the payment options.",
     slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
     processing: "Contactless payment in progress",
-    processingSub: "Follow the instructions shown on the payment reader.",
+    processingSub: "Now present your contactless phone or payment card to the kiosk contactless symbol.",
     staleQr: "Previous QR payment detected",
     staleQrSub: "That QR payment must be cancelled before starting contactless payment.",
     retry: "Retry reader",
@@ -84,7 +86,8 @@ const COPY = {
     eyebrow: "SICHERE ZAHLUNG",
     ready: "Wie möchten Sie bezahlen?",
     terminal: "Kontaktlos",
-    terminalSub: "Karte oder Smartphone an das Terminal halten",
+    terminalSub: "Halten Sie Ihr Smartphone oder Ihre kontaktlose Zahlungskarte an das Kontaktlos-Symbol der Station.",
+    terminalReservation: "Karte / Wallet: CHF 30 werden vorübergehend bei Ihrer Bank reserviert — sie werden zu Beginn nicht belastet. Bei Rückgabe wird nur der tatsächliche Mietpreis belastet und der Rest der Autorisierung freigegeben.",
     qr: "QR-Code",
     qrSub: "Scannen und auf dem Smartphone bezahlen",
     qrOnly: "Per QR-Code bezahlen",
@@ -93,7 +96,7 @@ const COPY = {
     checkingSub: "Das Terminal dieser Station wird geprüft, bevor die Zahlungsarten angezeigt werden.",
     slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst den QR-Code.",
     processing: "Kontaktlose Zahlung läuft",
-    processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
+    processingSub: "Halten Sie jetzt Ihr Smartphone oder Ihre kontaktlose Zahlungskarte an das Kontaktlos-Symbol der Station.",
     staleQr: "Vorherige QR-Zahlung erkannt",
     staleQrSub: "Die QR-Zahlung muss abgebrochen werden, bevor kontaktlos bezahlt werden kann.",
     retry: "Leser erneut verbinden",
@@ -428,7 +431,7 @@ export function KioskPaymentRailStage(props: Props) {
     const staleQrConflict = rawNativeRail === "QR";
     return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail={staleQrConflict ? "QR_CONFLICT" : "TERMINAL"} data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
       <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
-      {staleQrConflict ? <QrCode className="h-20 w-20 text-primary" /> : <CreditCard className="h-20 w-20 text-cyan-100" />}
+      {staleQrConflict ? <QrCode className="h-20 w-20 text-primary" /> : <Nfc className="h-20 w-20 text-cyan-100" aria-hidden="true" />}
       <h2 className="font-display text-5xl font-black tracking-tight">{staleQrConflict ? copy.staleQr : copy.processing}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{staleQrConflict ? copy.staleQrSub : copy.processingSub}</p>
       <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
@@ -478,8 +481,9 @@ export function KioskPaymentRailStage(props: Props) {
   return <div className="kiosk-payment-rail-stage flex w-full max-w-6xl flex-col items-center gap-7 px-5 text-center" data-payment-capability="TERMINAL_AND_QR" data-reader-state={readerState} data-native-payment-bridge="true">
     <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
     <h2 className="font-display text-5xl font-black tracking-tight sm:text-6xl">{copy.ready}</h2>
+    <p className="max-w-4xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.07] px-6 py-4 text-lg font-semibold leading-relaxed text-cyan-50">{copy.terminalReservation}</p>
     <div className="grid w-full grid-cols-2 gap-6">
-      <button type="button" onClick={chooseTerminal} disabled={!terminalStation || !model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
+      <button type="button" onClick={chooseTerminal} disabled={!terminalStation || !model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><div className="relative inline-flex"><CreditCard className="h-12 w-12 text-cyan-100" /><Nfc className="absolute -bottom-2 -right-5 h-8 w-8 rounded-full bg-cyan-950 p-1 text-cyan-100" aria-hidden="true" /></div><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
       <button type="button" onClick={chooseQr} disabled={!model.payment.canChooseQr} className="min-h-64 rounded-[2.25rem] border border-white/15 bg-white/[.055] p-8 text-left disabled:opacity-50"><QrCode className="h-12 w-12 text-primary" /><div className="mt-12 font-display text-3xl font-black">{copy.qr}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.qrSub}</p></button>
     </div>
     {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}
