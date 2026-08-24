@@ -5,6 +5,7 @@ PKG="ch.chargeurs.kiosk.staging"
 TARGET_STATION="DTA21277"
 TARGET_VENDOR="15a2"
 TARGET_PRODUCT="0101"
+LAST_KNOWN_ENDPOINT="${DTA21277_LAST_KNOWN_ENDPOINT:-192.168.8.139:41373}"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -21,19 +22,66 @@ station_for_serial() {
     | head -1
 }
 
-SERIAL="${DTA_SERIAL:-}"
-if [[ -z "$SERIAL" ]]; then
+find_connected_target() {
+  local candidate state detected
   while read -r candidate state _; do
     [[ "$state" == "device" ]] || continue
     detected="$(station_for_serial "$candidate" || true)"
     if [[ "$detected" == "$TARGET_STATION" ]]; then
-      SERIAL="$candidate"
-      break
+      printf '%s' "$candidate"
+      return 0
     fi
   done < <("$ADB" devices -l | tail -n +2)
+  return 1
+}
+
+refresh_adb_candidates() {
+  local endpoint
+
+  # First retry the endpoint that was positively identified as DTA21277 by the
+  # previous bootstrap. A stale port is harmless: adb connect will simply fail.
+  if [[ -n "$LAST_KNOWN_ENDPOINT" ]]; then
+    "$ADB" connect "$LAST_KNOWN_ENDPOINT" >/dev/null 2>&1 || true
+  fi
+
+  # Wireless-debugging ports can rotate. Ask adb mDNS for every currently
+  # advertised endpoint and connect them, then identify the station from its
+  # own encrypted app configuration rather than from IP/port assumptions.
+  while read -r endpoint; do
+    [[ -n "$endpoint" ]] || continue
+    "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+  done < <("$ADB" mdns services 2>/dev/null \
+    | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' \
+    | sort -u || true)
+}
+
+SERIAL="${DTA_SERIAL:-}"
+if [[ -n "$SERIAL" ]]; then
+  "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || "$ADB" connect "$SERIAL" >/dev/null 2>&1 || true
+  if [[ "$(station_for_serial "$SERIAL" || true)" != "$TARGET_STATION" ]]; then
+    SERIAL=""
+  fi
 fi
 
-[[ -n "$SERIAL" ]] || fail "Could not find an ADB device enrolled as $TARGET_STATION"
+if [[ -z "$SERIAL" ]]; then
+  SERIAL="$(find_connected_target || true)"
+fi
+
+if [[ -z "$SERIAL" ]]; then
+  echo "DTA21277 not currently resolved; refreshing wireless ADB candidates..."
+  refresh_adb_candidates
+  sleep 2
+  SERIAL="$(find_connected_target || true)"
+fi
+
+if [[ -z "$SERIAL" ]]; then
+  echo "== ADB candidates after refresh =="
+  "$ADB" devices -l || true
+  echo "== adb mDNS services =="
+  "$ADB" mdns services 2>/dev/null || true
+  fail "Could not reconnect an ADB device enrolled as $TARGET_STATION. Keep Wireless debugging enabled on DTA21277 and rerun."
+fi
+
 "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || fail "$TARGET_STATION ADB not responding"
 
 echo "REFERENCE_STATION=$TARGET_STATION"
