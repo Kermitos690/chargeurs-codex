@@ -10,11 +10,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Staging-only helper used for controlled signer migrations on a physical DTA.
+ * Controlled signer-migration helper for the staging APK only.
  *
- * The Activity is non-exported in AndroidManifest.xml. It never accepts or
- * persists a reusable backend secret from ADB; it only consumes the same
- * one-time six-digit pairing code as the normal ProvisioningActivity.
+ * The Activity is declared only by src/staging/AndroidManifest.xml and is
+ * protected by android.permission.DUMP so ADB shell can invoke it while
+ * ordinary third-party apps cannot. It never accepts or persists a reusable
+ * backend secret from ADB; it only consumes the same one-time six-digit
+ * pairing code as the normal ProvisioningActivity.
  */
 public final class StagingMigrationEnrollmentActivity extends Activity {
     private static final String TAG = "ChargeursMigration";
