@@ -5,7 +5,11 @@ PKG="ch.chargeurs.kiosk.staging"
 TARGET_STATION="DTA21277"
 TARGET_VENDOR="15a2"
 TARGET_PRODUCT="0101"
-LAST_KNOWN_ENDPOINT="${DTA21277_LAST_KNOWN_ENDPOINT:-192.168.8.139:41373}"
+# Positively identified by the successful DTA21277 bootstrap. Wireless-debugging
+# TCP ports rotate, but this adb TLS service identity remains the stable anchor.
+TARGET_MDNS_SERIAL="${DTA21277_MDNS_SERIAL:-adb-3d24b8cbb7d560bc-r6qk3T._adb-tls-connect._tcp}"
+TARGET_MDNS_NAME="${DTA21277_MDNS_NAME:-adb-3d24b8cbb7d560bc-r6qk3T}"
+LAST_KNOWN_ENDPOINT="${DTA21277_LAST_KNOWN_ENDPOINT:-192.168.8.139:39935}"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -22,7 +26,17 @@ station_for_serial() {
     | head -1
 }
 
-find_connected_target() {
+serial_is_live() {
+  local serial="$1"
+  [[ -n "$serial" ]] && "$ADB" -s "$serial" get-state >/dev/null 2>&1
+}
+
+mdns_endpoint_for_target() {
+  "$ADB" mdns services 2>/dev/null \
+    | awk -v name="$TARGET_MDNS_NAME" '$1==name && $2=="_adb-tls-connect._tcp" {print $3; exit}'
+}
+
+find_connected_target_by_station() {
   local candidate state detected
   while read -r candidate state _; do
     [[ "$state" == "device" ]] || continue
@@ -38,15 +52,19 @@ find_connected_target() {
 refresh_adb_candidates() {
   local endpoint
 
-  # First retry the endpoint that was positively identified as DTA21277 by the
-  # previous bootstrap. A stale port is harmless: adb connect will simply fail.
+  # Prefer the stable DTA21277 mDNS identity and whatever TCP endpoint it
+  # currently advertises. The numeric port can rotate between ADB sessions.
+  endpoint="$(mdns_endpoint_for_target || true)"
+  if [[ -n "$endpoint" ]]; then
+    "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+  fi
+
   if [[ -n "$LAST_KNOWN_ENDPOINT" ]]; then
     "$ADB" connect "$LAST_KNOWN_ENDPOINT" >/dev/null 2>&1 || true
   fi
 
-  # Wireless-debugging ports can rotate. Ask adb mDNS for every currently
-  # advertised endpoint and connect them, then identify the station from its
-  # own encrypted app configuration rather than from IP/port assumptions.
+  # Refresh all advertised endpoints as a fallback, but never infer station
+  # identity from IP address alone.
   while read -r endpoint; do
     [[ -n "$endpoint" ]] || continue
     "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
@@ -56,22 +74,56 @@ refresh_adb_candidates() {
 }
 
 SERIAL="${DTA_SERIAL:-}"
+IDENTITY_SOURCE="explicit"
+
 if [[ -n "$SERIAL" ]]; then
-  "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || "$ADB" connect "$SERIAL" >/dev/null 2>&1 || true
-  if [[ "$(station_for_serial "$SERIAL" || true)" != "$TARGET_STATION" ]]; then
-    SERIAL=""
+  serial_is_live "$SERIAL" || "$ADB" connect "$SERIAL" >/dev/null 2>&1 || true
+  serial_is_live "$SERIAL" || SERIAL=""
+fi
+
+# First choice: the stable mDNS service identity that was already positively
+# identified as DTA21277. adb devices may expose this service name directly.
+if [[ -z "$SERIAL" ]] && serial_is_live "$TARGET_MDNS_SERIAL"; then
+  SERIAL="$TARGET_MDNS_SERIAL"
+  IDENTITY_SOURCE="stable_mdns_identity"
+fi
+
+# Second choice: resolve that stable identity to its current rotating endpoint.
+if [[ -z "$SERIAL" ]]; then
+  endpoint="$(mdns_endpoint_for_target || true)"
+  if [[ -n "$endpoint" ]]; then
+    "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+    if serial_is_live "$endpoint"; then
+      SERIAL="$endpoint"
+      IDENTITY_SOURCE="stable_mdns_endpoint"
+    fi
   fi
 fi
 
+# Third choice: use the app's station_id if it is currently readable.
 if [[ -z "$SERIAL" ]]; then
-  SERIAL="$(find_connected_target || true)"
+  SERIAL="$(find_connected_target_by_station || true)"
+  [[ -z "$SERIAL" ]] || IDENTITY_SOURCE="station_id"
 fi
 
 if [[ -z "$SERIAL" ]]; then
   echo "DTA21277 not currently resolved; refreshing wireless ADB candidates..."
   refresh_adb_candidates
   sleep 2
-  SERIAL="$(find_connected_target || true)"
+
+  if serial_is_live "$TARGET_MDNS_SERIAL"; then
+    SERIAL="$TARGET_MDNS_SERIAL"
+    IDENTITY_SOURCE="stable_mdns_identity_after_refresh"
+  else
+    endpoint="$(mdns_endpoint_for_target || true)"
+    if [[ -n "$endpoint" ]] && serial_is_live "$endpoint"; then
+      SERIAL="$endpoint"
+      IDENTITY_SOURCE="stable_mdns_endpoint_after_refresh"
+    else
+      SERIAL="$(find_connected_target_by_station || true)"
+      [[ -z "$SERIAL" ]] || IDENTITY_SOURCE="station_id_after_refresh"
+    fi
+  fi
 fi
 
 if [[ -z "$SERIAL" ]]; then
@@ -79,19 +131,25 @@ if [[ -z "$SERIAL" ]]; then
   "$ADB" devices -l || true
   echo "== adb mDNS services =="
   "$ADB" mdns services 2>/dev/null || true
-  fail "Could not reconnect an ADB device enrolled as $TARGET_STATION. Keep Wireless debugging enabled on DTA21277 and rerun."
+  fail "Could not reconnect DTA21277 by its stable ADB identity. Keep Wireless debugging enabled on DTA21277 and rerun."
 fi
 
-"$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || fail "$TARGET_STATION ADB not responding"
+serial_is_live "$SERIAL" || fail "$TARGET_STATION ADB not responding"
 
 echo "REFERENCE_STATION=$TARGET_STATION"
 echo "REFERENCE_ADB_SERIAL=$SERIAL"
+echo "REFERENCE_IDENTITY_SOURCE=$IDENTITY_SOURCE"
 echo "ACTION=READ_ONLY_REFERENCE_PREFLIGHT"
 echo "No payment, ejection, reboot, install, USB reset, or app-data change will be performed."
 
 STATION="$(station_for_serial "$SERIAL" || true)"
 echo "DETECTED_STATION_ID=${STATION:-UNKNOWN}"
-[[ "$STATION" == "$TARGET_STATION" ]] || fail "ADB target is not $TARGET_STATION"
+# station_id is now a corroborating check, not the sole discovery mechanism.
+# A non-empty contradiction remains a hard stop; UNKNOWN is allowed because the
+# old 1.0.29 build has shown intermittent run-as/shared_prefs readability.
+if [[ -n "$STATION" && "$STATION" != "$TARGET_STATION" ]]; then
+  fail "Stable DTA21277 ADB identity reports station_id=$STATION, expected $TARGET_STATION"
+fi
 
 PKG_DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" 2>/dev/null | tr -d '\r')"
 VERSION_CODE="$(printf '%s\n' "$PKG_DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
