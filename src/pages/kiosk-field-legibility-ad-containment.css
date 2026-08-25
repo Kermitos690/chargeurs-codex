@@ -12,7 +12,8 @@ html.kiosk-v3 {
 }
 
 /* Footer: operational information only. Pricing and CHF 30 deposit stay out. */
-html.kiosk-v3 .kiosk-system-footer__commercial {
+html.kiosk-v3 .kiosk-system-footer__commercial,
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer__commercial {
   display: none !important;
 }
 
@@ -131,7 +132,7 @@ html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-pane
   }
 
   /* Home: larger copy, without expanding the card hit areas beyond the frame. */
-  html.kiosk-v3 .ck2-home .ck2-reference-home-main {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-home-main {
     width: min(1120px, calc(100% - 56px)) !important;
     top: 68px !important;
     bottom: 10px !important;
@@ -143,34 +144,34 @@ html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-pane
     width: calc(100vw - var(--p0-ads-rail-width, min(22vw, 280px)) - 64px) !important;
   }
 
-  html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
-  html.kiosk-v3 .ck2-home .ck2-home-title {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-heading h1,
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-home-title {
     font-size: 50px !important;
     line-height: 1 !important;
   }
 
-  html.kiosk-v3 .ck2-home .ck2-reference-heading p {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-heading p {
     font-size: 19px !important;
     line-height: 1.28 !important;
   }
 
-  html.kiosk-v3 .ck2-home .ck2-reference-card {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-card {
     min-width: 0 !important;
     min-height: 0 !important;
     padding: 26px 30px 66px !important;
     overflow: hidden !important;
   }
 
-  html.kiosk-v3 .ck2-home .ck2-reference-card > strong { font-size: 38px !important; }
-  html.kiosk-v3 .ck2-home .ck2-reference-card > small {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-card > strong { font-size: 38px !important; }
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-card > small {
     font-size: 18px !important;
     line-height: 1.3 !important;
   }
-  html.kiosk-v3 .ck2-home .ck2-choice-icon {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-choice-icon {
     width: 62px !important;
     height: 62px !important;
   }
-  html.kiosk-v3 .ck2-home .ck2-reference-rate b {
+  html.kiosk-v3 .kv3-product-layer > .ck2-home .ck2-reference-rate b {
     font-size: 31px !important;
     line-height: 1.04 !important;
   }
