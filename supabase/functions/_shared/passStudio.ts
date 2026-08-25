@@ -44,7 +44,6 @@ export type ResolvePassStudioPassOptions = {
 export class PassStudioError extends Error {
   readonly status: number;
   readonly code: string;
-
   constructor(status: number, code: string) {
     super(code);
     this.name = "PassStudioError";
@@ -55,18 +54,13 @@ export class PassStudioError extends Error {
 
 function safeCode(value: unknown): string {
   const text = String(value ?? "PASS_STUDIO_UNAVAILABLE")
-    .toUpperCase()
-    .replace(/[^A-Z0-9_:-]/g, "_")
-    .slice(0, 96);
+    .toUpperCase().replace(/[^A-Z0-9_:-]/g, "_").slice(0, 96);
   return text || "PASS_STUDIO_UNAVAILABLE";
 }
 
-function normalizePassName(value: string | null | undefined): string {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+function normalize(value: string | null | undefined): string {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 async function request<T>(apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -84,15 +78,11 @@ async function request<T>(apiKey: string, path: string, init: RequestInit = {}):
       },
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new PassStudioError(response.status, safeCode(payload?.code ?? `PASS_STUDIO_HTTP_${response.status}`));
-    }
+    if (!response.ok) throw new PassStudioError(response.status, safeCode(payload?.code ?? `PASS_STUDIO_HTTP_${response.status}`));
     return payload as T;
   } catch (error) {
     if (error instanceof PassStudioError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new PassStudioError(504, "PASS_STUDIO_TIMEOUT");
-    }
+    if (error instanceof DOMException && error.name === "AbortError") throw new PassStudioError(504, "PASS_STUDIO_TIMEOUT");
     throw new PassStudioError(502, "PASS_STUDIO_UNAVAILABLE");
   } finally {
     clearTimeout(timeout);
@@ -100,9 +90,9 @@ async function request<T>(apiKey: string, path: string, init: RequestInit = {}):
 }
 
 export function requirePassStudioApiKey(): string {
-  const apiKey = (Deno.env.get("PASS_STUDIO_API_KEY") ?? "").trim();
-  if (!apiKey) throw new PassStudioError(503, "PASS_STUDIO_NOT_CONFIGURED");
-  return apiKey;
+  const key = (Deno.env.get("PASS_STUDIO_API_KEY") ?? "").trim();
+  if (!key) throw new PassStudioError(503, "PASS_STUDIO_NOT_CONFIGURED");
+  return key;
 }
 
 export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPass[]> {
@@ -110,69 +100,41 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
   return Array.isArray(payload.passes) ? payload.passes : [];
 }
 
-export async function resolvePassStudioPass(
-  apiKey: string,
-  options: ResolvePassStudioPassOptions = {},
-): Promise<PassStudioPass> {
-  const hasExplicitId = Object.prototype.hasOwnProperty.call(options, "passId");
-  const hasExplicitName = Object.prototype.hasOwnProperty.call(options, "passName");
-  const defaultChargeursAccountPass = !hasExplicitId && !hasExplicitName;
-  const configuredId = String(
-    hasExplicitId ? options.passId ?? "" : CHARGEURS_CUSTOM_PASS_ID,
-  ).trim();
-  const configuredName = String(
-    hasExplicitName ? options.passName ?? "" : "",
-  ).trim();
+export async function resolvePassStudioPass(apiKey: string, options: ResolvePassStudioPassOptions = {}): Promise<PassStudioPass> {
+  const explicitId = Object.prototype.hasOwnProperty.call(options, "passId");
+  const explicitName = Object.prototype.hasOwnProperty.call(options, "passName");
+  const accountPass = !explicitId && !explicitName;
+  const configuredId = String(explicitId ? options.passId ?? "" : CHARGEURS_CUSTOM_PASS_ID).trim();
+  const configuredName = String(explicitName ? options.passName ?? "" : "").trim();
   const passes = await listPassStudioPasses(apiKey);
-
   const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
-  const normalizedConfiguredName = normalizePassName(configuredName);
-  const byName = normalizedConfiguredName
-    ? passes.find((pass) => normalizePassName(pass.name) === normalizedConfiguredName)
-    : undefined;
-  const activePasses = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
-  const onlyActive = defaultChargeursAccountPass || options.allowSoleActiveFallback === false
-    ? undefined
-    : activePasses.length === 1 ? activePasses[0] : undefined;
-  const match = byId ?? byName ?? onlyActive;
-
-  if (!match) {
-    throw new PassStudioError(503, defaultChargeursAccountPass ? "PASS_STUDIO_CUSTOM_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
-  }
-  if (String(match.status ?? "active").toLowerCase() !== "active") {
-    throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
-  }
-  if (defaultChargeursAccountPass) {
-    const passType = normalizePassName(match.passType);
-    if (!passType.includes("custom") && !passType.includes("generic")) {
-      throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
-    }
-    const templateOwned = new Set(match.templateOwnedFieldKeys ?? []);
-    const editableCount = (match.fieldKeys ?? []).filter((key) => !templateOwned.has(key)).length;
-    if (editableCount < 3) {
-      throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
-    }
+  const wantedName = normalize(configuredName);
+  const byName = wantedName ? passes.find((pass) => normalize(pass.name) === wantedName) : undefined;
+  const active = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
+  const sole = accountPass || options.allowSoleActiveFallback === false ? undefined : active.length === 1 ? active[0] : undefined;
+  const match = byId ?? byName ?? sole;
+  if (!match) throw new PassStudioError(503, accountPass ? "PASS_STUDIO_CUSTOM_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
+  if (String(match.status ?? "active").toLowerCase() !== "active") throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
+  if (accountPass) {
+    const passType = normalize(match.passType);
+    if (!passType.includes("custom") && !passType.includes("generic")) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
+    const owned = new Set(match.templateOwnedFieldKeys ?? []);
+    const editable = (match.fieldKeys ?? []).filter((key) => !owned.has(key));
+    if (editable.length < 5) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
   }
   return match;
 }
 
 function editableFields(pass: PassStudioPass, fields: Record<string, string | number | boolean | null>) {
   const editable = new Set(pass.fieldKeys ?? []);
-  const templateOwned = new Set(pass.templateOwnedFieldKeys ?? []);
-  return Object.fromEntries(
-    Object.entries(fields).filter(([key]) => editable.has(key) && !templateOwned.has(key)),
-  );
+  const owned = new Set(pass.templateOwnedFieldKeys ?? []);
+  return Object.fromEntries(Object.entries(fields).filter(([key]) => editable.has(key) && !owned.has(key)));
 }
 
 export async function issuePassStudioPass(
   apiKey: string,
   pass: PassStudioPass,
-  input: {
-    email: string;
-    name?: string | null;
-    phone?: string | null;
-    fields: Record<string, string | number | boolean | null>;
-  },
+  input: { email: string; name?: string | null; phone?: string | null; fields: Record<string, string | number | boolean | null> },
 ): Promise<PassStudioIssueResult> {
   return await request<PassStudioIssueResult>(apiKey, `/passes/${encodeURIComponent(pass.passId)}/issue`, {
     method: "POST",
