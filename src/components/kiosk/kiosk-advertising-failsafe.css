@@ -102,3 +102,25 @@ html.kiosk-v3[data-kiosk-auth="required"][data-kiosk-ads-split="true"] .kv3-auth
     padding: 16px 24px !important;
   }
 }
+
+
+/*
+ * Touch shield: a screensaver may be dismissed, but its physical touch must
+ * never reach a rental/payment control after the overlay has been removed.
+ */
+html.kiosk-v3 .kiosk-ad-split,
+html.kiosk-v3 .kiosk-ad-screensaver {
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+
+html.kiosk-v3 .kiosk-ad-screensaver {
+  z-index: 2147483000 !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split > *,
+html.kiosk-v3 .kiosk-ad-screensaver > * {
+  pointer-events: none !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
