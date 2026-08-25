@@ -35,6 +35,7 @@ end;
 $function$;
 
 revoke all on function public.customer_wallet_notification_history(integer) from public;
+revoke all on function public.customer_wallet_notification_history(integer) from anon;
 grant execute on function public.customer_wallet_notification_history(integer) to authenticated;
 
 create or replace function public.customer_wallet_realtime_rental_events()
