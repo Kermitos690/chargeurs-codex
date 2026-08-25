@@ -1,7 +1,7 @@
 /*
  * Chargeurs.ch — deterministic physical 1280×720 geometry contract.
  *
- * This file owns GEOMETRY ONLY and is imported last. Scene-specific visual design
+ * This file owns GEOMETRY ONLY and establishes the shared physical variables. Scene-specific visual design
  * remains with the Home/core/selection/confirmation owners. The purpose here is
  * to make physical framing mathematical instead of iterative: canvas → footer →
  * padded product root → header → main workspace. No pricing/payment/rental/
@@ -11,12 +11,12 @@
 html.kiosk-v3 {
   --p0-canvas-w: 1280px;
   --p0-canvas-h: 720px;
-  --p0-footer-h: 62px;
-  --p0-root-pad-top: 12px;
-  --p0-root-pad-x: 28px;
-  --p0-root-pad-bottom: 10px;
-  --p0-header-h: 48px;
-  --p0-header-gap: 8px;
+  --p0-footer-h: 82px;
+  --p0-root-pad-top: 6px;
+  --p0-root-pad-x: 22px;
+  --p0-root-pad-bottom: 6px;
+  --p0-header-h: 66px;
+  --p0-header-gap: 7px;
   --p0-pricing-h: 506px;
   --p0-selection-h: 526px;
 }
@@ -155,7 +155,7 @@ html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage {
     height: 720px !important;
   }
   html.kiosk-v3 .kv3-product-layer {
-    height: 658px !important;
-    bottom: 62px !important;
+    height: 638px !important;
+    bottom: 82px !important;
   }
 }

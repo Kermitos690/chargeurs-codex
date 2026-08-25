@@ -10,7 +10,7 @@
  */
 
 html.kiosk-v3 {
-  --p0-footer-h: 62px;
+  --p0-footer-h: 82px;
   --p0-product-h: calc(100dvh - var(--p0-footer-h));
   --p0-line: rgba(122, 170, 220, .20);
   --p0-surface: rgba(3, 10, 22, .94);
@@ -495,7 +495,7 @@ html.kiosk-v3 .kiosk-idle-stage { max-height: 100% !important; }
 html.kiosk-v3 .kiosk-idle-cta { margin-bottom: 4px !important; }
 
 @media (width: 1280px) and (height: 720px) {
-  html.kiosk-v3 { --p0-footer-h: 62px; }
+  html.kiosk-v3 { --p0-footer-h: 82px; }
   html.kiosk-v3 .ck2-home .ck2-reference-home-main { width: 1160px !important; }
   html.kiosk-v3 .ck2-home .ck2-reference-rate b { font-size: 30px !important; }
   html.kiosk-v3 .ck2-connected-grid { width: 1120px !important; }
@@ -504,7 +504,7 @@ html.kiosk-v3 .kiosk-idle-cta { margin-bottom: 4px !important; }
 }
 
 @media (max-width: 1120px), (max-height: 640px) {
-  html.kiosk-v3 { --p0-footer-h: 56px; }
+  html.kiosk-v3 { --p0-footer-h: 76px; }
   html.kiosk-v3 .kiosk-system-footer { grid-template-columns: minmax(0,1.3fr) auto minmax(225px,.68fr) !important; padding: 0 18px !important; gap: 11px !important; }
   html.kiosk-v3 .kiosk-system-footer__secure { display: none !important; }
   html.kiosk-v3 .kiosk-system-footer__commercial small { display: none !important; }

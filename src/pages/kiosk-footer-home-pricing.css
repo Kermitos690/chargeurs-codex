@@ -1,13 +1,11 @@
 /*
- * Chargeurs.ch — footer clarity + Home commercial conditions.
- * Presentation only. Imported after the global legibility authority.
- *
- * The system footer is operational HMI: payment acceptance on the left,
- * station/time/network on the right. Pricing conditions belong on Home.
+ * Chargeurs.ch — one readable footer, with commercial pricing on Home.
+ * Presentation only. The physical footer remains visible on every scene;
+ * tariff and deposit are shown only on Home, never during a transaction.
  */
 
 html.kiosk-v3 .kiosk-system-footer {
-  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-columns: minmax(0, 1fr) minmax(315px, max-content) !important;
   column-gap: 26px !important;
 }
 
@@ -31,75 +29,27 @@ html.kiosk-v3 .kiosk-system-footer__runtime {
   justify-self: end !important;
 }
 
-/* Home-only pricing conditions live in the unused centre of the topbar.
- * They are intentionally outside the footer and never appear in transactions. */
-html.kiosk-v3 .kiosk-home-pricing-summary {
+/* Home: keep the price visibly inside the enlarged physical footer. */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer {
+  grid-template-columns: minmax(0, 1.35fr) auto minmax(315px, .85fr) !important;
+  column-gap: 20px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer__commercial {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* KioskPremiumGateV2 also owns a legacy Home footer. Hide that duplicate so
+ * the customer sees one footer, one set of payment marks and one tariff. */
+html.kiosk-v3[data-kiosk-scene="home"] .kv3-product-layer > .ck2-home .ck2-reference-footer {
   display: none !important;
 }
 
-html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary {
-  position: fixed !important;
-  z-index: 920 !important;
-  top: 11px !important;
-  left: 47% !important;
-  transform: translateX(-50%) !important;
-  width: 360px !important;
-  height: 50px !important;
-  padding: 5px 15px !important;
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr) !important;
-  align-items: center !important;
-  gap: 14px !important;
-  border: 1px solid rgba(126, 190, 244, .23) !important;
-  border-radius: 18px !important;
-  background: linear-gradient(180deg, rgba(13, 39, 73, .78), rgba(5, 20, 43, .86)) !important;
-  box-shadow: inset 0 1px rgba(255,255,255,.055), 0 10px 28px rgba(0,0,0,.17) !important;
-  backdrop-filter: blur(18px) saturate(135%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(135%) !important;
-  color: #f8fcff !important;
-  pointer-events: none !important;
-}
-
-html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary > span {
-  min-width: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  text-align: center !important;
-}
-
-html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary small {
-  color: rgba(199, 222, 242, .72) !important;
-  font-size: 12px !important;
-  font-weight: 760 !important;
-  line-height: 1 !important;
-  white-space: nowrap !important;
-}
-
-html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary strong {
-  color: #ffffff !important;
-  font-size: 18px !important;
-  font-weight: 930 !important;
-  line-height: 1 !important;
-  white-space: nowrap !important;
-  font-variant-numeric: tabular-nums !important;
-}
-
-html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary > i {
-  width: 1px !important;
-  height: 30px !important;
-  background: rgba(132, 181, 226, .22) !important;
-}
-
 @media (max-height: 680px) {
-  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary {
-    top: 8px !important;
-    width: 338px !important;
-    height: 46px !important;
-    padding: 4px 12px !important;
-    gap: 11px !important;
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer {
+    grid-template-columns: minmax(0, 1.2fr) auto minmax(290px, .8fr) !important;
+    column-gap: 14px !important;
   }
-  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary small { font-size: 11px !important; }
-  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary strong { font-size: 17px !important; }
 }
