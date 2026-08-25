@@ -196,6 +196,30 @@ BEGIN
 END;
 $$;
 
+-- The membership-credit RPC returns an output column named currency. Its
+-- ledger predicate must qualify the real table column so PostgreSQL cannot
+-- confuse it with that output variable during settlement.
+DO $$
+DECLARE
+  v_definition text;
+BEGIN
+  SELECT pg_get_functiondef(p.oid)
+    INTO v_definition
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'public'
+     AND p.proname = 'apply_customer_membership_credit_to_rental'
+   LIMIT 1;
+
+  IF v_definition IS NULL
+     OR position('ledger.currency = ''CHF''' IN v_definition) = 0
+  THEN
+    RAISE EXCEPTION 'FAIL membership-credit currency predicate is not qualified';
+  END IF;
+  RAISE NOTICE 'PASS membership-credit currency predicate is qualified';
+END;
+$$;
+
 DO $$
 DECLARE
   v_organization_id uuid;
