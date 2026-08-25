@@ -288,7 +288,10 @@ export function KioskPaymentRailStage(props: Props) {
     && nativeBridge
     && !readerConfirmedUnavailable
     && readerGraceExpired;
-  const confirmedQrOnly = physicalQrOnlyCabinet || (model.reader.capability === "QR_ONLY" && (\n    !nativeBridge\n    || readerConfirmedUnavailable\n  ));
+  const confirmedQrOnly = physicalQrOnlyCabinet || (model.reader.capability === "QR_ONLY" && (
+    !nativeBridge
+    || readerConfirmedUnavailable
+  ));
 
   /*
    * Payment-rail invariant:
