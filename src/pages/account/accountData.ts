@@ -88,7 +88,9 @@ export type CustomerWalletPass = {
   membership_id: string | null;
   public_pass_id: string;
   status: string;
+  provider: string | null;
   provider_status: "not_issued" | "pending" | "issued" | "update_pending" | "error" | "revoked";
+  provider_add_to_wallet_url: string | null;
   pass_revision: number;
   token_version: number;
   apple_serial_number: string | null;

@@ -39,7 +39,10 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
       .limit(1)
       .maybeSingle(),
     db.from("customer_wallet_passes")
-      .select("id,membership_id,public_pass_id,status,provider_status,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
+      // This private endpoint is authenticated and scoped to the requesting
+      // member. The provider URL is never placed in a public Pass QR or kiosk
+      // response; it is only used to re-add that member's existing Pass.
+      .select("id,membership_id,public_pass_id,status,provider,provider_status,provider_add_to_wallet_url,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
