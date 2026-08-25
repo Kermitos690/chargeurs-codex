@@ -645,7 +645,7 @@ function KioskAdvertisingRuntime() {
   const copy = lang === "de"
     ? {
         sponsored: "Partner",
-        touch: "Bildschirm berühren, um eine Powerbank zu mieten",
+        touch: "Hier tippen, um eine Powerbank zu mieten",
         muted: "Video ohne Ton",
         unavailable: "Vermietung vorübergehend nicht verfügbar · Dienst wird reaktiviert",
         scan: "QR scannen",
@@ -653,14 +653,14 @@ function KioskAdvertisingRuntime() {
     : lang === "en"
       ? {
           sponsored: "Partner",
-          touch: "Touch the screen to rent a powerbank",
+          touch: "Tap here to rent a powerbank",
           muted: "Video muted",
           unavailable: "Rental temporarily unavailable · service is being restored",
           scan: "Scan QR",
         }
       : {
           sponsored: "Partenaire",
-          touch: "Touchez l’écran pour louer une batterie",
+          touch: "Touchez ici pour louer une batterie",
           muted: "Vidéo sans son",
           unavailable: "Location momentanément indisponible · service en cours de réactivation",
           scan: "Scanner le QR",
