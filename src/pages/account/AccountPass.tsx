@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   CustomerChargePoints,
   CustomerMembership,
+  CustomerRentalCredit,
   CustomerWalletPass,
   fetchPrivateAccountSummary,
   formatAccountDate,
@@ -32,6 +33,7 @@ type State = {
   membership: CustomerMembership | null;
   walletPass: CustomerWalletPass | null;
   chargePoints: CustomerChargePoints;
+  rentalCredit: CustomerRentalCredit;
 };
 
 type ManageAction = "portal" | "cancel_at_period_end" | "resume";
@@ -42,6 +44,7 @@ const initial: State = {
   membership: null,
   walletPass: null,
   chargePoints: { balance: 0, lastActivityAt: null },
+  rentalCredit: { balanceCents: 0, currency: "CHF", nextExpiryAt: null, lastActivityAt: null },
 };
 
 export default function AccountPass() {
@@ -63,6 +66,7 @@ export default function AccountPass() {
         membership: summary.membership,
         walletPass: summary.walletPass,
         chargePoints: summary.chargePoints,
+        rentalCredit: summary.rentalCredit,
       });
     } catch {
       setState((s) => ({ ...s, loading: false, error: true }));
@@ -229,7 +233,8 @@ export default function AccountPass() {
             <Info icon={CalendarClock} label="Plafond journalier" value={plan ? `${formatCents(plan.daily_cap_cents, plan.currency)} / jour` : "—"} />
             <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
             <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
-            {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit adhésion / renouvellement" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
+            <Info icon={WalletCards} label="Crédit location disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
+            {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit attribué par période" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
             <Info
               icon={CalendarClock}
               label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"}
@@ -238,6 +243,8 @@ export default function AccountPass() {
                 : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")}
             />
           </div>
+
+          <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
 
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
             {qrUrl ? (

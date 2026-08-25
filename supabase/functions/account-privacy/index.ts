@@ -29,7 +29,7 @@ async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, use
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
   await claimVerifiedEmailRentals(db, user);
 
-  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult] = await Promise.all([
+  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult] = await Promise.all([
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships")
@@ -45,12 +45,18 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
       .limit(1)
       .maybeSingle(),
     db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
+    db.from("customer_membership_credit_balances")
+      .select("balance_cents,currency,next_expiry_at,last_activity_at")
+      .eq("user_id", user.id)
+      .eq("currency", "CHF")
+      .maybeSingle(),
   ]);
 
   if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
   if (membershipResult.error) throw new Error("MEMBERSHIP_UNAVAILABLE");
   if (walletResult.error) throw new Error("WALLET_PASS_UNAVAILABLE");
   if (pointsResult.error) throw new Error("CHARGEPOINTS_UNAVAILABLE");
+  if (rentalCreditResult.error) throw new Error("MEMBERSHIP_CREDIT_UNAVAILABLE");
 
   const rentals = rentalsResult.data ?? [];
   const rentalIds = rentals.map((rental) => String(rental.id));
@@ -82,6 +88,12 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     chargePoints: {
       balance: Number(pointsResult.data?.balance ?? 0),
       lastActivityAt: pointsResult.data?.last_activity_at ?? null,
+    },
+    rentalCredit: {
+      balanceCents: Number(rentalCreditResult.data?.balance_cents ?? 0),
+      currency: String(rentalCreditResult.data?.currency ?? "CHF"),
+      nextExpiryAt: rentalCreditResult.data?.next_expiry_at ?? null,
+      lastActivityAt: rentalCreditResult.data?.last_activity_at ?? null,
     },
   };
 }

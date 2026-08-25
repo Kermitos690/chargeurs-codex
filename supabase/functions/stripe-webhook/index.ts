@@ -14,6 +14,7 @@ import { evaluatePaymentMatch } from "../_shared/payments.ts";
 import { resolveSettlementStrategy } from "../_shared/settlement.ts";
 import { appendRentalEvent, OrchestratorError } from "../_shared/rentalOrchestratorRuntime.ts";
 import { validateStripeTestRuntime } from "../_shared/stripeRuntimeConfig.ts";
+import { membershipCreditReservationCap } from "../_shared/membershipCreditReservation.ts";
 
 
 type DB = ReturnType<typeof adminClient>;
@@ -124,6 +125,38 @@ async function triggerEjection(rentalSessionId: string): Promise<void> {
   if (!response.ok) throw new Error(`EJECT_TRIGGER_HTTP_${response.status}`);
 }
 
+async function reserveMemberRentalCreditAtPaymentCommit(
+  db: DB,
+  session: RentalSession,
+  fallbackCents: number,
+  paymentIntentId: string,
+) {
+  if (session.customer_segment !== "member" || !session.customer_user_id) return 0;
+  const snapshot = session.pricing_snapshot as Record<string, unknown> | null;
+  if (!snapshot) throw new Error("MEMBERSHIP_CREDIT_SNAPSHOT_MISSING");
+  const reservationCapCents = membershipCreditReservationCap(snapshot, fallbackCents);
+  const { data, error } = await db.rpc("apply_customer_membership_credit_to_rental", {
+    p_rental_id: String(session.id),
+    p_reservation_cap_cents: reservationCapCents,
+    p_minimum_credit_cents: 0,
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.requirement_met !== true || String(row?.currency ?? "CHF").toUpperCase() !== "CHF") {
+    throw new Error("MEMBERSHIP_CREDIT_RESERVATION_REJECTED");
+  }
+  const reservedCents = Number(row?.applied_cents ?? 0);
+  if (!Number.isInteger(reservedCents) || reservedCents < 0 || reservedCents > reservationCapCents) {
+    throw new Error("MEMBERSHIP_CREDIT_RESERVATION_INVALID");
+  }
+  await auditLog(db, {
+    action: "membership_credit.rental_reserved_at_payment_commit",
+    target: String(session.id),
+    data: { reservation_cap_cents: reservationCapCents, reserved_cents: reservedCents, stripe_payment_intent_id: paymentIntentId },
+  });
+  return reservedCents;
+}
+
 async function processPaymentIntent(
   db: DB,
   stripe: Stripe,
@@ -230,6 +263,12 @@ async function processPaymentIntent(
   const amountAuthorizedCents = authorized
     ? Number(intent.amount_capturable ?? intent.amount ?? expectedCents)
     : 0;
+  const membershipCreditReservedCents = await reserveMemberRentalCreditAtPaymentCommit(
+    db,
+    session,
+    Math.max(expectedCents, amountAuthorizedCents, amountCapturedCents),
+    intent.id,
+  );
 
   await appendRentalEvent(db, {
     rentalId: String(session.id),
@@ -243,6 +282,7 @@ async function processPaymentIntent(
       settlementStrategy: strategy,
       authorizedCents: amountAuthorizedCents,
       capturedCents: amountCapturedCents,
+      membershipCreditReservedCents,
       currency: observedCurrency,
     },
   });
@@ -257,7 +297,8 @@ async function processPaymentIntent(
     stripe_payment_method_type: methodType,
     customer_email: customerEmail,
     amount_paid: amountCapturedCents / 100,
-    captured_amount_cents: amountCapturedCents,
+      captured_amount_cents: amountCapturedCents,
+      membership_credit_reservation_status: session.customer_segment === "member" && membershipCreditReservedCents > 0 ? "reserved" : session.membership_credit_reservation_status ?? "none",
     settlement_strategy: strategy,
     settlement_status: authorized ? "authorized" : "prepaid",
     settlement_error: null,

@@ -105,6 +105,13 @@ export type CustomerChargePoints = {
   lastActivityAt: string | null;
 };
 
+export type CustomerRentalCredit = {
+  balanceCents: number;
+  currency: string;
+  nextExpiryAt: string | null;
+  lastActivityAt: string | null;
+};
+
 export type PrivateAccountSummary = {
   rentals: CustomerRental[];
   payments: CustomerPayment[];
@@ -114,6 +121,7 @@ export type PrivateAccountSummary = {
   membership: CustomerMembership | null;
   walletPass: CustomerWalletPass | null;
   chargePoints: CustomerChargePoints;
+  rentalCredit: CustomerRentalCredit;
 };
 
 export const ACTIVE_RENTAL_STATES = new Set(["ejected", "battery_taken", "active_rental"]);
@@ -197,6 +205,12 @@ export async function fetchPrivateAccountSummary(): Promise<PrivateAccountSummar
     chargePoints: {
       balance: Number(data.data?.chargePoints?.balance ?? 0),
       lastActivityAt: data.data?.chargePoints?.lastActivityAt ?? null,
+    },
+    rentalCredit: {
+      balanceCents: Number(data.data?.rentalCredit?.balanceCents ?? 0),
+      currency: String(data.data?.rentalCredit?.currency ?? "CHF"),
+      nextExpiryAt: data.data?.rentalCredit?.nextExpiryAt ?? null,
+      lastActivityAt: data.data?.rentalCredit?.lastActivityAt ?? null,
     },
   };
 }

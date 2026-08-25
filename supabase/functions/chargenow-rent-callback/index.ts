@@ -94,7 +94,7 @@ async function incident(client: ReturnType<typeof db>, session: Record<string, u
   await client.from("system_incidents").insert({ type: "chargenow_callback", severity: "high", message, data: { rental_session_id: session?.id ?? null, station_id: session?.station_id ?? null, code, ...details }, resolved: false }).then(() => {}, () => {});
 }
 
-const SESSION_FIELDS = "id,station_id,state,state_version,battery_id,selected_slot_num,apifox_trade_no,chargenow_status,stripe_payment_intent_id,started_at,ejected_at,returned_at,settlement_status";
+const SESSION_FIELDS = "id,station_id,state,state_version,battery_id,selected_slot_num,apifox_trade_no,chargenow_status,stripe_payment_intent_id,started_at,ejected_at,returned_at,settlement_status,customer_segment,customer_user_id";
 async function uniqueActiveRentalByBattery(client: ReturnType<typeof db>, batteryId: string) {
   const { data, error } = await client.from("rental_sessions").select(SESSION_FIELDS)
     .eq("battery_id", batteryId)
@@ -274,6 +274,35 @@ async function triggerSettlement(rentalSessionId: string, returnedAt: string) {
   return { ok: response.ok, status: response.status };
 }
 
+async function reverseMemberCreditForProvenNoOutput(
+  client: ReturnType<typeof db>,
+  session: Record<string, unknown>,
+  tradeNo: string,
+) {
+  if (session.customer_segment !== "member" || !session.customer_user_id || !tradeNo) return false;
+  const { data: attempt, error: attemptError } = await client.from("hardware_release_attempts")
+    .select("command_sent_at").eq("rental_session_id", session.id).maybeSingle();
+  if (attemptError || !attempt?.command_sent_at) return false;
+  const [{ data: successfulCallback, error: callbackError }, { data: borrowEvents, error: borrowError }] = await Promise.all([
+    client.from("chargenow_callbacks").select("idempotency_key").eq("trade_no", tradeNo).eq("status", "1").limit(1).maybeSingle(),
+    client.from("cabinet_events").select("payload").eq("station_id", session.station_id).eq("event_type", "BATTERY_BORROW_OUT").gte("received_at", attempt.command_sent_at).limit(50),
+  ]);
+  if (callbackError || borrowError || successfulCallback) return false;
+  const hasMatchingOutput = (borrowEvents ?? []).some((row: { payload: unknown }) => outIdentity(row.payload).tradeNo === tradeNo);
+  if (hasMatchingOutput) return false;
+  const { data: releasedCents, error: reversalError } = await client.rpc("reverse_customer_membership_credit_for_rental", {
+    p_rental_id: session.id,
+    p_reason: "supplier_release_failed_without_borrow_out",
+  });
+  if (reversalError) throw reversalError;
+  await audit(client, "membership_credit.reservation_released_after_proven_ejection_failure", String(session.id), {
+    provider_trade_no: tradeNo,
+    released_cents: Number(releasedCents ?? 0),
+    physical_output_events: 0,
+  });
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok");
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -311,8 +340,9 @@ Deno.serve(async (req) => {
       return json({ received: true, provider_release_confirmed: true, state: confirmed ? "ejected" : session.state, kiosk_release_complete: confirmed }, confirmed ? 200 : 202);
     }
     if (parsed.status === "0") {
+      const creditReleased = await reverseMemberCreditForProvenNoOutput(client, session, canonicalTradeNo || parsed.tradeNo);
       await incident(client, session, "CHARGENOW_RELEASE_FAILURE_EVIDENCE", "ChargeNow a signalé un échec de sortie; aucune seconde commande d'éjection n'est envoyée automatiquement.", { tradeNo: parsed.tradeNo, currentState: session.state, automatic_retry_allowed: false });
-      return json({ received: true, release_failure_evidence: true, automatic_retry_allowed: false }, 202);
+      return json({ received: true, release_failure_evidence: true, membership_credit_released: creditReleased, automatic_retry_allowed: false }, 202);
     }
     if (parsed.status !== "2") return json({ received: true, ignored: true, reason: "UNKNOWN_STATUS" }, 202);
 

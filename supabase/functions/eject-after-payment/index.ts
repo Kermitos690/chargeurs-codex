@@ -4,7 +4,7 @@
 // Each station must have its own successful O2-only physical qualification before release is enabled.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const SUPPORTED_STATIONS = new Set(["DTA21269", "DTA21277"]);
+const SUPPORTED_STATIONS = new Set(["DTA21269", "DTA21270", "DTA21277"]);
 const BASE = (Deno.env.get("CHARGENOW_API_BASE_URL") ?? "https://developer.chargenow.top/cdb-open-api/v1").replace(/\/$/, "");
 const BASIC_AUTH = (Deno.env.get("CHARGENOW_BASIC_AUTH") ?? "").replace(/^Basic\s+/i, "").trim();
 const BASIC_USER = Deno.env.get("CHARGENOW_BASIC_USERNAME") ?? "";

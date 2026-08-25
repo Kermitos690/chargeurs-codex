@@ -6,8 +6,8 @@ describe("kiosk payment state presentation", () => {
     expect(kioskPaymentPresentation("needs_support", "CHECKOUT_EXPIRED")).toMatchObject({ phase: "expired", titleKey: "kiosk.state.payment_expired.title" });
   });
 
-  it("does not pretend a deliberately disabled release is still processing", () => {
-    expect(kioskPaymentPresentation("needs_support", "HARDWARE_EJECTION_DISABLED")).toMatchObject({ phase: "support", titleKey: "kiosk.state.hardware_ejection_disabled.title" });
+  it("keeps a deliberately disabled release in the protected polling flow", () => {
+    expect(kioskPaymentPresentation("needs_support", "HARDWARE_EJECTION_DISABLED")).toMatchObject({ phase: "waitpay", titleKey: "kiosk.state.hardware_ejection_disabled.title" });
   });
 
   it("keeps a verified payment in preparation until the provider reports release", () => {

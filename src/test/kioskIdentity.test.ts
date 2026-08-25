@@ -36,14 +36,14 @@ describe("kiosk canonical identity", () => {
     expect(getLockedStation()).toBe("DTA22032");
   });
 
-  it("keeps the proven Terminal device on DTA21269", () => {
+  it("keeps DTA21269 QR/client-only when no Terminal is attached", () => {
     bindNative("DTA21269", "8d9c5a0b-c15f-43b5-be76-5ed75b2607f6");
 
     const identity = resolveKioskIdentity("DTA21269");
 
     expect(identity.stationId).toBe("DTA21269");
     expect(identity.redirectTo).toBeNull();
-    expect(identity.terminalAvailable).toBe(true);
+    expect(identity.terminalAvailable).toBe(false);
     expect(getLockedStation()).toBe("DTA21269");
   });
 
@@ -55,6 +55,13 @@ describe("kiosk canonical identity", () => {
     expect(identity.stationId).toBe("DTA21277");
     expect(identity.redirectTo).toBeNull();
     expect(identity.terminalAvailable).toBe(false);
+  });
+
+  it("exposes the dedicated Terminal lane on DTA21270 only", () => {
+    bindNative("DTA21270", "dta21270-terminal-device");
+    const identity = resolveKioskIdentity("DTA21270");
+    expect(identity.stationId).toBe("DTA21270");
+    expect(identity.terminalAvailable).toBe(true);
   });
 
   it("does not fall back to DTA21269 for an invalid station", () => {
@@ -74,8 +81,9 @@ describe("kiosk canonical identity", () => {
     expect(identity.terminalAvailable).toBe(false);
   });
 
-  it("exposes terminal capability only for DTA21269", () => {
-    expect(stationHasPaymentTerminal("DTA21269")).toBe(true);
+  it("exposes terminal capability only for DTA21270", () => {
+    expect(stationHasPaymentTerminal("DTA21269")).toBe(false);
+    expect(stationHasPaymentTerminal("DTA21270")).toBe(true);
     expect(stationHasPaymentTerminal("DTA21277")).toBe(false);
     expect(stationHasPaymentTerminal("DTA22032")).toBe(false);
   });
