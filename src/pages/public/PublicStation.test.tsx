@@ -99,6 +99,31 @@ describe("public station page", () => {
     expect(document.body.textContent).not.toContain("Batteries disponibles");
   });
 
+  it("does not confuse a safety suspension with a missing supplier confirmation", async () => {
+    prepareQuery({
+      data: {
+        station_id: "DTA21269",
+        name: "Chargeurs.ch — Borne pilote",
+        location_name: "Lausanne Gare",
+        status: "maintenance",
+        online: true,
+        rentable_count: 0,
+        returnable_count: 0,
+        total_count: 4,
+        currency: "CHF",
+        price_per_period: 0.75,
+        last_sync_at: "2026-08-25T07:30:21Z",
+      },
+      error: null,
+    });
+
+    await renderStation();
+
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Location temporairement suspendue"));
+    expect(document.body.textContent).toContain("vérification de sécurité");
+    expect(document.body.textContent).not.toContain("Le fournisseur n’a pas confirmé");
+  });
+
   it("normalizes the station id before querying", async () => {
     prepareQuery({ data: null, error: null });
     await renderStation();

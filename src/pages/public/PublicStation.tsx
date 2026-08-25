@@ -141,6 +141,7 @@ export default function PublicStation() {
         {page.status === "ready" && (() => {
           const { station } = page;
           const connection = stationConnectionState(station);
+          const maintenance = station.status === "maintenance";
           const isAvailable = Boolean(station.online && (station.rentable_count ?? 0) > 0);
           const price = station.price_per_period ?? PUBLIC_PRICING.startingPrice;
           return (
@@ -149,9 +150,9 @@ export default function PublicStation() {
                 <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
                   <div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <Badge className={isAvailable ? "bg-success/15 text-success hover:bg-success/15" : connection === "unknown" ? "bg-warning/15 text-warning hover:bg-warning/15" : "bg-muted text-muted-foreground hover:bg-muted"}>
+                      <Badge className={isAvailable ? "bg-success/15 text-success hover:bg-success/15" : maintenance || connection === "unknown" ? "bg-warning/15 text-warning hover:bg-warning/15" : "bg-muted text-muted-foreground hover:bg-muted"}>
                         {connection === "online" ? <Wifi className="mr-1 h-3.5 w-3.5" /> : <WifiOff className="mr-1 h-3.5 w-3.5" />}
-                        {isAvailable ? "Batteries disponibles" : station.online ? "Aucune batterie disponible" : stationConnectionDetail(station)}
+                        {isAvailable ? "Batteries disponibles" : maintenance ? "Location temporairement suspendue" : station.online ? "Aucune batterie disponible" : stationConnectionDetail(station)}
                       </Badge>
                       <span className="font-mono text-xs text-muted-foreground">{station.station_id}</span>
                     </div>
@@ -186,7 +187,11 @@ export default function PublicStation() {
 
               <section className="mt-6 rounded-2xl border border-border bg-card/60 p-5 text-sm text-muted-foreground">
                 <p>La disponibilité est indicative et peut changer entre votre consultation et votre arrivée.</p>
-                {connection === "unknown" && <p className="mt-1 text-warning">Le fournisseur n’a pas confirmé le dernier état de la borne. Aucune location n’est proposée tant que cette vérification n’est pas rétablie.</p>}
+                {maintenance ? (
+                  <p className="mt-1 text-warning">La borne est temporairement suspendue pour vérification de sécurité. La disponibilité n’est pas proposée tant que cette qualification n’est pas rétablie.</p>
+                ) : connection === "unknown" ? (
+                  <p className="mt-1 text-warning">Le fournisseur n’a pas confirmé le dernier état de la borne. Aucune location n’est proposée tant que cette vérification n’est pas rétablie.</p>
+                ) : null}
                 {station.last_sync_at && <p className="mt-1">Dernière mise à jour : {new Date(station.last_sync_at).toLocaleString("fr-CH", { dateStyle: "medium", timeStyle: "short" })}</p>}
               </section>
             </>
