@@ -114,22 +114,27 @@ html.kiosk-v3 .kiosk-ad-screensaver-cta {
 }
 
 
-/* Advertisement taps are inert. Only this explicit, isolated dismissal control
- * can close the fullscreen campaign; it never shares a hit area with rental UI. */
-html.kiosk-v3 .kiosk-ad-screensaver > .kiosk-ad-screensaver-dismiss {
-  position: absolute !important;
+/* Advertisement taps are inert. The lower call-to-action is the sole,
+ * isolated exit from a fullscreen campaign; it never shares a hit area with
+ * rental controls. */
+html.kiosk-v3 .kiosk-ad-screensaver > .kiosk-ad-screensaver-cta {
   z-index: 12 !important;
-  right: 18px !important;
-  top: 16px !important;
-  min-width: 160px !important;
-  min-height: 46px !important;
-  padding: 0 18px !important;
-  border: 1px solid rgba(255,255,255,.32) !important;
-  border-radius: 999px !important;
-  background: rgba(2,8,23,.84) !important;
-  color: #fff !important;
-  font-size: 15px !important;
-  font-weight: 850 !important;
+  width: min(64vw, 480px) !important;
+  min-width: min(64vw, 480px) !important;
+  min-height: 54px !important;
+  bottom: 18px !important;
+  padding: 0 22px !important;
+  font-size: 18px !important;
   pointer-events: auto !important;
   touch-action: none !important;
+}
+html.kiosk-v3 .kiosk-ad-screensaver-cta b {
+  display: grid !important;
+  width: 32px !important;
+  height: 32px !important;
+  place-items: center !important;
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, #67e8f9, #2563eb 58%, #7c3aed) !important;
+  font-size: 22px !important;
+  line-height: 1 !important;
 }
