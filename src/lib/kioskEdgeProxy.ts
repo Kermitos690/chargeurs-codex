@@ -23,6 +23,7 @@ const SETTLING_READ_TTL_MS = 2_000;
 const FINAL_READ_TTL_MS = 5_000;
 const AD_IMPRESSION_SAMPLE_MS = 30 * 60_000;
 const AD_IMPRESSION_SAMPLE_PREFIX = "chargeurs:ads:impression-sample:";
+const POST_EVENT_REINVALIDATE_MS = 1_500;
 
 export type KioskProxyResult<T> = {
   data: T | null;
@@ -191,7 +192,11 @@ function ensureCabinetWakeSubscription(stationId: string) {
     .on("broadcast", { event: "cabinet_event" }, () => {
       // The broadcast contains no payment, customer or battery identity. It is
       // only a wake-up hint; the next authenticated read remains authoritative.
+      // Invalidate twice so a read that was already in flight when the physical
+      // event arrived cannot repopulate a stale 10-minute cache immediately
+      // after the first invalidation.
       invalidateKioskReadCache(stationId);
+      window.setTimeout(() => invalidateKioskReadCache(stationId), POST_EVENT_REINVALIDATE_MS);
     })
     .subscribe();
 }
