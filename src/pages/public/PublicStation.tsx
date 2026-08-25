@@ -33,7 +33,6 @@ type PublicStationRecord = {
   returnable_count: number | null;
   total_count: number | null;
   currency: string | null;
-  price_per_period: number | null;
   last_sync_at: string | null;
 };
 
@@ -143,7 +142,6 @@ export default function PublicStation() {
           const connection = stationConnectionState(station);
           const maintenance = station.status === "maintenance";
           const isAvailable = Boolean(station.online && (station.rentable_count ?? 0) > 0);
-          const price = station.price_per_period ?? PUBLIC_PRICING.startingPrice;
           return (
             <>
               <section className="glass-strong liquid-border mt-6 overflow-hidden rounded-3xl p-6 sm:p-10">
@@ -163,8 +161,8 @@ export default function PublicStation() {
                     </p>
                   </div>
                   <div className="rounded-2xl border border-primary/20 bg-primary/10 p-5 sm:min-w-52">
-                    <p className="text-sm text-muted-foreground">{station.price_per_period == null ? "Tarif standard" : "Tarif publié"}</p>
-                    <p className="mt-1 text-3xl font-extrabold text-gradient">{formatChf(Number(price))}</p>
+                    <p className="text-sm text-muted-foreground">Tarif invité</p>
+                    <p className="mt-1 text-3xl font-extrabold text-gradient">{formatChf(PUBLIC_PRICING.startingPrice)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">dès 30 min · grille complète avant paiement</p>
                   </div>
                 </div>

@@ -85,11 +85,15 @@ describe("public station page", () => {
     await vi.waitFor(() => expect(document.querySelector("h1")?.textContent).toBe("Chargeurs.ch — Borne pilote"));
     expect(document.body.textContent).toContain("Batteries disponibles");
     expect(document.body.textContent).toContain("Lausanne Gare");
+    expect(document.body.textContent).toContain("Tarif invité");
+    expect(document.body.textContent).toContain("1.90");
+    expect(document.body.textContent).not.toContain("0.75");
     expect(linkContaining("Itinéraire")?.getAttribute("href")).toBe(stationDirectionsUrl("Lausanne Gare", "DTA21269"));
     expect(linkContaining("Besoin d'aide")?.getAttribute("href")).toBe("/support?station=DTA21269");
     expect(mocks.select).toHaveBeenCalledWith(PUBLIC_STATION_FIELDS);
     expect(PUBLIC_STATION_FIELDS).not.toContain("raw_data");
     expect(PUBLIC_STATION_FIELDS).not.toContain("cabinet_id");
+    expect(PUBLIC_STATION_FIELDS).not.toContain("price_per_period");
   });
 
   it("shows an explicit error without fallback data", async () => {

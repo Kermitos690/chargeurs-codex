@@ -9,7 +9,6 @@ export const PUBLIC_STATION_FIELDS = [
   "returnable_count",
   "total_count",
   "currency",
-  "price_per_period",
   "last_sync_at",
 ].join(",");
 
