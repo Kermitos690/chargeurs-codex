@@ -1,11 +1,12 @@
-import { useLayoutEffect } from "react";
+import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { act } from "react-dom/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAdRotation } from "@/components/kiosk/KioskAdvertisingLayer";
 
 vi.mock("@/lib/kioskFetch", () => ({ readKioskToken: () => null }));
 vi.mock("@/lib/kioskEdgeProxy", () => ({ invokeKioskEdgeProxy: vi.fn() }));
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const imageEntries = [
   {
