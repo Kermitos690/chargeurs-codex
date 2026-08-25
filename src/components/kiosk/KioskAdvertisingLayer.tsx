@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type SyntheticEvent } from "react";
 import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -659,7 +659,7 @@ function KioskAdvertisingRuntime() {
   const saverLabel = authRequired ? copy.unavailable : copy.touch;
   const splitLayout = split.current ? splitMediaLayout(split.current.item) : "cover";
 
-  return (
+  // A campaign is a visual surface only. In particular, do not let the native\n  // WebView turn the touch which closes the full-screen screensaver into a\n  // synthetic click on the rental button revealed underneath.\n  const consumeAdvertisingTouch = useCallback((event: SyntheticEvent) => {\n    event.preventDefault();\n    event.stopPropagation();\n  }, []);\n\n  const dismissScreensaverSafely = useCallback((event: SyntheticEvent) => {\n    consumeAdvertisingTouch(event);\n    markActivity();\n  }, [consumeAdvertisingTouch, markActivity]);\n\n  return (
     <>
       {splitActive && split.current && (
         <aside
