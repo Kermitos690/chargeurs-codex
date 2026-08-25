@@ -1,6 +1,7 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
 import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
+import { CHARGEURS_CUSTOM_PASS_ID } from "../_shared/passStudio.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -26,7 +27,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships").select("id,status,starts_at,renews_at,ends_at,plan_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    db.from("customer_wallet_passes").select("id,membership_id,public_pass_id,status,provider_status,provider,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("customer_wallet_passes").select("id,membership_id,public_pass_id,status,provider_status,provider,provider_pass_id,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
     db.from("customer_membership_credit_balances").select("balance_cents,currency,next_expiry_at,last_activity_at").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
   ]);
@@ -69,11 +70,14 @@ Deno.serve(async (req) => {
     const walletAction = body.walletAction === "sync" ? "sync" : "issue";
     if (walletAction === "sync") {
       const { data: wallet, error: walletError } = await db.from("customer_wallet_passes")
-        .select("id,membership_id,provider,provider_status,provider_instance_id,provider_add_to_wallet_url")
+        .select("id,membership_id,provider,provider_status,provider_pass_id,provider_instance_id,provider_add_to_wallet_url")
         .eq("user_id", user.id).eq("status", "active").is("revoked_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (walletError) return json({ ok: false, error: "WALLET_PASS_UNAVAILABLE" }, 500);
       const addToWalletUrl = String(wallet?.provider_add_to_wallet_url ?? "").trim();
-      const existingPassStudioPass = wallet?.provider === "pass_studio" && Boolean(wallet?.provider_instance_id) && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
+      const existingPassStudioPass = wallet?.provider === "pass_studio"
+        && wallet?.provider_pass_id === CHARGEURS_CUSTOM_PASS_ID
+        && Boolean(wallet?.provider_instance_id)
+        && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
       if (existingPassStudioPass) {
         const { data: outboxId, error: queueError } = await db.rpc("enqueue_customer_wallet_sync_event", {
           p_user_id: user.id, p_event_type: "manual_sync", p_event_key: `wallet:manual:${user.id}:${crypto.randomUUID()}`,
