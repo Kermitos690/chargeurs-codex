@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, HelpCircle, RefreshCw, ShieldAlert } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,10 @@ type StatusResponse = {
   reason_code?: string | null;
   station?: { last_sync_at?: string | null } | null;
 };
+
+const HEALTHY_CHECK_MS = 10 * 60_000;
+const BLOCKED_CHECK_MS = 30_000;
+const RETRY_CHECK_MS = 60_000;
 
 const COPY = {
   fr: {
@@ -72,15 +76,17 @@ export function KioskOperationalGuard() {
   const [blocked, setBlocked] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const checkInFlightRef = useRef(false);
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (): Promise<"healthy" | "blocked" | "retry"> => {
     if (!stationId) {
       setBlocked(false);
       setReason(null);
-      return;
+      return "healthy";
     }
     const token = readKioskToken();
-    if (!token) return;
+    if (!token || checkInFlightRef.current) return "retry";
+    checkInFlightRef.current = true;
     setChecking(true);
     try {
       const { data, error } = await supabase.functions.invoke<StatusResponse>("kiosk-operational-status", {
@@ -88,19 +94,41 @@ export function KioskOperationalGuard() {
         headers: { "X-Kiosk-Token": token },
       });
       if (!error && data?.ok) {
-        setBlocked(Boolean(data.blocked));
+        const isBlocked = Boolean(data.blocked);
+        setBlocked(isBlocked);
         setReason(data.reason_code ?? null);
+        return isBlocked ? "blocked" : "healthy";
       }
+      return "retry";
+    } catch {
+      return "retry";
     } finally {
+      checkInFlightRef.current = false;
       setChecking(false);
     }
   }, [stationId]);
 
   useEffect(() => {
-    void check();
     if (!stationId) return;
-    const timer = window.setInterval(() => void check(), 8_000);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const schedule = async () => {
+      const result = await check();
+      if (cancelled) return;
+      const delay = result === "blocked"
+        ? BLOCKED_CHECK_MS
+        : result === "healthy"
+          ? HEALTHY_CHECK_MS
+          : RETRY_CHECK_MS;
+      timer = window.setTimeout(() => void schedule(), delay);
+    };
+
+    void schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [check, stationId]);
 
   if (!stationId || !blocked) return null;
