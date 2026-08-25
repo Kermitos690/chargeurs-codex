@@ -51,7 +51,7 @@ type KioskSlot = {
   status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "return_available" | "technical_issue" | "maintenance";
   recommended: boolean;
 };
-type Phase = "loading" | "idle" | "pricing" | "starting" | "payment_ready" | "terminal" | "qr" | "waitpay" | "success" | "cancelled" | "error" | "support" | "expired";
+type Phase = "loading" | "idle" | "pricing" | "starting" | "payment_ready" | "terminal" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
 };
@@ -249,8 +249,8 @@ export default function Kiosk() {
       return;
     }
     setCancellingCheckout(false);
-    setPhase("cancelled");
-  }, [phase, sessionId, stationId, cancellingCheckout]);
+    reset();
+  }, [phase, sessionId, stationId, cancellingCheckout, reset]);
 
   useEffect(() => {
     if (phase !== "idle") return;
@@ -536,27 +536,6 @@ export default function Kiosk() {
     },
   }[lang];
 
-  const cancellationCopy = {
-    fr: {
-      eyebrow: "PAIEMENT ANNULÉ",
-      title: "Location annulée",
-      subtitle: "Votre demande a été annulée. Aucun paiement n’a été encaissé.",
-      restart: "Recommencer",
-    },
-    en: {
-      eyebrow: "PAYMENT CANCELLED",
-      title: "Rental cancelled",
-      subtitle: "Your request has been cancelled. No payment has been taken.",
-      restart: "Start again",
-    },
-    de: {
-      eyebrow: "ZAHLUNG ABGEBROCHEN",
-      title: "Ausleihe abgebrochen",
-      subtitle: "Ihre Anfrage wurde abgebrochen. Es wurde keine Zahlung eingezogen.",
-      restart: "Erneut beginnen",
-    },
-  }[lang];
-
   if (mismatch && lockedStation) {
     return (
       <div className="relative grid min-h-screen place-items-center px-6 text-center">
@@ -721,7 +700,7 @@ export default function Kiosk() {
                 onChooseQr={() => void requestCheckout(sessionId)}
                 onTerminalEngaged={() => setPhase("terminal")}
                 onServerConfirmed={() => setPhase("waitpay")}
-                onCancelled={() => setPhase("cancelled")}
+                onCancelled={reset}
               />
             </motion.div>
           )}
@@ -740,7 +719,7 @@ export default function Kiosk() {
                 onChooseQr={() => {}}
                 onTerminalEngaged={() => {}}
                 onServerConfirmed={() => setPhase("waitpay")}
-                onCancelled={() => setPhase("cancelled")}
+                onCancelled={reset}
               />
             </motion.div>
           )}
@@ -778,16 +757,6 @@ export default function Kiosk() {
                 </div>
                 <div className="relative mt-9 h-1.5 overflow-hidden rounded-full bg-white/8"><motion.div className="h-full w-[42%] rounded-full bg-gradient-to-r from-cyan-300 via-blue-500 to-violet-400 shadow-[0_0_20px_rgba(34,211,238,.7)]" animate={{ x: ["-110%", "255%"] }} transition={{ duration: 1.25, repeat: Infinity, ease: "easeInOut" }} /></div>
               </div>
-            </motion.div>
-          )}
-
-          {phase === "cancelled" && (
-            <motion.div key="cancelled" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex w-full max-w-3xl flex-col items-center gap-7 px-5 text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{cancellationCopy.eyebrow}</div>
-              <div className="grid h-28 w-28 place-items-center rounded-full border border-emerald-200/25 bg-emerald-300/10 shadow-[0_0_42px_rgba(74,222,128,.20)]"><CheckCircle2 className="h-14 w-14 text-emerald-300" /></div>
-              <h2 className="font-display text-5xl font-black tracking-tight sm:text-6xl">{cancellationCopy.title}</h2>
-              <p className="max-w-2xl text-xl font-medium text-muted-foreground">{cancellationCopy.subtitle}</p>
-              <Button onClick={reset} className="h-16 gap-3 rounded-full bg-gradient-primary px-10 text-xl font-black shadow-glow"><RefreshCw className="h-5 w-5" />{cancellationCopy.restart}</Button>
             </motion.div>
           )}
 
