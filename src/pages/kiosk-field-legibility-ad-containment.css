@@ -57,6 +57,10 @@ html.kiosk-v3 .kiosk-ad-split {
   z-index: 110 !important;
 }
 
+html.kiosk-v3 .kiosk-ad-split * {
+  pointer-events: none !important;
+}
+
 html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media,
 html.kiosk-v3 .kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media {
   inset: 0 !important;
