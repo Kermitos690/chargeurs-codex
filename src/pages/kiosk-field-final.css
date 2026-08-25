@@ -112,3 +112,24 @@ html.kiosk-v3 .kiosk-ad-screensaver-cta {
 @media (max-width: 1100px), (max-height: 720px) {
   html.kiosk-v3 { --field-ad-rail: 280px; }
 }
+
+
+/* Advertisement taps are inert. Only this explicit, isolated dismissal control
+ * can close the fullscreen campaign; it never shares a hit area with rental UI. */
+html.kiosk-v3 .kiosk-ad-screensaver > .kiosk-ad-screensaver-dismiss {
+  position: absolute !important;
+  z-index: 12 !important;
+  right: 18px !important;
+  top: 16px !important;
+  min-width: 160px !important;
+  min-height: 46px !important;
+  padding: 0 18px !important;
+  border: 1px solid rgba(255,255,255,.32) !important;
+  border-radius: 999px !important;
+  background: rgba(2,8,23,.84) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
