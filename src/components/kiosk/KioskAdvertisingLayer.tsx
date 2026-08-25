@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type SyntheticEvent } from "react";
 import { useParams } from "react-router-dom";
 import { Megaphone, VolumeX, Zap } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -580,6 +580,12 @@ function KioskAdvertisingRuntime() {
     setScreensaver(false);
   }, []);
 
+  // Advertising is never a rental control. Consume all split-rail input so a
+  // tap on artwork cannot bubble into an underlying Home card or global action.
+  const consumeAdInteraction = useCallback((event: SyntheticEvent) => {
+    event.stopPropagation();
+  }, []);
+
   useEffect(() => {
     window.addEventListener("pointerdown", markActivity, { passive: true, capture: true });
     window.addEventListener("touchstart", markActivity, { passive: true, capture: true });
@@ -666,6 +672,9 @@ function KioskAdvertisingRuntime() {
           className="kiosk-ad-split"
           data-media-layout={splitLayout}
           aria-label={`${copy.sponsored}: ${split.current.campaignName}`}
+          onPointerDown={consumeAdInteraction}
+          onTouchStart={consumeAdInteraction}
+          onClick={consumeAdInteraction}
         >
           {splitLayout === "adaptive" && split.current.item.mediaType === "image" && (
             <img className="kiosk-ad-media-backdrop" src={split.current.item.url} alt="" aria-hidden draggable={false} />
@@ -690,8 +699,16 @@ function KioskAdvertisingRuntime() {
           role={authRequired ? "region" : "button"}
           tabIndex={authRequired ? undefined : 0}
           aria-label={saverLabel}
-          onClick={authRequired ? undefined : markActivity}
-          onKeyDown={authRequired ? undefined : markActivity}
+          onPointerDown={consumeAdInteraction}
+          onTouchStart={consumeAdInteraction}
+          onClick={(event) => {
+            consumeAdInteraction(event);
+            if (!authRequired) markActivity();
+          }}
+          onKeyDown={(event) => {
+            consumeAdInteraction(event);
+            if (!authRequired) markActivity();
+          }}
         >
           {saver.current ? (
             <BufferedAdMedia

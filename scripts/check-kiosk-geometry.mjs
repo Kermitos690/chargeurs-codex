@@ -7,6 +7,7 @@ const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readabil
 const supportCssPath = path.join(root, 'src/pages/kiosk-p0-support-safe.css');
 const selectionCssPath = path.join(root, 'src/pages/kiosk-p0-selection-fit.css');
 const footerCssPath = path.join(root, 'src/pages/kiosk-footer-home-pricing.css');
+const fieldCssPath = path.join(root, 'src/pages/kiosk-field-legibility-ad-containment.css');
 const adsPath = path.join(root, 'src/components/kiosk/kiosk-advertising-p0-safe.css');
 const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
 const paymentStatePath = path.join(root, 'src/lib/kioskPaymentState.ts');
@@ -20,6 +21,7 @@ const transactionCss = fs.readFileSync(transactionPath, 'utf8');
 const supportCss = fs.readFileSync(supportCssPath, 'utf8');
 const selectionCss = fs.readFileSync(selectionCssPath, 'utf8');
 const footerCss = fs.readFileSync(footerCssPath, 'utf8');
+const fieldCss = fs.readFileSync(fieldCssPath, 'utf8');
 const adsCss = fs.readFileSync(adsPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
 const paymentState = fs.readFileSync(paymentStatePath, 'utf8');
@@ -111,14 +113,25 @@ if (selectionCss.includes('minmax(300px, 322px)')) {
   failures.push('selection CTA must not return to a lateral right-hand column');
 }
 
-const homeFooterMarkers = [
-  'html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer__commercial',
-  'display: flex !important',
-  '.ck2-reference-footer',
+const footerMarkers = [
+  '.kiosk-system-footer__commercial',
   'display: none !important',
 ];
-for (const marker of homeFooterMarkers) {
-  if (!footerCss.includes(marker)) failures.push(`missing Home footer pricing marker: ${marker}`);
+for (const marker of footerMarkers) {
+  if (!fieldCss.includes(marker)) failures.push(`missing footer price-removal marker: ${marker}`);
+}
+
+const fieldMarkers = [
+  '--field-stage-w: 1024px',
+  '--field-stage-h: 526px',
+  'bottom: calc(var(--p0-footer-h, 82px) + 14px) !important',
+  'object-fit: contain !important',
+  'pointer-events: auto !important',
+  'touch-action: none !important',
+  'height: 56px !important',
+];
+for (const marker of fieldMarkers) {
+  if (!fieldCss.includes(marker)) failures.push(`missing physical field contract marker: ${marker}`);
 }
 
 const runtimeMarkers = [
@@ -258,9 +271,10 @@ console.log('[kiosk-geometry] PASS');
 console.log(JSON.stringify({
   canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection,
   transactionReadability: true, physicalTopology: '1|3/2|4', centeredSelectionCta: true,
-  footerCommercialPricing: true, startingScene: true,
+  footerCommercialPricing: false, startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
   partnerQrIsolated: true, partnerQrSingleOwner: true,
   portraitAdsFullBleed: true, portraitAdsFocalCrop: true, portraitAdsExplicitHeight: true,
   protectedSupportPolling: true, supportRestartSuppressed: true,
+  allScenesPhysicalFrame: true, advertisingTouchIsolated: true,
 }));
