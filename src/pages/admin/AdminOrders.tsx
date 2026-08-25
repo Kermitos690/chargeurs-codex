@@ -126,6 +126,11 @@ export default function AdminOrders() {
                   {busy === "retry_chargenow" + detail.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réessayer ChargeNow"}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => void act("reconcile", detail.id)} disabled={!!busy}>Réconcilier</Button>
+                {detail.state === "battery_returned" && detail.settlement_status !== "settled" && (
+                  <Button size="sm" variant="secondary" onClick={() => void act("retry_settlement", detail.id)} disabled={!!busy}>
+                    Reprendre le règlement
+                  </Button>
+                )}
                 <Button size="sm" variant="secondary" onClick={() => void act("manual_review", detail.id)} disabled={!!busy}>Revue manuelle</Button>
                 {isSuperAdmin && <Button size="sm" variant="destructive" onClick={() => void act("refund", detail.id)} disabled={!!busy}>Rembourser</Button>}
               </div>
