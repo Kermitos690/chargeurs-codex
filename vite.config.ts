@@ -4,6 +4,49 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
+const manualChunks = (id: string) => {
+  const normalized = id.replace(/\\/g, "/");
+
+  // Keep kiosk-critical application code in the entry chunk while moving
+  // back-office/account surfaces out of it. These remain static chunks (not
+  // React.lazy/dynamic imports), preserving compatibility with the old kiosk
+  // WebView target while avoiding one monolithic 1.4+ MB bundle.
+  if (normalized.includes("/src/pages/admin/") || normalized.includes("/src/components/admin/")) return "admin-app";
+  if (normalized.includes("/src/pages/account/") || normalized.includes("/src/components/account/")) return "account-app";
+
+  if (!normalized.includes("/node_modules/")) return undefined;
+
+  if (
+    normalized.includes("/node_modules/react/")
+    || normalized.includes("/node_modules/react-dom/")
+    || normalized.includes("/node_modules/react-router/")
+    || normalized.includes("/node_modules/react-router-dom/")
+    || normalized.includes("/node_modules/@tanstack/")
+  ) return "react-core";
+
+  if (
+    normalized.includes("/node_modules/@radix-ui/")
+    || normalized.includes("/node_modules/cmdk/")
+    || normalized.includes("/node_modules/vaul/")
+    || normalized.includes("/node_modules/sonner/")
+  ) return "ui-core";
+
+  if (normalized.includes("/node_modules/lucide-react/")) return "icons";
+  if (normalized.includes("/node_modules/@supabase/")) return "supabase";
+  if (
+    normalized.includes("/node_modules/recharts/")
+    || normalized.includes("/node_modules/d3-")
+    || normalized.includes("/node_modules/victory-vendor/")
+  ) return "charts";
+  if (
+    normalized.includes("/node_modules/framer-motion/")
+    || normalized.includes("/node_modules/motion-dom/")
+    || normalized.includes("/node_modules/motion-utils/")
+  ) return "motion";
+
+  return undefined;
+};
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   // The embedded tablet runs Android 8+ (minSdk 26), whose System WebView
@@ -12,6 +55,11 @@ export default defineConfig(({ mode }) => ({
   // that renders a native WebView as an empty page before React can recover.
   build: {
     target: "chrome61",
+    rollupOptions: {
+      output: {
+        manualChunks,
+      },
+    },
   },
   define: {
     __APP_BUILD__: JSON.stringify(new Date().toISOString()),
