@@ -1,0 +1,114 @@
+/*
+ * Physical 1280×720 final kiosk contract.
+ * This file is deliberately imported last so no legacy screen or advertising
+ * rule can put content behind the footer or let an advert extend beyond its
+ * reserved area.
+ */
+html.kiosk-v3 {
+  --p0-footer-h: 82px;
+  --field-ad-rail: 280px;
+}
+
+/* Conditions are shown in the pricing journey, not on the unattended Home. */
+html.kiosk-v3 .kiosk-home-pricing-summary,
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-home-pricing-summary,
+html.kiosk-v3 .kiosk-system-footer__commercial {
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-system-footer {
+  z-index: 900 !important;
+  height: var(--p0-footer-h) !important;
+  min-height: var(--p0-footer-h) !important;
+  max-height: var(--p0-footer-h) !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  overflow: hidden !important;
+}
+
+/* The Home decision controls end before both the ad rail and the footer. */
+html.kiosk-v3[data-kiosk-scene="home"][data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+  left: 28px !important;
+  right: calc(var(--field-ad-rail) + 22px) !important;
+  top: 74px !important;
+  bottom: 14px !important;
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  transform: none !important;
+  overflow: hidden !important;
+}
+
+/* Split adverts: fixed rail, clipped to the physical safe area, artwork intact. */
+html.kiosk-v3 .kiosk-ad-split {
+  position: fixed !important;
+  top: calc(var(--p0-header-h, 66px) + 10px) !important;
+  right: 0 !important;
+  bottom: calc(var(--p0-footer-h) + 10px) !important;
+  width: var(--field-ad-rail) !important;
+  min-width: var(--field-ad-rail) !important;
+  max-width: var(--field-ad-rail) !important;
+  z-index: 850 !important;
+  overflow: hidden !important;
+  clip-path: inset(0) !important;
+  contain: layout paint !important;
+  border-radius: 18px 0 0 18px !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+html.kiosk-v3 .kiosk-ad-split > * {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media-backdrop {
+  display: none !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-qr--split {
+  right: 8px !important;
+  bottom: 8px !important;
+  padding: 6px !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-qr__code {
+  width: 66px !important;
+  height: 66px !important;
+}
+
+/* Fullscreen advertising is still bounded above the footer and owns every touch. */
+html.kiosk-v3 .kiosk-ad-screensaver {
+  position: fixed !important;
+  inset: 0 0 var(--p0-footer-h) 0 !important;
+  z-index: 880 !important;
+  overflow: hidden !important;
+  clip-path: inset(0) !important;
+  contain: layout paint !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+html.kiosk-v3 .kiosk-ad-screensaver > * {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+html.kiosk-v3 .kiosk-ad-screensaver .kiosk-ad-media {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #020817 !important;
+}
+html.kiosk-v3 .kiosk-ad-screensaver-cta {
+  bottom: 18px !important;
+  max-width: calc(100% - 44px) !important;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  html.kiosk-v3 { --field-ad-rail: 280px; }
+}
