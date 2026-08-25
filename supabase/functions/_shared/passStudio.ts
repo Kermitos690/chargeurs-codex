@@ -35,6 +35,11 @@ export type PassStudioInstanceUpdateResult = {
 };
 
 export type PassStudioNotificationMessage = string | Record<string, string>;
+export type ResolvePassStudioPassOptions = {
+  passId?: string | null;
+  passName?: string | null;
+  allowSoleActiveFallback?: boolean;
+};
 
 export class PassStudioError extends Error {
   readonly status: number;
@@ -51,6 +56,11 @@ function safeCode(value: unknown): string {
   const text = String(value ?? "PASS_STUDIO_UNAVAILABLE")
     .toUpperCase().replace(/[^A-Z0-9_:-]/g, "_").slice(0, 96);
   return text || "PASS_STUDIO_UNAVAILABLE";
+}
+
+function normalize(value: string | null | undefined): string {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 async function request<T>(apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -90,10 +100,23 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
   return Array.isArray(payload.passes) ? payload.passes : [];
 }
 
-export async function resolvePassStudioPass(apiKey: string): Promise<PassStudioPass> {
+export async function resolvePassStudioPass(
+  apiKey: string,
+  options: ResolvePassStudioPassOptions = {},
+): Promise<PassStudioPass> {
+  const explicitId = Object.prototype.hasOwnProperty.call(options, "passId");
+  const explicitName = Object.prototype.hasOwnProperty.call(options, "passName");
+  const accountPass = !explicitId && !explicitName;
+  const configuredId = String(explicitId ? options.passId ?? "" : CHARGEURS_ACCOUNT_PASS_ID).trim();
+  const configuredName = String(explicitName ? options.passName ?? "" : "").trim();
   const passes = await listPassStudioPasses(apiKey);
-  const match = passes.find((pass) => pass.passId === CHARGEURS_ACCOUNT_PASS_ID);
-  if (!match) throw new PassStudioError(503, "PASS_STUDIO_ACCOUNT_PASS_NOT_FOUND");
+  const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
+  const wantedName = normalize(configuredName);
+  const byName = wantedName ? passes.find((pass) => normalize(pass.name) === wantedName) : undefined;
+  const active = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
+  const sole = accountPass || options.allowSoleActiveFallback === false ? undefined : active.length === 1 ? active[0] : undefined;
+  const match = byId ?? byName ?? sole;
+  if (!match) throw new PassStudioError(503, accountPass ? "PASS_STUDIO_ACCOUNT_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
   if (String(match.status ?? "active").toLowerCase() !== "active") throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
   return match;
 }
