@@ -130,3 +130,5 @@ export function selectStableClockOffsetMs(samples: NetworkClockSample[]): number
   const offsets = valid.map((sample) => sample.offsetMs).sort((a, b) => a - b);
   return offsets[Math.floor(offsets.length / 2)];
 }
+
+// Production deploy retry marker 1 — no runtime behavior change.
