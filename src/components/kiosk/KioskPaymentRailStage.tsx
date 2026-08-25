@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { ArrowDown, CreditCard, Loader2, QrCode, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   buildChargeursPresentationModel,
@@ -41,7 +41,7 @@ const COPY = {
     eyebrow: "PAIEMENT SÉCURISÉ",
     ready: "Comment souhaitez-vous payer ?",
     terminal: "Sans contact",
-    terminalSub: "Présentez votre carte ou votre téléphone sur le terminal",
+    terminalSub: "La zone sans contact se trouve sous l’écran",
     qr: "QR code",
     qrSub: "Scannez et payez sur votre téléphone",
     qrOnly: "Paiement par QR code",
@@ -49,13 +49,19 @@ const COPY = {
     checking: "Connexion au terminal…",
     checkingSub: "Nous vérifions le lecteur de cette borne avant de vous proposer le paiement.",
     slow: "Le terminal met plus de temps à se connecter. Vous pouvez réessayer ou choisir volontairement le QR code.",
-    processing: "Paiement sans contact en cours",
-    processingSub: "Suivez les instructions affichées sur le terminal.",
+    processing: "Approchez votre carte ou votre téléphone",
+    processingSub: "Maintenez-le sur la zone sans contact située sous l’écran jusqu’à la confirmation.",
+    presentNow: "Présentez maintenant",
+    terminalBelow: "ZONE SANS CONTACT SOUS L’ÉCRAN",
+    contactlessLabel: "Symbole de paiement sans contact",
+    cancellingTitle: "Annulation sécurisée en cours",
+    cancellingSub: "Ne présentez plus votre carte. Nous confirmons l’annulation avant le retour à l’accueil.",
+    cancelReturnHint: "Retour automatique à l’accueil après confirmation",
     staleQr: "Ancien paiement QR détecté",
     staleQrSub: "Ce paiement QR doit être annulé avant de démarrer le terminal sans contact.",
     retry: "Réessayer le lecteur",
     chooseQr: "Payer par QR code",
-    cancel: "Annuler",
+    cancel: "Annuler le paiement",
     cancelling: "Annulation…",
     cancelFailed: "Annulation impossible pour le moment. Réessayez.",
   },
@@ -63,7 +69,7 @@ const COPY = {
     eyebrow: "SECURE PAYMENT",
     ready: "How would you like to pay?",
     terminal: "Contactless",
-    terminalSub: "Tap your card or phone on the payment reader",
+    terminalSub: "The contactless area is below the screen",
     qr: "QR code",
     qrSub: "Scan and pay on your phone",
     qrOnly: "Pay by QR code",
@@ -71,13 +77,19 @@ const COPY = {
     checking: "Connecting payment reader…",
     checkingSub: "We are checking this kiosk reader before showing the payment options.",
     slow: "The payment reader is taking longer to connect. Retry it or explicitly choose QR payment.",
-    processing: "Contactless payment in progress",
-    processingSub: "Follow the instructions shown on the payment reader.",
+    processing: "Hold your card or phone near the reader",
+    processingSub: "Keep it on the contactless area below the screen until confirmation.",
+    presentNow: "Present it now",
+    terminalBelow: "CONTACTLESS AREA BELOW THE SCREEN",
+    contactlessLabel: "Contactless payment symbol",
+    cancellingTitle: "Secure cancellation in progress",
+    cancellingSub: "Remove your card or phone. We are confirming cancellation before returning home.",
+    cancelReturnHint: "Automatic return home after confirmation",
     staleQr: "Previous QR payment detected",
     staleQrSub: "That QR payment must be cancelled before starting contactless payment.",
     retry: "Retry reader",
     chooseQr: "Pay by QR code",
-    cancel: "Cancel",
+    cancel: "Cancel payment",
     cancelling: "Cancelling…",
     cancelFailed: "Unable to cancel right now. Please try again.",
   },
@@ -85,7 +97,7 @@ const COPY = {
     eyebrow: "SICHERE ZAHLUNG",
     ready: "Wie möchten Sie bezahlen?",
     terminal: "Kontaktlos",
-    terminalSub: "Karte oder Smartphone an das Terminal halten",
+    terminalSub: "Die Kontaktlos-Zone befindet sich unter dem Bildschirm",
     qr: "QR-Code",
     qrSub: "Scannen und auf dem Smartphone bezahlen",
     qrOnly: "Per QR-Code bezahlen",
@@ -93,17 +105,74 @@ const COPY = {
     checking: "Zahlungsterminal wird verbunden…",
     checkingSub: "Das Terminal dieser Station wird geprüft, bevor die Zahlungsarten angezeigt werden.",
     slow: "Die Verbindung zum Terminal dauert länger. Versuchen Sie es erneut oder wählen Sie bewusst den QR-Code.",
-    processing: "Kontaktlose Zahlung läuft",
-    processingSub: "Folgen Sie den Anweisungen auf dem Terminal.",
+    processing: "Karte oder Smartphone anhalten",
+    processingSub: "Halten Sie es bis zur Bestätigung an die Kontaktlos-Zone unter dem Bildschirm.",
+    presentNow: "Jetzt vorhalten",
+    terminalBelow: "KONTAKTLOS-ZONE UNTER DEM BILDSCHIRM",
+    contactlessLabel: "Symbol für kontaktloses Bezahlen",
+    cancellingTitle: "Sicherer Abbruch läuft",
+    cancellingSub: "Karte oder Smartphone entfernen. Wir bestätigen den Abbruch vor der Rückkehr zum Start.",
+    cancelReturnHint: "Automatische Rückkehr nach der Bestätigung",
     staleQr: "Vorherige QR-Zahlung erkannt",
     staleQrSub: "Die QR-Zahlung muss abgebrochen werden, bevor kontaktlos bezahlt werden kann.",
     retry: "Leser erneut verbinden",
     chooseQr: "Per QR-Code bezahlen",
-    cancel: "Abbrechen",
+    cancel: "Zahlung abbrechen",
     cancelling: "Abbruch…",
     cancelFailed: "Abbruch derzeit nicht möglich. Bitte erneut versuchen.",
   },
 } as const;
+
+type PaymentCopy = (typeof COPY)[keyof typeof COPY];
+
+function ContactlessSymbol({
+  label,
+  className = "h-20 w-20",
+}: {
+  label: string;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      role="img"
+      aria-label={label}
+      className={className}
+      fill="none"
+    >
+      <circle cx="10" cy="32" r="3.5" fill="currentColor" />
+      <path d="M18 45c7-7.2 7-18.8 0-26" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M30 51c11-10.8 11-27.2 0-38" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+      <path d="M43 57c15-14.6 15-35.4 0-50" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TerminalPlacementGuide({ copy }: { copy: PaymentCopy }) {
+  return (
+    <div className="flex w-full max-w-4xl flex-col items-center gap-0.5">
+      <div className="relative flex h-24 w-full items-center justify-center gap-4">
+        <span className="absolute h-24 w-64 rounded-full bg-cyan-300/15 blur-3xl" />
+        <div className="relative grid h-16 w-28 place-items-center rounded-[1.3rem] border border-cyan-100/25 bg-cyan-300/[.08] shadow-[0_0_36px_rgba(34,211,238,.14)]">
+          <CreditCard className="h-10 w-10 text-cyan-100" aria-hidden />
+        </div>
+        <div className="relative grid h-24 w-24 place-items-center rounded-full border border-cyan-100/35 bg-cyan-300/[.12] text-cyan-100 shadow-[0_0_48px_rgba(34,211,238,.28)]">
+          <span className="absolute inset-2 rounded-full border border-cyan-100/20 motion-safe:animate-ping" />
+          <ContactlessSymbol label={copy.contactlessLabel} className="relative h-16 w-16" />
+        </div>
+        <div className="relative grid h-16 w-16 place-items-center rounded-[1.3rem] border border-violet-200/25 bg-violet-300/[.08] shadow-[0_0_36px_rgba(167,139,250,.14)]">
+          <Smartphone className="h-10 w-10 text-violet-100" aria-hidden />
+        </div>
+      </div>
+      <div className="flex flex-col items-center text-cyan-100">
+        <ArrowDown className="h-8 w-8 motion-safe:animate-bounce" aria-hidden />
+        <span className="rounded-full border border-cyan-100/25 bg-cyan-300/[.09] px-5 py-1 text-sm font-black tracking-[.13em]">
+          {copy.terminalBelow}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function parseProjection(raw: string | undefined): NativeReaderProjection | null {
   if (!raw) return null;
@@ -448,17 +517,60 @@ export function KioskPaymentRailStage(props: Props) {
 
   if (inProgress || model.payment.rail === "TERMINAL") {
     const staleQrConflict = rawNativeRail === "QR";
-    return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-rail={staleQrConflict ? "QR_CONFLICT" : "TERMINAL"} data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
-      <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
-      {staleQrConflict ? <QrCode className="h-20 w-20 text-primary" /> : <CreditCard className="h-20 w-20 text-cyan-100" />}
-      <h2 className="font-display text-5xl font-black tracking-tight">{staleQrConflict ? copy.staleQr : copy.processing}</h2>
-      <p className="max-w-3xl text-xl font-medium text-muted-foreground">{staleQrConflict ? copy.staleQrSub : copy.processingSub}</p>
-      <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-base font-bold"><Loader2 className="h-5 w-5 animate-spin text-primary" /><span>{model.payment.serverConfirmed ? "SERVER CONFIRMED" : `${readerState} · ${model.payment.railState}`}</span></div>
-      <Button variant="outline" onClick={() => void cancelActivePayment()} disabled={cancellingPayment} className="h-14 gap-3 rounded-full px-8 text-base font-black">
-        {cancellingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}
+    const cancellationRequested = cancellingPayment
+      || localRailState === "CANCELLING"
+      || model.payment.railState === "CANCELLING";
+    const title = staleQrConflict
+      ? copy.staleQr
+      : cancellationRequested
+        ? copy.cancellingTitle
+        : copy.processing;
+    const subtitle = staleQrConflict
+      ? copy.staleQrSub
+      : cancellationRequested
+        ? copy.cancellingSub
+        : copy.processingSub;
+
+    return <div
+      className="kiosk-payment-rail-stage flex w-full max-w-6xl flex-col items-center gap-4 px-6 text-center"
+      data-payment-rail={staleQrConflict ? "QR_CONFLICT" : "TERMINAL"}
+      data-reader-state={readerState}
+      data-native-payment-bridge={nativeBridge ? "true" : "false"}
+      aria-live="polite"
+    >
+      <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100">
+        <ShieldCheck className="h-4 w-4" aria-hidden />
+        {copy.eyebrow}
+      </div>
+
+      {staleQrConflict
+        ? <QrCode className="h-20 w-20 text-primary" aria-hidden />
+        : cancellationRequested
+          ? <div className="grid h-28 w-28 place-items-center rounded-full border border-cyan-100/25 bg-cyan-300/10 shadow-[0_0_42px_rgba(34,211,238,.2)]"><Loader2 className="h-14 w-14 animate-spin text-cyan-100" aria-hidden /></div>
+          : <TerminalPlacementGuide copy={copy} />}
+
+      <h2 className="font-display text-5xl font-black leading-[.96] tracking-tight">{title}</h2>
+      <p className="max-w-4xl text-2xl font-semibold leading-snug text-slate-200/80">{subtitle}</p>
+
+      {!staleQrConflict && !cancellationRequested && (
+        <div className="inline-flex items-center gap-3 rounded-full border border-emerald-200/20 bg-emerald-300/[.08] px-6 py-3 text-lg font-black text-emerald-200">
+          <span className="h-3 w-3 animate-pulse rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,.9)]" />
+          {copy.presentNow}
+        </div>
+      )}
+
+      <Button
+        variant="outline"
+        onClick={() => void cancelActivePayment()}
+        disabled={cancellingPayment}
+        className="h-14 gap-3 rounded-full px-9 text-lg font-black"
+      >
+        {cancellingPayment ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <X className="h-5 w-5" aria-hidden />}
         {cancellingPayment ? copy.cancelling : copy.cancel}
       </Button>
-      {cancelError && <p className="text-sm font-semibold text-warning">{copy.cancelFailed} <span className="font-mono text-xs">{cancelError}</span></p>}
+
+      <p className="text-sm font-semibold text-cyan-100/65">{copy.cancelReturnHint}</p>
+      {cancelError && <p role="alert" className="text-sm font-semibold text-warning">{copy.cancelFailed} <span className="font-mono text-xs">{cancelError}</span></p>}
     </div>;
   }
 
@@ -501,7 +613,7 @@ export function KioskPaymentRailStage(props: Props) {
     <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-4 py-2 text-sm font-black tracking-[.14em] text-cyan-100"><ShieldCheck className="h-4 w-4" />{copy.eyebrow}</div>
     <h2 className="font-display text-5xl font-black tracking-tight sm:text-6xl">{copy.ready}</h2>
     <div className="grid w-full grid-cols-2 gap-6">
-      <button type="button" onClick={chooseTerminal} disabled={!terminalStation || !model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
+      <button type="button" onClick={chooseTerminal} disabled={!terminalStation || !model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><ContactlessSymbol label={copy.contactlessLabel} className="h-14 w-14 text-cyan-100" /><div className="mt-10 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
       <button type="button" onClick={chooseQr} disabled={!model.payment.canChooseQr} className="min-h-64 rounded-[2.25rem] border border-white/15 bg-white/[.055] p-8 text-left disabled:opacity-50"><QrCode className="h-12 w-12 text-primary" /><div className="mt-12 font-display text-3xl font-black">{copy.qr}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.qrSub}</p></button>
     </div>
     {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}

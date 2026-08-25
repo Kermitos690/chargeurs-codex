@@ -148,7 +148,7 @@ for (const marker of supportCssMarkers) {
 
 const partnerRuntimeMarkers = [
   'import { KioskAdvertisingPartnerBridge } from "./KioskAdvertisingPartnerBridge";',
-  '<KioskAdvertisingLayer />',
+  '<KioskAdvertisingLayer authoritativeClockOffsetMs={authoritativeClockOffsetMs} />',
   '<KioskAdvertisingPartnerBridge />',
 ];
 for (const marker of partnerRuntimeMarkers) {
