@@ -4,6 +4,7 @@ import {
   PassStudioError,
   type PassStudioPass,
   issuePassStudioPass,
+  listPassStudioPasses,
   requirePassStudioApiKey,
   resolvePassStudioPass,
   updatePassStudioInstance,
@@ -57,6 +58,41 @@ function firstEditableField(pass: PassStudioPass, aliases: string[]) {
   });
 }
 
+const CUSTOM_REQUIRED_GROUPS = [
+  ["credit", "rental_credit", "rentalCredit", "credit_location", "solde", "balance"],
+  ["tier", "status", "membership_status", "status_membre", "niveau"],
+  ["member_rate", "tarif_membre", "rate", "hourly_rate"],
+  ["daily_cap", "plafond_journalier", "cap"],
+  ["points", "chargepoints", "charge_points"],
+  ["next_due", "prochaine_echeance", "membership_end", "fin_adhesion"],
+] as const;
+
+function customReadinessScore(pass: PassStudioPass) {
+  return CUSTOM_REQUIRED_GROUPS.reduce((score, aliases) => score + (firstEditableField(pass, [...aliases]) ? 1 : 0), 0);
+}
+
+function looksLikeChargeursCustomPass(pass: PassStudioPass) {
+  const name = normalizeFieldKey(pass.name ?? "");
+  const type = normalizeFieldKey(pass.passType ?? "");
+  const active = String(pass.status ?? "active").toLowerCase() === "active";
+  return active
+    && name === normalizeFieldKey("Chargeurs+")
+    && (type.includes("custom") || type.includes("generic"));
+}
+
+async function resolvePreferredChargeursPass(apiKey: string): Promise<PassStudioPass> {
+  const passes = await listPassStudioPasses(apiKey);
+  const customCandidates = passes
+    .filter(looksLikeChargeursCustomPass)
+    .map((pass) => ({ pass, score: customReadinessScore(pass) }))
+    .sort((a, b) => b.score - a.score);
+
+  const readyCustom = customCandidates.find(({ score }) => score >= 3)?.pass;
+  if (readyCustom) return readyCustom;
+
+  return await resolvePassStudioPass(apiKey);
+}
+
 function buildChargeursPassFields(
   pass: PassStudioPass,
   values: {
@@ -87,15 +123,15 @@ function buildChargeursPassFields(
   ].filter(Boolean).join(" · ");
 
   assign(["chargepoints", "charge_points", "points", "points_balance", "pointsBalance", "loyalty_points", "solde_points", "solde_de_points"], values.chargePoints);
-  assign(["membership_name", "membership_level", "tier", "level", "niveau"], values.membershipName);
+  assign(["membership_name", "membership_level", "tier", "level", "niveau", "status"], values.membershipName);
   assign(["credit", "rental_credit", "rentalCredit", "credit_location", "solde", "balance"], values.rentalCredit);
   assign(["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"], offerDetails);
   assign(["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"], conditions);
   assign(["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"], values.nextDateIso);
 
   assign(["membership_status", "status_membre"], values.membershipStatus);
-  assign(["member_rate", "tarif_membre"], values.memberRate);
-  assign(["daily_cap", "plafond_journalier"], values.dailyCap);
+  assign(["member_rate", "tarif_membre", "rate", "hourly_rate"], values.memberRate);
+  assign(["daily_cap", "plafond_journalier", "cap"], values.dailyCap);
   assign(["renewal_credit", "credit_adhesion_renouvellement"], values.renewalCredit);
   assign(["next_due", "prochaine_echeance", "membership_end", "fin_adhesion"], values.nextDateDisplay);
 
@@ -196,7 +232,7 @@ export async function handlePassStudioWallet(
 
   let providerPass: PassStudioPass;
   try {
-    providerPass = await resolvePassStudioPass(apiKey);
+    providerPass = await resolvePreferredChargeursPass(apiKey);
   } catch (error) {
     const providerError = safeProviderError(error);
     await recordProviderFailure(providerError.code, "template");
@@ -225,13 +261,16 @@ export async function handlePassStudioWallet(
   }
   applyRealtimePresentation(providerPass, fields, realtimePresentation);
 
-  const existingInstanceId = String(existing?.provider_instance_id ?? "").trim();
+  const existingProviderPassId = String(existing?.provider_pass_id ?? "").trim();
+  const canReuseExistingInstance = Boolean(existing?.provider_instance_id)
+    && existingProviderPassId === providerPass.passId;
+  const existingInstanceId = canReuseExistingInstance ? String(existing?.provider_instance_id ?? "").trim() : "";
 
   try {
     let instanceId = existingInstanceId;
-    let holderId = String(existing?.provider_holder_id ?? "").trim();
-    let barcodeContent = String(existing?.provider_barcode_content ?? "").trim();
-    let addToWalletUrl = String(existing?.provider_add_to_wallet_url ?? "").trim();
+    let holderId = canReuseExistingInstance ? String(existing?.provider_holder_id ?? "").trim() : "";
+    let barcodeContent = canReuseExistingInstance ? String(existing?.provider_barcode_content ?? "").trim() : "";
+    let addToWalletUrl = canReuseExistingInstance ? String(existing?.provider_add_to_wallet_url ?? "").trim() : "";
     let alreadyExisted = Boolean(existingInstanceId);
 
     if (!instanceId) {
@@ -254,7 +293,7 @@ export async function handlePassStudioWallet(
     }
 
     if (Object.keys(fields).length > 0) {
-      await updatePassStudioInstance(apiKey, providerPass, instanceId, fields, null, `wallet:account-sync:${user.id}:${Number(existing?.pass_revision ?? 0) + 1}`);
+      await updatePassStudioInstance(apiKey, providerPass, instanceId, fields, null, `wallet:account-sync:${user.id}:${providerPass.passId}:${Number(existing?.pass_revision ?? 0) + 1}`);
     }
 
     const providerPatch = {
@@ -301,6 +340,7 @@ export async function handlePassStudioWallet(
         provider: "pass_studio",
         provider_pass_id: providerPass.passId,
         provider_instance_id: instanceId,
+        template_changed: Boolean(existingProviderPassId && existingProviderPassId !== providerPass.passId),
         already_existed: alreadyExisted,
         updated_fields: Object.keys(fields),
         realtime_presentation: true,
@@ -315,6 +355,9 @@ export async function handlePassStudioWallet(
         provider: "pass_studio",
         status: "issued",
         addToWalletUrl,
+        passId: providerPass.passId,
+        passType: providerPass.passType ?? null,
+        customTemplateReady: looksLikeChargeursCustomPass(providerPass) && customReadinessScore(providerPass) >= 3,
         alreadyExisted,
         syncedAt: now,
       },
