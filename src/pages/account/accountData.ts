@@ -100,6 +100,15 @@ export type CustomerWalletPass = {
   updated_at: string;
 };
 
+export type CustomerWalletNotification = {
+  id: string;
+  event_type: string;
+  title: string;
+  message: string | null;
+  created_at: string;
+  delivered_at: string | null;
+};
+
 export type CustomerChargePoints = {
   balance: number;
   lastActivityAt: string | null;
@@ -120,6 +129,7 @@ export type PrivateAccountSummary = {
   profile: Record<string, unknown> | null;
   membership: CustomerMembership | null;
   walletPass: CustomerWalletPass | null;
+  walletNotifications: CustomerWalletNotification[];
   chargePoints: CustomerChargePoints;
   rentalCredit: CustomerRentalCredit;
 };
@@ -202,6 +212,7 @@ export async function fetchPrivateAccountSummary(): Promise<PrivateAccountSummar
     profile: (data.data?.profile ?? null) as Record<string, unknown> | null,
     membership: (data.data?.membership ?? null) as CustomerMembership | null,
     walletPass: (data.data?.walletPass ?? null) as CustomerWalletPass | null,
+    walletNotifications: (data.data?.walletNotifications ?? []) as CustomerWalletNotification[],
     chargePoints: {
       balance: Number(data.data?.chargePoints?.balance ?? 0),
       lastActivityAt: data.data?.chargePoints?.lastActivityAt ?? null,
