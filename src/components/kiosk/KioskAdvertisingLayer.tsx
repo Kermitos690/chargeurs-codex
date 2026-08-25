@@ -61,6 +61,20 @@ type PlaybackStatus = "completed" | "failed" | "interrupted";
 const REFRESH_MS = 60_000;
 const CACHE_PREFIX = "chargeurs:ads:playlist:";
 
+function consumeRequestedPlaylistReset(stationId: string): boolean {
+  try {
+    const reset = new URLSearchParams(window.location.search).get("ads-reset");
+    if (!reset || !stationId) return false;
+    const marker = `chargeurs:ads:reset:${stationId}:${reset}`;
+    if (sessionStorage.getItem(marker) === "1") return false;
+    sessionStorage.setItem(marker, "1");
+    localStorage.removeItem(`${CACHE_PREFIX}${stationId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sceneNow(): string {
   return document.documentElement.dataset.kioskScene ?? (document.querySelector(".ck2-home") ? "home" : "other");
 }
@@ -130,6 +144,7 @@ function splitMediaLayout(item: AdItem): "cover" | "adaptive" {
 }
 
 function loadCached(stationId: string): PlaylistResponse | null {
+  if (consumeRequestedPlaylistReset(stationId)) return null;
   try {
     const raw = localStorage.getItem(`${CACHE_PREFIX}${stationId}`);
     if (!raw) return null;
