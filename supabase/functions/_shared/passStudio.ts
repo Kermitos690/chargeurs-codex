@@ -1,6 +1,6 @@
 const PASS_STUDIO_BASE_URL = "https://www.passstudio.online/api/v1";
 const REQUEST_TIMEOUT_MS = 10_000;
-const DEFAULT_PASS_STUDIO_PASS_ID = "kBQ15unyR1QPeUhcRWID";
+export const CHARGEURS_CUSTOM_PASS_ID = "hFAOsekroeBC4IHRTlDI";
 
 export type PassStudioPass = {
   passId: string;
@@ -30,6 +30,7 @@ export type PassStudioInstanceUpdateResult = {
   pushed: boolean;
   providerPushed?: boolean;
   alreadyProcessed?: boolean;
+  pushSkipReason?: "no_change" | "insufficient_credits" | "push_failed" | string;
   warnings?: unknown[];
 };
 
@@ -115,11 +116,12 @@ export async function resolvePassStudioPass(
 ): Promise<PassStudioPass> {
   const hasExplicitId = Object.prototype.hasOwnProperty.call(options, "passId");
   const hasExplicitName = Object.prototype.hasOwnProperty.call(options, "passName");
+  const defaultChargeursAccountPass = !hasExplicitId && !hasExplicitName;
   const configuredId = String(
-    hasExplicitId ? options.passId ?? "" : Deno.env.get("PASS_STUDIO_PASS_ID") ?? DEFAULT_PASS_STUDIO_PASS_ID,
+    hasExplicitId ? options.passId ?? "" : CHARGEURS_CUSTOM_PASS_ID,
   ).trim();
   const configuredName = String(
-    hasExplicitName ? options.passName ?? "" : Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+",
+    hasExplicitName ? options.passName ?? "" : "",
   ).trim();
   const passes = await listPassStudioPasses(apiKey);
 
@@ -129,16 +131,27 @@ export async function resolvePassStudioPass(
     ? passes.find((pass) => normalizePassName(pass.name) === normalizedConfiguredName)
     : undefined;
   const activePasses = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
-  const onlyActive = options.allowSoleActiveFallback === false
+  const onlyActive = defaultChargeursAccountPass || options.allowSoleActiveFallback === false
     ? undefined
     : activePasses.length === 1 ? activePasses[0] : undefined;
   const match = byId ?? byName ?? onlyActive;
 
   if (!match) {
-    throw new PassStudioError(503, configuredId || configuredName ? "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
+    throw new PassStudioError(503, defaultChargeursAccountPass ? "PASS_STUDIO_CUSTOM_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
   }
   if (String(match.status ?? "active").toLowerCase() !== "active") {
     throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
+  }
+  if (defaultChargeursAccountPass) {
+    const passType = normalizePassName(match.passType);
+    if (!passType.includes("custom") && !passType.includes("generic")) {
+      throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
+    }
+    const templateOwned = new Set(match.templateOwnedFieldKeys ?? []);
+    const editableCount = (match.fieldKeys ?? []).filter((key) => !templateOwned.has(key)).length;
+    if (editableCount < 3) {
+      throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
+    }
   }
   return match;
 }
