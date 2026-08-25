@@ -17,6 +17,9 @@ const backendSource = await Deno.readTextFile(new URL("../stripe-terminal-backen
 const qrSource = await Deno.readTextFile(new URL("../create-stripe-checkout/index.ts", import.meta.url));
 const webhookSource = await Deno.readTextFile(new URL("../stripe-webhook/index.ts", import.meta.url));
 const webhookGatewaySource = await Deno.readTextFile(new URL("../stripe-webhook-gateway/index.ts", import.meta.url));
+const terminalCancellationMigration = await Deno.readTextFile(
+  new URL("../../migrations/20260825112843_finalize_confirmed_terminal_cancellation.sql", import.meta.url),
+);
 
 Deno.test("Terminal amount remains server-owned from rental canonical deposit", () => {
   assertEquals(canonicalTerminalAmountCents({ deposit_amount_cents: 3000, pricing_snapshot: { deposit_cents: 9999 } }), 3000);
@@ -126,6 +129,16 @@ Deno.test("cancel timeout and uncertain failure never auto-fallback to QR", () =
   assertEquals(backendSource.includes("checkout.sessions.create"), false);
 });
 
+Deno.test("Stripe-confirmed Terminal cancellation atomically clears only pre-ejection state", () => {
+  assert(backendSource.includes("finalizeConfirmedTerminalCancellation"));
+  assert(backendSource.includes('finalize_confirmed_terminal_cancellation'));
+  assert(terminalCancellationMigration.includes("TERMINAL_CANCELLATION_AFTER_HARDWARE_COMMAND"));
+  assert(terminalCancellationMigration.includes("TERMINAL_CANCELLATION_FINANCIAL_SIDE_EFFECT"));
+  assert(terminalCancellationMigration.includes("state = 'payment_cancelled'"));
+  assert(terminalCancellationMigration.includes("old.state = 'needs_support' and new.state = 'payment_cancelled'"));
+  assert(terminalCancellationMigration.includes("a.status = 'canceled'"));
+});
+
 Deno.test("QR claims rail before creating a Checkout side effect", () => {
   const claim = qrSource.indexOf('p_rail: "qr_checkout"');
   const stripeClient = qrSource.indexOf("const stripe = new Stripe", claim);
@@ -173,7 +186,7 @@ Deno.test("simulated Terminal reconciliation voids only its own capturable TEST 
   assert(backendSource.includes('claim?.metadata?.reader_mode === "simulated"'));
   assert(backendSource.includes("intent.livemode === false"));
   assert(backendSource.includes('if (isSimulatedTerminalIntent && intent.status === "requires_capture")'));
-  assert(backendSource.includes('p_reason: isSimulatedTerminalIntent'));
+  assert(backendSource.includes('isSimulatedTerminalIntent\n          ? "simulated_terminal_authorization_voided_no_hardware"'));
   assert(backendSource.includes('"simulated_terminal_authorization_voided_no_hardware"'));
   assert(backendSource.includes('simulatedAuthorizationVoided\n    ? "CANCELLED"'));
 });

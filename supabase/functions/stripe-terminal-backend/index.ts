@@ -101,6 +101,14 @@ async function loadClaimAndAttempt(db: any, rentalSessionId: string) {
   return { claim, attempt };
 }
 
+async function finalizeConfirmedTerminalCancellation(db: any, rentalSessionId: string, reason: string) {
+  const { error } = await db.rpc("finalize_confirmed_terminal_cancellation", {
+    p_rental_id: rentalSessionId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+}
+
 async function projectState(db: any, stripe: Stripe, session: any, reconcile: boolean) {
   const { claim, attempt } = await loadClaimAndAttempt(db, String(session.id));
   let stripeStatus = attempt?.status ?? null;
@@ -142,13 +150,13 @@ async function projectState(db: any, stripe: Stripe, session: any, reconcile: bo
     if (stripeStatus === "canceled") update.canceled_at = new Date().toISOString();
     await db.from("stripe_terminal_payment_attempts").update(update).eq("rental_session_id", session.id);
     if (stripeStatus === "canceled") {
-      await db.rpc("release_rental_payment_rail_claim", {
-        p_rental_id: session.id,
-        p_expected_rail: "stripe_terminal",
-        p_reason: isSimulatedTerminalIntent
+      await finalizeConfirmedTerminalCancellation(
+        db,
+        String(session.id),
+        isSimulatedTerminalIntent
           ? "simulated_terminal_authorization_voided_no_hardware"
           : "stripe_confirmed_canceled",
-      });
+      );
     }
   }
 
@@ -283,18 +291,18 @@ Deno.serve(async (req) => {
         if (current.attempt?.reconciliation_required || current.claim?.claim_state === "reconciliation_required") {
           return json({ ok: false, error: "PAYMENT_RECONCILIATION_REQUIRED" }, 409);
         }
-        await db.rpc("release_rental_payment_rail_claim", {
-          p_rental_id: rentalSessionId,
-          p_expected_rail: "stripe_terminal",
-          p_reason: action === "timeout_payment_intent" ? "timeout_before_stripe_side_effect" : "cancel_before_stripe_side_effect",
-        });
+        await finalizeConfirmedTerminalCancellation(
+          db,
+          rentalSessionId,
+          action === "timeout_payment_intent" ? "timeout_before_stripe_side_effect" : "cancel_before_stripe_side_effect",
+        );
         return json({ ok: true, rail: "NONE", railState: action === "timeout_payment_intent" ? "EXPIRED" : "CANCELLED", serverConfirmed: false });
       }
 
       const intent = await stripe.paymentIntents.retrieve(String(intentId));
       if (intent.status === "canceled") {
         await db.from("stripe_terminal_payment_attempts").update({ status: "canceled", canceled_at: new Date().toISOString(), reconciliation_required: false, last_reconciled_at: new Date().toISOString() }).eq("rental_session_id", rentalSessionId);
-        await db.rpc("release_rental_payment_rail_claim", { p_rental_id: rentalSessionId, p_expected_rail: "stripe_terminal", p_reason: "stripe_already_canceled" });
+        await finalizeConfirmedTerminalCancellation(db, rentalSessionId, "stripe_already_canceled");
         return json({ ok: true, rail: "NONE", railState: "CANCELLED", serverConfirmed: false });
       }
       if (intent.status === "requires_capture" || intent.status === "succeeded") {
@@ -320,11 +328,11 @@ Deno.serve(async (req) => {
         last_reconciled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).eq("rental_session_id", rentalSessionId);
-      await db.rpc("release_rental_payment_rail_claim", {
-        p_rental_id: rentalSessionId,
-        p_expected_rail: "stripe_terminal",
-        p_reason: action === "timeout_payment_intent" ? "stripe_confirmed_timeout_cancel" : "stripe_confirmed_cancel",
-      });
+      await finalizeConfirmedTerminalCancellation(
+        db,
+        rentalSessionId,
+        action === "timeout_payment_intent" ? "stripe_confirmed_timeout_cancel" : "stripe_confirmed_cancel",
+      );
       return json({ ok: true, paymentIntentId: canceled.id, stripeStatus: canceled.status, rail: "NONE", railState: action === "timeout_payment_intent" ? "EXPIRED" : "CANCELLED", serverConfirmed: false });
     }
 
