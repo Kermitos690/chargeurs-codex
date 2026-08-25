@@ -167,3 +167,23 @@ Deno.test("settlement remains scoped to the uniquely correlated rental, not an e
   assertEquals(callbackSource.includes("triggerSettlement(String(extra"), false);
   assertEquals(callbackSource.includes('from("rental_sessions").insert'), false);
 });
+
+Deno.test("paired exact cabinet events repair only a legacy fallback release identity", () => {
+  const start = callbackSource.indexOf("async function repairProviderFallbackReleaseIdentity");
+  const end = callbackSource.indexOf("async function physicalReturnTime", start);
+  assert(start >= 0);
+  assert(end > start);
+  const repair = callbackSource.slice(start, end);
+
+  assert(repair.includes('eventType: "BATTERY_BORROW_OUT"'));
+  assert(repair.includes('eventType: "BATTERY_IN"'));
+  assert(repair.includes("provider_identity_fallback === true"));
+  assert(repair.includes('result: "unexpected_release"'));
+  assert(repair.includes('p_event_type: "release_identity_corrected"'));
+  assert(repair.includes('chargenow_status: "unexpected_release_detected"'));
+  assert(repair.includes(".neq(\"id\", rentalId)"));
+  assert(repair.includes("releases.length !== 1 || returns.length !== 1"));
+  assert(repair.includes("no_hardware_command: true"));
+  assert(repair.includes("no_payment_mutation: true"));
+  assertEquals(repair.includes("ejectBy"), false);
+});
