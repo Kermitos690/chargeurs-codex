@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  Bell,
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
@@ -20,8 +21,10 @@ import {
   CustomerChargePoints,
   CustomerMembership,
   CustomerRentalCredit,
+  CustomerWalletNotification,
   CustomerWalletPass,
   fetchPrivateAccountSummary,
+  fetchWalletNotificationHistory,
   formatAccountDate,
   formatCents,
   membershipPlan,
@@ -34,6 +37,7 @@ type State = {
   walletPass: CustomerWalletPass | null;
   chargePoints: CustomerChargePoints;
   rentalCredit: CustomerRentalCredit;
+  walletNotifications: CustomerWalletNotification[];
 };
 
 type ManageAction = "portal" | "cancel_at_period_end" | "resume";
@@ -46,10 +50,12 @@ const initial: State = {
   walletPass: null,
   chargePoints: { balance: 0, lastActivityAt: null },
   rentalCredit: { balanceCents: 0, currency: "CHF", nextExpiryAt: null, lastActivityAt: null },
+  walletNotifications: [],
 };
 
 export default function AccountPass() {
   const [state, setState] = useState<State>(initial);
+  const [walletHistoryError, setWalletHistoryError] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [subscribeError, setSubscribeError] = useState<string | null>(null);
   const [managementAction, setManagementAction] = useState<ManageAction | null>(null);
@@ -62,8 +68,16 @@ export default function AccountPass() {
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
+    setWalletHistoryError(false);
     try {
-      const summary = await fetchPrivateAccountSummary();
+      const [summaryResult, historyResult] = await Promise.allSettled([
+        fetchPrivateAccountSummary(),
+        fetchWalletNotificationHistory(10),
+      ]);
+      if (summaryResult.status !== "fulfilled") throw summaryResult.reason;
+      const summary = summaryResult.value;
+      const walletNotifications = historyResult.status === "fulfilled" ? historyResult.value : [];
+      setWalletHistoryError(historyResult.status === "rejected");
       setState({
         loading: false,
         error: false,
@@ -71,6 +85,7 @@ export default function AccountPass() {
         walletPass: summary.walletPass,
         chargePoints: summary.chargePoints,
         rentalCredit: summary.rentalCredit,
+        walletNotifications,
       });
     } catch {
       setState((s) => ({ ...s, loading: false, error: true }));
@@ -247,6 +262,38 @@ export default function AccountPass() {
             <p className="mt-1 text-xs text-muted-foreground">Identifiant opaque. Le scan redirige vers l’authentification et ne donne jamais accès au compte à lui seul.</p>
           </div>
         </div>
+      </section>
+
+      <section id="historique-wallet" className="glass rounded-3xl p-6 sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-violet-500/10 p-2.5 text-violet-300"><Bell className="h-6 w-6" /></div>
+            <div>
+              <h2 className="font-display text-xl font-bold">Historique Wallet</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Les 10 dernières notifications Wallet livrées, du plus récent au plus ancien.</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="rounded-full" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Actualiser</Button>
+        </div>
+
+        {walletHistoryError ? (
+          <div className="mt-5 rounded-2xl border border-warning/25 bg-warning/10 p-4 text-sm text-warning">L’historique Wallet n’a pas pu être chargé. Les notifications restent conservées côté Chargeurs.ch ; réessayez dans un instant.</div>
+        ) : state.walletNotifications.length === 0 ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">Aucune notification Wallet pour le moment.</div>
+        ) : (
+          <div className="mt-5 divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70 bg-background/25">
+            {state.walletNotifications.map((notification) => (
+              <article key={notification.id} className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-semibold">{notification.title}</h3>
+                  <time className="text-xs text-muted-foreground" dateTime={notification.delivered_at ?? notification.created_at}>{formatAccountDate(notification.delivered_at ?? notification.created_at)}</time>
+                </div>
+                {notification.message ? <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{notification.message}</p> : null}
+              </article>
+            ))}
+          </div>
+        )}
+        <p className="mt-4 text-xs text-muted-foreground">Cette liste est un affichage récent. L’historique technique complet reste conservé côté Chargeurs.ch et n’est pas supprimé lorsque de nouvelles notifications arrivent.</p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">

@@ -1,7 +1,7 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
 import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
-import { CHARGEURS_CUSTOM_PASS_ID } from "../_shared/passStudio.ts";
+import { CHARGEURS_ACCOUNT_PASS_ID } from "../_shared/passStudio.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -32,6 +32,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     db.from("customer_membership_credit_balances").select("balance_cents,currency,next_expiry_at,last_activity_at").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
   ]);
   if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
+  if (profileResult.error) throw new Error("PROFILE_UNAVAILABLE");
   if (membershipResult.error) throw new Error("MEMBERSHIP_UNAVAILABLE");
   if (walletResult.error) throw new Error("WALLET_PASS_UNAVAILABLE");
   if (pointsResult.error) throw new Error("CHARGEPOINTS_UNAVAILABLE");
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
       if (walletError) return json({ ok: false, error: "WALLET_PASS_UNAVAILABLE" }, 500);
       const addToWalletUrl = String(wallet?.provider_add_to_wallet_url ?? "").trim();
       const existingPassStudioPass = wallet?.provider === "pass_studio"
-        && wallet?.provider_pass_id === CHARGEURS_CUSTOM_PASS_ID
+        && wallet?.provider_pass_id === CHARGEURS_ACCOUNT_PASS_ID
         && Boolean(wallet?.provider_instance_id)
         && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
       if (existingPassStudioPass) {

@@ -1,6 +1,6 @@
 const PASS_STUDIO_BASE_URL = "https://www.passstudio.online/api/v1";
 const REQUEST_TIMEOUT_MS = 10_000;
-export const CHARGEURS_CUSTOM_PASS_ID = "hFAOsekroeBC4IHRTlDI";
+export const CHARGEURS_ACCOUNT_PASS_ID = "kBQ15unyRlQPeUhcRWID";
 
 export type PassStudioPass = {
   passId: string;
@@ -100,11 +100,14 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
   return Array.isArray(payload.passes) ? payload.passes : [];
 }
 
-export async function resolvePassStudioPass(apiKey: string, options: ResolvePassStudioPassOptions = {}): Promise<PassStudioPass> {
+export async function resolvePassStudioPass(
+  apiKey: string,
+  options: ResolvePassStudioPassOptions = {},
+): Promise<PassStudioPass> {
   const explicitId = Object.prototype.hasOwnProperty.call(options, "passId");
   const explicitName = Object.prototype.hasOwnProperty.call(options, "passName");
   const accountPass = !explicitId && !explicitName;
-  const configuredId = String(explicitId ? options.passId ?? "" : CHARGEURS_CUSTOM_PASS_ID).trim();
+  const configuredId = String(explicitId ? options.passId ?? "" : CHARGEURS_ACCOUNT_PASS_ID).trim();
   const configuredName = String(explicitName ? options.passName ?? "" : "").trim();
   const passes = await listPassStudioPasses(apiKey);
   const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
@@ -113,14 +116,8 @@ export async function resolvePassStudioPass(apiKey: string, options: ResolvePass
   const active = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
   const sole = accountPass || options.allowSoleActiveFallback === false ? undefined : active.length === 1 ? active[0] : undefined;
   const match = byId ?? byName ?? sole;
-  if (!match) throw new PassStudioError(503, accountPass ? "PASS_STUDIO_CUSTOM_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
+  if (!match) throw new PassStudioError(503, accountPass ? "PASS_STUDIO_ACCOUNT_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
   if (String(match.status ?? "active").toLowerCase() !== "active") throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
-  if (accountPass) {
-    const passType = normalize(match.passType);
-    if (!passType.includes("custom") && !passType.includes("generic")) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
-    // Do not block issuance while Pass Studio is still propagating generated fieldKeys.
-    // The template identity/type remain strict; dynamic values are applied best-effort.
-  }
   return match;
 }
 

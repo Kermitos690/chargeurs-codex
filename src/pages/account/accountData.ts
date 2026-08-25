@@ -100,6 +100,15 @@ export type CustomerWalletPass = {
   updated_at: string;
 };
 
+export type CustomerWalletNotification = {
+  id: string;
+  event_type: string;
+  title: string;
+  message: string;
+  created_at: string;
+  delivered_at: string | null;
+};
+
 export type CustomerChargePoints = {
   balance: number;
   lastActivityAt: string | null;
@@ -187,6 +196,28 @@ export async function fetchCustomerRentals(limit = 100): Promise<CustomerRental[
 export async function fetchCustomerPayments(limit = 100): Promise<CustomerPayment[]> {
   const summary = await fetchPrivateAccountSummary();
   return summary.payments.slice(0, limit);
+}
+
+export async function fetchWalletNotificationHistory(limit = 10): Promise<CustomerWalletNotification[]> {
+  const rpcClient = supabase as unknown as {
+    rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  };
+  const { data, error } = await rpcClient.rpc("customer_wallet_notification_history", {
+    p_limit: Math.min(Math.max(Math.trunc(limit), 1), 10),
+  });
+  if (error) throw new Error("WALLET_NOTIFICATION_HISTORY_UNAVAILABLE");
+  if (!Array.isArray(data)) return [];
+  return data.map((row) => {
+    const item = row as Record<string, unknown>;
+    return {
+      id: String(item.id ?? ""),
+      event_type: String(item.event_type ?? "wallet_update"),
+      title: String(item.title ?? "Mise à jour Wallet"),
+      message: String(item.message ?? ""),
+      created_at: String(item.created_at ?? ""),
+      delivered_at: item.delivered_at ? String(item.delivered_at) : null,
+    };
+  }).filter((item) => Boolean(item.id && item.created_at));
 }
 
 export async function fetchPrivateAccountSummary(): Promise<PrivateAccountSummary> {
