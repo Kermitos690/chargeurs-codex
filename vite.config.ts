@@ -29,9 +29,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       // The kiosk wrapper (src/pwa/registerSW.ts) is the ONLY registrar.
       injectRegister: null,
-      // "prompt": we control when the new SW activates so we never reload
-      // during an active rental or payment.
-      registerType: "prompt",
+      // A fresh worker activates as soon as it has been downloaded. It does not\n      // reload the active page, so an in-progress rental or payment keeps running;\n      // the next navigation uses the new app shell instead of a stale kiosk UI.\n      registerType: "autoUpdate",
       filename: "sw.js",
       // No SW in dev / Lovable preview.
       devOptions: { enabled: false },
@@ -60,7 +58,7 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
-        skipWaiting: false,
+        // Let a downloaded fix take control immediately; the current page is not\n        // force-reloaded, avoiding any interruption to an active transaction.\n        skipWaiting: true,
         // OAuth callback must never be served from cache / fallback.
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/~oauth/, /^\/admin/, /\/functions\//, /\/rest\//, /\/auth\//],
