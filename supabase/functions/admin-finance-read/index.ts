@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
   if (action === "rentals") {
     const { data, error } = await db.from("rental_sessions")
-      .select("id,public_session_code,state,station_id,cabinet_id,shop_id,selected_slot_num,battery_id,apifox_trade_no,chargenow_order_id,chargenow_status,stripe_checkout_session_id,stripe_payment_intent_id,stripe_payment_method_type,amount_expected,amount_paid,currency,retry_count,created_at,paid_at,ejected_at,returned_at,failure_code,failure_message,settlement_status,settlement_error,final_amount_cents,captured_amount_cents,refunded_amount_cents")
+      .select("id,public_session_code,state,station_id,cabinet_id,shop_id,selected_slot_num,battery_id,apifox_trade_no,chargenow_order_id,chargenow_status,stripe_checkout_session_id,stripe_payment_intent_id,stripe_payment_method_type,amount_expected,amount_paid,currency,retry_count,created_at,paid_at,ejected_at,returned_at,return_station_id,returned_slot_num,return_external_event_id,failure_code,failure_message,settlement_status,settlement_error,final_amount_cents,captured_amount_cents,refunded_amount_cents")
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) return json({ ok: false, error: "RENTALS_READ_FAILED" }, 500);

@@ -26,6 +26,18 @@ export default function AdminOrders() {
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const hasVerifiedPhysicalReturn = (r: Row) => Boolean(
+    r.returned_at && r.battery_id && r.return_station_id && r.returned_slot_num != null,
+  );
+  const returnFinal = (r: Row) => hasVerifiedPhysicalReturn(r) || ["battery_returned", "completed", "closed"].includes(String(r.state));
+  const returnEvidence = (r: Row) => {
+    if (!r.returned_at) return "Non confirmé";
+    if (r.return_station_id && r.returned_slot_num != null && r.battery_id) {
+      return `Confirmé — ${r.return_station_id}, slot ${r.returned_slot_num}`;
+    }
+    return "Signalé — identité ou slot à vérifier";
+  };
+
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -60,7 +72,9 @@ export default function AdminOrders() {
         toast.error(actionError(data?.error, error?.message));
         return;
       }
-      toast.success("Action exécutée");
+      toast.success(action === "repair_verified_return_statuses"
+        ? `${data.repaired_count ?? 0} retour(s) confirmé(s) corrigé(s)`
+        : "Action exécutée");
       await load(true);
       setDetail(null);
     } finally {
@@ -75,6 +89,9 @@ export default function AdminOrders() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-3xl font-bold">Locations / Commandes</h1>
         <div className="flex items-center gap-2">
+          {isSuperAdmin && <Button variant="secondary" onClick={() => void act("repair_verified_return_statuses", "")} disabled={!!busy}>
+            {busy === "repair_verified_return_statuses" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réparer les retours confirmés"}
+          </Button>}
           <div className="glass flex items-center gap-2 rounded-xl px-3"><Search className="h-4 w-4 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher…" className="border-0 bg-transparent focus-visible:ring-0" />
           </div>
@@ -85,7 +102,7 @@ export default function AdminOrders() {
       </div>
 
       <DataTable
-        columns={["Code", "État", "Stripe", "ChargeNow", "Station", "Slot", "Attendu", "Payé", "Moyen", "Créé", "Payé le", "Retries", ""]}
+        columns={["Code", "État", "Stripe", "Réf. fournisseur", "Station", "Slot", "Attendu", "Payé", "Moyen", "Créé", "Payé le", "Retries", ""]}
         empty={loading ? "Chargement…" : "Aucune location."}
         rows={filtered.map((r) => [
           <span className="font-mono text-xs">{r.public_session_code ?? String(r.id).slice(0, 8)}</span>,
@@ -110,7 +127,8 @@ export default function AdminOrders() {
               {[
                 ["Station", detail.station_id], ["Cabinet", detail.cabinet_id], ["Shop", detail.shop_id],
                 ["Slot", detail.selected_slot_num], ["TradeNo", detail.apifox_trade_no], ["Order id", detail.chargenow_order_id],
-                ["CN status", detail.chargenow_status], ["Stripe PI", detail.stripe_payment_intent_id],
+                ["Statut fournisseur", detail.chargenow_status], ["Retour physique", returnEvidence(detail)],
+                ["Stripe PI", detail.stripe_payment_intent_id],
                 ["Attendu", `${detail.amount_expected ?? "—"} ${detail.currency}`], ["Payé", `${detail.amount_paid ?? "—"} ${detail.currency}`],
                 ["Moyen", detail.stripe_payment_method_type], ["Retries", detail.retry_count],
                 ["Créé", fmt(detail.created_at)], ["Payé", fmt(detail.paid_at)], ["Éjecté", fmt(detail.ejected_at)],
@@ -122,11 +140,20 @@ export default function AdminOrders() {
             </div>
             {canWrite ? (
               <div className="mt-6 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => void act("retry_chargenow", detail.id)} disabled={!!busy}>
-                  {busy === "retry_chargenow" + detail.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réessayer ChargeNow"}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => void act("reconcile", detail.id)} disabled={!!busy}>Réconcilier</Button>
-                <Button size="sm" variant="secondary" onClick={() => void act("manual_review", detail.id)} disabled={!!busy}>Revue manuelle</Button>
+                {!returnFinal(detail) && <>
+                  <Button size="sm" onClick={() => void act("retry_chargenow", detail.id)} disabled={!!busy}>
+                    {busy === "retry_chargenow" + detail.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Réessayer ChargeNow"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => void act("reconcile", detail.id)} disabled={!!busy}>Réconcilier</Button>
+                </>}
+                {detail.state === "battery_returned" && detail.settlement_status !== "settled" && (
+                  <Button size="sm" variant="secondary" onClick={() => void act("retry_settlement", detail.id)} disabled={!!busy}>
+                    Reprendre le règlement
+                  </Button>
+                )}
+                {!(detail.state === "completed" && detail.settlement_status === "settled") && (
+                  <Button size="sm" variant="secondary" onClick={() => void act("manual_review", detail.id)} disabled={!!busy}>Revue manuelle</Button>
+                )}
                 {isSuperAdmin && <Button size="sm" variant="destructive" onClick={() => void act("refund", detail.id)} disabled={!!busy}>Rembourser</Button>}
               </div>
             ) : (

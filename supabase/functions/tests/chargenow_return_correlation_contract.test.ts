@@ -7,6 +7,9 @@ import {
 const callbackSource = await Deno.readTextFile(
   new URL("../chargenow-rent-callback/index.ts", import.meta.url),
 );
+const adminActionSource = await Deno.readTextFile(
+  new URL("../rental-admin-action/index.ts", import.meta.url),
+);
 
 Deno.test("same contractual battery returned to a different slot is accepted", () => {
   const evidence = selectPhysicalReturnEvidence([
@@ -130,6 +133,31 @@ Deno.test("return callback never issues a second hardware command", () => {
   assertEquals(callbackSource.includes("ejectByRent"), false);
   assertEquals(callbackSource.includes("eject-after-payment"), false);
   assert(callbackSource.includes("automatic_retry_allowed: false"));
+});
+
+Deno.test("verified physical return normalizes only ordinary stale supplier states", () => {
+  const statusProjection = callbackSource.slice(
+    callbackSource.indexOf("RETURN_STATUS_NORMALIZATION_SOURCES"),
+    callbackSource.indexOf("await client.from(\"batteries\")"),
+  );
+  assert(statusProjection.includes('chargenow_status: "returned"'));
+  assert(statusProjection.includes('"ejected"'));
+  assert(statusProjection.includes('"borrowing"'));
+  assert(statusProjection.includes('priorChargeNowStatus === null'));
+  assertEquals(statusProjection.includes("multi_release_detected"), false);
+  assertEquals(statusProjection.includes("unexpected_release_detected"), false);
+  assertEquals(statusProjection.includes("release_battery_mismatch"), false);
+});
+
+Deno.test("operator actions cannot re-query or re-eject a verified returned rental", () => {
+  assert(adminActionSource.includes("PHYSICAL_RETURN_ALREADY_CONFIRMED"));
+  assert(adminActionSource.includes("already_returned: true"));
+  assert(adminActionSource.includes("repair_verified_return_statuses"));
+  const retry = adminActionSource.slice(
+    adminActionSource.indexOf('if (action === "retry_chargenow")'),
+    adminActionSource.indexOf('if (action === "manual_review")'),
+  );
+  assert(retry.indexOf("isReturnFinalState(session)") < retry.indexOf('callInternalFunction("eject-after-payment"'));
 });
 
 Deno.test("settlement remains scoped to the uniquely correlated rental, not an extra battery", () => {
