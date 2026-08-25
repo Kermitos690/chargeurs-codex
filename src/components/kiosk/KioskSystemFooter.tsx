@@ -21,6 +21,8 @@ type CustomerOptions = {
 
 type ConnectionState = "online" | "limited" | "offline" | "checking";
 
+const FOOTER_BACKEND_REFRESH_MS = 10 * 60_000;
+
 const COPY = {
   fr: {
     secure: "Paiement sécurisé par Stripe",
@@ -91,7 +93,7 @@ export function KioskSystemFooter() {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 30_000);
+    const interval = window.setInterval(() => void refresh(), FOOTER_BACKEND_REFRESH_MS);
     return () => window.clearInterval(interval);
   }, [refresh]);
 
