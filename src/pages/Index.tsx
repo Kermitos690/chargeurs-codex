@@ -99,10 +99,16 @@ export default function Index() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleStations.map((station) => {
               const connection = stationConnectionState(station);
+              const maintenance = station.status === "maintenance";
+              const availabilityLabel = connection === "online"
+                ? "Disponible"
+                : maintenance
+                  ? "Location temporairement suspendue"
+                  : stationConnectionLabel(station);
               return <Link key={station.station_id} to={publicStationPath(station.station_id)} className="glass liquid-border group rounded-2xl p-6 text-left transition-transform hover:scale-[1.03]">
                 <div className="flex items-start justify-between gap-3">
                   <MonitorSmartphone className="h-7 w-7 text-primary" />
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${connection === "online" ? "bg-success/15 text-success" : connection === "unknown" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>{connection === "online" ? "Disponible" : stationConnectionLabel(station)}</span>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${connection === "online" ? "bg-success/15 text-success" : maintenance || connection === "unknown" ? "bg-warning/15 text-warning" : "bg-muted text-muted-foreground"}`}>{availabilityLabel}</span>
                 </div>
                 <div className="mt-4 font-mono text-xs text-muted-foreground">{station.station_id}</div>
                 <div className="text-lg font-bold">{station.name}</div>
