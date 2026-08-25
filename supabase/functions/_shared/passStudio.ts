@@ -118,9 +118,8 @@ export async function resolvePassStudioPass(apiKey: string, options: ResolvePass
   if (accountPass) {
     const passType = normalize(match.passType);
     if (!passType.includes("custom") && !passType.includes("generic")) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
-    const owned = new Set(match.templateOwnedFieldKeys ?? []);
-    const editable = (match.fieldKeys ?? []).filter((key) => !owned.has(key));
-    if (editable.length < 5) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
+    // Do not block issuance while Pass Studio is still propagating generated fieldKeys.
+    // The template identity/type remain strict; dynamic values are applied best-effort.
   }
   return match;
 }

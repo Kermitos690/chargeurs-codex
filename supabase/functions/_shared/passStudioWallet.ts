@@ -56,11 +56,6 @@ export function chargeursCustomFieldMap(pass: PassStudioPass): ChargeursCustomFi
   if (pass.passId !== CHARGEURS_CUSTOM_PASS_ID) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
   const keys = editableKeys(pass);
   if (keys.length < 5) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
-
-  // Prefer semantic provider keys when Pass Studio exposes them. The Custom Pass
-  // editor currently generates keys internally, so the five-field template order
-  // is the deterministic fallback agreed for #1002:
-  // 1 Crédit location, 2 Statut, 3 ChargePoints, 4 Tarif membre, 5 Historique récent.
   const used = new Set<string>();
   const pick = (aliases: string[], fallbackIndex: number) => {
     const semantic = byAliases(pass, aliases);
@@ -69,7 +64,6 @@ export function chargeursCustomFieldMap(pass: PassStudioPass): ChargeursCustomFi
     used.add(key);
     return key;
   };
-
   return {
     rentalCredit: pick(["rental_credit", "credit", "credit_location", "solde", "balance"], 0),
     status: pick(["status", "tier", "statut", "membership_status"], 1),
@@ -77,6 +71,23 @@ export function chargeursCustomFieldMap(pass: PassStudioPass): ChargeursCustomFi
     memberRate: pick(["member_rate", "tarif_membre", "rate", "hourly_rate"], 3),
     recentActivity: pick(["recent_activity", "historique_recent", "history", "activity"], 4),
   };
+}
+
+function customValues(input: {
+  rentalCredit: string;
+  status: string;
+  chargePoints: number;
+  memberRate: string;
+  dailyCap: string;
+  recentActivity: string;
+}) {
+  return [
+    input.rentalCredit,
+    input.status,
+    input.chargePoints,
+    `${input.memberRate} · plafond ${input.dailyCap}`,
+    input.recentActivity || "Aucune activité récente",
+  ] as const;
 }
 
 export function chargeursCustomFields(
@@ -91,13 +102,59 @@ export function chargeursCustomFields(
   },
 ) {
   const map = chargeursCustomFieldMap(pass);
+  const values = customValues(input);
   return {
-    [map.rentalCredit]: input.rentalCredit,
-    [map.status]: input.status,
-    [map.chargePoints]: input.chargePoints,
-    [map.memberRate]: `${input.memberRate} · plafond ${input.dailyCap}`,
-    [map.recentActivity]: input.recentActivity || "Aucune activité récente",
+    [map.rentalCredit]: values[0],
+    [map.status]: values[1],
+    [map.chargePoints]: values[2],
+    [map.memberRate]: values[3],
+    [map.recentActivity]: values[4],
   } as Record<string, string | number | boolean | null>;
+}
+
+// Issuance must not be blocked while Pass Studio is propagating newly-created
+// Custom Pass field keys. Use every editable key currently exposed, in the
+// agreed #1002 order, and let later syncs fill the complete five-field map.
+function chargeursCustomFieldsBestEffort(
+  pass: PassStudioPass,
+  input: {
+    rentalCredit: string;
+    status: string;
+    chargePoints: number;
+    memberRate: string;
+    dailyCap: string;
+    recentActivity: string;
+  },
+) {
+  if (pass.passId !== CHARGEURS_CUSTOM_PASS_ID) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
+  const keys = editableKeys(pass);
+  const values = customValues(input);
+  const aliases = [
+    ["rental_credit", "credit", "credit_location", "solde", "balance"],
+    ["status", "tier", "statut", "membership_status"],
+    ["points", "chargepoints", "charge_points"],
+    ["member_rate", "tarif_membre", "rate", "hourly_rate"],
+    ["recent_activity", "historique_recent", "history", "activity"],
+  ];
+  const used = new Set<string>();
+  const fields: Record<string, string | number | boolean | null> = {};
+  for (let i = 0; i < Math.min(5, keys.length); i += 1) {
+    const semantic = byAliases(pass, aliases[i]);
+    const key = semantic && !used.has(semantic) ? semantic : keys[i];
+    if (!key || used.has(key)) continue;
+    used.add(key);
+    fields[key] = values[i];
+  }
+  return fields;
+}
+
+async function persistFailure(db: SupabaseClient, existing: Record<string, unknown> | null, code: string) {
+  if (!existing?.id) return;
+  await db.from("customer_wallet_passes").update({
+    provider_status: "error",
+    provider_last_error_code: code,
+    updated_at: new Date().toISOString(),
+  }).eq("id", String(existing.id));
 }
 
 export async function handlePassStudioWallet(
@@ -137,9 +194,9 @@ export async function handlePassStudioWallet(
   try {
     apiKey = requirePassStudioApiKey();
     providerPass = await resolvePassStudioPass(apiKey);
-    chargeursCustomFieldMap(providerPass);
   } catch (error) {
     const pe = safeProviderError(error);
+    await persistFailure(db, existing, pe.code);
     return { ok: false, status: pe.status, body: { ok: false, error: pe.code } };
   }
 
@@ -150,14 +207,15 @@ export async function handlePassStudioWallet(
     ? presentation.fields as Record<string, unknown>
     : {};
   const currency = String(plan.currency ?? "CHF");
-  const fields = chargeursCustomFields(providerPass, {
+  const sourceValues = {
     rentalCredit: String(pFields.rental_credit ?? cents(Number(creditResult.data?.balance_cents ?? 0), String(creditResult.data?.currency ?? "CHF"))),
     status: String(pFields.status ?? pFields.tier ?? membership.status ?? "Actif"),
     chargePoints: Number(pFields.points ?? pointsResult.data?.balance ?? 0),
     memberRate: `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`,
     dailyCap: `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`,
     recentActivity: String(pFields.recent_activity ?? "Aucune activité récente"),
-  });
+  };
+  const fields = chargeursCustomFieldsBestEffort(providerPass, sourceValues);
 
   const existingPassId = String(existing?.provider_pass_id ?? "").trim();
   const sameTemplate = existingPassId === providerPass.passId;
@@ -168,8 +226,6 @@ export async function handlePassStudioWallet(
   let alreadyExisted = Boolean(instanceId);
 
   try {
-    // Initial values are sent with issuance. Do not immediately PATCH the new
-    // instance: PATCH may trigger a billable push and is handled by the corrected dispatcher.
     if (!instanceId) {
       const issued = await issuePassStudioPass(apiKey, providerPass, {
         email: user.email,
@@ -184,6 +240,7 @@ export async function handlePassStudioWallet(
       alreadyExisted = Boolean(issued.alreadyExisted);
     }
     if (!instanceId || !addToWalletUrl) {
+      await persistFailure(db, existing, "PASS_STUDIO_ISSUE_RESPONSE_INVALID");
       return { ok: false, status: 502, body: { ok: false, error: "PASS_STUDIO_ISSUE_RESPONSE_INVALID" } };
     }
 
@@ -231,6 +288,8 @@ export async function handlePassStudioWallet(
         old_template_removed: Boolean(existingPassId && existingPassId !== providerPass.passId),
         already_existed: alreadyExisted,
         updated_fields: Object.keys(fields),
+        expected_field_count: 5,
+        provider_field_count: editableKeys(providerPass).length,
       },
     });
 
@@ -244,13 +303,16 @@ export async function handlePassStudioWallet(
         addToWalletUrl,
         passId: providerPass.passId,
         passType: providerPass.passType ?? null,
-        customTemplateReady: true,
+        customTemplateReady: editableKeys(providerPass).length >= 5,
+        fieldCount: editableKeys(providerPass).length,
         alreadyExisted,
         syncedAt: now,
       },
     };
   } catch (error) {
     const pe = safeProviderError(error);
+    await persistFailure(db, existing, pe.code);
+    await auditLog(db, { actor: user.id, action: "wallet.pass_issue_failed", target: membership.id, data: { provider: "pass_studio", provider_pass_id: providerPass.passId, error: pe.code } });
     return { ok: false, status: pe.status, body: { ok: false, error: pe.code } };
   }
 }
