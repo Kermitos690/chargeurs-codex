@@ -1,0 +1,173 @@
+/*
+ * Chargeurs.ch — global physical kiosk legibility scale.
+ * Presentation only. Imported LAST by KioskPremiumGateV3.
+ * No page zoom: header, customer scenes and footer each own a readable physical scale.
+ */
+
+html.kiosk-v3 {
+  --p0-footer-h: 82px;
+  --p0-header-h: 66px;
+  --p0-header-gap: 7px;
+  --p0-root-pad-top: 6px;
+  --p0-root-pad-x: 22px;
+  --p0-root-pad-bottom: 6px;
+}
+
+/* GLOBAL SHELL / HEADER */
+html.kiosk-v3 .kv3-product-layer { bottom: var(--p0-footer-h) !important; }
+html.kiosk-v3 .kv3-product-layer > .kiosk-root {
+  padding: var(--p0-root-pad-top) var(--p0-root-pad-x) var(--p0-root-pad-bottom) !important;
+  grid-template-rows: var(--p0-header-h) minmax(0, 1fr) !important;
+  row-gap: var(--p0-header-gap) !important;
+}
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header {
+  height: var(--p0-header-h) !important;
+  min-height: var(--p0-header-h) !important;
+  max-height: var(--p0-header-h) !important;
+  gap: 14px !important;
+}
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child {
+  min-width: 190px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child img,
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > button:first-child svg {
+  max-height: 42px !important;
+  width: auto !important;
+}
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div { gap: 11px !important; }
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button {
+  min-height: 52px !important;
+  padding: 0 20px !important;
+  font-size: 19px !important;
+  line-height: 1 !important;
+  font-weight: 820 !important;
+}
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button svg { width: 24px !important; height: 24px !important; }
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full { padding: 5px !important; gap: 4px !important; }
+html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full > button {
+  min-width: 56px !important;
+  min-height: 44px !important;
+  padding: 0 14px !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
+
+/* SYSTEM FOOTER — deliberately larger than a web footer; this is operational HMI data. */
+html.kiosk-v3 .kiosk-system-footer {
+  height: var(--p0-footer-h) !important;
+  min-height: var(--p0-footer-h) !important;
+  max-height: var(--p0-footer-h) !important;
+  grid-template-columns: minmax(0, 1.38fr) auto minmax(330px, .82fr) !important;
+  gap: 22px !important;
+  padding: 0 22px !important;
+}
+html.kiosk-v3 .kiosk-system-footer__payments { gap: 13px !important; }
+html.kiosk-v3 .kiosk-system-footer__secure { gap: 8px !important; font-size: 15px !important; font-weight: 780 !important; }
+html.kiosk-v3 .kiosk-system-footer__secure svg { width: 20px !important; height: 20px !important; }
+html.kiosk-v3 .kiosk-system-footer .kiosk-payment-marks { gap: 8px !important; }
+html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark {
+  min-width: 54px !important;
+  height: 35px !important;
+  min-height: 35px !important;
+  max-height: 35px !important;
+  padding: 0 8px !important;
+  border-radius: 9px !important;
+}
+html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark img { max-height: 26px !important; }
+html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark svg { max-height: 25px !important; }
+html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark > span { font-size: 12px !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial { gap: 20px !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial > span { gap: 4px !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial small { font-size: 14px !important; line-height: 1 !important; font-weight: 780 !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial strong { font-size: 18px !important; line-height: 1 !important; font-weight: 930 !important; }
+html.kiosk-v3 .kiosk-system-footer__commercial > i { height: 38px !important; }
+html.kiosk-v3 .kiosk-system-footer__runtime { gap: 14px !important; }
+html.kiosk-v3 .kiosk-system-footer__station { font-size: 17px !important; font-weight: 930 !important; }
+html.kiosk-v3 .kiosk-system-footer__time,
+html.kiosk-v3 .kiosk-system-footer__network { gap: 7px !important; font-size: 15px !important; font-weight: 820 !important; }
+html.kiosk-v3 .kiosk-system-footer__time svg,
+html.kiosk-v3 .kiosk-system-footer__network svg { width: 18px !important; height: 18px !important; }
+html.kiosk-v3 .kiosk-system-footer__network b { width: 10px !important; height: 10px !important; }
+
+/* HOME */
+html.kiosk-v3 .ck2-home .ck2-reference-home-main {
+  top: 72px !important;
+  bottom: 8px !important;
+  width: min(1180px, calc(100% - 50px)) !important;
+  grid-template-rows: 94px minmax(0, 1fr) !important;
+  gap: 13px !important;
+}
+html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
+html.kiosk-v3 .ck2-home .ck2-home-title { font-size: 52px !important; line-height: .98 !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-heading p { margin-top: 7px !important; font-size: 20px !important; line-height: 1.2 !important; font-weight: 620 !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-card { padding: 23px 27px 61px !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-card > strong { font-size: 39px !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-card > small { margin-top: 8px !important; font-size: 19px !important; line-height: 1.28 !important; }
+html.kiosk-v3 .ck2-home .ck2-choice-icon { width: 64px !important; height: 64px !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-rate em { font-size: 15px !important; }
+html.kiosk-v3 .ck2-home .ck2-reference-rate b { font-size: 33px !important; }
+html.kiosk-v3 .ck2-home .ck2-choice-member:disabled .ck2-reference-rate b { font-size: 25px !important; }
+
+/* CONNECTED / MEMBER */
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) h1,
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) h2 { font-size: clamp(44px, 3.7vw, 52px) !important; line-height: 1 !important; }
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) p,
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) small { font-size: 20px !important; line-height: 1.25 !important; }
+html.kiosk-v3 :is(.ck2-connected, .ck2-member) button { min-height: 54px !important; font-size: 20px !important; }
+
+/* STARTING */
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main .h-20.w-20 { width: 92px !important; height: 92px !important; }
+html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main p { font-size: 32px !important; line-height: 1.08 !important; font-weight: 820 !important; }
+
+/* PRICING */
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 { font-size: 46px !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card > div:last-child > .font-display { font-size: 47px !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.text-xl { font-size: 20px !important; line-height: 1.22 !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card p.mt-7 { font-size: 17px !important; line-height: 1.2 !important; }
+html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button { min-height: 58px !important; font-size: 21px !important; }
+
+/* PAYMENT CHOICE */
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > h2 { font-size: 46px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > p { font-size: 20px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > div { font-size: 30px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > .grid > button > p { font-size: 18px !important; }
+html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > button { min-height: 52px !important; font-size: 18px !important; }
+
+/* QR PAYMENT */
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:first-child > .font-display.text-5xl { font-size: 44px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 { font-size: 44px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 + p { font-size: 20px !important; line-height: 1.22 !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-6,
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child > .mt-4 { font-size: 16px !important; }
+html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage button { min-height: 48px !important; font-size: 17px !important; }
+
+/* RELEASE / SUPPORT / SUCCESS */
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage h2,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage h2 { font-size: clamp(44px, 3.7vw, 52px) !important; line-height: 1 !important; }
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage p,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage p,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage p { font-size: 20px !important; line-height: 1.22 !important; }
+html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage button,
+html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage button,
+html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage button { min-height: 52px !important; font-size: 20px !important; }
+
+/* Short Android CSS viewports: compress spacing before type. */
+@media (max-height: 680px) {
+  html.kiosk-v3 {
+    --p0-footer-h: 76px;
+    --p0-header-h: 60px;
+    --p0-root-pad-top: 5px;
+    --p0-root-pad-bottom: 5px;
+  }
+  html.kiosk-v3 .kv3-product-layer > .kiosk-root > header > div > button { min-height: 48px !important; font-size: 18px !important; }
+  html.kiosk-v3 .kv3-product-layer > .kiosk-root > header .inline-flex.rounded-full > button { min-height: 40px !important; font-size: 16px !important; }
+  html.kiosk-v3 .kiosk-system-footer__secure { font-size: 14px !important; }
+  html.kiosk-v3 .kiosk-system-footer__commercial small { font-size: 13px !important; }
+  html.kiosk-v3 .kiosk-system-footer__commercial strong { font-size: 17px !important; }
+  html.kiosk-v3 .kiosk-system-footer__station { font-size: 16px !important; }
+  html.kiosk-v3 .kiosk-system-footer__time,
+  html.kiosk-v3 .kiosk-system-footer__network { font-size: 14px !important; }
+}
