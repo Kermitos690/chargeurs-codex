@@ -158,6 +158,239 @@ async function appendExactEvent(
   throw new Error("ORCHESTRATOR_VERSION_CONFLICT");
 }
 
+type ExactCabinetLifecycle = {
+  stationId: string;
+  batteryId: string;
+  slotNum: number;
+  eventId: string | null;
+  receivedAt: string;
+};
+
+function exactCabinetLifecycle(row: Record<string, unknown>, eventType: "BATTERY_BORROW_OUT" | "BATTERY_IN", tradeNo: string): ExactCabinetLifecycle | null {
+  if (row.event_type !== eventType) return null;
+  const body = flatten(row.payload);
+  const stationId = typeof row.station_id === "string" ? row.station_id.trim() : "";
+  const observedTrade = firstString(body, ["tradeNo", "rentOrderId", "orderId", "orderNo"]);
+  const batteryId = eventType === "BATTERY_BORROW_OUT"
+    ? firstString(body, ["outBatteryId", "batteryId"])
+    : firstString(body, ["returnBatteryId", "batteryId"]);
+  const slotNum = eventType === "BATTERY_BORROW_OUT"
+    ? firstInt(body, ["outSlot", "slotNum", "slot"])
+    : firstInt(body, ["returnSlot", "slotNum", "slot"]);
+  const receivedAt = typeof row.received_at === "string" ? row.received_at : "";
+  if (observedTrade !== tradeNo || !stationId || !batteryId || slotNum == null || slotNum < 1 || !Number.isFinite(Date.parse(receivedAt))) return null;
+  return {
+    stationId,
+    batteryId,
+    slotNum,
+    eventId: typeof row.external_event_id === "string" ? row.external_event_id : null,
+    receivedAt,
+  };
+}
+
+function uniqueCabinetLifecycle(values: ExactCabinetLifecycle[]) {
+  const unique = new Map<string, ExactCabinetLifecycle>();
+  for (const value of values) unique.set(`${value.stationId}:${value.batteryId}:${value.slotNum}`, value);
+  return [...unique.values()];
+}
+
+/**
+ * Compatibility repair for rentals activated by the former provider-identity
+ * fallback.  A correction is allowed only when one exact BATTERY_BORROW_OUT
+ * and one exact BATTERY_IN share the immutable order and battery identity.
+ * The release is proven at the origin station; the return may be in any slot
+ * of any station. The pre-command snapshot must prove the released battery and
+ * no other active rental may own it. No hardware command is issued here.
+ */
+async function repairProviderFallbackReleaseIdentity(
+  client: ReturnType<typeof db>,
+  session: Record<string, unknown>,
+  returnStationId: string,
+  tradeNo: string,
+): Promise<Record<string, unknown>> {
+  const rentalId = String(session.id ?? "");
+  const originalBatteryId = typeof session.battery_id === "string" ? session.battery_id.trim() : "";
+  const originalSlotNum = Number(session.selected_slot_num);
+  const startedAt = String(session.started_at ?? session.ejected_at ?? "");
+  const originStationId = typeof session.station_id === "string" ? session.station_id.trim() : "";
+  if (!rentalId || !tradeNo || !originStationId || !returnStationId || !originalBatteryId || !Number.isInteger(originalSlotNum) ||
+      !["ejected", "active_rental", "battery_taken"].includes(String(session.state)) ||
+      session.returned_at || !Number.isFinite(Date.parse(startedAt))) return session;
+
+  const { data: activationEvents, error: activationError } = await client.from("rental_orchestrator_events")
+    .select("metadata")
+    .eq("rental_id", rentalId)
+    .eq("event_type", "rental_activated")
+    .order("resulting_version", { ascending: false })
+    .limit(3);
+  if (activationError) throw activationError;
+  const usedFallback = (activationEvents ?? []).some((event) =>
+    event.metadata && typeof event.metadata === "object" &&
+    (event.metadata as Record<string, unknown>).provider_identity_fallback === true
+  );
+  if (!usedFallback) return session;
+
+  const relevantStationIds = originStationId === returnStationId
+    ? [originStationId]
+    : [originStationId, returnStationId];
+  const { data: rows, error: rowsError } = await client.from("cabinet_events")
+    .select("station_id,event_type,external_event_id,received_at,payload")
+    .in("station_id", relevantStationIds)
+    .in("event_type", ["BATTERY_BORROW_OUT", "BATTERY_IN"])
+    .gte("received_at", startedAt)
+    .order("received_at", { ascending: true })
+    .limit(100);
+  if (rowsError) throw rowsError;
+
+  const releases = uniqueCabinetLifecycle((rows ?? [])
+    .map((row) => exactCabinetLifecycle(row as Record<string, unknown>, "BATTERY_BORROW_OUT", tradeNo))
+    .filter((value): value is ExactCabinetLifecycle => value !== null && value.stationId === originStationId));
+  const returns = uniqueCabinetLifecycle((rows ?? [])
+    .map((row) => exactCabinetLifecycle(row as Record<string, unknown>, "BATTERY_IN", tradeNo))
+    .filter((value): value is ExactCabinetLifecycle => value !== null && value.stationId === returnStationId));
+  if (releases.length !== 1 || returns.length !== 1) return session;
+
+  const released = releases[0], returned = returns[0];
+  if (released.batteryId !== returned.batteryId ||
+      Date.parse(returned.receivedAt) < Date.parse(released.receivedAt)) return session;
+  if (released.batteryId === originalBatteryId && released.slotNum === originalSlotNum) return session;
+
+  const { data: sameTrade, error: tradeError } = await client.from("rental_sessions")
+    .select("id")
+    .eq("apifox_trade_no", tradeNo)
+    .limit(3);
+  if (tradeError) throw tradeError;
+  if ((sameTrade ?? []).length !== 1 || String(sameTrade?.[0]?.id ?? "") !== rentalId) return session;
+
+  const { data: conflicts, error: conflictsError } = await client.from("rental_sessions")
+    .select("id")
+    .eq("battery_id", released.batteryId)
+    .in("state", ["ejected", "active_rental", "battery_taken", "battery_returned"])
+    .is("returned_at", null)
+    .neq("id", rentalId)
+    .limit(2);
+  if (conflictsError) throw conflictsError;
+  if ((conflicts ?? []).length) return session;
+
+  const { data: attempt, error: attemptError } = await client.from("hardware_release_attempts")
+    .select("id,result,pre_snapshot,released_slot_nums,released_battery_ids")
+    .eq("rental_session_id", rentalId)
+    .maybeSingle();
+  if (attemptError) throw attemptError;
+  const preSlots = Array.isArray(attempt?.pre_snapshot?.slots) ? attempt.pre_snapshot.slots : [];
+  const physicalBaseline = preSlots.find((slot: Record<string, unknown>) =>
+    Number(slot.slot_num) === released.slotNum &&
+    slot.battery_present === true &&
+    String(slot.battery_id ?? "") === released.batteryId
+  );
+  if (!attempt || !physicalBaseline) return session;
+
+  const attemptAlreadyCorrected = attempt.result === "unexpected_release" &&
+    Array.isArray(attempt.released_slot_nums) && attempt.released_slot_nums.length === 1 &&
+    Number(attempt.released_slot_nums[0]) === released.slotNum &&
+    Array.isArray(attempt.released_battery_ids) && attempt.released_battery_ids.length === 1 &&
+    String(attempt.released_battery_ids[0]) === released.batteryId;
+  if (!attemptAlreadyCorrected) {
+    const staleFallbackAttempt = attempt.result === "single_release" &&
+      Array.isArray(attempt.released_slot_nums) && attempt.released_slot_nums.length === 1 &&
+      Number(attempt.released_slot_nums[0]) === originalSlotNum &&
+      Array.isArray(attempt.released_battery_ids) && attempt.released_battery_ids.length === 1 &&
+      String(attempt.released_battery_ids[0]) === originalBatteryId;
+    if (!staleFallbackAttempt) return session;
+    const { data: correctedAttempt, error: correctAttemptError } = await client.from("hardware_release_attempts").update({
+      result: "unexpected_release",
+      released_slot_nums: [released.slotNum],
+      released_battery_ids: [released.batteryId],
+      post_snapshot: {
+        source: "exact_chargenow_cabinet_events",
+        requested_slot_num: originalSlotNum,
+        requested_battery_id: originalBatteryId,
+        actual_slot_num: released.slotNum,
+        actual_battery_id: released.batteryId,
+        release_station_id: released.stationId,
+        return_station_id: returned.stationId,
+        returned_slot_num: returned.slotNum,
+        release_event_id: released.eventId,
+        return_event_id: returned.eventId,
+      },
+      reconciled_at: released.receivedAt,
+      updated_at: new Date().toISOString(),
+    }).eq("id", attempt.id).eq("result", "single_release").select("id");
+    if (correctAttemptError) throw correctAttemptError;
+    if ((correctedAttempt ?? []).length !== 1) return session;
+  }
+
+  const { data: snapshot, error: snapshotError } = await client.from("rental_orchestrator_snapshots")
+    .select("state,version,battery_id")
+    .eq("rental_id", rentalId)
+    .maybeSingle();
+  if (snapshotError) throw snapshotError;
+  if (!snapshot || snapshot.state !== "active") return session;
+  if (snapshot.battery_id === originalBatteryId) {
+    const { error: correctionEventError } = await client.rpc("append_rental_orchestrator_event", {
+      p_rental_id: rentalId,
+      p_expected_version: Number(snapshot.version),
+      p_event_type: "release_identity_corrected",
+      p_idempotency_key: `release_identity_corrected:${released.eventId ?? tradeNo}`,
+      p_occurred_at: released.receivedAt,
+      p_metadata: {
+        source: "exact_chargenow_cabinet_events",
+        provider_identity_fallback: true,
+        order_id: tradeNo,
+        requested_slot_num: originalSlotNum,
+        requested_battery_id: originalBatteryId,
+        actual_slot_num: released.slotNum,
+        actual_battery_id: released.batteryId,
+        release_station_id: released.stationId,
+        return_station_id: returned.stationId,
+        returned_slot_num: returned.slotNum,
+        release_event_id: released.eventId,
+        return_event_id: returned.eventId,
+        no_hardware_command: true,
+        no_payment_mutation: true,
+      },
+      p_resulting_state: "active",
+      p_payment_intent_id: null,
+      p_station_id: released.stationId,
+      p_battery_id: released.batteryId,
+      p_final_amount_chf: null,
+      p_failure_reason: null,
+    });
+    if (correctionEventError) throw correctionEventError;
+  } else if (snapshot.battery_id !== released.batteryId) {
+    return session;
+  }
+
+  const { data: correctedRental, error: correctionError } = await client.from("rental_sessions").update({
+    battery_id: released.batteryId,
+    selected_slot_num: released.slotNum,
+    chargenow_status: "unexpected_release_detected",
+    updated_at: new Date().toISOString(),
+  }).eq("id", rentalId)
+    .eq("battery_id", originalBatteryId)
+    .eq("selected_slot_num", originalSlotNum)
+    .is("returned_at", null)
+    .select(SESSION_FIELDS);
+  if (correctionError) throw correctionError;
+  const corrected = correctedRental?.[0] as Record<string, unknown> | undefined;
+  if (!corrected) return session;
+
+  await audit(client, "rental.release_identity.corrected_from_exact_physical_events", rentalId, {
+    order_id: tradeNo,
+    release_station_id: released.stationId,
+    return_station_id: returned.stationId,
+    requested_battery_id: originalBatteryId,
+    requested_slot_num: originalSlotNum,
+    actual_battery_id: released.batteryId,
+    actual_slot_num: released.slotNum,
+    release_event_id: released.eventId,
+    return_event_id: returned.eventId,
+    no_hardware_command: true,
+    no_payment_mutation: true,
+  });
+  return corrected;
+}
+
 async function physicalReturnTime(
   client: ReturnType<typeof db>,
   session: Record<string, unknown>,
@@ -244,7 +477,7 @@ Deno.serve(async (req) => {
       await incident(client, null, "RETURN_IDENTITY_AMBIGUOUS", "Plusieurs locations correspondent à la même preuve fournisseur; aucune transition n'a été appliquée.", { battery_id: parsed.batteryId, match_count: sessions.length });
       return json({ received: true, ignored: true, settlement_triggered: false, reason: "AMBIGUOUS_RENTAL" }, 202);
     }
-    const session = sessions[0];
+    let session = sessions[0];
     if (!await verifyCallback(req, String(session.id))) {
       await logApi(client, "/rent/callback:rejected", 401, safe, "INVALID_CALLBACK_AUTH");
       return json({ ok: false, error: "INVALID_CALLBACK_AUTH" }, 401);
@@ -270,6 +503,12 @@ Deno.serve(async (req) => {
       return json({ received: true, release_failure_evidence: true, automatic_retry_allowed: false }, 202);
     }
     if (parsed.status !== "2") return json({ received: true, ignored: true, reason: "UNKNOWN_STATUS" }, 202);
+
+    const candidateReturnStationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
+    const candidateTradeNo = typeof session.apifox_trade_no === "string" ? session.apifox_trade_no : (parsed.tradeNo || "");
+    if (candidateReturnStationId && candidateTradeNo) {
+      session = await repairProviderFallbackReleaseIdentity(client, session, candidateReturnStationId, candidateTradeNo);
+    }
 
     const contractualBatteryId = typeof session.battery_id === "string" ? session.battery_id.trim() : "";
     const returnStationId = parsed.stationId ?? (typeof session.station_id === "string" ? session.station_id : null);
