@@ -8,6 +8,7 @@ import {
   type PaymentRailState,
 } from "@/lib/chargeursPresentationModel";
 import { shouldLeaveTerminalPaymentStage } from "@/lib/kioskTerminalCancellation";
+import { stationHasPaymentTerminal } from "@/lib/kioskTerminalStation";
 
 type NativeTerminalBridge = {
   getPaymentReaderStatus?: () => string;
@@ -134,7 +135,8 @@ export function KioskPaymentRailStage(props: Props) {
   } = props;
   const copy = COPY[lang];
   const native = (window as NativeWindow).ChargeursNative;
-  const nativeBridge = Boolean(native?.getPaymentReaderStatus && native?.startTerminalPayment);
+  const terminalStation = stationHasPaymentTerminal(stationId);
+  const nativeBridge = terminalStation && Boolean(native?.getPaymentReaderStatus && native?.startTerminalPayment);
   const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
   const [localRail, setLocalRail] = useState<PaymentRail>(inProgress ? "TERMINAL" : "NONE");
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
@@ -250,7 +252,7 @@ export function KioskPaymentRailStage(props: Props) {
   }, [inProgress, model.reader.capability, model.payment.canChooseQr, confirmedQrOnly, onChooseQr]);
 
   const chooseTerminal = () => {
-    if (railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
+    if (!terminalStation || railTapLockRef.current || !model.payment.canChooseTerminal || !native?.startTerminalPayment) return;
     railTapLockRef.current = true;
     setNativeError(null);
     setLocalRail("TERMINAL");
@@ -362,7 +364,7 @@ export function KioskPaymentRailStage(props: Props) {
     {selectedSlot != null && <p className="text-lg font-bold text-cyan-100">{copy.reservedSlot(selectedSlot)}</p>}
     {guarantee && cap && <p className="max-w-3xl rounded-2xl border border-cyan-200/20 bg-cyan-300/[.08] px-5 py-4 text-base font-semibold text-cyan-50">{copy.guarantee(guarantee)}</p>}
     <div className="grid w-full grid-cols-2 gap-6">
-      <button type="button" onClick={chooseTerminal} disabled={!model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
+      <button type="button" onClick={chooseTerminal} disabled={!terminalStation || !model.payment.canChooseTerminal} className="min-h-64 rounded-[2.25rem] border border-cyan-200/25 bg-cyan-300/[.08] p-8 text-left disabled:opacity-50"><CreditCard className="h-12 w-12 text-cyan-100" /><div className="mt-12 font-display text-3xl font-black">{copy.terminal}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.terminalSub}</p></button>
       <button type="button" onClick={chooseQr} disabled={!model.payment.canChooseQr} className="min-h-64 rounded-[2.25rem] border border-white/15 bg-white/[.055] p-8 text-left disabled:opacity-50"><QrCode className="h-12 w-12 text-primary" /><div className="mt-12 font-display text-3xl font-black">{copy.qr}</div><p className="mt-3 text-lg font-medium text-muted-foreground">{copy.qrSub}</p></button>
     </div>
     {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}
