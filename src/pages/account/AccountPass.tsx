@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
+  Bell,
   CalendarClock,
   CheckCircle2,
   CircleDollarSign,
@@ -20,6 +21,7 @@ import {
   CustomerChargePoints,
   CustomerMembership,
   CustomerRentalCredit,
+  CustomerWalletNotification,
   CustomerWalletPass,
   fetchPrivateAccountSummary,
   formatAccountDate,
@@ -32,6 +34,7 @@ type State = {
   error: boolean;
   membership: CustomerMembership | null;
   walletPass: CustomerWalletPass | null;
+  walletNotifications: CustomerWalletNotification[];
   chargePoints: CustomerChargePoints;
   rentalCredit: CustomerRentalCredit;
 };
@@ -44,6 +47,7 @@ const initial: State = {
   error: false,
   membership: null,
   walletPass: null,
+  walletNotifications: [],
   chargePoints: { balance: 0, lastActivityAt: null },
   rentalCredit: { balanceCents: 0, currency: "CHF", nextExpiryAt: null, lastActivityAt: null },
 };
@@ -69,6 +73,7 @@ export default function AccountPass() {
         error: false,
         membership: summary.membership,
         walletPass: summary.walletPass,
+        walletNotifications: summary.walletNotifications,
         chargePoints: summary.chargePoints,
         rentalCredit: summary.rentalCredit,
       });
@@ -247,6 +252,36 @@ export default function AccountPass() {
             <p className="mt-1 text-xs text-muted-foreground">Identifiant opaque. Le scan redirige vers l’authentification et ne donne jamais accès au compte à lui seul.</p>
           </div>
         </div>
+      </section>
+
+      <section className="glass rounded-3xl p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Bell className="h-7 w-7 text-violet-300" />
+            <div>
+              <h2 className="font-display text-xl font-bold">10 dernières notifications</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Historique persistant des notifications Wallet réellement livrées.</p>
+            </div>
+          </div>
+          <span className="rounded-full border border-white/10 bg-white/[.04] px-3 py-1 text-xs font-semibold text-muted-foreground">{state.walletNotifications.length}/10</span>
+        </div>
+
+        {state.walletNotifications.length ? (
+          <div className="mt-5 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-black/10">
+            {state.walletNotifications.map((notification) => (
+              <article key={notification.id} className="p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="font-semibold">{notification.title}</p>
+                  <time className="text-xs text-muted-foreground">{formatAccountDate(notification.delivered_at ?? notification.created_at)}</time>
+                </div>
+                {notification.message ? <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{notification.message}</p> : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-2xl border border-dashed border-white/10 p-5 text-sm text-muted-foreground">Aucune notification Wallet livrée pour le moment.</div>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">Apple/Google Wallet n’exposent que la mise à jour la plus récente dans le Pass. Chargeurs+ conserve ici les dix dernières sans effacer l’historique serveur complet.</p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
