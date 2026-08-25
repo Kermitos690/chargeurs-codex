@@ -37,6 +37,7 @@ type State = {
 };
 
 type ManageAction = "portal" | "cancel_at_period_end" | "resume";
+type WalletAction = "issue" | "sync";
 
 const initial: State = {
   loading: true,
@@ -54,6 +55,9 @@ export default function AccountPass() {
   const [managementAction, setManagementAction] = useState<ManageAction | null>(null);
   const [managementMessage, setManagementMessage] = useState<string | null>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
+  const [walletAction, setWalletAction] = useState<WalletAction | null>(null);
+  const [walletMessage, setWalletMessage] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const membershipReturn = useMemo(() => new URLSearchParams(window.location.search).get("membership"), []);
 
   const load = useCallback(async () => {
@@ -88,16 +92,16 @@ export default function AccountPass() {
 
   const providerStatus = state.walletPass?.provider_status ?? "not_issued";
   const providerLabel = providerStatus === "issued"
-    ? "Émis"
+    ? "Pass Wallet prêt"
     : providerStatus === "pending"
       ? "Émission en cours"
       : providerStatus === "update_pending"
         ? "Mise à jour en cours"
         : providerStatus === "error"
-          ? "À vérifier"
+          ? "À resynchroniser"
           : providerStatus === "revoked"
-            ? "Révoqué"
-            : "Émission Wallet non activée";
+            ? "Pass révoqué"
+            : "Prêt à être ajouté";
 
   const subscribe = async () => {
     if (subscribing) return;
@@ -153,9 +157,30 @@ export default function AccountPass() {
     }
   };
 
-  if (state.loading) {
-    return <div className="glass mt-6 grid min-h-[50vh] place-items-center rounded-3xl"><Loader2 className="h-9 w-9 animate-spin text-primary" /></div>;
-  }
+  const addToWallet = async () => {
+    if (!membershipActive || walletAction) return;
+    const action: WalletAction = providerStatus === "issued" ? "sync" : "issue";
+    setWalletAction(action);
+    setWalletError(null);
+    setWalletMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("account-privacy", {
+        body: { action: "wallet_pass", walletAction: action },
+      });
+      if (error || !data?.ok) throw new Error(String(data?.error ?? "WALLET_PASS_UNAVAILABLE"));
+      const addToWalletUrl = String(data.addToWalletUrl ?? "");
+      if (!/^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl)) throw new Error("WALLET_URL_INVALID");
+      setWalletMessage(action === "sync" ? "Pass synchronisé. Ouverture du Wallet…" : "Pass créé. Ouverture du Wallet…");
+      await load();
+      window.location.assign(addToWalletUrl);
+    } catch {
+      setWalletError("Le Pass Wallet n’a pas pu être ouvert pour le moment. Votre adhésion Chargeurs+ reste inchangée.");
+    } finally {
+      setWalletAction(null);
+    }
+  };
+
+  if (state.loading) return <div className="glass mt-6 grid min-h-[50vh] place-items-center rounded-3xl"><Loader2 className="h-9 w-9 animate-spin text-primary" /></div>;
 
   if (state.error) {
     return (
@@ -169,57 +194,32 @@ export default function AccountPass() {
 
   return (
     <div className="space-y-6 pt-6">
-      {membershipReturn === "success" && (
-        <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm text-success">
-          Paiement d’adhésion reçu par Stripe. Le statut ci-dessous est mis à jour uniquement après confirmation du webhook signé.
-        </div>
-      )}
-      {membershipReturn === "cancelled" && (
-        <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-          Souscription interrompue. Aucune adhésion n’est affichée comme active sans confirmation Stripe.
-        </div>
-      )}
-      {cancellationScheduled && (
-        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
-          Renouvellement désactivé. Votre adhésion et vos avantages restent actifs jusqu’au {periodEnd ? formatAccountDate(periodEnd) : "terme de la période en cours"}.
-        </div>
-      )}
+      {membershipReturn === "success" && <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm text-success">Paiement d’adhésion reçu par Stripe. Le statut ci-dessous est mis à jour uniquement après confirmation du webhook signé.</div>}
+      {membershipReturn === "cancelled" && <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">Souscription interrompue. Aucune adhésion n’est affichée comme active sans confirmation Stripe.</div>}
+      {cancellationScheduled && <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">Renouvellement désactivé. Votre adhésion et vos avantages restent actifs jusqu’au {periodEnd ? formatAccountDate(periodEnd) : "terme de la période en cours"}.</div>}
       {managementMessage && <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm text-success">{managementMessage}</div>}
       {managementError && <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">{managementError}</div>}
+      {walletMessage && <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm text-success">{walletMessage}</div>}
+      {walletError && <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">{walletError}</div>}
 
       <section className="overflow-hidden rounded-[2rem] border border-violet-300/20 bg-[radial-gradient(circle_at_20%_10%,rgba(168,85,247,.22),transparent_35%),linear-gradient(145deg,rgba(9,6,20,.98),rgba(3,7,16,.98))] p-6 shadow-[0_30px_80px_rgba(0,0,0,.45)] sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-1.5 text-xs font-black uppercase tracking-[.16em] text-violet-200">
-              <WalletCards className="h-4 w-4" /> Chargeurs+ Pass
-            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-1.5 text-xs font-black uppercase tracking-[.16em] text-violet-200"><WalletCards className="h-4 w-4" /> Chargeurs+ Pass</div>
             <h1 className="mt-4 font-display text-4xl font-extrabold sm:text-5xl">{plan?.name ?? "Votre Pass Chargeurs.ch"}</h1>
-            <p className="mt-2 max-w-2xl text-muted-foreground">
-              {membershipActive
-                ? "Votre adhésion est liée à ce compte. Les avantages affichés ci-dessous proviennent du backend Chargeurs.ch."
-                : "Aucune adhésion active n’est actuellement liée à ce compte. Le Checkout utilise automatiquement le plan actif configuré côté serveur."}
-            </p>
+            <p className="mt-2 max-w-2xl text-muted-foreground">{membershipActive ? "Votre adhésion est liée à ce compte. Les avantages affichés ci-dessous proviennent du backend Chargeurs.ch." : "Aucune adhésion active n’est actuellement liée à ce compte. Le Checkout utilise automatiquement le plan actif configuré côté serveur."}</p>
             {!membershipActive ? (
               <div className="mt-5">
-                <Button onClick={() => void subscribe()} disabled={subscribing} className="rounded-full bg-violet-500 px-6 font-bold text-white hover:bg-violet-400">
-                  {subscribing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WalletCards className="mr-2 h-4 w-4" />}
-                  {state.membership?.status === "pending" ? "Reprendre la souscription" : "Devenir Client Chargeurs"}
-                </Button>
+                <Button onClick={() => void subscribe()} disabled={subscribing} className="rounded-full bg-violet-500 px-6 font-bold text-white hover:bg-violet-400">{subscribing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <WalletCards className="mr-2 h-4 w-4" />}{state.membership?.status === "pending" ? "Reprendre la souscription" : "Devenir Client Chargeurs"}</Button>
                 {subscribeError && <p className="mt-3 max-w-xl text-sm text-destructive">{subscribeError}</p>}
               </div>
             ) : (
               <div className="mt-5 flex flex-wrap gap-2">
-                <Button variant="outline" className="rounded-full" onClick={() => void manage("portal")} disabled={Boolean(managementAction)}>
-                  {managementAction === "portal" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}Gérer le paiement
-                </Button>
+                <Button variant="outline" className="rounded-full" onClick={() => void manage("portal")} disabled={Boolean(managementAction)}>{managementAction === "portal" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}Gérer le paiement</Button>
                 {cancellationScheduled ? (
-                  <Button variant="outline" className="rounded-full border-success/30 text-success" onClick={() => void manage("resume")} disabled={Boolean(managementAction)}>
-                    {managementAction === "resume" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Reprendre le renouvellement
-                  </Button>
+                  <Button variant="outline" className="rounded-full border-success/30 text-success" onClick={() => void manage("resume")} disabled={Boolean(managementAction)}>{managementAction === "resume" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}Reprendre le renouvellement</Button>
                 ) : (
-                  <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={() => void manage("cancel_at_period_end")} disabled={Boolean(managementAction)}>
-                    {managementAction === "cancel_at_period_end" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}Arrêter au renouvellement
-                  </Button>
+                  <Button variant="ghost" className="rounded-full text-muted-foreground" onClick={() => void manage("cancel_at_period_end")} disabled={Boolean(managementAction)}>{managementAction === "cancel_at_period_end" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}Arrêter au renouvellement</Button>
                 )}
               </div>
             )}
@@ -228,30 +228,21 @@ export default function AccountPass() {
         </div>
 
         <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_320px]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Info icon={CircleDollarSign} label="Tarif membre" value={plan ? `${formatCents(plan.hourly_cents, plan.currency)} / h` : "—"} />
-            <Info icon={CalendarClock} label="Plafond journalier" value={plan ? `${formatCents(plan.daily_cap_cents, plan.currency)} / jour` : "—"} />
-            <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
-            <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
-            <Info icon={WalletCards} label="Crédit location disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
-            {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit attribué par période" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
-            <Info
-              icon={CalendarClock}
-              label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"}
-              value={cancellationScheduled
-                ? (periodEnd ? formatAccountDate(periodEnd) : "—")
-                : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")}
-            />
+          <div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Info icon={CircleDollarSign} label="Tarif membre" value={plan ? `${formatCents(plan.hourly_cents, plan.currency)} / h` : "—"} />
+              <Info icon={CalendarClock} label="Plafond journalier" value={plan ? `${formatCents(plan.daily_cap_cents, plan.currency)} / jour` : "—"} />
+              <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
+              <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
+              <Info icon={WalletCards} label="Crédit location disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
+              {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit attribué par période" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
+              <Info icon={CalendarClock} label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"} value={cancellationScheduled ? (periodEnd ? formatAccountDate(periodEnd) : "—") : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")} />
+            </div>
+            <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
           </div>
 
-          <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
-
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
-            {qrUrl ? (
-              <div className="mx-auto w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={qrUrl} size={220} level="M" includeMargin={false} /></div>
-            ) : (
-              <div className="mx-auto grid h-[244px] w-[244px] place-items-center rounded-2xl border border-dashed border-white/15 bg-black/20"><WalletCards className="h-14 w-14 text-white/30" /></div>
-            )}
+            {qrUrl ? <div className="mx-auto w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={qrUrl} size={220} level="M" includeMargin={false} /></div> : <div className="mx-auto grid h-[244px] w-[244px] place-items-center rounded-2xl border border-dashed border-white/15 bg-black/20"><WalletCards className="h-14 w-14 text-white/30" /></div>}
             <p className="mt-4 text-sm font-bold">QR du Pass</p>
             <p className="mt-1 text-xs text-muted-foreground">Identifiant opaque. Le scan redirige vers l’authentification et ne donne jamais accès au compte à lui seul.</p>
           </div>
@@ -262,12 +253,13 @@ export default function AccountPass() {
         <article className="glass rounded-3xl p-6">
           <div className="flex items-center gap-3"><Smartphone className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Apple Wallet / Google Wallet</h2></div>
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {providerStatus === "issued"
-              ? "Le backend indique qu’un objet Wallet a été émis."
-              : "Le modèle de Pass est prêt, mais aucun bouton d’ajout n’est affiché tant que les certificats et identifiants plateforme nécessaires ne sont pas configurés côté serveur."}
-          </p>
-          {state.walletPass ? <p className="mt-4 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
+          <p className="mt-2 text-sm text-muted-foreground">{membershipActive ? `Votre Pass est relié au solde Chargeurs+ actuel (${formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)}). Ouvrez-le pour forcer une synchronisation Pass Studio.` : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}</p>
+          <Button className="mt-5 w-full rounded-2xl bg-black py-6 text-base font-bold text-white hover:bg-black/85" disabled={!membershipActive || Boolean(walletAction)} onClick={() => void addToWallet()}>
+            {walletAction ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <WalletCards className="mr-2 h-5 w-5" />}
+            {providerStatus === "issued" ? "Ouvrir / synchroniser mon Wallet" : "Ajouter à Apple / Google Wallet"}
+          </Button>
+          <p className="mt-3 text-xs text-muted-foreground">Le lien d’ajout Pass Studio est généré côté serveur et n’expose aucune clé fournisseur.</p>
+          {state.walletPass ? <p className="mt-3 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
         </article>
 
         <article className="glass rounded-3xl p-6">
