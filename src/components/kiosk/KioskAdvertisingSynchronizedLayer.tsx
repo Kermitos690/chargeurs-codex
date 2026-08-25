@@ -6,6 +6,7 @@ import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import {
   estimateNetworkClockSample,
   selectStableClockOffsetMs,
+  getAuthoritativeAdsClockOffsetMs,
   setAuthoritativeAdsClockOffsetMs,
   type NetworkClockSample,
 } from "@/lib/adSync";
@@ -15,7 +16,7 @@ const CLOCK_RESYNC_MS = 15_000;
 const INITIAL_CLOCK_SAMPLES = 5;
 const STEADY_CLOCK_SAMPLES = 3;
 const SAMPLE_GAP_MS = 35;
-const ADS_CACHE_PREFIX = "chargeurs:ads:playlist:";
+const ADS_CACHE_PREFIX = "chargeurs:ads:playlist:clock-v2:";
 
 type AdsClockResponse = {
   ok?: boolean;
@@ -78,6 +79,9 @@ function warmCachedAdvertisingMedia() {
  */
 export function KioskAdvertisingSynchronizedLayer() {
   const [, setHeartbeat] = useState(0);
+  const [authoritativeClockOffsetMs, setAuthoritativeClockOffsetMs] = useState<number | null>(
+    () => getAuthoritativeAdsClockOffsetMs(),
+  );
 
   const synchronizeClock = useCallback(async (sampleCount: number) => {
     const samples: NetworkClockSample[] = [];
@@ -108,6 +112,7 @@ export function KioskAdvertisingSynchronizedLayer() {
     const stableOffsetMs = selectStableClockOffsetMs(samples);
     if (stableOffsetMs !== null) {
       setAuthoritativeAdsClockOffsetMs(stableOffsetMs);
+      setAuthoritativeClockOffsetMs(stableOffsetMs);
       const bestRtt = samples.length ? Math.min(...samples.map((sample) => sample.rttMs)) : 0;
       document.documentElement.dataset.kioskAdsClock = "locked";
       document.documentElement.dataset.kioskAdsClockRttMs = String(bestRtt);
@@ -148,7 +153,7 @@ export function KioskAdvertisingSynchronizedLayer() {
 
   return (
     <>
-      <KioskAdvertisingLayer />
+      <KioskAdvertisingLayer authoritativeClockOffsetMs={authoritativeClockOffsetMs} />
       <KioskAdvertisingPartnerBridge />
       <KioskAdvertisingPortraitFocus />
     </>
