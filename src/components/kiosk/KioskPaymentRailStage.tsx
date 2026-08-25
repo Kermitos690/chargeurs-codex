@@ -148,31 +148,25 @@ function ContactlessSymbol({
   );
 }
 
-function TerminalPlacementGuide({
-  copy,
-  cancelling,
-}: {
-  copy: PaymentCopy;
-  cancelling: boolean;
-}) {
+function TerminalPlacementGuide({ copy }: { copy: PaymentCopy }) {
   return (
-    <div className="flex w-full max-w-4xl flex-col items-center gap-2" aria-hidden={cancelling}>
-      <div className="relative flex h-36 w-full items-center justify-center gap-5">
-        <span className="absolute h-32 w-72 rounded-full bg-cyan-300/15 blur-3xl" />
-        <div className="relative grid h-24 w-36 place-items-center rounded-[1.6rem] border border-cyan-100/25 bg-cyan-300/[.08] shadow-[0_0_36px_rgba(34,211,238,.14)]">
-          <CreditCard className="h-14 w-14 text-cyan-100" aria-hidden />
+    <div className="flex w-full max-w-4xl flex-col items-center gap-0.5">
+      <div className="relative flex h-24 w-full items-center justify-center gap-4">
+        <span className="absolute h-24 w-64 rounded-full bg-cyan-300/15 blur-3xl" />
+        <div className="relative grid h-16 w-28 place-items-center rounded-[1.3rem] border border-cyan-100/25 bg-cyan-300/[.08] shadow-[0_0_36px_rgba(34,211,238,.14)]">
+          <CreditCard className="h-10 w-10 text-cyan-100" aria-hidden />
         </div>
-        <div className="relative grid h-32 w-32 place-items-center rounded-full border border-cyan-100/35 bg-cyan-300/[.12] text-cyan-100 shadow-[0_0_48px_rgba(34,211,238,.28)]">
+        <div className="relative grid h-24 w-24 place-items-center rounded-full border border-cyan-100/35 bg-cyan-300/[.12] text-cyan-100 shadow-[0_0_48px_rgba(34,211,238,.28)]">
           <span className="absolute inset-2 rounded-full border border-cyan-100/20 motion-safe:animate-ping" />
-          <ContactlessSymbol label={copy.contactlessLabel} className="relative h-20 w-20" />
+          <ContactlessSymbol label={copy.contactlessLabel} className="relative h-16 w-16" />
         </div>
-        <div className="relative grid h-24 w-24 place-items-center rounded-[1.6rem] border border-violet-200/25 bg-violet-300/[.08] shadow-[0_0_36px_rgba(167,139,250,.14)]">
-          <Smartphone className="h-14 w-14 text-violet-100" aria-hidden />
+        <div className="relative grid h-16 w-16 place-items-center rounded-[1.3rem] border border-violet-200/25 bg-violet-300/[.08] shadow-[0_0_36px_rgba(167,139,250,.14)]">
+          <Smartphone className="h-10 w-10 text-violet-100" aria-hidden />
         </div>
       </div>
       <div className="flex flex-col items-center text-cyan-100">
-        <ArrowDown className="h-11 w-11 motion-safe:animate-bounce" aria-hidden />
-        <span className="rounded-full border border-cyan-100/25 bg-cyan-300/[.09] px-6 py-2 text-base font-black tracking-[.13em]">
+        <ArrowDown className="h-8 w-8 motion-safe:animate-bounce" aria-hidden />
+        <span className="rounded-full border border-cyan-100/25 bg-cyan-300/[.09] px-5 py-1 text-sm font-black tracking-[.13em]">
           {copy.terminalBelow}
         </span>
       </div>
@@ -553,7 +547,7 @@ export function KioskPaymentRailStage(props: Props) {
         ? <QrCode className="h-20 w-20 text-primary" aria-hidden />
         : cancellationRequested
           ? <div className="grid h-28 w-28 place-items-center rounded-full border border-cyan-100/25 bg-cyan-300/10 shadow-[0_0_42px_rgba(34,211,238,.2)]"><Loader2 className="h-14 w-14 animate-spin text-cyan-100" aria-hidden /></div>
-          : <TerminalPlacementGuide copy={copy} cancelling={false} />}
+          : <TerminalPlacementGuide copy={copy} />}
 
       <h2 className="font-display text-5xl font-black leading-[.96] tracking-tight">{title}</h2>
       <p className="max-w-4xl text-2xl font-semibold leading-snug text-slate-200/80">{subtitle}</p>
