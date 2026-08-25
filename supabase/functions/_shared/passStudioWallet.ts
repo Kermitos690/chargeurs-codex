@@ -43,7 +43,7 @@ function memberReference(membershipId: string) {
 function buildFields(pass: PassStudioPass, input: {
   memberId: string;
   displayName: string;
-  status: string;
+  tierSummary: string;
   chargePoints: number;
   rentalCredit: string;
   memberRate: string;
@@ -56,7 +56,7 @@ function buildFields(pass: PassStudioPass, input: {
     if (aliases(["memberId", "member_id", "membershipId"]).includes(normalized)) fields[key] = input.memberId;
     else if (aliases(["memberName", "member_name", "name", "holderName"]).includes(normalized) && input.displayName) fields[key] = input.displayName;
     else if (aliases(["points", "chargePoints", "charge_points"]).includes(normalized)) fields[key] = input.chargePoints;
-    else if (aliases(["tier", "status", "statut", "membershipStatus"]).includes(normalized)) fields[key] = input.status;
+    else if (aliases(["tier", "status", "statut", "membershipStatus"]).includes(normalized)) fields[key] = input.tierSummary;
     else if (aliases(["rentalCredit", "credit", "creditLocation", "balance", "solde"]).includes(normalized)) fields[key] = input.rentalCredit;
     else if (aliases(["memberRate", "tarifMembre", "rate", "hourlyRate"]).includes(normalized)) fields[key] = input.memberRate;
     else if (aliases(["dailyCap", "plafond", "plafondJournalier"]).includes(normalized)) fields[key] = input.dailyCap;
@@ -132,7 +132,7 @@ export async function handlePassStudioWallet(
     memberId: memberReference(String(membership.id)),
     displayName,
     rentalCredit: String(pFields.rental_credit ?? cents(Number(creditResult.data?.balance_cents ?? 0), String(creditResult.data?.currency ?? "CHF"))),
-    status: String(pFields.membership_status ?? pFields.tier ?? membership.status ?? "Actif"),
+    tierSummary: String(pFields.tier ?? pFields.membership_status ?? membership.status ?? "Actif"),
     chargePoints: Number(pFields.points ?? pointsResult.data?.balance ?? 0),
     memberRate: `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`,
     dailyCap: `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`,
