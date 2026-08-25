@@ -54,6 +54,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        // This script makes the downloaded worker activate immediately. The page\n        // is deliberately not reloaded: an active rental/payment stays intact.\n        importScripts: ["/kiosk-sw-activate.js"],
         // Precache the built app shell (hashed JS/CSS + icons).
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         cleanupOutdatedCaches: true,
