@@ -157,6 +157,45 @@ BEGIN
   RAISE NOTICE '======================================================';
 END $$;
 
+-- The client profile that the kiosk resolves must stay aligned with the one
+-- active Chargeurs+ plan. The release trigger enforces this same relation
+-- before accepting a member rental session.
+DO $$
+DECLARE
+  v_profile public.price_profiles%ROWTYPE;
+  v_plan_count integer;
+  v_plan_currency text;
+  v_plan_hourly_cents integer;
+  v_plan_daily_cap_cents integer;
+BEGIN
+  SELECT p.*
+    INTO v_profile
+    FROM public.resolve_customer_price_profile('DTA21277', 'member') r
+    JOIN public.price_profiles p ON p.id = r.profile_id
+   LIMIT 1;
+
+  SELECT count(*), min(currency), min(hourly_cents), min(daily_cap_cents)
+    INTO v_plan_count, v_plan_currency, v_plan_hourly_cents, v_plan_daily_cap_cents
+    FROM public.customer_membership_plans
+   WHERE code = 'client'
+     AND active IS TRUE;
+
+  IF v_profile.id IS NULL
+     OR v_plan_count <> 1
+     OR upper(coalesce(v_plan_currency, '')) <> 'CHF'
+     OR coalesce(v_profile.period_minutes, 0) <= 0
+     OR coalesce(v_profile.price_per_period_cents, 0) <= 0
+     OR coalesce(v_plan_hourly_cents, 0) <= 0
+     OR (v_profile.price_per_period_cents::bigint * 60)
+          <> (v_plan_hourly_cents::bigint * v_profile.period_minutes::bigint)
+     OR coalesce(v_profile.daily_cap_cents, -1) <> v_plan_daily_cap_cents
+  THEN
+    RAISE EXCEPTION 'FAIL member price profile and Chargeurs+ plan are not aligned';
+  END IF;
+  RAISE NOTICE 'PASS member profile matches active Chargeurs+ plan';
+END;
+$$;
+
 DO $$
 DECLARE
   v_organization_id uuid;
