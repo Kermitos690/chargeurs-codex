@@ -1,5 +1,9 @@
 const PASS_STUDIO_BASE_URL = "https://www.passstudio.online/api/v1";
 const REQUEST_TIMEOUT_MS = 10_000;
+
+// Reactivated Chargeurs+ membership pass (#1001). Keep the former custom-pass
+// identifier exported separately so old migrations/audit references remain clear.
+export const CHARGEURS_ACCOUNT_PASS_ID = "kBQ15unyRlQPeUhcRWID";
 export const CHARGEURS_CUSTOM_PASS_ID = "hFAOsekroeBC4IHRTlDI";
 
 export type PassStudioPass = {
@@ -100,27 +104,23 @@ export async function listPassStudioPasses(apiKey: string): Promise<PassStudioPa
   return Array.isArray(payload.passes) ? payload.passes : [];
 }
 
-export async function resolvePassStudioPass(apiKey: string, options: ResolvePassStudioPassOptions = {}): Promise<PassStudioPass> {
+export async function resolvePassStudioPass(
+  apiKey: string,
+  options: ResolvePassStudioPassOptions = {},
+): Promise<PassStudioPass> {
   const explicitId = Object.prototype.hasOwnProperty.call(options, "passId");
   const explicitName = Object.prototype.hasOwnProperty.call(options, "passName");
-  const accountPass = !explicitId && !explicitName;
-  const configuredId = String(explicitId ? options.passId ?? "" : CHARGEURS_CUSTOM_PASS_ID).trim();
-  const configuredName = String(explicitName ? options.passName ?? "" : "").trim();
+  const configuredId = String(explicitId ? options.passId ?? "" : Deno.env.get("PASS_STUDIO_PASS_ID") ?? "").trim();
+  const configuredName = String(explicitName ? options.passName ?? "" : Deno.env.get("PASS_STUDIO_PASS_NAME") ?? "Chargeurs+").trim();
   const passes = await listPassStudioPasses(apiKey);
   const byId = configuredId ? passes.find((pass) => pass.passId === configuredId) : undefined;
   const wantedName = normalize(configuredName);
   const byName = wantedName ? passes.find((pass) => normalize(pass.name) === wantedName) : undefined;
   const active = passes.filter((pass) => String(pass.status ?? "active").toLowerCase() === "active");
-  const sole = accountPass || options.allowSoleActiveFallback === false ? undefined : active.length === 1 ? active[0] : undefined;
+  const sole = options.allowSoleActiveFallback === false ? undefined : active.length === 1 ? active[0] : undefined;
   const match = byId ?? byName ?? sole;
-  if (!match) throw new PassStudioError(503, accountPass ? "PASS_STUDIO_CUSTOM_PASS_NOT_FOUND" : "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND");
+  if (!match) throw new PassStudioError(503, configuredId || configuredName ? "PASS_STUDIO_PASS_ID_OR_NAME_NOT_FOUND" : "PASS_STUDIO_PASS_NOT_FOUND");
   if (String(match.status ?? "active").toLowerCase() !== "active") throw new PassStudioError(409, "PASS_STUDIO_PASS_NOT_ACTIVE");
-  if (accountPass) {
-    const passType = normalize(match.passType);
-    if (!passType.includes("custom") && !passType.includes("generic")) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
-    // Do not block issuance while Pass Studio is still propagating generated fieldKeys.
-    // The template identity/type remain strict; dynamic values are applied best-effort.
-  }
   return match;
 }
 
