@@ -1,4 +1,5 @@
 import { legacyReconciliationUuid } from "@/lib/kioskReconciliationId";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Invoke kiosk-sensitive Edge Functions through the staging application's own
@@ -16,6 +17,13 @@ const PUBLIC_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STA
 export const KIOSK_PAIRING_STORAGE_KEY = "chargeurs:kiosk:customer-pairing-id";
 export const KIOSK_JOURNEY_STORAGE_KEY = "chargeurs:kiosk:customer-journey";
 export const KIOSK_AUTH_REQUIRED_EVENT = "chargeurs:kiosk-auth-required";
+
+const QUIET_READ_TTL_MS = 10 * 60_000;
+const SETTLING_READ_TTL_MS = 2_000;
+const FINAL_READ_TTL_MS = 5_000;
+const AD_IMPRESSION_SAMPLE_MS = 30 * 60_000;
+const AD_IMPRESSION_SAMPLE_PREFIX = "chargeurs:ads:impression-sample:";
+const POST_EVENT_REINVALIDATE_MS = 1_500;
 
 export type KioskProxyResult<T> = {
   data: T | null;
@@ -37,6 +45,16 @@ type KioskProxyPath =
   | "/api/kiosk/customer-pairing-status"
   | "/api/kiosk/ads-clock"
   | "/api/kiosk/ads-playlist";
+
+type CachedProxyResult = {
+  expiresAt: number;
+  result: KioskProxyResult<unknown>;
+};
+
+const readCache = new Map<string, CachedProxyResult>();
+const readInflight = new Map<string, Promise<KioskProxyResult<unknown>>>();
+const stationCacheKeys = new Map<string, Set<string>>();
+const cabinetWakeSubscriptions = new Set<string>();
 
 function customerPairingPayload(path: KioskProxyPath, body: Record<string, unknown>): Record<string, unknown> {
   if (path !== "/api/kiosk/create-rental-session") return body;
@@ -138,7 +156,110 @@ function legacyReconciliationRetryBody(
   return legacyId ? { ...body, rentalSessionId: legacyId } : null;
 }
 
-export async function invokeKioskEdgeProxy<T>(
+function stationIdFromBody(body: Record<string, unknown>): string {
+  return typeof body.stationId === "string" ? body.stationId.trim() : "";
+}
+
+function cacheKey(path: KioskProxyPath, body: Record<string, unknown>): string {
+  return `${path}:${JSON.stringify(body)}`;
+}
+
+function rememberStationCacheKey(stationId: string, key: string) {
+  if (!stationId) return;
+  const keys = stationCacheKeys.get(stationId) ?? new Set<string>();
+  keys.add(key);
+  stationCacheKeys.set(stationId, keys);
+}
+
+export function invalidateKioskReadCache(stationId?: string) {
+  if (!stationId) {
+    readCache.clear();
+    stationCacheKeys.clear();
+    return;
+  }
+  const keys = stationCacheKeys.get(stationId);
+  if (!keys) return;
+  keys.forEach((key) => readCache.delete(key));
+  stationCacheKeys.delete(stationId);
+}
+
+function ensureCabinetWakeSubscription(stationId: string) {
+  if (!stationId || cabinetWakeSubscriptions.has(stationId)) return;
+  cabinetWakeSubscriptions.add(stationId);
+
+  supabase
+    .channel(`kiosk-cabinet:${stationId}`)
+    .on("broadcast", { event: "cabinet_event" }, () => {
+      // The broadcast contains no payment, customer or battery identity. It is
+      // only a wake-up hint; the next authenticated read remains authoritative.
+      // Invalidate twice so a read that was already in flight when the physical
+      // event arrived cannot repopulate a stale 10-minute cache immediately
+      // after the first invalidation.
+      invalidateKioskReadCache(stationId);
+      window.setTimeout(() => invalidateKioskReadCache(stationId), POST_EVENT_REINVALIDATE_MS);
+    })
+    .subscribe();
+}
+
+function readTtlMs(path: KioskProxyPath, body: Record<string, unknown>, data: unknown): number {
+  if (path === "/api/kiosk/cabinet-snapshot") return QUIET_READ_TTL_MS;
+  if (path === "/api/kiosk/ads-playlist" && body.action === "playlist") return QUIET_READ_TTL_MS;
+  if (path !== "/api/kiosk/return-summary" || body.ackRentalSessionId) return 0;
+  if (!data || typeof data !== "object") return 0;
+
+  const stage = (data as Record<string, unknown>).stage;
+  if (stage === "settling") return SETTLING_READ_TTL_MS;
+  if (stage === "completed" || stage === "support") return FINAL_READ_TTL_MS;
+  return QUIET_READ_TTL_MS;
+}
+
+function cachedResultFor<T>(path: KioskProxyPath, key: string): KioskProxyResult<T> | null {
+  const cached = readCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    readCache.delete(key);
+    return null;
+  }
+
+  if (path === "/api/kiosk/ads-playlist" && cached.result.data && typeof cached.result.data === "object") {
+    return {
+      ...cached.result,
+      data: {
+        ...(cached.result.data as Record<string, unknown>),
+        serverTimeMs: Date.now(),
+      } as T,
+    };
+  }
+  return cached.result as KioskProxyResult<T>;
+}
+
+function impressionSampleKey(body: Record<string, unknown>): string {
+  const stationId = stationIdFromBody(body);
+  const mode = typeof body.displayMode === "string" ? body.displayMode : "unknown";
+  return `${AD_IMPRESSION_SAMPLE_PREFIX}${stationId}:${mode}`;
+}
+
+function shouldSkipAdImpression(body: Record<string, unknown>): boolean {
+  if (body.action !== "impression") return false;
+  try {
+    const raw = localStorage.getItem(impressionSampleKey(body));
+    const previous = raw ? Number(raw) : 0;
+    return Number.isFinite(previous) && previous > 0 && Date.now() - previous < AD_IMPRESSION_SAMPLE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function markAdImpressionSample(body: Record<string, unknown>) {
+  if (body.action !== "impression") return;
+  try {
+    localStorage.setItem(impressionSampleKey(body), String(Date.now()));
+  } catch {
+    // Analytics sampling is best-effort and never affects Advertising playback.
+  }
+}
+
+async function invokeNetwork<T>(
   path: KioskProxyPath,
   body: Record<string, unknown>,
   headers: Record<string, string>,
@@ -181,5 +302,53 @@ export async function invokeKioskEdgeProxy<T>(
     };
   } catch {
     return { data: null, transportError: true, status: null, authError: false };
+  }
+}
+
+export async function invokeKioskEdgeProxy<T>(
+  path: KioskProxyPath,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+): Promise<KioskProxyResult<T>> {
+  const stationId = stationIdFromBody(body);
+  if (stationId && (path === "/api/kiosk/return-summary" || path === "/api/kiosk/cabinet-snapshot")) {
+    ensureCabinetWakeSubscription(stationId);
+  }
+
+  if (path === "/api/kiosk/ads-playlist" && shouldSkipAdImpression(body)) {
+    return {
+      data: { ok: true, sampled: true } as T,
+      transportError: false,
+      status: 200,
+      authError: false,
+    };
+  }
+
+  const key = cacheKey(path, body);
+  const cacheable = readTtlMs(path, body, { stage: "none" }) > 0;
+  if (cacheable) {
+    const cached = cachedResultFor<T>(path, key);
+    if (cached) return cached;
+
+    const pending = readInflight.get(key);
+    if (pending) return pending as Promise<KioskProxyResult<T>>;
+  }
+
+  const request = invokeNetwork<T>(path, body, headers);
+  if (cacheable) readInflight.set(key, request as Promise<KioskProxyResult<unknown>>);
+
+  try {
+    const result = await request;
+    const ttl = readTtlMs(path, body, result.data);
+    if (ttl > 0 && !result.transportError && !result.authError && result.status !== null && result.status >= 200 && result.status < 300) {
+      readCache.set(key, { expiresAt: Date.now() + ttl, result: result as KioskProxyResult<unknown> });
+      rememberStationCacheKey(stationId, key);
+    }
+    if (path === "/api/kiosk/ads-playlist" && body.action === "impression" && !result.transportError && !result.authError && result.status === 200) {
+      markAdImpressionSample(body);
+    }
+    return result;
+  } finally {
+    if (cacheable) readInflight.delete(key);
   }
 }
