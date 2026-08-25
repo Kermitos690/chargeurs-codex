@@ -7,6 +7,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { classifyRentalCandidates, selectPhysicalReturnEvidence } from "../_shared/returnCorrelation.ts";
 
 const encoder = new TextEncoder();
+// These are ordinary lifecycle observations which a fully correlated physical
+// BATTERY_IN may safely advance to `returned`.  Safety/anomaly statuses are
+// intentionally absent: a return must never erase evidence of an ambiguous or
+// multi-battery release.
+const RETURN_STATUS_NORMALIZATION_SOURCES = new Set([
+  "ejected",
+  "borrowing",
+  "query_error",
+  "returned",
+]);
 const json = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { "Content-Type": "application/json" },
@@ -304,6 +314,30 @@ Deno.serve(async (req) => {
       chargenow_order_id: canonicalTradeNo || parsed.tradeNo || null,
     }).eq("id", session.id).is("returned_at", null);
     if (updateError) throw updateError;
+
+    // `return_detected` is normally projected first by the DB trigger, which
+    // makes the guarded update above intentionally a no-op.  Persist the
+    // canonical return status in a separate, status-only update so a completed
+    // rental never continues to look `ejected`/`borrowing` in operations.
+    // The allowlist prevents a valid return from concealing any prior release
+    // anomaly; those remain visible for operator review.
+    const priorChargeNowStatus = typeof session.chargenow_status === "string"
+      ? session.chargenow_status
+      : null;
+    if (priorChargeNowStatus === null || RETURN_STATUS_NORMALIZATION_SOURCES.has(priorChargeNowStatus)) {
+      const statusProjection = client.from("rental_sessions").update({
+        chargenow_status: "returned",
+        return_external_event_id: physical.externalEventId
+          ? `battery-in:${physical.externalEventId}`
+          : `battery-in:correlated:${eventId}`,
+        chargenow_order_id: canonicalTradeNo || parsed.tradeNo || null,
+      }).eq("id", session.id)
+        .in("state", ["battery_returned", "completed", "closed"]);
+      const { error: statusProjectionError } = priorChargeNowStatus === null
+        ? await statusProjection.is("chargenow_status", null)
+        : await statusProjection.in("chargenow_status", [...RETURN_STATUS_NORMALIZATION_SOURCES]);
+      if (statusProjectionError) throw statusProjectionError;
+    }
     await client.from("batteries").update({ station_id: returnStationId, slot_num: returnedSlotNum, status: "in_station", updated_at: new Date().toISOString() }).eq("battery_id", contractualBatteryId);
 
     const settlement = await triggerSettlement(String(session.id), returnedAt);

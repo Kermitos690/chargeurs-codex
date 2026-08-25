@@ -1,6 +1,6 @@
 // Privileged rental operations:
 //   retry_chargenow | reconcile | retry_settlement | declare_non_return |
-//   refund | manual_review
+//   refund | manual_review | repair_verified_return_statuses
 //
 // operator+: retry/reconcile/manual review
 // super_admin: full refund and explicit non-return declaration
@@ -17,6 +17,23 @@ import { stagingAuthorizationReleaseAllowed } from "../_shared/checkoutCancellat
 
 type DB = ReturnType<typeof adminClient>;
 type Session = Record<string, any>;
+
+// A physical BATTERY_IN plus contractual identity is final return evidence.
+// Only these ordinary, stale lifecycle labels may be normalized to `returned`.
+// Never overwrite supplier quarantine/anomaly statuses during an operator
+// repair: they remain evidence for the protected hardware investigation.
+const RETURN_STATUS_REPAIR_SOURCES = ["ejected", "borrowing", "query_error"];
+
+function hasVerifiedPhysicalReturn(session: Session) {
+  return Boolean(
+    session.returned_at && session.battery_id && session.return_station_id &&
+    session.returned_slot_num != null,
+  );
+}
+
+function isReturnFinalState(session: Session) {
+  return hasVerifiedPhysicalReturn(session) || ["battery_returned", "completed", "closed"].includes(String(session.state));
+}
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -474,7 +491,50 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = typeof body.action === "string" ? body.action : "";
     const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
-    if (!action || !rentalSessionId) return json({ ok: false, error: "MISSING_PARAMS" }, 400);
+    if (!action) return json({ ok: false, error: "MISSING_PARAMS" }, 400);
+
+    if (action === "repair_verified_return_statuses") {
+      if (!isSuper) return json({ ok: false, error: "FORBIDDEN_SUPER_ADMIN_REQUIRED" }, 403);
+      const { data: candidates, error: candidatesError } = await db.from("rental_sessions")
+        .select("id,chargenow_status,returned_at,return_station_id,returned_slot_num,battery_id,state")
+        .not("returned_at", "is", null)
+        .not("return_station_id", "is", null)
+        .not("returned_slot_num", "is", null)
+        .not("battery_id", "is", null)
+        .in("state", ["battery_returned", "completed", "closed"])
+        .in("chargenow_status", RETURN_STATUS_REPAIR_SOURCES)
+        .limit(100);
+      if (candidatesError) throw candidatesError;
+
+      const repaired = [] as string[];
+      for (const candidate of candidates ?? []) {
+        const { data: updated, error: updateError } = await db.from("rental_sessions").update({
+          chargenow_status: "returned",
+          updated_at: new Date().toISOString(),
+        }).eq("id", candidate.id)
+          .eq("chargenow_status", candidate.chargenow_status)
+          .eq("returned_at", candidate.returned_at)
+          .in("state", ["battery_returned", "completed", "closed"])
+          .select("id");
+        if (updateError) throw updateError;
+        if (updated?.length) repaired.push(String(candidate.id));
+      }
+      await auditLog(db, {
+        actor: uid,
+        action: "rental.return_status.backfilled",
+        target: "verified_physical_returns",
+        data: {
+          candidate_count: candidates?.length ?? 0,
+          repaired_count: repaired.length,
+          source_statuses: RETURN_STATUS_REPAIR_SOURCES,
+          no_hardware_command: true,
+          no_payment_mutation: true,
+        },
+      });
+      return json({ ok: true, candidate_count: candidates?.length ?? 0, repaired_count: repaired.length });
+    }
+
+    if (!rentalSessionId) return json({ ok: false, error: "MISSING_PARAMS" }, 400);
 
     const { data: session, error: sessionError } = await db.from("rental_sessions")
       .select("*").eq("id", rentalSessionId).maybeSingle();
@@ -482,6 +542,9 @@ Deno.serve(async (req) => {
     if (!session) return json({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
 
     if (action === "retry_chargenow") {
+      if (isReturnFinalState(session)) {
+        return json({ ok: false, error: "PHYSICAL_RETURN_ALREADY_CONFIRMED" }, 409);
+      }
       const result = await callInternalFunction("eject-after-payment", { rentalSessionId });
       await logApi(db, {
         service: "admin", endpoint: "retry_chargenow", method: "POST",
@@ -491,6 +554,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "manual_review") {
+      if (String(session.state) === "completed" && session.settlement_status === "settled") {
+        return json({ ok: false, error: "RENTAL_ALREADY_COMPLETED" }, 409);
+      }
       const { error } = await db.from("rental_sessions").update({
         state: "manual_review",
         settlement_status: session.settlement_status === "settled" ? "settled" : "manual_review",
@@ -502,6 +568,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "retry_settlement") {
+      if (session.settlement_status === "settled") {
+        return json({ ok: false, error: "SETTLEMENT_ALREADY_FINAL" }, 409);
+      }
       const state = await orchestratorState(db, rentalSessionId);
       const nonReturn = state === "non_return" || Boolean(session.non_return_declared_at);
       if (!nonReturn && (
@@ -568,6 +637,16 @@ Deno.serve(async (req) => {
     }
 
     if (action === "reconcile") {
+      if (isReturnFinalState(session)) {
+        return json({
+          ok: true,
+          already_returned: true,
+          settlement_status: session.settlement_status ?? null,
+          return_station_id: session.return_station_id ?? null,
+          returned_slot_num: session.returned_slot_num ?? null,
+          chargenow_status: session.chargenow_status ?? null,
+        });
+      }
       if (!session.apifox_trade_no) {
         return json({ ok: true, chargenow_skipped: true, reason: "NO_TRADE_NO" });
       }
