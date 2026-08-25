@@ -138,3 +138,40 @@ html.kiosk-v3 .kiosk-ad-screensaver-cta b {
   font-size: 22px !important;
   line-height: 1 !important;
 }
+
+
+/* Partner QR dock: use one bounded geometry on every physical cabinet.
+ * Its code box is never allowed to slide below the Home footer or get clipped
+ * by a narrow/older WebView viewport. */
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-partner-panel--split {
+  left: 8px !important;
+  right: 8px !important;
+  bottom: 8px !important;
+  max-width: calc(100% - 16px) !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__body {
+  grid-template-columns: 74px minmax(0, 1fr) !important;
+  min-height: 104px !important;
+  max-height: 104px !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+}
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__qr {
+  width: 74px !important;
+  height: 74px !important;
+  min-width: 74px !important;
+  min-height: 74px !important;
+  box-sizing: border-box !important;
+  border-width: 4px !important;
+  overflow: hidden !important;
+}
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media,
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media-backdrop {
+  bottom: 150px !important;
+}
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+  inset: 6px 5px 150px !important;
+}
