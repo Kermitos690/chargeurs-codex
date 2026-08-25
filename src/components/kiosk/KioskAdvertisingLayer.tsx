@@ -685,6 +685,12 @@ function KioskAdvertisingRuntime() {
     window.setTimeout(dismissScreensaver, 650);
   }, [consumeAdvertisingTouch, dismissScreensaver]);
 
+  const consumeScreensaverSurface = useCallback((event: SyntheticEvent) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest(".kiosk-ad-screensaver-dismiss")) return;
+    consumeAdvertisingTouch(event);
+  }, [consumeAdvertisingTouch]);
+
   return (
     <>
       {splitActive && split.current && (
@@ -718,10 +724,10 @@ function KioskAdvertisingRuntime() {
           className="kiosk-ad-screensaver"
           role="region"
           aria-label={saverLabel}
-          onPointerDownCapture={consumeAdvertisingTouch}
-          onTouchStartCapture={consumeAdvertisingTouch}
-          onClickCapture={consumeAdvertisingTouch}
-          onKeyDownCapture={consumeAdvertisingTouch}
+          onPointerDownCapture={consumeScreensaverSurface}
+          onTouchStartCapture={consumeScreensaverSurface}
+          onClickCapture={consumeScreensaverSurface}
+          onKeyDownCapture={consumeScreensaverSurface}
         >
           {saver.current ? (
             <BufferedAdMedia
