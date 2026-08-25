@@ -18,6 +18,7 @@ import "./kiosk-p0-safe-frame-1280.css";
 import "./kiosk-p0-selection-fit.css";
 import "./kiosk-global-legibility.css";
 import "./kiosk-footer-home-pricing.css";
+import "./kiosk-field-legibility-ad-containment.css";
 
 const GOLDEN_FR_HOME_TITLE = "BESOIN DE BATTERIE ?";
 
