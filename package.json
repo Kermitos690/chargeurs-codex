@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "allowScripts": {
+    "@swc/core@1.13.2": true,
+    "esbuild@0.25.12": true
+  },
   "scripts": {
     "prebuild": "node scripts/check-kiosk-geometry.mjs && node scripts/materialize-cinematic-art.mjs",
     "dev": "vite",
