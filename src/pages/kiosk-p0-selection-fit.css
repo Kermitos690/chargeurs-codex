@@ -34,19 +34,19 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kv3-product-layer > .kiosk-root > m
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
   box-sizing: border-box !important;
-  width: min(1140px, 100%) !important;
-  max-width: min(1140px, 100%) !important;
+  width: min(1160px, 100%) !important;
+  max-width: min(1160px, 100%) !important;
   min-width: 0 !important;
-  height: min(510px, 100%) !important;
+  height: min(var(--p0-selection-h), 100%) !important;
   min-height: 0 !important;
-  max-height: min(510px, 100%) !important;
+  max-height: min(var(--p0-selection-h), 100%) !important;
   margin: 0 auto !important;
-  padding: 18px 22px 20px !important;
+  padding: 12px 18px 14px !important;
   display: grid !important;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 322px) !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
-  column-gap: 20px !important;
-  row-gap: 12px !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto minmax(0, 1fr) 70px !important;
+  column-gap: 0 !important;
+  row-gap: 10px !important;
   align-items: stretch !important;
   align-content: stretch !important;
   transform: none !important;
@@ -58,8 +58,8 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero {
   width: 100% !important;
   min-width: 0 !important;
   gap: 4px !important;
-  align-items: flex-start !important;
-  text-align: left !important;
+  align-items: center !important;
+  text-align: center !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 {
@@ -73,7 +73,7 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 {
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p {
   margin-top: 4px !important;
   margin-bottom: 0 !important;
-  font-size: clamp(19px, 1.6vw, 22px) !important;
+  font-size: clamp(18px, 1.5vw, 20px) !important;
   line-height: 1.12 !important;
   font-weight: 650 !important;
 }
@@ -99,7 +99,7 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
   min-width: 0 !important;
   min-height: 0 !important;
   height: 100% !important;
-  gap: 12px 14px !important;
+  gap: 10px 12px !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
   align-self: stretch !important;
@@ -111,7 +111,7 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card {
   min-width: 0 !important;
   min-height: 0 !important;
   height: 100% !important;
-  padding: 12px 15px !important;
+  padding: 8px 12px !important;
   border-radius: 22px !important;
   opacity: 1 !important;
   transform: none !important;
@@ -147,8 +147,8 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card:active {
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual {
   position: relative !important;
   isolation: isolate !important;
-  height: 43px !important;
-  min-height: 43px !important;
+  height: 32px !important;
+  min-height: 32px !important;
   margin-top: 4px !important;
   padding-left: 13px !important;
   padding-right: 13px !important;
@@ -179,25 +179,25 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual:
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual svg {
   width: 30px !important;
-  height: 30px !important;
+  height: 24px !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl {
   margin-top: 4px !important;
-  font-size: clamp(44px, 3.65vw, 50px) !important;
+  font-size: clamp(36px, 3vw, 40px) !important;
   line-height: .9 !important;
   font-weight: 940 !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl {
-  font-size: clamp(21px, 1.7vw, 24px) !important;
+  font-size: clamp(19px, 1.55vw, 21px) !important;
   line-height: 1 !important;
   font-weight: 900 !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base {
   margin-top: 4px !important;
-  font-size: clamp(17px, 1.35vw, 19px) !important;
+  font-size: clamp(15px, 1.25vw, 17px) !important;
   line-height: 1.04 !important;
   font-weight: 800 !important;
 }
@@ -222,31 +222,33 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .h-3:not(.overflow-
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
   box-sizing: border-box !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  padding: 16px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 14px !important;
-  align-self: stretch !important;
-  overflow: hidden !important;
-}
-
-html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
-  box-sizing: border-box !important;
+  grid-column: 1 / -1 !important;
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
   min-height: 70px !important;
-  margin: 0 !important;
-  padding: 15px 18px !important;
+  height: 70px !important;
+  padding: 0 8px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 620px) minmax(0, 1fr) !important;
+  align-items: center !important;
+  justify-content: stretch !important;
+  gap: 14px !important;
+  align-self: stretch !important;
+  overflow: visible !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
+  box-sizing: border-box !important;
+  grid-column: 2 !important;
+  width: 100% !important;
+  max-width: 620px !important;
+  min-width: 0 !important;
+  min-height: 64px !important;
+  margin: 0 auto !important;
+  padding: 13px 22px !important;
   border-radius: 21px !important;
-  font-size: clamp(22px, 1.8vw, 25px) !important;
+  font-size: clamp(23px, 1.9vw, 26px) !important;
   font-weight: 900 !important;
   line-height: 1.04 !important;
   white-space: normal !important;
@@ -257,10 +259,13 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta > span {
-  font-size: clamp(19px, 1.5vw, 21px) !important;
+  grid-column: 3 !important;
+  justify-self: end !important;
+  max-width: 230px !important;
+  font-size: clamp(17px, 1.4vw, 19px) !important;
   line-height: 1.08 !important;
   font-weight: 850 !important;
-  text-align: center !important;
+  text-align: right !important;
 }
 
 html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:hover,
@@ -276,27 +281,34 @@ html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button:active {
 
 @media (max-height: 680px) {
   html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
-    width: min(1140px, 100%) !important;
+    width: min(1120px, 100%) !important;
     height: min(100%, 492px) !important;
     max-height: 100% !important;
-    padding: 11px 15px 13px !important;
-    grid-template-columns: minmax(0, 1fr) minmax(286px, 306px) !important;
-    row-gap: 8px !important;
-    column-gap: 15px !important;
+    padding: 9px 14px 11px !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto minmax(0, 1fr) 64px !important;
+    row-gap: 7px !important;
+    column-gap: 0 !important;
   }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 { font-size: clamp(45px, 6.7vh, 49px) !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p { font-size: clamp(18px, 2.7vh, 20px) !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p.text-sm { font-size: 14px !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero > div { font-size: clamp(23px, 3.4vh, 26px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 { font-size: clamp(42px, 6.3vh, 46px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p { font-size: clamp(16px, 2.4vh, 18px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p.text-sm { font-size: 13px !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero > div { font-size: clamp(21px, 3.1vh, 23px) !important; }
   html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid { gap: 8px 11px !important; }
   html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card { padding: 9px 12px !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual { height: 39px !important; min-height: 39px !important; margin-top: 3px !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl { font-size: clamp(41px, 6vh, 46px) !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl { font-size: clamp(20px, 2.9vh, 22px) !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base { font-size: clamp(16px, 2.35vh, 18px) !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta { padding: 11px !important; gap: 10px !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button { min-height: 64px !important; font-size: clamp(20px, 3vh, 23px) !important; padding: 12px 14px !important; }
-  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta > span { font-size: clamp(18px, 2.6vh, 20px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .kiosk-slot-visual { height: 28px !important; min-height: 28px !important; margin-top: 3px !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl { font-size: clamp(32px, 4.8vh, 36px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl { font-size: clamp(18px, 2.7vh, 20px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base { font-size: clamp(14px, 2.1vh, 16px) !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
+    min-height: 64px !important;
+    height: 64px !important;
+    padding: 0 6px !important;
+    grid-template-columns: minmax(0, 1fr) minmax(390px, 570px) minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button { min-height: 58px !important; font-size: clamp(20px, 3vh, 23px) !important; padding: 10px 14px !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta > span { max-width: 200px !important; font-size: clamp(16px, 2.4vh, 18px) !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

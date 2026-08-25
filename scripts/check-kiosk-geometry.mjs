@@ -5,6 +5,8 @@ const root = process.cwd();
 const cssPath = path.join(root, 'src/pages/kiosk-1280-geometry-contract.css');
 const transactionPath = path.join(root, 'src/pages/kiosk-p0-transaction-readability.css');
 const supportCssPath = path.join(root, 'src/pages/kiosk-p0-support-safe.css');
+const selectionCssPath = path.join(root, 'src/pages/kiosk-p0-selection-fit.css');
+const footerCssPath = path.join(root, 'src/pages/kiosk-footer-home-pricing.css');
 const adsPath = path.join(root, 'src/components/kiosk/kiosk-advertising-p0-safe.css');
 const runtimePath = path.join(root, 'src/pages/KioskPremiumGateV3.tsx');
 const paymentStatePath = path.join(root, 'src/lib/kioskPaymentState.ts');
@@ -16,6 +18,8 @@ const adsPortraitCssPath = path.join(root, 'src/components/kiosk/kiosk-advertisi
 const css = fs.readFileSync(cssPath, 'utf8');
 const transactionCss = fs.readFileSync(transactionPath, 'utf8');
 const supportCss = fs.readFileSync(supportCssPath, 'utf8');
+const selectionCss = fs.readFileSync(selectionCssPath, 'utf8');
+const footerCss = fs.readFileSync(footerCssPath, 'utf8');
 const adsCss = fs.readFileSync(adsPath, 'utf8');
 const runtime = fs.readFileSync(runtimePath, 'utf8');
 const paymentState = fs.readFileSync(paymentStatePath, 'utf8');
@@ -47,9 +51,9 @@ const spareSelection = mainH - selectionH;
 
 const failures = [];
 if (canvasH !== 720) failures.push(`canvas must stay 720px, got ${canvasH}`);
-if (footerH <= 0 || footerH >= canvasH) failures.push(`invalid footer height ${footerH}`);
-if (productH !== 658) failures.push(`product budget must be 658px, got ${productH}`);
-if (mainH < 560) failures.push(`main workspace too small: ${mainH}px`);
+if (footerH !== 82) failures.push(`physical footer must stay 82px, got ${footerH}px`);
+if (productH !== 638) failures.push(`product budget must be 638px, got ${productH}`);
+if (mainH < 540) failures.push(`main workspace too small: ${mainH}px`);
 if (pricingH > mainH) failures.push(`pricing scene ${pricingH}px exceeds main ${mainH}px`);
 if (selectionH > mainH) failures.push(`selection scene ${selectionH}px exceeds main ${mainH}px`);
 if (sparePricing < 24) failures.push(`pricing safety margin too small: ${sparePricing}px`);
@@ -82,7 +86,7 @@ for (const marker of requiredTransactionMarkers) {
 }
 
 const requiredAdsMarkers = [
-  'bottom: 62px !important',
+  'bottom: var(--p0-footer-h, 82px) !important',
   'html.kiosk-v3:not([data-kiosk-scene="home"]) .kiosk-ad-split',
   '.ck2-reference-home-main',
   '--p0-ads-rail-width',
@@ -90,6 +94,31 @@ const requiredAdsMarkers = [
 ];
 for (const marker of requiredAdsMarkers) {
   if (!adsCss.includes(marker)) failures.push(`missing advertising safety marker: ${marker}`);
+}
+
+const centeredSelectionMarkers = [
+  'grid-template-columns: minmax(0, 1fr) !important',
+  'grid-template-rows: auto minmax(0, 1fr) 70px !important',
+  'grid-template-columns: repeat(2, minmax(0, 1fr)) !important',
+  'grid-column: 1 / -1 !important',
+  'grid-column: 2 !important',
+  'max-width: 620px !important',
+];
+for (const marker of centeredSelectionMarkers) {
+  if (!selectionCss.includes(marker)) failures.push(`missing centered selection marker: ${marker}`);
+}
+if (selectionCss.includes('minmax(300px, 322px)')) {
+  failures.push('selection CTA must not return to a lateral right-hand column');
+}
+
+const homeFooterMarkers = [
+  'html.kiosk-v3[data-kiosk-scene="home"] .kiosk-system-footer__commercial',
+  'display: flex !important',
+  '.ck2-reference-footer',
+  'display: none !important',
+];
+for (const marker of homeFooterMarkers) {
+  if (!footerCss.includes(marker)) failures.push(`missing Home footer pricing marker: ${marker}`);
 }
 
 const runtimeMarkers = [
@@ -228,7 +257,8 @@ if (failures.length) {
 console.log('[kiosk-geometry] PASS');
 console.log(JSON.stringify({
   canvasH, footerH, productH, mainH, pricingH, sparePricing, selectionH, spareSelection,
-  transactionReadability: true, physicalTopology: '1|3/2|4', startingScene: true,
+  transactionReadability: true, physicalTopology: '1|3/2|4', centeredSelectionCta: true,
+  footerCommercialPricing: true, startingScene: true,
   advertisingRuntime: true, advertisingFooterSafe: true, advertisingTransactionIsolated: true,
   partnerQrIsolated: true, partnerQrSingleOwner: true,
   portraitAdsFullBleed: true, portraitAdsFocalCrop: true, portraitAdsExplicitHeight: true,
