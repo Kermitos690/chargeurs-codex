@@ -1,10 +1,17 @@
 /*
- * Field correction — readability and advertising containment for the physical
- * kiosk. Presentation only: no rental, price, payment, return or hardware
- * behavior is changed here.
+ * Physical 1280×720 field contract.
+ * Presentation and hit-testing only. It deliberately owns the final geometry
+ * after every legacy scene stylesheet so a kiosk scene cannot escape its
+ * physical frame or let Advertising steal a rental interaction.
  */
 
-/* Remove the redundant daily cap / CHF 30 deposit strip from the footer. */
+html.kiosk-v3 {
+  --field-footer-h: 82px;
+  --field-stage-w: 1024px;
+  --field-stage-h: 526px;
+}
+
+/* Footer: operational information only. Pricing and CHF 30 deposit stay out. */
 html.kiosk-v3 .kiosk-system-footer__commercial {
   display: none !important;
 }
@@ -14,62 +21,19 @@ html.kiosk-v3 .kiosk-system-footer {
   column-gap: 28px !important;
 }
 
-html.kiosk-v3 .kiosk-system-footer__secure {
-  font-size: 12px !important;
-}
-
+html.kiosk-v3 .kiosk-system-footer__secure { font-size: 12px !important; }
 html.kiosk-v3 .kiosk-system-footer .kiosk-payment-mark {
   min-width: 52px !important;
   height: 34px !important;
   min-height: 34px !important;
   max-height: 34px !important;
 }
-
-html.kiosk-v3 .kiosk-system-footer__station {
-  font-size: 14px !important;
-}
-
+html.kiosk-v3 .kiosk-system-footer__station { font-size: 14px !important; }
 html.kiosk-v3 .kiosk-system-footer__time,
-html.kiosk-v3 .kiosk-system-footer__network {
-  font-size: 12px !important;
-}
+html.kiosk-v3 .kiosk-system-footer__network { font-size: 12px !important; }
 
-/* Larger Home copy, sized for reading from standing distance. */
-html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
-html.kiosk-v3 .ck2-home .ck2-home-title {
-  font-size: 50px !important;
-  line-height: 1 !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-reference-heading p {
-  font-size: 19px !important;
-  line-height: 1.3 !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-reference-card {
-  padding: 30px 34px 76px !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-reference-card > strong {
-  font-size: 40px !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-reference-card > small {
-  font-size: 18px !important;
-  line-height: 1.34 !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-choice-icon {
-  width: 66px !important;
-  height: 66px !important;
-}
-
-html.kiosk-v3 .ck2-home .ck2-reference-rate b {
-  font-size: 33px !important;
-  line-height: 1.04 !important;
-}
-
-/* Keep campaign artwork entirely inside a narrower, footer-safe portrait rail. */
+/* Advertisements are a bounded non-rental surface: no overflow, no footer
+ * overlap, and no touch-through to a rental control below. */
 html.kiosk-v3[data-kiosk-ads-split="true"] {
   --p0-ads-rail-width: min(22vw, 280px);
 }
@@ -87,6 +51,10 @@ html.kiosk-v3 .kiosk-ad-split {
   overflow: hidden !important;
   clip-path: inset(0 round 22px 0 0) !important;
   contain: layout paint !important;
+  isolation: isolate !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+  z-index: 110 !important;
 }
 
 html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media,
@@ -100,6 +68,10 @@ html.kiosk-v3 .kiosk-ad-split[data-media-layout="adaptive"] .kiosk-ad-media {
   object-position: center center !important;
 }
 
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media-backdrop {
+  display: none !important;
+}
+
 html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-media,
 html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="adaptive"] .kiosk-ad-media {
   top: 0 !important;
@@ -107,21 +79,266 @@ html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"][data-media-layout="ada
   bottom: auto !important;
   left: 0 !important;
   width: 100% !important;
-  height: calc(100% - 142px) !important;
+  height: calc(100% - 124px) !important;
   max-width: 100% !important;
   object-fit: contain !important;
   object-position: center center !important;
 }
 
-html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media-backdrop {
-  display: none !important;
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-panel--split {
+  left: 8px !important;
+  right: 8px !important;
+  bottom: 8px !important;
+  max-width: calc(100% - 16px) !important;
+  box-sizing: border-box !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-panel__body {
+  grid-template-columns: 70px minmax(0, 1fr) !important;
+  gap: 8px !important;
+  padding: 8px !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-panel__qr {
+  width: 70px !important;
+  height: 70px !important;
+  border-width: 4px !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-panel__action {
+  font-size: 12px !important;
+  line-height: 1.05 !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split[data-has-partner-qr="true"] .kiosk-ad-partner-panel__copy p {
+  font-size: 9px !important;
+}
+
+@media (min-width: 1180px) and (min-height: 680px) {
+  /* One exact product workspace. Every scene is clipped inside it before the
+   * physical footer begins. */
+  html.kiosk-v3 .kv3-product-layer > .kiosk-root > main,
+  html.kiosk-v3 .kv3-product-layer > .kiosk-root > main > div {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  /* Home: larger copy, without expanding the card hit areas beyond the frame. */
+  html.kiosk-v3 .ck2-home .ck2-reference-home-main {
+    width: min(1120px, calc(100% - 56px)) !important;
+    top: 68px !important;
+    bottom: 10px !important;
+    grid-template-rows: 86px minmax(0, 1fr) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-ads-split="true"] .kv3-product-layer > .ck2-home .ck2-reference-home-main {
+    left: 28px !important;
+    width: calc(100vw - var(--p0-ads-rail-width, min(22vw, 280px)) - 64px) !important;
+  }
+
+  html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
+  html.kiosk-v3 .ck2-home .ck2-home-title {
+    font-size: 50px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3 .ck2-home .ck2-reference-heading p {
+    font-size: 19px !important;
+    line-height: 1.28 !important;
+  }
+
+  html.kiosk-v3 .ck2-home .ck2-reference-card {
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 26px 30px 66px !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3 .ck2-home .ck2-reference-card > strong { font-size: 38px !important; }
+  html.kiosk-v3 .ck2-home .ck2-reference-card > small {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+  }
+  html.kiosk-v3 .ck2-home .ck2-choice-icon {
+    width: 62px !important;
+    height: 62px !important;
+  }
+  html.kiosk-v3 .ck2-home .ck2-reference-rate b {
+    font-size: 31px !important;
+    line-height: 1.04 !important;
+  }
+
+  /* Shared post-home envelope. */
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage,
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage,
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage,
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage {
+    width: var(--field-stage-w) !important;
+    max-width: var(--field-stage-w) !important;
+    height: var(--field-stage-h) !important;
+    min-height: 0 !important;
+    max-height: var(--field-stage-h) !important;
+    margin: auto !important;
+    overflow: hidden !important;
+  }
+
+  /* Selection: readable numbers, compact cards, normal-size confirmation button. */
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-stage {
+    width: var(--field-stage-w) !important;
+    max-width: var(--field-stage-w) !important;
+    height: var(--field-stage-h) !important;
+    max-height: var(--field-stage-h) !important;
+    grid-template-rows: auto minmax(0, 1fr) 62px !important;
+    gap: 8px !important;
+    padding: 10px 14px 12px !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero h1 {
+    font-size: 46px !important;
+    line-height: .98 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero p {
+    font-size: 18px !important;
+    line-height: 1.15 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-hero > div {
+    font-size: 24px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-grid {
+    width: 900px !important;
+    max-width: 900px !important;
+    gap: 10px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card {
+    height: 154px !important;
+    min-height: 154px !important;
+    padding: 10px 13px !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-5xl {
+    font-size: 34px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-xl { font-size: 19px !important; }
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-slot-card .text-base { font-size: 15px !important; }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta {
+    height: 62px !important;
+    min-height: 62px !important;
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 520px) minmax(0, 1fr) !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta button {
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+    padding: 10px 22px !important;
+    font-size: 20px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="selection"] .kiosk-idle-cta > span {
+    font-size: 15px !important;
+    max-width: 190px !important;
+  }
+
+  /* Confirmation and payment controls: large enough to tap, never huge. */
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage {
+    grid-template-rows: 48px minmax(0, 1fr) 64px !important;
+    gap: 12px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > h2 { font-size: 42px !important; }
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-card {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 {
+    height: 64px !important;
+    min-height: 64px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="pricing"] .kiosk-pricing-stage > .flex.gap-5 button,
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage button,
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage button,
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage button,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage button,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage button {
+    height: 56px !important;
+    min-height: 56px !important;
+    max-height: 56px !important;
+    font-size: 18px !important;
+    line-height: 1.1 !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage {
+    padding: 20px 24px !important;
+    gap: 14px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > h2 { font-size: 42px !important; }
+  html.kiosk-v3[data-kiosk-scene="payment-choice"] .kiosk-payment-rail-stage > p { font-size: 18px !important; }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, .94fr) !important;
+    gap: 26px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 { font-size: 42px !important; }
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage h2 + p { font-size: 19px !important; }
+  html.kiosk-v3[data-kiosk-scene="payment"] .kiosk-qr-stage > div:last-child .glass-strong > svg {
+    width: 276px !important;
+    height: 276px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="starting"] .kv3-product-layer > .kiosk-root > main > div {
+    width: min(700px, calc(100% - 64px)) !important;
+    min-height: 280px !important;
+    max-height: 420px !important;
+    padding: 34px 42px !important;
+    overflow: hidden !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage {
+    padding: 18px 24px !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage h2,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage h2,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage h2 {
+    font-size: 44px !important;
+    line-height: 1 !important;
+  }
+
+  html.kiosk-v3[data-kiosk-scene="release"] .kiosk-release-stage p,
+  html.kiosk-v3[data-kiosk-scene="support"] .kiosk-release-stage p,
+  html.kiosk-v3[data-kiosk-scene="success"] .kiosk-ready-stage p {
+    font-size: 19px !important;
+    line-height: 1.25 !important;
+  }
 }
 
 @media (max-height: 680px) {
-  html.kiosk-v3 .ck2-home .ck2-reference-heading h1,
-  html.kiosk-v3 .ck2-home .ck2-home-title { font-size: 44px !important; }
-  html.kiosk-v3 .ck2-home .ck2-reference-heading p { font-size: 17px !important; }
-  html.kiosk-v3 .ck2-home .ck2-reference-card > strong { font-size: 34px !important; }
-  html.kiosk-v3 .ck2-home .ck2-reference-card > small { font-size: 16px !important; }
-  html.kiosk-v3 .ck2-home .ck2-reference-rate b { font-size: 28px !important; }
+  html.kiosk-v3 .kiosk-ad-split {
+    top: 70px !important;
+    bottom: calc(var(--p0-footer-h, 76px) + 10px) !important;
+    height: calc(100dvh - 70px - var(--p0-footer-h, 76px) - 10px) !important;
+  }
 }
