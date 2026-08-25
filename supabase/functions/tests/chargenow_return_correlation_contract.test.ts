@@ -168,7 +168,7 @@ Deno.test("settlement remains scoped to the uniquely correlated rental, not an e
   assertEquals(callbackSource.includes('from("rental_sessions").insert'), false);
 });
 
-Deno.test("paired exact cabinet events repair only a legacy fallback release identity", () => {
+Deno.test("paired exact cabinet events repair a legacy fallback across any return station and slot", () => {
   const start = callbackSource.indexOf("async function repairProviderFallbackReleaseIdentity");
   const end = callbackSource.indexOf("async function physicalReturnTime", start);
   assert(start >= 0);
@@ -183,6 +183,14 @@ Deno.test("paired exact cabinet events repair only a legacy fallback release ide
   assert(repair.includes('chargenow_status: "unexpected_release_detected"'));
   assert(repair.includes(".neq(\"id\", rentalId)"));
   assert(repair.includes("releases.length !== 1 || returns.length !== 1"));
+  assert(repair.includes('.in("station_id", relevantStationIds)'));
+  assert(repair.includes("value.stationId === originStationId"));
+  assert(repair.includes("value.stationId === returnStationId"));
+  assert(repair.includes("release_station_id: released.stationId"));
+  assert(repair.includes("return_station_id: returned.stationId"));
+  assert(repair.includes("returned_slot_num: returned.slotNum"));
+  assertEquals(repair.includes("released.slotNum !== returned.slotNum"), false);
+  assertEquals(repair.includes("released.stationId !== returned.stationId"), false);
   assert(repair.includes("no_hardware_command: true"));
   assert(repair.includes("no_payment_mutation: true"));
   assertEquals(repair.includes("ejectBy"), false);
