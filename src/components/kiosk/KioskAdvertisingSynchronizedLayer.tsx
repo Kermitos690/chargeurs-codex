@@ -11,11 +11,12 @@ import {
   type NetworkClockSample,
 } from "@/lib/adSync";
 
-const SYNC_HEARTBEAT_MS = 50;
-const CLOCK_RESYNC_MS = 15_000;
-const INITIAL_CLOCK_SAMPLES = 5;
-const STEADY_CLOCK_SAMPLES = 3;
-const SAMPLE_GAP_MS = 35;
+const SYNC_HEARTBEAT_MS = 1_000;
+const CLOCK_RESYNC_MS = 10 * 60_000;
+const INITIAL_CLOCK_SAMPLES = 3;
+const STEADY_CLOCK_SAMPLES = 1;
+const SAMPLE_GAP_MS = 70;
+const RESUME_RESYNC_MIN_GAP_MS = 60_000;
 const ADS_CACHE_PREFIX = "chargeurs:ads:playlist:clock-v2:";
 
 type AdsClockResponse = {
@@ -63,13 +64,10 @@ function warmCachedAdvertisingMedia() {
 }
 
 /**
- * Keeps the isolated Ads runtime on a hard shared network cadence.
- *
- * A dedicated data-free clock endpoint is sampled with an NTP-style four
- * timestamp exchange. The median of the best low-latency samples becomes the
- * authoritative Ads clock for every kiosk, including a kiosk temporarily using
- * its cached playlist. Media are also warmed ahead of boundaries so Android
- * decode latency does not become visible as a one-second slide offset.
+ * Keeps the isolated Ads runtime on a shared network cadence while respecting
+ * the Supabase Free-plan invocation budget. The last good clock offset remains
+ * authoritative between sparse resyncs; ad boundaries themselves are still
+ * calculated locally from the shared timeline epoch.
  *
  * Partner QR/data and portrait smart-crop helpers are mounted only inside this
  * Advertising runtime. Either helper may fail closed without propagating to the
@@ -123,16 +121,21 @@ export function KioskAdvertisingSynchronizedLayer() {
   }, []);
 
   useEffect(() => {
+    let lastResumeResyncAt = 0;
     const pulse = () => setHeartbeat((value) => (value + 1) % 10_000);
     const heartbeat = window.setInterval(pulse, SYNC_HEARTBEAT_MS);
     void synchronizeClock(INITIAL_CLOCK_SAMPLES);
     const clockTimer = window.setInterval(() => void synchronizeClock(STEADY_CLOCK_SAMPLES), CLOCK_RESYNC_MS);
-    const warmTimer = window.setInterval(warmCachedAdvertisingMedia, 5_000);
+    const warmTimer = window.setInterval(warmCachedAdvertisingMedia, 60_000);
     warmCachedAdvertisingMedia();
 
     const resync = () => {
       pulse();
-      void synchronizeClock(INITIAL_CLOCK_SAMPLES);
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - lastResumeResyncAt < RESUME_RESYNC_MIN_GAP_MS) return;
+      lastResumeResyncAt = now;
+      void synchronizeClock(STEADY_CLOCK_SAMPLES);
     };
     window.addEventListener("focus", resync);
     window.addEventListener("pageshow", resync);
