@@ -2,8 +2,8 @@
 //
 // PHYSICAL SOURCE OF TRUTH (pilot fleet):
 //   DTA21269 — QR/client-only cabinet; no Terminal is required.
-//   DTA21270 — dedicated Stripe Terminal / WisePad cabinet.
-//   DTA21277 — separate non-Terminal staging cabinet.
+//   DTA21270 — legacy terminal identity (not an active kiosk record).
+//   DTA21277 — dedicated Stripe Terminal / WisePad cabinet.
 //   DTA22032 — cabinet WITHOUT a payment terminal.
 //
 // A single cabinet id must never appear on two tablets. Historically the route
@@ -18,7 +18,7 @@ export const PILOT_STATION_IDS = ["DTA21269", "DTA21270", "DTA21277", "DTA22032"
 export type PilotStationId = (typeof PILOT_STATION_IDS)[number];
 
 /** Cabinets physically equipped with a payment terminal. */
-const TERMINAL_STATION_IDS: readonly string[] = ["DTA21270"];
+const TERMINAL_STATION_IDS: readonly string[] = ["DTA21270", "DTA21277"];
 
 /**
  * FIELD_REPAIR — temporary provisioning repair for the physical DTA22032 tablet.
