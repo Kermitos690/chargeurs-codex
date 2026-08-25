@@ -137,6 +137,8 @@ Deno.test("Stripe-confirmed Terminal cancellation atomically clears only pre-eje
   assert(terminalCancellationMigration.includes("state = 'payment_cancelled'"));
   assert(terminalCancellationMigration.includes("old.state = 'needs_support' and new.state = 'payment_cancelled'"));
   assert(terminalCancellationMigration.includes("a.status = 'canceled'"));
+  assert(terminalCancellationMigration.includes("UNVERIFIED_SINGLE_RELEASE_RECOVERY"));
+  assert(terminalCancellationMigration.includes("UNVERIFIED_RETURNED_VOIDED_TEST_CYCLE"));
 });
 
 Deno.test("QR claims rail before creating a Checkout side effect", () => {
