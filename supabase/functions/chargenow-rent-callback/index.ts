@@ -159,6 +159,7 @@ async function appendExactEvent(
 }
 
 type ExactCabinetLifecycle = {
+  stationId: string;
   batteryId: string;
   slotNum: number;
   eventId: string | null;
@@ -168,6 +169,7 @@ type ExactCabinetLifecycle = {
 function exactCabinetLifecycle(row: Record<string, unknown>, eventType: "BATTERY_BORROW_OUT" | "BATTERY_IN", tradeNo: string): ExactCabinetLifecycle | null {
   if (row.event_type !== eventType) return null;
   const body = flatten(row.payload);
+  const stationId = typeof row.station_id === "string" ? row.station_id.trim() : "";
   const observedTrade = firstString(body, ["tradeNo", "rentOrderId", "orderId", "orderNo"]);
   const batteryId = eventType === "BATTERY_BORROW_OUT"
     ? firstString(body, ["outBatteryId", "batteryId"])
@@ -176,8 +178,9 @@ function exactCabinetLifecycle(row: Record<string, unknown>, eventType: "BATTERY
     ? firstInt(body, ["outSlot", "slotNum", "slot"])
     : firstInt(body, ["returnSlot", "slotNum", "slot"]);
   const receivedAt = typeof row.received_at === "string" ? row.received_at : "";
-  if (observedTrade !== tradeNo || !batteryId || slotNum == null || slotNum < 1 || !Number.isFinite(Date.parse(receivedAt))) return null;
+  if (observedTrade !== tradeNo || !stationId || !batteryId || slotNum == null || slotNum < 1 || !Number.isFinite(Date.parse(receivedAt))) return null;
   return {
+    stationId,
     batteryId,
     slotNum,
     eventId: typeof row.external_event_id === "string" ? row.external_event_id : null,
@@ -187,28 +190,30 @@ function exactCabinetLifecycle(row: Record<string, unknown>, eventType: "BATTERY
 
 function uniqueCabinetLifecycle(values: ExactCabinetLifecycle[]) {
   const unique = new Map<string, ExactCabinetLifecycle>();
-  for (const value of values) unique.set(`${value.batteryId}:${value.slotNum}`, value);
+  for (const value of values) unique.set(`${value.stationId}:${value.batteryId}:${value.slotNum}`, value);
   return [...unique.values()];
 }
 
 /**
  * Compatibility repair for rentals activated by the former provider-identity
  * fallback.  A correction is allowed only when one exact BATTERY_BORROW_OUT
- * and one exact BATTERY_IN share the immutable order, station, battery and
- * slot, the pre-command snapshot proves that battery occupied that slot, and
- * no other active rental owns it.  No hardware command is issued here.
+ * and one exact BATTERY_IN share the immutable order and battery identity.
+ * The release is proven at the origin station; the return may be in any slot
+ * of any station. The pre-command snapshot must prove the released battery and
+ * no other active rental may own it. No hardware command is issued here.
  */
 async function repairProviderFallbackReleaseIdentity(
   client: ReturnType<typeof db>,
   session: Record<string, unknown>,
-  stationId: string,
+  returnStationId: string,
   tradeNo: string,
 ): Promise<Record<string, unknown>> {
   const rentalId = String(session.id ?? "");
   const originalBatteryId = typeof session.battery_id === "string" ? session.battery_id.trim() : "";
   const originalSlotNum = Number(session.selected_slot_num);
   const startedAt = String(session.started_at ?? session.ejected_at ?? "");
-  if (!rentalId || !tradeNo || !originalBatteryId || !Number.isInteger(originalSlotNum) ||
+  const originStationId = typeof session.station_id === "string" ? session.station_id.trim() : "";
+  if (!rentalId || !tradeNo || !originStationId || !returnStationId || !originalBatteryId || !Number.isInteger(originalSlotNum) ||
       !["ejected", "active_rental", "battery_taken"].includes(String(session.state)) ||
       session.returned_at || !Number.isFinite(Date.parse(startedAt))) return session;
 
@@ -225,9 +230,12 @@ async function repairProviderFallbackReleaseIdentity(
   );
   if (!usedFallback) return session;
 
+  const relevantStationIds = originStationId === returnStationId
+    ? [originStationId]
+    : [originStationId, returnStationId];
   const { data: rows, error: rowsError } = await client.from("cabinet_events")
-    .select("event_type,external_event_id,received_at,payload")
-    .eq("station_id", stationId)
+    .select("station_id,event_type,external_event_id,received_at,payload")
+    .in("station_id", relevantStationIds)
     .in("event_type", ["BATTERY_BORROW_OUT", "BATTERY_IN"])
     .gte("received_at", startedAt)
     .order("received_at", { ascending: true })
@@ -236,14 +244,14 @@ async function repairProviderFallbackReleaseIdentity(
 
   const releases = uniqueCabinetLifecycle((rows ?? [])
     .map((row) => exactCabinetLifecycle(row as Record<string, unknown>, "BATTERY_BORROW_OUT", tradeNo))
-    .filter((value): value is ExactCabinetLifecycle => value !== null));
+    .filter((value): value is ExactCabinetLifecycle => value !== null && value.stationId === originStationId));
   const returns = uniqueCabinetLifecycle((rows ?? [])
     .map((row) => exactCabinetLifecycle(row as Record<string, unknown>, "BATTERY_IN", tradeNo))
-    .filter((value): value is ExactCabinetLifecycle => value !== null));
+    .filter((value): value is ExactCabinetLifecycle => value !== null && value.stationId === returnStationId));
   if (releases.length !== 1 || returns.length !== 1) return session;
 
   const released = releases[0], returned = returns[0];
-  if (released.batteryId !== returned.batteryId || released.slotNum !== returned.slotNum ||
+  if (released.batteryId !== returned.batteryId ||
       Date.parse(returned.receivedAt) < Date.parse(released.receivedAt)) return session;
   if (released.batteryId === originalBatteryId && released.slotNum === originalSlotNum) return session;
 
@@ -299,6 +307,9 @@ async function repairProviderFallbackReleaseIdentity(
         requested_battery_id: originalBatteryId,
         actual_slot_num: released.slotNum,
         actual_battery_id: released.batteryId,
+        release_station_id: released.stationId,
+        return_station_id: returned.stationId,
+        returned_slot_num: returned.slotNum,
         release_event_id: released.eventId,
         return_event_id: returned.eventId,
       },
@@ -330,6 +341,9 @@ async function repairProviderFallbackReleaseIdentity(
         requested_battery_id: originalBatteryId,
         actual_slot_num: released.slotNum,
         actual_battery_id: released.batteryId,
+        release_station_id: released.stationId,
+        return_station_id: returned.stationId,
+        returned_slot_num: returned.slotNum,
         release_event_id: released.eventId,
         return_event_id: returned.eventId,
         no_hardware_command: true,
@@ -337,7 +351,7 @@ async function repairProviderFallbackReleaseIdentity(
       },
       p_resulting_state: "active",
       p_payment_intent_id: null,
-      p_station_id: stationId,
+      p_station_id: released.stationId,
       p_battery_id: released.batteryId,
       p_final_amount_chf: null,
       p_failure_reason: null,
@@ -363,7 +377,8 @@ async function repairProviderFallbackReleaseIdentity(
 
   await audit(client, "rental.release_identity.corrected_from_exact_physical_events", rentalId, {
     order_id: tradeNo,
-    station_id: stationId,
+    release_station_id: released.stationId,
+    return_station_id: returned.stationId,
     requested_battery_id: originalBatteryId,
     requested_slot_num: originalSlotNum,
     actual_battery_id: released.batteryId,
