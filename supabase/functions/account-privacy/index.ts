@@ -1,7 +1,7 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
 import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
-import { CHARGEURS_CUSTOM_PASS_ID } from "../_shared/passStudio.ts";
+import { CHARGEURS_ACCOUNT_PASS_ID } from "../_shared/passStudio.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -23,22 +23,41 @@ async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, use
 
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
   await claimVerifiedEmailRentals(db, user);
-  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult] = await Promise.all([
+  const [
+    rentalsResult,
+    profileResult,
+    membershipResult,
+    walletResult,
+    pointsResult,
+    rentalCreditResult,
+    walletNotificationsResult,
+  ] = await Promise.all([
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships").select("id,status,starts_at,renews_at,ends_at,plan_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_wallet_passes").select("id,membership_id,public_pass_id,status,provider_status,provider,provider_pass_id,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
     db.from("customer_membership_credit_balances").select("balance_cents,currency,next_expiry_at,last_activity_at").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
+    db.from("customer_wallet_native_notifications")
+      .select("id,event_type,title,message,created_at,delivered_at")
+      .eq("user_id", user.id)
+      .eq("status", "delivered")
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
+
   if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
   if (membershipResult.error) throw new Error("MEMBERSHIP_UNAVAILABLE");
   if (walletResult.error) throw new Error("WALLET_PASS_UNAVAILABLE");
   if (pointsResult.error) throw new Error("CHARGEPOINTS_UNAVAILABLE");
   if (rentalCreditResult.error) throw new Error("MEMBERSHIP_CREDIT_UNAVAILABLE");
+  if (walletNotificationsResult.error) throw new Error("WALLET_NOTIFICATION_HISTORY_UNAVAILABLE");
+
   const rentals = rentalsResult.data ?? [];
   const rentalIds = rentals.map((rental) => String(rental.id));
-  let payments: unknown[] = []; let refunds: unknown[] = []; let incidents: unknown[] = [];
+  let payments: unknown[] = [];
+  let refunds: unknown[] = [];
+  let incidents: unknown[] = [];
   if (rentalIds.length) {
     const [paymentsResult, refundsResult, incidentsResult] = await Promise.all([
       db.from("payments").select("id,rental_session_id,provider,amount,currency,payment_method,status,created_at").in("rental_session_id", rentalIds),
@@ -46,13 +65,30 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
       db.from("system_incidents").select("id,rental_session_id,type,severity,resolved,created_at,resolved_at").in("rental_session_id", rentalIds),
     ]);
     if (paymentsResult.error || refundsResult.error || incidentsResult.error) throw new Error("ACCOUNT_RELATED_DATA_UNAVAILABLE");
-    payments = paymentsResult.data ?? []; refunds = refundsResult.data ?? []; incidents = incidentsResult.data ?? [];
+    payments = paymentsResult.data ?? [];
+    refunds = refundsResult.data ?? [];
+    incidents = incidentsResult.data ?? [];
   }
+
   return {
-    profile: profileResult.data ?? null, rentals, payments, refunds, incidents,
-    membership: membershipResult.data ?? null, walletPass: walletResult.data ?? null,
-    chargePoints: { balance: Number(pointsResult.data?.balance ?? 0), lastActivityAt: pointsResult.data?.last_activity_at ?? null },
-    rentalCredit: { balanceCents: Number(rentalCreditResult.data?.balance_cents ?? 0), currency: String(rentalCreditResult.data?.currency ?? "CHF"), nextExpiryAt: rentalCreditResult.data?.next_expiry_at ?? null, lastActivityAt: rentalCreditResult.data?.last_activity_at ?? null },
+    profile: profileResult.data ?? null,
+    rentals,
+    payments,
+    refunds,
+    incidents,
+    membership: membershipResult.data ?? null,
+    walletPass: walletResult.data ?? null,
+    walletNotifications: walletNotificationsResult.data ?? [],
+    chargePoints: {
+      balance: Number(pointsResult.data?.balance ?? 0),
+      lastActivityAt: pointsResult.data?.last_activity_at ?? null,
+    },
+    rentalCredit: {
+      balanceCents: Number(rentalCreditResult.data?.balance_cents ?? 0),
+      currency: String(rentalCreditResult.data?.currency ?? "CHF"),
+      nextExpiryAt: rentalCreditResult.data?.next_expiry_at ?? null,
+      lastActivityAt: rentalCreditResult.data?.last_activity_at ?? null,
+    },
   };
 }
 
@@ -75,13 +111,17 @@ Deno.serve(async (req) => {
       if (walletError) return json({ ok: false, error: "WALLET_PASS_UNAVAILABLE" }, 500);
       const addToWalletUrl = String(wallet?.provider_add_to_wallet_url ?? "").trim();
       const existingPassStudioPass = wallet?.provider === "pass_studio"
-        && wallet?.provider_pass_id === CHARGEURS_CUSTOM_PASS_ID
+        && wallet?.provider_pass_id === CHARGEURS_ACCOUNT_PASS_ID
         && Boolean(wallet?.provider_instance_id)
         && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
       if (existingPassStudioPass) {
         const { data: outboxId, error: queueError } = await db.rpc("enqueue_customer_wallet_sync_event", {
-          p_user_id: user.id, p_event_type: "manual_sync", p_event_key: `wallet:manual:${user.id}:${crypto.randomUUID()}`,
-          p_rental_session_id: null, p_payload: { source: "account_pass" }, p_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+          p_user_id: user.id,
+          p_event_type: "manual_sync",
+          p_event_key: `wallet:manual:${user.id}:${crypto.randomUUID()}`,
+          p_rental_session_id: null,
+          p_payload: { source: "account_pass" },
+          p_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
         });
         if (queueError || !outboxId) return json({ ok: false, error: "WALLET_SYNC_QUEUE_FAILED" }, 500);
         await auditLog(db, { actor: user.id, action: "wallet.pass_sync_queued", target: wallet?.membership_id ?? user.id, data: { provider: "pass_studio", outbox_id: outboxId } });
@@ -117,5 +157,6 @@ Deno.serve(async (req) => {
     if (deleteError) return json({ ok: false, error: "ACCOUNT_DELETE_FAILED" }, 500);
     return json({ ok: true });
   }
+
   return json({ ok: false, error: "UNKNOWN_ACTION" }, 400);
 });
