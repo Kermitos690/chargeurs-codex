@@ -677,9 +677,12 @@ function KioskAdvertisingRuntime() {
     event.stopPropagation();
   }, []);
 
-  const dismissScreensaverSafely = useCallback((event: SyntheticEvent) => {
+  // Generic advertising touches are intentionally inert. Dismissing happens only
+  // through the dedicated control below and is delayed until the native WebView
+  // has finished this touch sequence, so it cannot click the UI underneath.
+  const dismissScreensaverExplicitly = useCallback((event: SyntheticEvent) => {
     consumeAdvertisingTouch(event);
-    dismissScreensaver();
+    window.setTimeout(dismissScreensaver, 650);
   }, [consumeAdvertisingTouch, dismissScreensaver]);
 
   return (
@@ -713,13 +716,12 @@ function KioskAdvertisingRuntime() {
       {saverActive && (
         <div
           className="kiosk-ad-screensaver"
-          role={authRequired ? "region" : "button"}
-          tabIndex={authRequired ? undefined : 0}
+          role="region"
           aria-label={saverLabel}
-          onPointerDownCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
-          onTouchStartCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
+          onPointerDownCapture={consumeAdvertisingTouch}
+          onTouchStartCapture={consumeAdvertisingTouch}
           onClickCapture={consumeAdvertisingTouch}
-          onKeyDownCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
+          onKeyDownCapture={consumeAdvertisingTouch}
         >
           {saver.current ? (
             <BufferedAdMedia
@@ -741,6 +743,17 @@ function KioskAdvertisingRuntime() {
           </div>
           {saver.current?.qrUrl && <AdvertisingQr url={saver.current.qrUrl} label={copy.scan} mode="screensaver" />}
           {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
+          {!authRequired && (
+            <button
+              type="button"
+              className="kiosk-ad-screensaver-dismiss"
+              onPointerDownCapture={consumeAdvertisingTouch}
+              onTouchStartCapture={consumeAdvertisingTouch}
+              onClick={dismissScreensaverExplicitly}
+            >
+              {lang === "de" ? "Werbung schließen" : lang === "en" ? "Close advertisement" : "Fermer la publicité"}
+            </button>
+          )}
         </div>
       )}
     </>
