@@ -1,4 +1,4 @@
-2026-08-25T18:46:00Z
+2026-08-25T19:45:09Z
 source=chatgpt
-reason=force-prebuilt-production-release-dta21277-stale-terminal-cancellation-fix
-source_commit=fc5e6cae74e706eea2241b269c29daa7361fe974
+reason=manual-production-release-dta21269-ads-sync-and-cancelled-payment-confirmation
+source_commit=f8e7d486593ed79a73aa915cff661d0df48c1993
