@@ -47,17 +47,17 @@ describe("kiosk canonical identity", () => {
     expect(getLockedStation()).toBe("DTA21269");
   });
 
-  it("keeps DTA21277 separate and without terminal", () => {
+  it("keeps DTA21277 separate with its dedicated terminal", () => {
     bindNative("DTA21277", "c1651928-082d-4220-a4dc-77e9532ae8a2");
 
     const identity = resolveKioskIdentity("DTA21277");
 
     expect(identity.stationId).toBe("DTA21277");
     expect(identity.redirectTo).toBeNull();
-    expect(identity.terminalAvailable).toBe(false);
+    expect(identity.terminalAvailable).toBe(true);
   });
 
-  it("exposes the dedicated Terminal lane on DTA21270 only", () => {
+  it("exposes the legacy Terminal lane on DTA21270", () => {
     bindNative("DTA21270", "dta21270-terminal-device");
     const identity = resolveKioskIdentity("DTA21270");
     expect(identity.stationId).toBe("DTA21270");
@@ -81,10 +81,10 @@ describe("kiosk canonical identity", () => {
     expect(identity.terminalAvailable).toBe(false);
   });
 
-  it("exposes terminal capability only for DTA21270", () => {
+  it("exposes terminal capability on DTA21270 and DTA21277", () => {
     expect(stationHasPaymentTerminal("DTA21269")).toBe(false);
     expect(stationHasPaymentTerminal("DTA21270")).toBe(true);
-    expect(stationHasPaymentTerminal("DTA21277")).toBe(false);
+    expect(stationHasPaymentTerminal("DTA21277")).toBe(true);
     expect(stationHasPaymentTerminal("DTA22032")).toBe(false);
   });
 });
