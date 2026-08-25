@@ -168,6 +168,7 @@ export function KioskPaymentRailStage(props: Props) {
   // kiosk has already returned home. Never let that stale terminal state close
   // a newly-created rental before this exact screen has started a payment.
   const terminalStartAcceptedRef = useRef(false);
+  const terminalRailObservedRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
   const initialReaderProbeRef = useRef<string | null>(null);
@@ -175,6 +176,7 @@ export function KioskPaymentRailStage(props: Props) {
   useEffect(() => {
     terminalCancellationHandledRef.current = false;
     terminalStartAcceptedRef.current = false;
+    terminalRailObservedRef.current = false;
   }, [rentalSessionId]);
 
   useEffect(() => {
@@ -251,12 +253,23 @@ export function KioskPaymentRailStage(props: Props) {
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
   useEffect(() => {
-    // Do not consume a final cancellation left over from the preceding rental.
-    // Only the current screen's accepted Terminal start may return this kiosk
-    // home as a terminal-cancellation result.
+    const payment = reader?.payment;
+    const currentTerminalRail = payment?.rail === "TERMINAL"
+      && payment?.railState !== "CANCELLED"
+      && payment?.railState !== "EXPIRED";
+
+    // The native shell may carry a prior rental's final CANCELLED projection
+    // across Home and into the next payment screen. A current session must
+    // first be visibly engaged on the native Terminal rail before its own
+    // cancellation is allowed to return the kiosk home.
+    if (terminalStartAcceptedRef.current && currentTerminalRail) {
+      terminalRailObservedRef.current = true;
+    }
+
     if (
       terminalCancellationHandledRef.current
       || !terminalStartAcceptedRef.current
+      || !terminalRailObservedRef.current
       || !isCanonicalTerminalCancellation(reader)
     ) return;
     terminalCancellationHandledRef.current = true;
