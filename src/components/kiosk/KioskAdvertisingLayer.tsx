@@ -575,7 +575,17 @@ function KioskAdvertisingRuntime() {
     };
   }, []);
 
-  const markActivity = useCallback(() => {
+  const markActivity = useCallback((event?: Event) => {
+    // Window capture fires before React's overlay handler. Keep the screensaver
+    // mounted for a touch that started on it, so it can consume that touch
+    // instead of exposing a rental button to the native synthetic click.
+    const target = event?.target;
+    if (target instanceof Element && target.closest(".kiosk-ad-screensaver")) return;
+    lastActivityRef.current = Date.now();
+    setScreensaver(false);
+  }, []);
+
+  const dismissScreensaver = useCallback(() => {
     lastActivityRef.current = Date.now();
     setScreensaver(false);
   }, []);
@@ -669,8 +679,8 @@ function KioskAdvertisingRuntime() {
 
   const dismissScreensaverSafely = useCallback((event: SyntheticEvent) => {
     consumeAdvertisingTouch(event);
-    markActivity();
-  }, [consumeAdvertisingTouch, markActivity]);
+    dismissScreensaver();
+  }, [consumeAdvertisingTouch, dismissScreensaver]);
 
   return (
     <>
