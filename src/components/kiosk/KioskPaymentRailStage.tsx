@@ -150,7 +150,11 @@ export function KioskPaymentRailStage(props: Props) {
   const native = (window as NativeWindow).ChargeursNative;
   const nativeBridge = Boolean(native?.getPaymentReaderStatus && native?.startTerminalPayment);
   const terminalStation = stationHasPaymentTerminal(stationId);
-  // Cabinet identity is the physical source of truth. A native bridge on a QR-only\n  // tablet is not evidence of a payment reader; it must never create a disabled\n  // “Sans contact” choice for the customer.\n  const physicalQrOnlyCabinet = !terminalStation;\n  const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
+  // Cabinet identity is the physical source of truth. A native bridge on a QR-only
+  // tablet is not evidence of a payment reader; it must never create a disabled
+  // “Sans contact” choice for the customer.
+  const physicalQrOnlyCabinet = !terminalStation;
+  const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
   const [localRail, setLocalRail] = useState<PaymentRail>(inProgress ? "TERMINAL" : "NONE");
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
   const [nativeError, setNativeError] = useState<string | null>(null);
