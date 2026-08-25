@@ -687,7 +687,7 @@ function KioskAdvertisingRuntime() {
 
   const consumeScreensaverSurface = useCallback((event: SyntheticEvent) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".kiosk-ad-screensaver-dismiss")) return;
+    if (target instanceof Element && target.closest(".kiosk-ad-screensaver-cta")) return;
     consumeAdvertisingTouch(event);
   }, [consumeAdvertisingTouch]);
 
@@ -743,23 +743,24 @@ function KioskAdvertisingRuntime() {
           )}
           <div className="kiosk-ad-screensaver-shade" aria-hidden />
           <div className="kiosk-ad-screensaver-brand"><Zap /> Chargeurs.ch</div>
-          <div className={`kiosk-ad-screensaver-cta${authRequired ? " kiosk-ad-screensaver-cta--unavailable" : ""}`}>
-            <span>{saverLabel}</span>
-            {!authRequired && <b>→</b>}
-          </div>
-          {saver.current?.qrUrl && <AdvertisingQr url={saver.current.qrUrl} label={copy.scan} mode="screensaver" />}
-          {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
-          {!authRequired && (
+          {authRequired ? (
+            <div className="kiosk-ad-screensaver-cta kiosk-ad-screensaver-cta--unavailable">
+              <span>{saverLabel}</span>
+            </div>
+          ) : (
             <button
               type="button"
-              className="kiosk-ad-screensaver-dismiss"
+              className="kiosk-ad-screensaver-cta"
               onPointerDownCapture={consumeAdvertisingTouch}
               onTouchStartCapture={consumeAdvertisingTouch}
               onClick={dismissScreensaverExplicitly}
             >
-              {lang === "de" ? "Werbung schließen" : lang === "en" ? "Close advertisement" : "Fermer la publicité"}
+              <span>{saverLabel}</span>
+              <b aria-hidden>→</b>
             </button>
           )}
+          {saver.current?.qrUrl && <AdvertisingQr url={saver.current.qrUrl} label={copy.scan} mode="screensaver" />}
+          {saver.current && <div className="kiosk-ad-screensaver-partner"><Megaphone /> {copy.sponsored}</div>}
         </div>
       )}
     </>
