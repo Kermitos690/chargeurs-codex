@@ -659,13 +659,29 @@ function KioskAdvertisingRuntime() {
   const saverLabel = authRequired ? copy.unavailable : copy.touch;
   const splitLayout = split.current ? splitMediaLayout(split.current.item) : "cover";
 
-  // A campaign is a visual surface only. In particular, do not let the native\n  // WebView turn the touch which closes the full-screen screensaver into a\n  // synthetic click on the rental button revealed underneath.\n  const consumeAdvertisingTouch = useCallback((event: SyntheticEvent) => {\n    event.preventDefault();\n    event.stopPropagation();\n  }, []);\n\n  const dismissScreensaverSafely = useCallback((event: SyntheticEvent) => {\n    consumeAdvertisingTouch(event);\n    markActivity();\n  }, [consumeAdvertisingTouch, markActivity]);\n\n  return (
+  // A campaign is a visual surface only. In particular, do not let the native
+  // WebView turn the touch which closes the full-screen screensaver into a
+  // synthetic click on the rental button revealed underneath.
+  const consumeAdvertisingTouch = useCallback((event: SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  const dismissScreensaverSafely = useCallback((event: SyntheticEvent) => {
+    consumeAdvertisingTouch(event);
+    markActivity();
+  }, [consumeAdvertisingTouch, markActivity]);
+
+  return (
     <>
       {splitActive && split.current && (
         <aside
           className="kiosk-ad-split"
           data-media-layout={splitLayout}
           aria-label={`${copy.sponsored}: ${split.current.campaignName}`}
+          onPointerDownCapture={consumeAdvertisingTouch}
+          onTouchStartCapture={consumeAdvertisingTouch}
+          onClickCapture={consumeAdvertisingTouch}
         >
           {splitLayout === "adaptive" && split.current.item.mediaType === "image" && (
             <img className="kiosk-ad-media-backdrop" src={split.current.item.url} alt="" aria-hidden draggable={false} />
@@ -690,8 +706,10 @@ function KioskAdvertisingRuntime() {
           role={authRequired ? "region" : "button"}
           tabIndex={authRequired ? undefined : 0}
           aria-label={saverLabel}
-          onClick={authRequired ? undefined : markActivity}
-          onKeyDown={authRequired ? undefined : markActivity}
+          onPointerDownCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
+          onTouchStartCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
+          onClickCapture={consumeAdvertisingTouch}
+          onKeyDownCapture={authRequired ? consumeAdvertisingTouch : dismissScreensaverSafely}
         >
           {saver.current ? (
             <BufferedAdMedia
