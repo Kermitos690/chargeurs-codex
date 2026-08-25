@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Chargeurs plus">
+  <rect width="1024" height="1024" rx="224" fill="#07162e"/>
+  <rect x="300" y="248" width="424" height="542" rx="74" fill="none" stroke="#7fe8ff" stroke-width="52"/>
+  <path d="M444 248v-58c0-25 20-45 45-45h46c25 0 45 20 45 45v58" fill="none" stroke="#7fe8ff" stroke-linecap="round" stroke-width="52"/>
+  <path d="M568 342 408 562h126l-76 180 194-244H530z" fill="#7fe8ff"/>
+</svg>
