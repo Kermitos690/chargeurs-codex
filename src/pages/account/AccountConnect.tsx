@@ -16,6 +16,9 @@ type MemberSummary = {
   dailyCapCents?: number | null;
   includedMinutes?: number | null;
   renewalCreditCents?: number | null;
+  rentalCreditCents?: number | null;
+  rentalCreditCurrency?: string | null;
+  rentalCreditExpiresAt?: string | null;
   renewsAt?: string | null;
 };
 
@@ -96,6 +99,11 @@ export default function AccountConnect() {
               <p className="mt-1 font-display text-4xl font-extrabold text-success">{money(member?.hourlyCents, member?.currency)} / h</p>
               {member?.dailyCapCents != null && <p className="mt-2 text-sm text-muted-foreground">Plafond journalier {money(member.dailyCapCents, member.currency)}</p>}
               {Number(member?.includedMinutes ?? 0) > 0 && <p className="mt-1 text-sm text-muted-foreground">{member?.includedMinutes} min incluses dans votre plan</p>}
+              <div className="mt-4 border-t border-success/20 pt-4">
+                <p className="text-sm text-muted-foreground">Crédit location disponible</p>
+                <p className="mt-1 font-display text-2xl font-extrabold text-success">{money(member?.rentalCreditCents, member?.rentalCreditCurrency ?? member?.currency)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Il sera déduit du prix final de la location. La garantie éventuelle reste séparée.</p>
+              </div>
             </div>
             <p className="mt-5 text-sm text-muted-foreground">Vous pouvez reprendre sur l’écran de la borne.</p>
             <Button onClick={() => navigate("/compte", { replace: true })} className="mt-6 w-full rounded-full bg-gradient-success py-6 text-lg font-bold text-success-foreground">
