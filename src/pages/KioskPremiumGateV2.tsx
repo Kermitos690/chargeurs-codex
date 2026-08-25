@@ -46,6 +46,7 @@ type SegmentPrice = {
   total_cap_cents?: number | null;
   period_minutes?: number | null;
   price_per_period_cents?: number | null;
+  min_amount_cents?: number | null;
 };
 
 type MembershipPlan = {
@@ -180,13 +181,15 @@ type Copy = {
   becomePlusBody: string;
   expressInstead: string;
   memberUnavailable: string;
+  minimumRental: string;
+  minimumRentalBody: string;
 };
 
 const COPY: Record<"fr" | "en" | "de", Copy> = {
   fr: {
     refresh: "Actualiser", help: "FAQ / Aide", cancel: "Annuler", returnHome: "Retour accueil", back: "Retour",
     connectedKicker: "PASS RECONNU", connectedTitle: "CONNEXION RÉUSSIE", connectedSubtitle: "Vos avantages Client Chargeurs actifs sont chargés depuis votre compte.",
-    connectedBenefits: "Vos avantages actifs", connectedRate: "Tarif membre", connectedCap: "Plafond journalier", connectedMinutes: "Minutes incluses", connectedCredit: "Crédit location", connectedCreditNote: "Déduit du prix final de la location. La garantie reste distincte ; un règlement à vérifier réserve le crédit concerné.", connectedWallet: "Pass Wallet", connectedWalletLocal: "Pass compte actif",
+    connectedBenefits: "Vos avantages actifs", connectedRate: "Tarif membre", connectedCap: "Plafond journalier", connectedMinutes: "Minutes incluses", connectedCredit: "Crédit location", connectedCreditNote: "Déduit du prix final de la location. Le tarif et son minimum restent les mêmes avec ou sans crédit ; la garantie reste distincte.", connectedWallet: "Pass Wallet", connectedWalletLocal: "Pass compte actif",
     connectedCta: "COMMENCER UNE LOCATION", connectedCtaSub: "Choisissez ensuite votre batterie sur cette borne.",
     memberEyebrow: "CLIENT CHARGEURS", memberTitle: "Scannez avec", memberTitleAccent: "votre téléphone", memberPrivacy: "Connexion temporaire et sécurisée. Aucune donnée personnelle n’est saisie sur la borne.",
     memberRateLabel: "Tarif Client Chargeurs", memberScan: "Ouvrez l’appareil photo de votre téléphone et scannez le QR code.", memberError: "Connexion temporairement indisponible", retry: "Réessayer",
@@ -199,12 +202,12 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     continueExpress: "CONTINUER EN EXPRESS", discoverPlus: "Voir Chargeurs+", totalRentalCap: "Plafond total de location", totalRentalCapBody: "Même sur une longue location, le tarif de location est plafonné selon le contrat actif.",
     plusKicker: "CHARGEURS+ · PASS CLIENT", plusTitle: "Louez moins cher quand votre usage s’y prête.", plusLead: "Le Pass et le tarif membre ci-dessous viennent du backend Chargeurs.ch. L’économie dépend de la durée de chaque location et de votre fréquence d’utilisation.",
     passPrice: "Pass / 12 mois", memberPrice: "Tarif membre", renewalCredit: "Crédit adhésion / renouvellement", potentialSaving: "Économie potentielle", savingExample: "Exemple", savingDisclaimer: "Économie sur le prix de la location uniquement, avant prise en compte du prix annuel du Pass.",
-    alreadyMember: "J’AI DÉJÀ UN PASS", becomePlus: "DEVENIR CHARGEURS+", becomePlusBody: "Scannez avec votre téléphone pour créer/ouvrir votre compte puis activer le Pass Chargeurs+.", expressInstead: "Continuer sans compte", memberUnavailable: "La connexion membre est momentanément indisponible, mais vous pouvez consulter l’offre Chargeurs+.",
+    alreadyMember: "J’AI DÉJÀ UN PASS", becomePlus: "DEVENIR CHARGEURS+", becomePlusBody: "Scannez avec votre téléphone pour créer/ouvrir votre compte puis activer le Pass Chargeurs+.", expressInstead: "Continuer sans compte", memberUnavailable: "La connexion membre est momentanément indisponible, mais vous pouvez consulter l’offre Chargeurs+.", minimumRental: "Minimum de location", minimumRentalBody: "Ce montant s’applique dès la mise à disposition de la batterie, même pour une location très courte. Le crédit Pass est déduit du même prix final avant tout prélèvement ; la garantie reste séparée.",
   },
   en: {
     refresh: "Refresh", help: "FAQ / Help", cancel: "Cancel", returnHome: "Back home", back: "Back",
     connectedKicker: "PASS RECOGNISED", connectedTitle: "CONNECTION SUCCESSFUL", connectedSubtitle: "Your active Chargeurs member benefits are loaded from your account.",
-    connectedBenefits: "Your active benefits", connectedRate: "Member rate", connectedCap: "Daily cap", connectedMinutes: "Included minutes", connectedCredit: "Rental credit", connectedCreditNote: "Deducted from the final rental price. The guarantee remains separate; a payment under review reserves its credit.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Account Pass active",
+    connectedBenefits: "Your active benefits", connectedRate: "Member rate", connectedCap: "Daily cap", connectedMinutes: "Included minutes", connectedCredit: "Rental credit", connectedCreditNote: "Deducted from the final rental price. The rate and its minimum stay the same with or without credit; the guarantee remains separate.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Account Pass active",
     connectedCta: "START A RENTAL", connectedCtaSub: "Choose your powerbank next on this kiosk.",
     memberEyebrow: "CHARGEURS MEMBER", memberTitle: "Scan with", memberTitleAccent: "your phone", memberPrivacy: "Temporary, secure connection. No personal data is entered on the station.",
     memberRateLabel: "Chargeurs member rate", memberScan: "Open your phone camera and scan the QR code.", memberError: "Connection temporarily unavailable", retry: "Try again",
@@ -217,12 +220,12 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     continueExpress: "CONTINUE EXPRESS", discoverPlus: "See Chargeurs+", totalRentalCap: "Total rental cap", totalRentalCapBody: "Even on a long rental, the rental price is capped under the active contract.",
     plusKicker: "CHARGEURS+ · MEMBER PASS", plusTitle: "Pay less when your usage fits the member tariff.", plusLead: "The Pass and member prices below come from the Chargeurs.ch backend. Savings depend on each rental duration and how often you use it.",
     passPrice: "Pass / 12 months", memberPrice: "Member price", renewalCredit: "Membership / renewal credit", potentialSaving: "Potential saving", savingExample: "Example", savingDisclaimer: "Saving on rental price only, before the annual Pass price is taken into account.",
-    alreadyMember: "I ALREADY HAVE A PASS", becomePlus: "GET CHARGEURS+", becomePlusBody: "Scan with your phone to create/open your account and activate Chargeurs+.", expressInstead: "Continue without account", memberUnavailable: "Member connection is temporarily unavailable, but you can still review the Chargeurs+ offer.",
+    alreadyMember: "I ALREADY HAVE A PASS", becomePlus: "GET CHARGEURS+", becomePlusBody: "Scan with your phone to create/open your account and activate Chargeurs+.", expressInstead: "Continue without account", memberUnavailable: "Member connection is temporarily unavailable, but you can still review the Chargeurs+ offer.", minimumRental: "Minimum rental charge", minimumRentalBody: "This amount applies as soon as the powerbank is made available, including for a very short rental. Pass credit is deducted from the same final price before any card charge; the guarantee remains separate.",
   },
   de: {
     refresh: "Aktualisieren", help: "FAQ / Hilfe", cancel: "Abbrechen", returnHome: "Zur Startseite", back: "Zurück",
     connectedKicker: "PASS ERKANNT", connectedTitle: "VERBINDUNG ERFOLGREICH", connectedSubtitle: "Ihre aktiven Chargeurs-Kundenvorteile werden aus Ihrem Konto geladen.",
-    connectedBenefits: "Ihre aktiven Vorteile", connectedRate: "Kundentarif", connectedCap: "Tageslimit", connectedMinutes: "Inklusive Minuten", connectedCredit: "Mietguthaben", connectedCreditNote: "Wird vom endgültigen Mietpreis abgezogen. Die Garantie bleibt getrennt; bei einer Zahlungsprüfung bleibt das Guthaben reserviert.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Konto-Pass aktiv",
+    connectedBenefits: "Ihre aktiven Vorteile", connectedRate: "Kundentarif", connectedCap: "Tageslimit", connectedMinutes: "Inklusive Minuten", connectedCredit: "Mietguthaben", connectedCreditNote: "Wird vom endgültigen Mietpreis abgezogen. Tarif und Mindestbetrag bleiben mit oder ohne Guthaben gleich; die Garantie bleibt getrennt.", connectedWallet: "Wallet Pass", connectedWalletLocal: "Konto-Pass aktiv",
     connectedCta: "MIETE STARTEN", connectedCtaSub: "Wählen Sie anschließend Ihre Powerbank an dieser Station.",
     memberEyebrow: "CHARGEURS KUNDE", memberTitle: "Scanne mit", memberTitleAccent: "deinem Smartphone", memberPrivacy: "Temporäre, sichere Verbindung. Auf der Station werden keine persönlichen Daten eingegeben.",
     memberRateLabel: "Chargeurs-Kundentarif", memberScan: "Öffne die Kamera deines Smartphones und scanne den QR-Code.", memberError: "Verbindung vorübergehend nicht verfügbar", retry: "Erneut versuchen",
@@ -235,7 +238,7 @@ const COPY: Record<"fr" | "en" | "de", Copy> = {
     continueExpress: "EXPRESS FORTSETZEN", discoverPlus: "Chargeurs+ ansehen", totalRentalCap: "Gesamtlimit der Miete", totalRentalCapBody: "Auch bei längerer Miete bleibt der Mietpreis gemäss aktivem Vertrag begrenzt.",
     plusKicker: "CHARGEURS+ · KUNDENPASS", plusTitle: "Günstiger mieten, wenn Ihr Nutzungsprofil passt.", plusLead: "Pass und Kundentarif werden direkt aus dem Chargeurs.ch-Backend geladen. Die Ersparnis hängt von Mietdauer und Nutzungshäufigkeit ab.",
     passPrice: "Pass / 12 Monate", memberPrice: "Kundentarif", renewalCredit: "Mitgliedschafts-/Verlängerungsguthaben", potentialSaving: "Mögliche Ersparnis", savingExample: "Beispiel", savingDisclaimer: "Ersparnis nur auf den Mietpreis, vor Berücksichtigung des jährlichen Passpreises.",
-    alreadyMember: "ICH HABE SCHON EINEN PASS", becomePlus: "CHARGEURS+ WERDEN", becomePlusBody: "Mit dem Smartphone scannen, Konto erstellen/öffnen und Chargeurs+ aktivieren.", expressInstead: "Ohne Konto fortfahren", memberUnavailable: "Die Kundenverbindung ist vorübergehend nicht verfügbar. Das Chargeurs+-Angebot kann trotzdem angesehen werden.",
+    alreadyMember: "ICH HABE SCHON EINEN PASS", becomePlus: "CHARGEURS+ WERDEN", becomePlusBody: "Mit dem Smartphone scannen, Konto erstellen/öffnen und Chargeurs+ aktivieren.", expressInstead: "Ohne Konto fortfahren", memberUnavailable: "Die Kundenverbindung ist vorübergehend nicht verfügbar. Das Chargeurs+-Angebot kann trotzdem angesehen werden.", minimumRental: "Mindestbetrag pro Miete", minimumRentalBody: "Dieser Betrag gilt ab Bereitstellung der Powerbank, auch bei einer sehr kurzen Miete. Pass-Guthaben wird zuerst vom gleichen Endpreis abgezogen; die Garantie bleibt getrennt.",
   },
 };
 
@@ -587,6 +590,7 @@ export default function KioskPremiumGateV2() {
     const annualFee = Number(membershipPlan?.annual_fee_cents ?? 0);
     const memberHourly = Number(membershipPlan?.hourly_cents ?? options?.member?.hourly_cents ?? 0);
     const memberDailyCap = Number(membershipPlan?.daily_cap_cents ?? options?.member?.daily_cap_cents ?? 0);
+    const memberMinimum = Number(options?.member?.min_amount_cents ?? 0);
     const renewalCredit = Number(membershipPlan?.renewal_credit_cents ?? 0);
     return (
       <div className="ck2-shell ck2-pricing-screen ck2-pricing-member-offer">
@@ -606,6 +610,7 @@ export default function KioskPremiumGateV2() {
               <article className="ck2-plus-metric"><span>{copy.dailyCap}</span><strong>{memberDailyCap > 0 ? money(memberDailyCap, membershipCurrency) : "—"}</strong></article>
               <article className="ck2-plus-metric"><span>{copy.renewalCredit}</span><strong>{renewalCredit > 0 ? money(renewalCredit, membershipCurrency) : "—"}</strong></article>
             </div>
+            {memberMinimum > 0 && <div className="ck2-pricing-note"><ShieldCheck /><div><strong>{copy.minimumRental} · {money(memberMinimum, membershipCurrency)}</strong><p>{copy.minimumRentalBody}</p></div></div>}
             {memberSaving && <div className="ck2-pricing-note"><BadgePercent /><div><strong>{copy.potentialSaving} · {memberSaving.percent}%</strong><p>{copy.savingExample} {durationLabel(memberSaving.minutes, lang)} : {money(memberSaving.memberCents, membershipCurrency)} avec le tarif membre contre {money(memberSaving.guestCents, guestCurrency)} en Express, soit {money(memberSaving.savingCents, guestCurrency)} d’écart. {copy.savingDisclaimer}</p></div></div>}
             {!memberPricingReady && <div className="ck2-pricing-note"><ShieldCheck /><div><strong>{copy.memberUnavailable}</strong></div></div>}
             <div className="ck2-pricing-actions">
@@ -627,6 +632,7 @@ export default function KioskPremiumGateV2() {
     const currency = member?.currency ?? options?.member?.currency ?? "CHF";
     const hourly = member?.hourlyCents ?? options?.member?.hourly_cents;
     const dailyCapValue = member?.dailyCapCents ?? options?.member?.daily_cap_cents;
+    const memberMinimum = Number(options?.member?.min_amount_cents ?? 0);
     return (
       <div className="ck2-shell ck2-connected">
         {journeyControl}
@@ -651,6 +657,7 @@ export default function KioskPremiumGateV2() {
               <article><WalletCards /><span>{copy.connectedCredit}</span><strong>{money(member?.rentalCreditCents, member?.rentalCreditCurrency ?? currency)}</strong></article>
               {member?.walletPassActive && <article><WalletCards /><span>{copy.connectedWallet}</span><strong>{member.walletProviderStatus === "issued" ? copy.connectedWallet : copy.connectedWalletLocal}</strong></article>}
             </div>
+            {memberMinimum > 0 && <p className="ck2-connected-credit-note"><strong>{copy.minimumRental} · {money(memberMinimum, currency)}.</strong> {copy.minimumRentalBody}</p>}
             <p className="ck2-connected-credit-note">{copy.connectedCreditNote}</p>
             <button type="button" className="ck2-connected-cta" onClick={continueMember}><Zap /><span><strong>{copy.connectedCta}</strong><small>{copy.connectedCtaSub}</small></span><b>→</b></button>
           </section>

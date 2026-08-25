@@ -40,6 +40,7 @@ type Quote = {
   amount: number; currency: string; profile_name: string;
   final_cents: number; profile_id: string; source: string; error?: string;
   deposit_cents: number; period_minutes: number; price_per_period_cents: number;
+  min_amount_cents: number;
   daily_cap_cents: number; unreturned_fee_cents: number;
   tiered?: boolean; tiers?: Array<{ upper_minutes: number; total_cents: number }>;
 };
@@ -177,6 +178,7 @@ export default function Kiosk() {
       deposit_cents: Number(snap.deposit_cents),
       period_minutes: Number(snap.period_minutes),
       price_per_period_cents: Number(snap.price_per_period_cents ?? snap.duration_cents),
+      min_amount_cents: Number(snap.min_amount_cents ?? 0),
       daily_cap_cents: Number(snap.daily_cap_cents),
       unreturned_fee_cents: Number(snap.unreturned_fee_cents),
       tiered: Boolean(snap.tiered),
@@ -676,7 +678,7 @@ export default function Kiosk() {
               {quote ? (
                 <div className="kiosk-pricing-card glass liquid-border grid w-full max-w-6xl grid-cols-[.8fr_1.2fr] items-center gap-8 rounded-[2.25rem] p-8 text-center sm:p-10">
                   <div className="flex flex-col items-center gap-4 border-r border-white/15 pr-8"><div className="text-xl font-bold text-muted-foreground">{t("kiosk.slot.label", { slot: slotNum ?? "—" })}</div><div className="grid h-28 w-28 place-items-center rounded-[2rem] border border-primary/40 bg-primary/10 shadow-glow"><span className="font-display text-7xl font-extrabold text-gradient-cyan">{slotNum ?? "—"}</span></div></div>
-                  <div><div className="font-display text-5xl font-extrabold leading-none text-gradient-cyan sm:text-6xl">{pricingHeadline}</div><p className="mt-5 text-xl font-semibold text-muted-foreground">{tierSummary ?? `${fmtCents(quote.price_per_period_cents, quote.currency)} / ${quote.period_minutes} ${t("kiosk.minutes")}`}</p>{quote.deposit_cents > 0 && <p className="mt-7 text-base text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>}</div>
+                  <div><div className="font-display text-5xl font-extrabold leading-none text-gradient-cyan sm:text-6xl">{pricingHeadline}</div><p className="mt-5 text-xl font-semibold text-muted-foreground">{tierSummary ?? `${fmtCents(quote.price_per_period_cents, quote.currency)} / ${quote.period_minutes} ${t("kiosk.minutes")}`}</p>{quote.min_amount_cents > 0 && <p className="mt-4 text-base text-muted-foreground">{t("kiosk.pricing.minimum", { amount: fmtCents(quote.min_amount_cents, quote.currency) })}</p>}{quote.deposit_cents > 0 && <p className="mt-7 text-base text-muted-foreground">{t("kiosk.pricing.guarantee", { amount: fmtCents(quote.deposit_cents, quote.currency) })}</p>}</div>
                 </div>
               ) : <p className="text-warning">{quoteError === "KIOSK_AUTH_REQUIRED" || quoteError === "KIOSK_AUTH_INVALID" ? t("kiosk.pricing.auth_error") : quoteError === "PRICING_NOT_CONFIGURED" ? t("kiosk.pricing.error") : quoteError ? t("kiosk.error.pricing.title") : t("kiosk.pricing.loading")}</p>}
               <div className="flex gap-5"><Button variant="ghost" onClick={reset} className="h-16 px-8 text-xl">{t("kiosk.back")}</Button><Button onClick={startRental} disabled={!quote || slotNum === null} className="h-16 rounded-full bg-gradient-primary px-14 text-2xl font-bold shadow-glow">{t("kiosk.rent_selected")}</Button></div>

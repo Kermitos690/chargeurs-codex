@@ -120,13 +120,14 @@ Deno.serve(async (req) => {
   const perPeriod = Number(snap.price_per_period_cents ?? 0);
   const hourly = period ? Math.round(perPeriod * 60 / period) : 0;
   const daily = Number(snap.daily_cap_cents ?? 0);
+  const minimum = Number(snap.min_amount_cents ?? 0);
   const nonReturn = Number(snap.unreturned_fee_cents ?? 9900);
 
   if (view === "choose" && !rental.paid_at) {
     const copy = lang === "de" ? {
       eyebrow: "Sicher · schnell · transparent",
       title: "Zahlungsart wählen",
-      sub: "Der Mietpreis bleibt gleich. Nur die Behandlung der CHF-30-Garantie hängt von der Zahlungsart ab.",
+      sub: `Der Mietpreis bleibt gleich. Die Miete hat einen Mindestbetrag von ${money(minimum, currency)}, der ab Bereitstellung der Powerbank gilt. ${rental.customer_segment === "member" ? "Pass-Guthaben wird zuerst vom gleichen Endpreis abgezogen; der Mindestbetrag bleibt gleich. " : ""}Nur die Behandlung der CHF-30-Garantie hängt von der Zahlungsart ab.`,
       cardTitle: "Karte & Wallet",
       cardText: `${money(deposit, currency)} werden vorübergehend bei Ihrer Bank reserviert. Bei Rückgabe wird nur der tatsächliche Mietpreis belastet und der Rest freigegeben.`,
       twintTitle: "TWINT",
@@ -137,7 +138,7 @@ Deno.serve(async (req) => {
     } : lang === "en" ? {
       eyebrow: "Secure · fast · transparent",
       title: "Choose how to pay",
-      sub: "The rental price is identical. Only the CHF 30 guarantee mechanism changes with the payment method.",
+      sub: `The rental price is identical. A minimum rental charge of ${money(minimum, currency)} applies when the powerbank is made available. ${rental.customer_segment === "member" ? "Pass credit is deducted from that same final price first; the minimum stays the same. " : ""}Only the CHF 30 guarantee mechanism changes with the payment method.`,
       cardTitle: "Card & wallet",
       cardText: `${money(deposit, currency)} is temporarily authorised by your bank. On return, only the actual rental price is captured and the remainder is released.`,
       twintTitle: "TWINT",
@@ -148,7 +149,7 @@ Deno.serve(async (req) => {
     } : {
       eyebrow: "Simple · rapide · transparent",
       title: "Choisissez comment payer",
-      sub: "Le tarif ne change pas. Seul le fonctionnement de la garantie de 30 CHF dépend du moyen choisi.",
+      sub: `Le tarif ne change pas. Un minimum de location de ${money(minimum, currency)} s’applique dès la mise à disposition de la batterie, même pour une location très courte. ${rental.customer_segment === "member" ? "Le crédit Pass est d’abord déduit de ce même prix final ; le minimum reste identique. " : ""}Seul le fonctionnement de la garantie de 30 CHF dépend du moyen choisi.`,
       cardTitle: "Carte & wallet",
       cardText: `${money(deposit, currency)} sont temporairement réservés auprès de votre banque. Au retour, seul le prix réel de la location est prélevé et le solde est libéré.`,
       twintTitle: "TWINT",

@@ -82,6 +82,7 @@ Deno.serve(async (req) => {
         hourly_cents: hourlyCents(snapshot),
         period_minutes: Number(snapshot.period_minutes ?? 0),
         price_per_period_cents: Number(snapshot.price_per_period_cents ?? 0),
+        min_amount_cents: Number(snapshot.min_amount_cents ?? 0),
         daily_cap_cents: Number(snapshot.daily_cap_cents ?? 0),
         total_cap_cents: Number(snapshot.total_cap_cents ?? 0),
         deposit_cents: Number(snapshot.deposit_cents ?? 0),

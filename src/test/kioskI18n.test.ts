@@ -20,6 +20,12 @@ describe("kiosk translations", () => {
     expect(translate("de", "qr.secured")).toBe("Sichere Zahlung über Stripe");
   });
 
+  it("explains the configured rental minimum in every public language", () => {
+    expect(translate("fr", "kiosk.pricing.minimum", { amount: "1.90 CHF" })).toContain("1.90 CHF");
+    expect(translate("en", "kiosk.pricing.minimum", { amount: "1.90 CHF" })).toContain("1.90 CHF");
+    expect(translate("de", "kiosk.pricing.minimum", { amount: "1.90 CHF" })).toContain("1.90 CHF");
+  });
+
   it("defines every hosted-payment page key in FR, EN and DE", () => {
     for (const lang of ["fr", "en", "de"] as const) {
       for (const key of ["pay.title", "pay.pending", "pay.open", "pay.methods", "pay.return", "qr.secured"]) {
