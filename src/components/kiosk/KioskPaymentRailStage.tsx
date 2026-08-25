@@ -150,6 +150,10 @@ export function KioskPaymentRailStage(props: Props) {
   const native = (window as NativeWindow).ChargeursNative;
   const nativeBridge = Boolean(native?.getPaymentReaderStatus && native?.startTerminalPayment);
   const terminalStation = stationHasPaymentTerminal(stationId);
+  // Cabinet identity is the physical source of truth. A native bridge on a QR-only
+  // tablet is not evidence of a payment reader; it must never create a disabled
+  // “Sans contact” choice for the customer.
+  const physicalQrOnlyCabinet = !terminalStation;
   const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
   const [localRail, setLocalRail] = useState<PaymentRail>(inProgress ? "TERMINAL" : "NONE");
   const [localRailState, setLocalRailState] = useState<PaymentRailState>(inProgress ? "ENGAGED" : "UNCLAIMED");
@@ -284,10 +288,10 @@ export function KioskPaymentRailStage(props: Props) {
     && nativeBridge
     && !readerConfirmedUnavailable
     && readerGraceExpired;
-  const confirmedQrOnly = model.reader.capability === "QR_ONLY" && (
+  const confirmedQrOnly = physicalQrOnlyCabinet || (model.reader.capability === "QR_ONLY" && (
     !nativeBridge
     || readerConfirmedUnavailable
-  );
+  ));
 
   /*
    * Payment-rail invariant:
@@ -302,7 +306,7 @@ export function KioskPaymentRailStage(props: Props) {
   useEffect(() => {
     if (
       inProgress
-      || model.reader.capability !== "QR_ONLY"
+      || (!physicalQrOnlyCabinet && model.reader.capability !== "QR_ONLY")
       || !confirmedQrOnly
       || !model.payment.canChooseQr
       || qrAutoStartedRef.current
@@ -464,13 +468,13 @@ export function KioskPaymentRailStage(props: Props) {
     </div>;
   }
 
-  if (model.reader.capability === "QR_ONLY") {
+  if (physicalQrOnlyCabinet || model.reader.capability === "QR_ONLY") {
     return <div className="kiosk-payment-rail-stage flex w-full max-w-5xl flex-col items-center gap-7 px-5 text-center" data-payment-capability="QR_ONLY" data-reader-state={readerState} data-native-payment-bridge={nativeBridge ? "true" : "false"}>
       <ShieldCheck className="h-8 w-8 text-primary" /><QrCode className="h-20 w-20 text-primary" />
       <h2 className="font-display text-5xl font-black tracking-tight">{copy.qrOnly}</h2>
       <p className="max-w-3xl text-xl font-medium text-muted-foreground">{copy.qrOnlySub}</p>
       <Loader2 className="h-7 w-7 animate-spin text-primary" />
-      {nativeBridge && (readerState === "ERROR" || readerState === "ABSENT") && <Button variant="ghost" onClick={retryReader} className="h-12 gap-2 rounded-full px-6"><RefreshCw className="h-4 w-4" />{copy.retry}</Button>}
+      {terminalStation && nativeBridge && (readerState === "ERROR" || readerState === "ABSENT") && <Button variant="ghost" onClick={retryReader} className="h-12 gap-2 rounded-full px-6"><RefreshCw className="h-4 w-4" />{copy.retry}</Button>}
       {nativeError && <p className="text-sm font-semibold text-warning">{nativeError}</p>}
     </div>;
   }
