@@ -1,5 +1,6 @@
 import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
+import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -39,7 +40,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
       .limit(1)
       .maybeSingle(),
     db.from("customer_wallet_passes")
-      .select("id,membership_id,public_pass_id,status,provider_status,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
+      .select("id,membership_id,public_pass_id,status,provider_status,provider,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -76,7 +77,8 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     incidents = incidentsResult.data ?? [];
   }
 
-  // Deliberately omit Stripe customer/subscription/checkout IDs and Wallet token hashes.
+  // Deliberately omit Stripe customer/subscription/checkout IDs, Wallet token
+  // hashes, provider holder identifiers and provider-hosted delivery URLs.
   return {
     profile: profileResult.data ?? null,
     rentals,
@@ -107,6 +109,63 @@ Deno.serve(async (req) => {
   if (authError || !user || !user.email_confirmed_at) return json({ ok: false, error: "VERIFIED_ACCOUNT_REQUIRED" }, 401);
   const body = await req.json().catch(() => ({}));
   const action = String(body.action ?? "summary");
+
+  if (action === "wallet_pass") {
+    const walletAction = body.walletAction === "sync" ? "sync" : "issue";
+
+    // Existing passes are never synchronised by rebuilding fields inside this request.
+    // Queue an asynchronous realtime refresh instead, so an active rental price/status
+    // cannot be overwritten by stale account-only presentation data.
+    if (walletAction === "sync") {
+      const { data: wallet, error: walletError } = await db
+        .from("customer_wallet_passes")
+        .select("id,membership_id,provider,provider_status,provider_instance_id,provider_add_to_wallet_url")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .is("revoked_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (walletError) return json({ ok: false, error: "WALLET_PASS_UNAVAILABLE" }, 500);
+
+      const addToWalletUrl = String(wallet?.provider_add_to_wallet_url ?? "").trim();
+      const existingPassStudioPass = wallet?.provider === "pass_studio"
+        && Boolean(wallet?.provider_instance_id)
+        && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
+
+      if (existingPassStudioPass) {
+        const { data: outboxId, error: queueError } = await db.rpc("enqueue_customer_wallet_sync_event", {
+          p_user_id: user.id,
+          p_event_type: "manual_sync",
+          p_event_key: `wallet:manual:${user.id}:${crypto.randomUUID()}`,
+          p_rental_session_id: null,
+          p_payload: { source: "account_pass" },
+          p_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+        });
+
+        if (queueError || !outboxId) return json({ ok: false, error: "WALLET_SYNC_QUEUE_FAILED" }, 500);
+
+        await auditLog(db, {
+          actor: user.id,
+          action: "wallet.pass_sync_queued",
+          target: wallet?.membership_id ?? user.id,
+          data: { provider: "pass_studio", outbox_id: outboxId },
+        });
+
+        return json({
+          ok: true,
+          provider: "pass_studio",
+          status: "update_pending",
+          addToWalletUrl,
+          queued: true,
+        });
+      }
+    }
+
+    const result = await handlePassStudioWallet(db, user, walletAction);
+    return json(result.body, result.status);
+  }
 
   if (action === "summary" || action === "export") {
     let data: Awaited<ReturnType<typeof customerData>>;
