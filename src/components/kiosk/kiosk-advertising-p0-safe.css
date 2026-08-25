@@ -79,3 +79,84 @@ html.kiosk-v3 .kiosk-system-footer {
     width: calc(100vw - var(--p0-ads-rail-width, min(25vw, 320px)) - 76px) !important;
   }
 }
+
+
+/* --------------------------------------------------------------------------
+ * Physical field advertising frame — final authority.
+ * Advertising stays inside the 1280×720 canvas, above (never behind) the
+ * system footer. Source creatives are preserved in full so addresses, offers
+ * and partner logos cannot be cut off at either edge.
+ * -------------------------------------------------------------------------- */
+html.kiosk-v3[data-kiosk-ads-split="true"] {
+  --p0-ads-rail-width: min(21.875vw, 280px);
+}
+
+html.kiosk-v3 .kiosk-ad-split {
+  top: calc(var(--p0-header-h, 66px) + 10px) !important;
+  right: 0 !important;
+  bottom: calc(var(--p0-footer-h, 82px) + 10px) !important;
+  width: var(--p0-ads-rail-width, min(21.875vw, 280px)) !important;
+  min-width: 0 !important;
+  max-width: 280px !important;
+  overflow: hidden !important;
+  clip-path: inset(0) !important;
+  contain: layout paint !important;
+  border-radius: 18px 0 0 18px !important;
+  z-index: 700 !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-media-backdrop {
+  display: none !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-qr--split {
+  right: 8px !important;
+  bottom: 8px !important;
+  padding: 6px !important;
+}
+
+html.kiosk-v3 .kiosk-ad-split .kiosk-ad-qr__code {
+  width: 66px !important;
+  height: 66px !important;
+}
+
+html.kiosk-v3 .kiosk-ad-screensaver {
+  inset: 0 0 var(--p0-footer-h, 82px) 0 !important;
+  z-index: 800 !important;
+  overflow: hidden !important;
+  clip-path: inset(0) !important;
+  contain: layout paint !important;
+}
+
+html.kiosk-v3 .kiosk-ad-screensaver .kiosk-ad-media {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #020817 !important;
+}
+
+html.kiosk-v3 .kiosk-ad-screensaver-cta {
+  bottom: 18px !important;
+  max-width: calc(100% - 44px) !important;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  html.kiosk-v3[data-kiosk-ads-split="true"] {
+    --p0-ads-rail-width: 280px;
+  }
+
+  html.kiosk-v3 .kiosk-ad-split {
+    width: 280px !important;
+    max-width: 280px !important;
+  }
+}
