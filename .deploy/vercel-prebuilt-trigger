@@ -1,3 +1,4 @@
-2026-08-11T03:07:00+02:00
+2026-08-25T18:46:00Z
 source=chatgpt
-reason=kiosk-pilot-hardening-navigation-touch-payment-marks
+reason=force-prebuilt-production-release-dta21277-stale-terminal-cancellation-fix
+source_commit=fc5e6cae74e706eea2241b269c29daa7361fe974
