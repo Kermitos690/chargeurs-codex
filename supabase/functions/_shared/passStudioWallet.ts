@@ -1,161 +1,103 @@
 import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { auditLog } from "./db.ts";
 import {
+  CHARGEURS_CUSTOM_PASS_ID,
   PassStudioError,
   type PassStudioPass,
   issuePassStudioPass,
-  listPassStudioPasses,
   requirePassStudioApiKey,
   resolvePassStudioPass,
-  updatePassStudioInstance,
 } from "./passStudio.ts";
 
 export type WalletAction = "issue" | "sync";
-
 export type PassStudioWalletResult =
   | { ok: true; status: 200; body: Record<string, unknown> }
   | { ok: false; status: number; body: Record<string, unknown> };
 
-function cents(centsValue: number | null | undefined, currency = "CHF") {
-  if (centsValue == null) return "—";
-  return new Intl.NumberFormat("fr-CH", { style: "currency", currency }).format(Number(centsValue) / 100);
+function cents(value: number | null | undefined, currency = "CHF") {
+  if (value == null) return "—";
+  return new Intl.NumberFormat("fr-CH", { style: "currency", currency }).format(Number(value) / 100);
 }
 
-function accountDate(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("fr-CH", { dateStyle: "medium", timeStyle: "short" });
-}
-
-function isoDate(value: string | null | undefined) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
-}
-
-function safeProviderError(error: unknown) {
-  if (error instanceof PassStudioError) {
-    const status = error.status === 401 || error.status === 403 ? 503 : error.status;
-    return { status, code: error.code };
-  }
-  return { status: 502, code: "PASS_STUDIO_UNAVAILABLE" };
-}
-
-function normalizeFieldKey(value: string) {
-  return value
+function normalize(value: string) {
+  return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 }
 
-function firstEditableField(pass: PassStudioPass, aliases: string[]) {
-  const templateOwned = new Set((pass.templateOwnedFieldKeys ?? []).map(normalizeFieldKey));
-  const aliasSet = new Set(aliases.map(normalizeFieldKey));
-  return (pass.fieldKeys ?? []).find((key) => {
-    const normalized = normalizeFieldKey(key);
-    return aliasSet.has(normalized) && !templateOwned.has(normalized);
-  });
+function safeProviderError(error: unknown) {
+  if (error instanceof PassStudioError) {
+    return { status: error.status === 401 || error.status === 403 ? 503 : error.status, code: error.code };
+  }
+  return { status: 502, code: "PASS_STUDIO_UNAVAILABLE" };
 }
 
-const CUSTOM_REQUIRED_GROUPS = [
-  ["credit", "rental_credit", "rentalCredit", "credit_location", "solde", "balance"],
-  ["tier", "status", "membership_status", "status_membre", "niveau"],
-  ["member_rate", "tarif_membre", "rate", "hourly_rate"],
-  ["daily_cap", "plafond_journalier", "cap"],
-  ["points", "chargepoints", "charge_points"],
-  ["next_due", "prochaine_echeance", "membership_end", "fin_adhesion"],
-] as const;
-
-function customReadinessScore(pass: PassStudioPass) {
-  return CUSTOM_REQUIRED_GROUPS.reduce((score, aliases) => score + (firstEditableField(pass, [...aliases]) ? 1 : 0), 0);
+function editableKeys(pass: PassStudioPass) {
+  const owned = new Set(pass.templateOwnedFieldKeys ?? []);
+  return (pass.fieldKeys ?? []).filter((key) => !owned.has(key));
 }
 
-function looksLikeChargeursCustomPass(pass: PassStudioPass) {
-  const name = normalizeFieldKey(pass.name ?? "");
-  const type = normalizeFieldKey(pass.passType ?? "");
-  const active = String(pass.status ?? "active").toLowerCase() === "active";
-  return active
-    && name === normalizeFieldKey("Chargeurs+")
-    && (type.includes("custom") || type.includes("generic"));
+function byAliases(pass: PassStudioPass, aliases: string[]) {
+  const allowed = new Set(aliases.map(normalize));
+  return editableKeys(pass).find((key) => allowed.has(normalize(key)));
 }
 
-async function resolvePreferredChargeursPass(apiKey: string): Promise<PassStudioPass> {
-  const passes = await listPassStudioPasses(apiKey);
-  const customCandidates = passes
-    .filter(looksLikeChargeursCustomPass)
-    .map((pass) => ({ pass, score: customReadinessScore(pass) }))
-    .sort((a, b) => b.score - a.score);
+export type ChargeursCustomFieldMap = {
+  rentalCredit: string;
+  status: string;
+  chargePoints: string;
+  memberRate: string;
+  recentActivity: string;
+};
 
-  const readyCustom = customCandidates.find(({ score }) => score >= 3)?.pass;
-  if (readyCustom) return readyCustom;
+export function chargeursCustomFieldMap(pass: PassStudioPass): ChargeursCustomFieldMap {
+  if (pass.passId !== CHARGEURS_CUSTOM_PASS_ID) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_REQUIRED");
+  const keys = editableKeys(pass);
+  if (keys.length < 5) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_PASS_NOT_READY");
 
-  return await resolvePassStudioPass(apiKey);
-}
-
-function buildChargeursPassFields(
-  pass: PassStudioPass,
-  values: {
-    membershipName: string;
-    membershipStatus: string;
-    memberRate: string;
-    dailyCap: string;
-    chargePoints: number;
-    rentalCredit: string;
-    renewalCredit: string | null;
-    nextDateLabel: "Prochaine échéance" | "Fin de l’adhésion";
-    nextDateDisplay: string;
-    nextDateIso: string | null;
-  },
-) {
-  const fields: Record<string, string | number | boolean | null> = {};
-  const assign = (aliases: string[], value: string | number | boolean | null) => {
-    const key = firstEditableField(pass, aliases);
-    if (key && fields[key] === undefined) fields[key] = value;
+  // Prefer semantic provider keys when Pass Studio exposes them. The Custom Pass
+  // editor currently generates keys internally, so the five-field template order
+  // is the deterministic fallback agreed for #1002:
+  // 1 Crédit location, 2 Statut, 3 ChargePoints, 4 Tarif membre, 5 Historique récent.
+  const used = new Set<string>();
+  const pick = (aliases: string[], fallbackIndex: number) => {
+    const semantic = byAliases(pass, aliases);
+    const key = semantic && !used.has(semantic) ? semantic : keys[fallbackIndex];
+    if (!key || used.has(key)) throw new PassStudioError(409, "PASS_STUDIO_CUSTOM_FIELD_MAP_INVALID");
+    used.add(key);
+    return key;
   };
 
-  const offerDetails = `Tarif membre : ${values.memberRate} · Plafond journalier : ${values.dailyCap}`;
-  const conditions = [
-    `Statut adhésion : ${values.membershipStatus}`,
-    `Crédit location : ${values.rentalCredit}`,
-    values.renewalCredit ? `Crédit adhésion / renouvellement : ${values.renewalCredit}` : null,
-    `${values.nextDateLabel} : ${values.nextDateDisplay}`,
-  ].filter(Boolean).join(" · ");
-
-  assign(["chargepoints", "charge_points", "points", "points_balance", "pointsBalance", "loyalty_points", "solde_points", "solde_de_points"], values.chargePoints);
-  assign(["membership_name", "membership_level", "tier", "level", "niveau", "status"], values.membershipName);
-  assign(["credit", "rental_credit", "rentalCredit", "credit_location", "solde", "balance"], values.rentalCredit);
-  assign(["offer_details", "offerDetails", "details_offer", "details_de_loffre", "details_de_l_offre", "benefits", "avantages"], offerDetails);
-  assign(["conditions", "terms", "terms_conditions", "termsAndConditions", "conditions_offre", "conditions_de_loffre"], conditions);
-  assign(["valid_until", "expiry", "expiration", "offer_expiry", "offerExpiry", "offer_expiration", "expires_at", "expiration_offre"], values.nextDateIso);
-
-  assign(["membership_status", "status_membre"], values.membershipStatus);
-  assign(["member_rate", "tarif_membre", "rate", "hourly_rate"], values.memberRate);
-  assign(["daily_cap", "plafond_journalier", "cap"], values.dailyCap);
-  assign(["renewal_credit", "credit_adhesion_renouvellement"], values.renewalCredit);
-  assign(["next_due", "prochaine_echeance", "membership_end", "fin_adhesion"], values.nextDateDisplay);
-
-  return fields;
+  return {
+    rentalCredit: pick(["rental_credit", "credit", "credit_location", "solde", "balance"], 0),
+    status: pick(["status", "tier", "statut", "membership_status"], 1),
+    chargePoints: pick(["points", "chargepoints", "charge_points"], 2),
+    memberRate: pick(["member_rate", "tarif_membre", "rate", "hourly_rate"], 3),
+    recentActivity: pick(["recent_activity", "historique_recent", "history", "activity"], 4),
+  };
 }
 
-function applyRealtimePresentation(
+export function chargeursCustomFields(
   pass: PassStudioPass,
-  fields: Record<string, string | number | boolean | null>,
-  presentation: unknown,
+  input: {
+    rentalCredit: string;
+    status: string;
+    chargePoints: number;
+    memberRate: string;
+    dailyCap: string;
+    recentActivity: string;
+  },
 ) {
-  if (!presentation || typeof presentation !== "object") return fields;
-  const rawFields = (presentation as Record<string, unknown>).fields;
-  if (!rawFields || typeof rawFields !== "object") return fields;
-
-  for (const [sourceKey, rawValue] of Object.entries(rawFields as Record<string, unknown>)) {
-    if (rawValue !== null && typeof rawValue !== "string" && typeof rawValue !== "number" && typeof rawValue !== "boolean") continue;
-    const aliases = sourceKey === "rental_credit" || sourceKey === "credit"
-      ? [sourceKey, "credit", "rental_credit", "rentalCredit", "credit_location", "solde", "balance"]
-      : [sourceKey];
-    const providerKey = firstEditableField(pass, aliases);
-    if (providerKey) fields[providerKey] = rawValue as string | number | boolean | null;
-  }
-  return fields;
+  const map = chargeursCustomFieldMap(pass);
+  return {
+    [map.rentalCredit]: input.rentalCredit,
+    [map.status]: input.status,
+    [map.chargePoints]: input.chargePoints,
+    [map.memberRate]: `${input.memberRate} · plafond ${input.dailyCap}`,
+    [map.recentActivity]: input.recentActivity || "Aucune activité récente",
+  } as Record<string, string | number | boolean | null>;
 }
 
 export async function handlePassStudioWallet(
@@ -165,9 +107,9 @@ export async function handlePassStudioWallet(
 ): Promise<PassStudioWalletResult> {
   if (!user.email) return { ok: false, status: 401, body: { ok: false, error: "VERIFIED_ACCOUNT_REQUIRED" } };
 
-  const [membershipResult, profileResult, pointsResult, rentalCreditResult, walletResult] = await Promise.all([
+  const [membershipResult, profileResult, pointsResult, creditResult, walletResult, presentationResult] = await Promise.all([
     db.from("customer_memberships")
-      .select("id,status,renews_at,ends_at,cancel_at_period_end,stripe_current_period_end,customer_membership_plans(id,name,currency,renewal_credit_cents,hourly_cents,daily_cap_cents)")
+      .select("id,status,customer_membership_plans(id,name,currency,hourly_cents,daily_cap_cents)")
       .eq("user_id", user.id)
       .in("status", ["active", "trialing"])
       .order("updated_at", { ascending: false })
@@ -177,102 +119,57 @@ export async function handlePassStudioWallet(
     db.from("customer_chargepoints_balances").select("balance").eq("user_id", user.id).maybeSingle(),
     db.from("customer_membership_credit_balances").select("balance_cents,currency").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
     db.from("customer_wallet_passes").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db.rpc("customer_wallet_presentation_state", { p_user_id: user.id }),
   ]);
 
-  if (membershipResult.error || profileResult.error || pointsResult.error || rentalCreditResult.error || walletResult.error) {
+  if (membershipResult.error || profileResult.error || pointsResult.error || creditResult.error || walletResult.error || presentationResult.error) {
     return { ok: false, status: 500, body: { ok: false, error: "WALLET_SOURCE_DATA_UNAVAILABLE" } };
   }
   const membership = membershipResult.data;
   if (!membership) return { ok: false, status: 409, body: { ok: false, error: "ACTIVE_MEMBERSHIP_REQUIRED" } };
-
   const rawPlan = membership.customer_membership_plans;
   const plan = Array.isArray(rawPlan) ? rawPlan[0] : rawPlan;
   if (!plan) return { ok: false, status: 409, body: { ok: false, error: "MEMBERSHIP_PLAN_UNAVAILABLE" } };
 
   const existing = walletResult.data as Record<string, unknown> | null;
-  const now = new Date().toISOString();
-  const recordProviderFailure = async (code: string, stage: "configuration" | "template" | "issuance") => {
-    if (existing?.id) {
-      await db.from("customer_wallet_passes").update({
-        provider: "pass_studio",
-        provider_status: "error",
-        provider_last_error_code: code,
-        updated_at: now,
-      }).eq("id", String(existing.id));
-    }
-    await auditLog(db, {
-      actor: user.id,
-      action: "wallet.pass_provider_failed",
-      target: membership.id,
-      data: { provider: "pass_studio", code, stage },
-    });
-  };
-
   let apiKey: string;
-  try {
-    apiKey = requirePassStudioApiKey();
-  } catch (error) {
-    const providerError = safeProviderError(error);
-    await recordProviderFailure(providerError.code, "configuration");
-    return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
-  }
-
-  const currency = String(plan.currency ?? "CHF");
-  const memberRate = `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`;
-  const dailyCap = `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`;
-  const rentalCredit = cents(Number(rentalCreditResult.data?.balance_cents ?? 0), String(rentalCreditResult.data?.currency ?? "CHF"));
-  const renewalCreditCents = Number(plan.renewal_credit_cents ?? 0);
-  const renewalCredit = renewalCreditCents > 0 ? cents(renewalCreditCents, currency) : null;
-  const cancellationScheduled = Boolean(membership.cancel_at_period_end);
-  const periodEnd = membership.stripe_current_period_end ?? membership.ends_at ?? null;
-  const nextDateRaw = cancellationScheduled ? periodEnd : membership.renews_at;
-  const nextDateLabel = cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance";
-  const nextDateDisplay = accountDate(nextDateRaw);
-  const nextDateIso = isoDate(nextDateRaw);
-
   let providerPass: PassStudioPass;
   try {
-    providerPass = await resolvePreferredChargeursPass(apiKey);
+    apiKey = requirePassStudioApiKey();
+    providerPass = await resolvePassStudioPass(apiKey);
+    chargeursCustomFieldMap(providerPass);
   } catch (error) {
-    const providerError = safeProviderError(error);
-    await recordProviderFailure(providerError.code, "template");
-    return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
+    const pe = safeProviderError(error);
+    return { ok: false, status: pe.status, body: { ok: false, error: pe.code } };
   }
 
-  const fields = buildChargeursPassFields(providerPass, {
-    membershipName: String(plan.name ?? "Chargeurs+"),
-    membershipStatus: String(membership.status ?? "active"),
-    memberRate,
-    dailyCap,
-    chargePoints: Number(pointsResult.data?.balance ?? 0),
-    rentalCredit,
-    renewalCredit,
-    nextDateLabel,
-    nextDateDisplay,
-    nextDateIso,
+  const presentation = presentationResult.data && typeof presentationResult.data === "object"
+    ? presentationResult.data as Record<string, unknown>
+    : {};
+  const pFields = presentation.fields && typeof presentation.fields === "object"
+    ? presentation.fields as Record<string, unknown>
+    : {};
+  const currency = String(plan.currency ?? "CHF");
+  const fields = chargeursCustomFields(providerPass, {
+    rentalCredit: String(pFields.rental_credit ?? cents(Number(creditResult.data?.balance_cents ?? 0), String(creditResult.data?.currency ?? "CHF"))),
+    status: String(pFields.status ?? pFields.tier ?? membership.status ?? "Actif"),
+    chargePoints: Number(pFields.points ?? pointsResult.data?.balance ?? 0),
+    memberRate: `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`,
+    dailyCap: `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`,
+    recentActivity: String(pFields.recent_activity ?? "Aucune activité récente"),
   });
 
-  const { data: realtimePresentation, error: realtimePresentationError } = await db.rpc(
-    "customer_wallet_presentation_state",
-    { p_user_id: user.id },
-  );
-  if (realtimePresentationError) {
-    return { ok: false, status: 500, body: { ok: false, error: "WALLET_PRESENTATION_UNAVAILABLE" } };
-  }
-  applyRealtimePresentation(providerPass, fields, realtimePresentation);
-
-  const existingProviderPassId = String(existing?.provider_pass_id ?? "").trim();
-  const canReuseExistingInstance = Boolean(existing?.provider_instance_id)
-    && existingProviderPassId === providerPass.passId;
-  const existingInstanceId = canReuseExistingInstance ? String(existing?.provider_instance_id ?? "").trim() : "";
+  const existingPassId = String(existing?.provider_pass_id ?? "").trim();
+  const sameTemplate = existingPassId === providerPass.passId;
+  let instanceId = sameTemplate ? String(existing?.provider_instance_id ?? "").trim() : "";
+  let holderId = sameTemplate ? String(existing?.provider_holder_id ?? "").trim() : "";
+  let barcode = sameTemplate ? String(existing?.provider_barcode_content ?? "").trim() : "";
+  let addToWalletUrl = sameTemplate ? String(existing?.provider_add_to_wallet_url ?? "").trim() : "";
+  let alreadyExisted = Boolean(instanceId);
 
   try {
-    let instanceId = existingInstanceId;
-    let holderId = canReuseExistingInstance ? String(existing?.provider_holder_id ?? "").trim() : "";
-    let barcodeContent = canReuseExistingInstance ? String(existing?.provider_barcode_content ?? "").trim() : "";
-    let addToWalletUrl = canReuseExistingInstance ? String(existing?.provider_add_to_wallet_url ?? "").trim() : "";
-    let alreadyExisted = Boolean(existingInstanceId);
-
+    // Initial values are sent with issuance. Do not immediately PATCH the new
+    // instance: PATCH may trigger a billable push and is handled by the corrected dispatcher.
     if (!instanceId) {
       const issued = await issuePassStudioPass(apiKey, providerPass, {
         email: user.email,
@@ -282,21 +179,16 @@ export async function handlePassStudioWallet(
       });
       instanceId = issued.instanceId;
       holderId = issued.passstudioHolderId;
-      barcodeContent = issued.barcodeContent;
+      barcode = issued.barcodeContent;
       addToWalletUrl = issued.addToWalletUrl;
       alreadyExisted = Boolean(issued.alreadyExisted);
     }
-
     if (!instanceId || !addToWalletUrl) {
-      await recordProviderFailure("PASS_STUDIO_ISSUE_RESPONSE_INVALID", "issuance");
       return { ok: false, status: 502, body: { ok: false, error: "PASS_STUDIO_ISSUE_RESPONSE_INVALID" } };
     }
 
-    if (Object.keys(fields).length > 0) {
-      await updatePassStudioInstance(apiKey, providerPass, instanceId, fields, null, `wallet:account-sync:${user.id}:${providerPass.passId}:${Number(existing?.pass_revision ?? 0) + 1}`);
-    }
-
-    const providerPatch = {
+    const now = new Date().toISOString();
+    const patch = {
       membership_id: membership.id,
       status: "active",
       provider_status: "issued",
@@ -304,7 +196,7 @@ export async function handlePassStudioWallet(
       provider_pass_id: providerPass.passId,
       provider_instance_id: instanceId,
       provider_holder_id: holderId || null,
-      provider_barcode_content: barcodeContent || null,
+      provider_barcode_content: barcode || null,
       provider_add_to_wallet_url: addToWalletUrl,
       provider_last_error_code: null,
       last_generated_at: now,
@@ -313,37 +205,32 @@ export async function handlePassStudioWallet(
     };
 
     if (existing?.id) {
-      const { error: updateError } = await db.from("customer_wallet_passes").update({
-        ...providerPatch,
-        pass_revision: Number(existing.pass_revision ?? 0) + 1,
-      }).eq("id", String(existing.id));
-      if (updateError) return { ok: false, status: 500, body: { ok: false, error: "WALLET_PASS_PERSIST_FAILED" } };
+      const { error } = await db.from("customer_wallet_passes")
+        .update({ ...patch, pass_revision: Number(existing.pass_revision ?? 0) + 1 })
+        .eq("id", String(existing.id));
+      if (error) return { ok: false, status: 500, body: { ok: false, error: "WALLET_PASS_PERSIST_FAILED" } };
     } else {
-      const { error: insertError } = await db.from("customer_wallet_passes").insert({
+      const { error } = await db.from("customer_wallet_passes").insert({
         user_id: user.id,
-        membership_id: membership.id,
         public_pass_id: crypto.randomUUID(),
-        status: "active",
-        provider_status: "issued",
         pass_revision: 1,
         token_version: 1,
-        ...providerPatch,
+        ...patch,
       });
-      if (insertError) return { ok: false, status: 500, body: { ok: false, error: "WALLET_PASS_PERSIST_FAILED" } };
+      if (error) return { ok: false, status: 500, body: { ok: false, error: "WALLET_PASS_PERSIST_FAILED" } };
     }
 
     await auditLog(db, {
       actor: user.id,
-      action: existingInstanceId || action === "sync" ? "wallet.pass_synced" : "wallet.pass_issued",
+      action: sameTemplate || action === "sync" ? "wallet.pass_synced" : "wallet.pass_issued",
       target: membership.id,
       data: {
         provider: "pass_studio",
         provider_pass_id: providerPass.passId,
         provider_instance_id: instanceId,
-        template_changed: Boolean(existingProviderPassId && existingProviderPassId !== providerPass.passId),
+        old_template_removed: Boolean(existingPassId && existingPassId !== providerPass.passId),
         already_existed: alreadyExisted,
         updated_fields: Object.keys(fields),
-        realtime_presentation: true,
       },
     });
 
@@ -357,14 +244,13 @@ export async function handlePassStudioWallet(
         addToWalletUrl,
         passId: providerPass.passId,
         passType: providerPass.passType ?? null,
-        customTemplateReady: looksLikeChargeursCustomPass(providerPass) && customReadinessScore(providerPass) >= 3,
+        customTemplateReady: true,
         alreadyExisted,
         syncedAt: now,
       },
     };
   } catch (error) {
-    const providerError = safeProviderError(error);
-    await recordProviderFailure(providerError.code, "issuance");
-    return { ok: false, status: providerError.status, body: { ok: false, error: providerError.code } };
+    const pe = safeProviderError(error);
+    return { ok: false, status: pe.status, body: { ok: false, error: pe.code } };
   }
 }
