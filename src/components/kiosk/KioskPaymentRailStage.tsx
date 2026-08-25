@@ -164,12 +164,17 @@ export function KioskPaymentRailStage(props: Props) {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const confirmedRef = useRef(false);
   const terminalCancellationHandledRef = useRef(false);
+  // A WisePad cancellation may remain projected for a brief moment after the
+  // kiosk has already returned home. Never let that stale terminal state close
+  // a newly-created rental before this exact screen has started a payment.
+  const terminalStartAcceptedRef = useRef(false);
   const railTapLockRef = useRef(inProgress);
   const qrAutoStartedRef = useRef(false);
   const initialReaderProbeRef = useRef<string | null>(null);
 
   useEffect(() => {
     terminalCancellationHandledRef.current = false;
+    terminalStartAcceptedRef.current = false;
   }, [rentalSessionId]);
 
   useEffect(() => {
@@ -246,7 +251,14 @@ export function KioskPaymentRailStage(props: Props) {
   }, [model.payment.serverConfirmed, onServerConfirmed]);
 
   useEffect(() => {
-    if (terminalCancellationHandledRef.current || !isCanonicalTerminalCancellation(reader)) return;
+    // Do not consume a final cancellation left over from the preceding rental.
+    // Only the current screen's accepted Terminal start may return this kiosk
+    // home as a terminal-cancellation result.
+    if (
+      terminalCancellationHandledRef.current
+      || !terminalStartAcceptedRef.current
+      || !isCanonicalTerminalCancellation(reader)
+    ) return;
     terminalCancellationHandledRef.current = true;
     railTapLockRef.current = false;
     setCancellingPayment(false);
@@ -341,6 +353,7 @@ export function KioskPaymentRailStage(props: Props) {
       setLocalRailState("UNCLAIMED");
       return;
     }
+    terminalStartAcceptedRef.current = true;
     setLocalRailState("ENGAGED");
     onTerminalEngaged();
   };
