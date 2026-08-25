@@ -48,6 +48,7 @@ function buildFields(pass: PassStudioPass, input: {
   rentalCredit: string;
   memberRate: string;
   dailyCap: string;
+  recentHistory: string;
 }) {
   const fields: Record<string, string | number | boolean | null> = {};
   const aliases = (values: string[]) => values.map(normalize);
@@ -60,6 +61,7 @@ function buildFields(pass: PassStudioPass, input: {
     else if (aliases(["rentalCredit", "credit", "creditLocation", "balance", "solde"]).includes(normalized)) fields[key] = input.rentalCredit;
     else if (aliases(["memberRate", "tarifMembre", "rate", "hourlyRate"]).includes(normalized)) fields[key] = input.memberRate;
     else if (aliases(["dailyCap", "plafond", "plafondJournalier"]).includes(normalized)) fields[key] = input.dailyCap;
+    else if (aliases(["recentHistory", "recentActivity", "historiqueRecent", "history", "activity", "latestUpdate", "latestUpdates"]).includes(normalized)) fields[key] = input.recentHistory;
   }
   return fields;
 }
@@ -136,6 +138,7 @@ export async function handlePassStudioWallet(
     chargePoints: Number(pFields.points ?? pointsResult.data?.balance ?? 0),
     memberRate: `${cents(Number(plan.hourly_cents ?? 0), currency)} / h`,
     dailyCap: `${cents(Number(plan.daily_cap_cents ?? 0), currency)} / jour`,
+    recentHistory: String(pFields.recent_history ?? pFields.historique_recent ?? presentation.recentHistory ?? "Aucune activité récente"),
   };
   const fields = buildFields(providerPass, sourceValues);
 
