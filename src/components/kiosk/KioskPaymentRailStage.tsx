@@ -152,7 +152,7 @@ export function KioskPaymentRailStage(props: Props) {
   const terminalStation = stationHasPaymentTerminal(stationId);
   // Cabinet identity is the physical source of truth. A native bridge on a QR-only
   // tablet is not evidence of a payment reader; it must never create a disabled
-  // “Sans contact” choice for the customer.
+  // “Sans contact” choice for the customer (including on a restarted native shell).
   const physicalQrOnlyCabinet = !terminalStation;
   const [reader, setReader] = useState<NativeReaderProjection | null>(() => parseProjection(native?.getPaymentReaderStatus?.()));
   const [localRail, setLocalRail] = useState<PaymentRail>(inProgress ? "TERMINAL" : "NONE");
