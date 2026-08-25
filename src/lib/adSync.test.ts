@@ -4,6 +4,7 @@ import {
   estimateServerClockOffsetMs,
   resolveAdSyncPosition,
   selectStableClockOffsetMs,
+  resolveEffectiveAdsClockOffsetMs,
   setAuthoritativeAdsClockOffsetMs,
 } from "./adSync";
 
@@ -60,5 +61,11 @@ describe("network advertising clock", () => {
   it("makes the dedicated fleet clock override a noisier playlist estimate", () => {
     setAuthoritativeAdsClockOffsetMs(1_234);
     expect(estimateServerClockOffsetMs(9_000, 1_000, 6_000)).toBe(1_234);
+  });
+
+  it("uses the dedicated fleet clock for a cached playlist with no local estimate", () => {
+    expect(resolveEffectiveAdsClockOffsetMs(1_234, null)).toBe(1_234);
+    expect(resolveEffectiveAdsClockOffsetMs(null, -456)).toBe(-456);
+    expect(resolveEffectiveAdsClockOffsetMs(Number.NaN, 789)).toBe(789);
   });
 });

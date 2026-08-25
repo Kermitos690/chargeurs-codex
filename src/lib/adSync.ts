@@ -37,6 +37,20 @@ export function getAuthoritativeAdsClockOffsetMs(): number | null {
   return authoritativeAdsClockOffsetMs;
 }
 
+/**
+ * Resolve the best fleet clock for a render. A valid dedicated Ads-clock sample
+ * is preferred even when the playlist itself came from local cache and therefore
+ * has no recent server-time estimate.
+ */
+export function resolveEffectiveAdsClockOffsetMs(
+  authoritativeOffsetMs: number | null | undefined,
+  playlistOffsetMs: number | null | undefined,
+): number | null {
+  const normalize = (value: number | null | undefined) =>
+    typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+  return normalize(authoritativeOffsetMs) ?? normalize(playlistOffsetMs);
+}
+
 export function adEntryDurationMs(entry: TimedAdEntry): number {
   const rawSeconds = entry.item.mediaType === "video"
     ? Number(entry.item.mediaDurationSeconds) || DEFAULT_VIDEO_MS / 1_000

@@ -30,6 +30,7 @@ type Props = {
   onChooseQr: () => void;
   onTerminalEngaged: () => void;
   onServerConfirmed: () => void;
+  onCancelled: () => void;
 };
 
 const READER_GRACE_MS = 10_000;
@@ -145,6 +146,7 @@ export function KioskPaymentRailStage(props: Props) {
     onChooseQr,
     onTerminalEngaged,
     onServerConfirmed,
+    onCancelled,
   } = props;
   const copy = COPY[lang];
   const native = (window as NativeWindow).ChargeursNative;
@@ -278,8 +280,8 @@ export function KioskPaymentRailStage(props: Props) {
     setCancelError(null);
     setLocalRail("NONE");
     setLocalRailState(reader?.payment?.railState === "EXPIRED" ? "EXPIRED" : "CANCELLED");
-    window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
-  }, [reader]);
+    onCancelled();
+  }, [reader, onCancelled]);
 
   const chooseQr = () => {
     if (railTapLockRef.current || !model.payment.canChooseQr) return;
@@ -371,18 +373,6 @@ export function KioskPaymentRailStage(props: Props) {
     onTerminalEngaged();
   };
 
-  const restartCleanly = () => {
-    try {
-      if (native?.restartApp) {
-        native.restartApp();
-        return;
-      }
-    } catch {
-      // Browser fallback below.
-    }
-    window.location.reload();
-  };
-
   const cancelActivePayment = async () => {
     if (cancellingPayment) return;
     setCancellingPayment(true);
@@ -436,7 +426,9 @@ export function KioskPaymentRailStage(props: Props) {
         setCancelError(data?.error ?? "PAYMENT_CANCEL_FAILED");
         return;
       }
-      restartCleanly();
+      setLocalRail("NONE");
+      setLocalRailState("CANCELLED");
+      onCancelled();
     } catch {
       setCancelError("PAYMENT_CANCEL_NETWORK_FAILED");
     } finally {

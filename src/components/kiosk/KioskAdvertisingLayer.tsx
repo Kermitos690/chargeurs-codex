@@ -4,7 +4,7 @@ import { Megaphone, VolumeX, Zap } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { readKioskToken } from "@/lib/kioskFetch";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
-import { adEntryDurationMs, estimateServerClockOffsetMs, resolveAdSyncPosition } from "@/lib/adSync";
+import { adEntryDurationMs, estimateServerClockOffsetMs, resolveAdSyncPosition, resolveEffectiveAdsClockOffsetMs } from "@/lib/adSync";
 import { useI18n } from "@/i18n/i18n";
 import "./kiosk-advertising.css";
 import "./kiosk-advertising-failsafe.css";
@@ -59,7 +59,8 @@ type DisplayMode = "split" | "screensaver";
 type PlaybackStatus = "completed" | "failed" | "interrupted";
 
 const REFRESH_MS = 60_000;
-const CACHE_PREFIX = "chargeurs:ads:playlist:";
+const CACHE_RECOVERY_INITIAL_MS = 8_000;
+const CACHE_PREFIX = "chargeurs:ads:playlist:clock-v2:";
 
 function consumeRequestedPlaylistReset(stationId: string): boolean {
   try {
@@ -517,7 +518,11 @@ class AdvertisingErrorBoundary extends Component<{ children: ReactNode }, Bounda
   }
 }
 
-function KioskAdvertisingRuntime() {
+type KioskAdvertisingRuntimeProps = {
+  authoritativeClockOffsetMs?: number | null;
+};
+
+function KioskAdvertisingRuntime({ authoritativeClockOffsetMs = null }: KioskAdvertisingRuntimeProps) {
   const { stationId = "" } = useParams();
   const { lang } = useI18n();
   const [playlist, setPlaylist] = useState<PlaylistResponse>(() => loadCached(stationId) ?? { ok: true, campaigns: [] });
@@ -537,8 +542,8 @@ function KioskAdvertisingRuntime() {
     return values.length ? Math.min(...values) : 45;
   }, [campaigns]);
 
-  const load = useCallback(async () => {
-    if (!stationId) return;
+  const load = useCallback(async (): Promise<boolean> => {
+    if (!stationId) return false;
     const token = readKioskToken();
     const requestStartedMs = Date.now();
     try {
@@ -554,21 +559,38 @@ function KioskAdvertisingRuntime() {
         }
         setPlaylist(data);
         cachePlaylist(stationId, data);
-        return;
+        return true;
       }
     } catch {
       // Network/backend Ads failure is isolated; retain the last valid local playlist.
     }
     const cached = loadCached(stationId);
     if (cached) setPlaylist(cached);
+    return false;
   }, [stationId]);
 
   useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    let consecutiveFailures = 0;
+
+    const refresh = async () => {
+      const freshPlaylist = await load();
+      if (cancelled) return;
+      consecutiveFailures = freshPlaylist ? 0 : Math.min(consecutiveFailures + 1, 3);
+      const delay = freshPlaylist
+        ? REFRESH_MS
+        : Math.min(REFRESH_MS, CACHE_RECOVERY_INITIAL_MS * (2 ** Math.max(0, consecutiveFailures - 1)));
+      timer = window.setTimeout(() => void refresh(), delay);
+    };
+
     const cached = loadCached(stationId);
     if (cached) setPlaylist(cached);
-    void load();
-    const timer = window.setInterval(() => void load(), REFRESH_MS);
-    return () => window.clearInterval(timer);
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
   }, [load, stationId]);
 
   useEffect(() => {
@@ -643,8 +665,9 @@ function KioskAdvertisingRuntime() {
   const splitActive = surface.splitActive;
   const saverActive = surface.saverActive;
   const timelineEpochMs = Number(playlist.timelineEpochMs ?? 0) || 0;
-  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
-  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version, serverClockOffsetMs, timelineEpochMs);
+  const effectiveClockOffsetMs = resolveEffectiveAdsClockOffsetMs(authoritativeClockOffsetMs, serverClockOffsetMs);
+  const split = useAdRotation(splitEntries, splitActive, "split", stationId, playlist.version, effectiveClockOffsetMs, timelineEpochMs);
+  const saver = useAdRotation(saverEntries, saverActive, "screensaver", stationId, playlist.version, effectiveClockOffsetMs, timelineEpochMs);
 
   useEffect(() => {
     if (!splitActive || !split.current) return;
@@ -782,10 +805,14 @@ function KioskAdvertisingRuntime() {
   );
 }
 
-export function KioskAdvertisingLayer() {
+type KioskAdvertisingLayerProps = {
+  authoritativeClockOffsetMs?: number | null;
+};
+
+export function KioskAdvertisingLayer({ authoritativeClockOffsetMs = null }: KioskAdvertisingLayerProps) {
   return (
     <AdvertisingErrorBoundary>
-      <KioskAdvertisingRuntime />
+      <KioskAdvertisingRuntime authoritativeClockOffsetMs={authoritativeClockOffsetMs} />
     </AdvertisingErrorBoundary>
   );
 }
