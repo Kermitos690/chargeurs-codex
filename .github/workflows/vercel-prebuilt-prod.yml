@@ -49,26 +49,26 @@ jobs:
 
       - name: Link Vercel project
         run: >-
-          npx --yes vercel@latest link --yes
+          npx --yes vercel@59.6.2 link --yes
           --scope="$VERCEL_SCOPE"
           --project="$VERCEL_PROJECT"
           --token="$VERCEL_TOKEN"
 
       - name: Pull production environment
         run: >-
-          npx --yes vercel@latest pull --yes
+          npx --yes vercel@59.6.2 pull --yes
           --environment=production
           --scope="$VERCEL_SCOPE"
           --token="$VERCEL_TOKEN"
 
       - name: Build precompiled production output
         run: >-
-          npx --yes vercel@latest build --prod
+          npx --yes vercel@59.6.2 build --prod
           --scope="$VERCEL_SCOPE"
           --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt output to production
         run: >-
-          npx --yes vercel@latest deploy --prebuilt --prod --yes
+          npx --yes vercel@59.6.2 deploy --prebuilt --prod --yes
           --scope="$VERCEL_SCOPE"
           --token="$VERCEL_TOKEN"
