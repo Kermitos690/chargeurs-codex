@@ -7,9 +7,10 @@ const migration = readFileSync(
   "utf8",
 );
 const acceptance = readFileSync(
-  resolve(process.cwd(), "supabase/functions/record-rental-contract-acceptance/index.ts"),
+  resolve(process.cwd(), "supabase/functions/kiosk-customer-options/index.ts"),
   "utf8",
 );
+const vercelConfig = readFileSync(resolve(process.cwd(), "vercel.json"), "utf8");
 
 describe("member prepaid payment rail", () => {
   it("is a first-class mutually exclusive payment rail", () => {
@@ -54,5 +55,10 @@ describe("member prepaid payment rail", () => {
     expect(acceptance).toContain("authorize_member_prepaid_rental");
     expect(acceptance).toContain("prepaidAuthorized");
     expect(acceptance).toContain("eject-after-payment");
+  });
+
+  it("routes contract acceptance through the existing kiosk function to stay within the free Edge-function cap", () => {
+    expect(vercelConfig).toContain('"source": "/api/kiosk/record-rental-contract-acceptance"');
+    expect(vercelConfig).toContain('functions/v1/kiosk-customer-options');
   });
 });
