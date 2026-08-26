@@ -35,6 +35,7 @@ export type KioskProxyResult<T> = {
 type KioskProxyPath =
   | "/api/kiosk/create-rental-session"
   | "/api/kiosk/create-stripe-checkout"
+  | "/api/kiosk/record-rental-contract-acceptance"
   | "/api/kiosk/cancel-checkout"
   | "/api/kiosk/cabinet-snapshot"
   | "/api/kiosk/reconcile-pending-ejection"
