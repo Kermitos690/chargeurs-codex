@@ -3,8 +3,8 @@
 Assumptions: 30-day month; continuously powered stations; no active payment or
 hardware incident; current cached/adaptive kiosk behavior. The Supabase Free
 ceiling used for planning is 500,000 invocations/month; Chargeurs.ch internal
-safety ceiling is 350,000. The known deployed-but-unversioned `noop` Wallet
-dispatcher remains an intended cron target and is counted conservatively.
+safety ceiling is 350,000. The staging-exported `noop` Wallet dispatcher
+remains an intended cron target and is counted conservatively.
 
 | Call | Trigger | Normal interval | Error interval | Per-station monthly estimate |
 | --- | --- | ---: | ---: | ---: |
@@ -23,25 +23,28 @@ and must not be slowed for quota savings.
 | --- | ---: | ---: | ---: | --- | --- |
 | `expire-stale-rental-sessions` | every 5 min | 288 | 8,640 | SQL_ONLY | — |
 | `field-incident-watchdog` | every 5 min | 288 | 8,640 | SQL_ONLY | — |
-| `chargeurs-wallet-price-transitions` | every 10 sec | 8,640 | 259,200 | SQL_ONLY | — |
+| `chargeurs-plus-push-reminders` | every 5 min | 288 | 8,640 | SQL_ONLY | — |
+| `chargeurs-wallet-price-transitions` | every 1 min | 1,440 | 43,200 | SQL_ONLY | — |
+| `guest-wallet-price-transitions` | every 1 min | 1,440 | 43,200 | SQL_ONLY | — |
 | `chargeurs-transactional-email-outbox` | every 5 min | 288 | 8,640 | EDGE_FUNCTION | `process-rental-email-outbox` |
-| `chargeurs-plus-push-outbox` | every 5 min | 288 | 8,640 | EDGE_FUNCTION | `noop` (unversioned dispatcher) |
+| `chargeurs-membership-email-outbox` | every 5 min | 288 | 8,640 | EDGE_FUNCTION | `process-membership-email-outbox` |
+| `chargeurs-plus-push-outbox` | every 5 min | 288 | 8,640 | EDGE_FUNCTION | `noop` |
 | `chargeurs-advertising-impression-retention` | daily 03:17 | 1 | 30 | SQL_ONLY | — |
 
 `noop` has separate individual-instance and guest/bulk provider-push paths.
 Pass Studio confirmed that either path consumes one credit whenever it delivers
 a push, so both are disabled by the hardening migration. Its remaining Web Push
 outbox is non-transaction-critical and now runs every five minutes.
-No other versioned migration schedules an Edge Function. The remote cron export
-is still required to exclude additional unversioned jobs.
+The staging cron export confirms these three fixed Edge workers; all other
+active jobs are SQL-only.
 
 | Pilot size | Station calls | Fixed Edge crons | Estimated monthly total | Internal 350k |
 | ---: | ---: | ---: | ---: | --- |
-| 1 | 21,696 | 17,280 | 38,976 | within |
-| 3 | 65,088 | 17,280 | 82,368 | within |
-| 4 | 86,784 | 17,280 | 104,064 | within |
-| 10 | 216,960 | 17,280 | 234,240 | within |
-| 20 | 433,920 | 17,280 | 451,200 | exceeds internal; below Free ceiling |
+| 1 | 21,696 | 25,920 | 47,616 | within |
+| 3 | 65,088 | 25,920 | 91,008 | within |
+| 4 | 86,784 | 25,920 | 112,704 | within |
+| 10 | 216,960 | 25,920 | 242,880 | within |
+| 20 | 433,920 | 25,920 | 459,840 | exceeds internal; below Free ceiling |
 
 Database-local jobs (`expire-stale-rental-sessions`, field-incident watchdog,
 wallet price transitions and advertising-retention) contribute zero Edge
