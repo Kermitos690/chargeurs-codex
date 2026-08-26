@@ -2,7 +2,10 @@
 
 ## Garantie et prix final
 
-La garantie initiale est de 30 CHF. Le prix final provient exclusivement du snapshot tarifaire immuable : 0,75 CHF par 30 minutes, plafond journalier 18 CHF, non-retour 99 CHF. Le complément maximal théorique après la garantie est 69 CHF.
+La garantie initiale, le prix final, le plafond et le non-retour proviennent
+exclusivement du snapshot tarifaire immuable de la location. Cette documentation
+ne publie pas de montants commerciaux fixes : ils doivent être affichés au
+client avant l’acceptation et validés juridiquement avant la production.
 
 ## Stratégie carte
 
@@ -10,15 +13,23 @@ Pour une carte/Wallet éligible, Checkout crée un PaymentIntent à capture manu
 
 ## Stratégie capture automatique
 
-Pour TWINT ou une méthode ne permettant pas la capture manuelle, les 30 CHF sont encaissés. Après retour, Stripe rembourse la différence entre 30 CHF et le prix final. L'éjection attend la confirmation serveur de l'encaissement.
+Pour TWINT ou une méthode ne permettant pas la capture manuelle, le montant de
+garantie du snapshot est encaissé. Après retour, Stripe rembourse la différence
+entre cette garantie et le prix final. L'éjection attend la confirmation serveur
+de l'encaissement.
 
 ## Complément
 
-Si le prix final dépasse 30 CHF, le moteur tente un paiement hors session uniquement avec un moyen sauvegardé et un consentement compatible. Si une authentification supplémentaire est requise ou le paiement échoue, l'état devient `supplemental_required`/revue manuelle ; aucun débit arbitraire n'est simulé.
+Si le prix final dépasse la garantie du snapshot, le moteur tente un paiement
+hors session uniquement avec un moyen sauvegardé et un consentement compatible.
+Si une authentification supplémentaire est requise ou le paiement échoue, l'état
+devient `supplemental_required`/revue manuelle ; aucun débit arbitraire n'est simulé.
 
 ## Non-retour
 
-Le résultat contractuel de non-retour est exactement 99 CHF, non réduit par le plafond journalier ordinaire. Il doit être déclaré par une procédure autorisée et auditée. Le calcul du snapshot applique ensuite le plafond maximum de 99 CHF.
+Le résultat contractuel de non-retour est celui du snapshot accepté, non réduit
+par le plafond journalier ordinaire. Il doit être déclaré par une procédure
+autorisée et auditée.
 
 ## Compensation
 
