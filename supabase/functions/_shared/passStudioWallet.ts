@@ -53,7 +53,10 @@ function buildFields(pass: PassStudioPass, input: {
   const fields: Record<string, string | number | boolean | null> = {};
   const aliases = (values: string[]) => values.map(normalize);
   for (const key of editableKeys(pass)) {
-    const normalized = normalize(key);
+    // Custom Passes expose stable generated keys (for example `field_…`) and
+    // their human-facing semantic labels separately. Prefer the provider label
+    // for mapping while retaining the stable key in the PATCH payload.
+    const normalized = normalize(pass.fieldLabels?.[key] ?? key);
     if (aliases(["memberId", "member_id", "membershipId"]).includes(normalized)) fields[key] = input.memberId;
     else if (aliases(["memberName", "member_name", "name", "holderName"]).includes(normalized) && input.displayName) fields[key] = input.displayName;
     else if (aliases(["points", "chargePoints", "charge_points"]).includes(normalized)) fields[key] = input.chargePoints;
