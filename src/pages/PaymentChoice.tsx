@@ -20,15 +20,22 @@ const TERMINAL_STATUS_STATES = new Set([
 ]);
 
 type Lang = "fr" | "de" | "en";
+type PricingTier = { upper_minutes?: number | null; total_cents?: number | null };
 type Status = {
   state?: string;
   currency?: string;
   deposit_amount_cents?: number | null;
   pricing?: {
+    profile_name?: string | null;
+    pricing_rules_version?: number | null;
+    initial_fee_cents?: number | null;
+    min_amount_cents?: number | null;
     period_minutes?: number | null;
     price_per_period_cents?: number | null;
     daily_cap_cents?: number | null;
     unreturned_fee_cents?: number | null;
+    tiered?: boolean | null;
+    tiers?: PricingTier[] | null;
   } | null;
 };
 
@@ -47,6 +54,8 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Plafond journalier",
     nonReturn: "Non-retour",
+    then: "puis",
+    accordingToDuration: "selon la durée",
     continueCard: "Autoriser la garantie et louer",
     continueTwint: "Payer la garantie et louer",
     secure: "Paiement sécurisé par Stripe",
@@ -68,6 +77,8 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Tageslimit",
     nonReturn: "Nichtrückgabe",
+    then: "danach",
+    accordingToDuration: "je nach Dauer",
     continueCard: "Garantie autorisieren und mieten",
     continueTwint: "Garantie zahlen und mieten",
     secure: "Sichere Zahlung mit Stripe",
@@ -89,6 +100,8 @@ const COPY = {
     guarantee: "Guarantee",
     dailyCap: "Daily cap",
     nonReturn: "Non-return",
+    then: "then",
+    accordingToDuration: "depending on duration",
     continueCard: "Authorise guarantee and rent",
     continueTwint: "Pay guarantee and rent",
     secure: "Secure payment by Stripe",
@@ -100,6 +113,36 @@ const COPY = {
 
 function cents(value: number | null | undefined, currency = "CHF") {
   return `${(Number(value ?? 0) / 100).toFixed(2)} ${currency}`;
+}
+
+function pricingLabel(pricing: Status["pricing"], currency: string, lang: Lang) {
+  if (!pricing) return "—";
+  const copy = COPY[lang];
+  const period = Number(pricing.period_minutes ?? 0);
+  const perPeriod = Number(pricing.price_per_period_cents ?? 0);
+  const initial = Number(pricing.initial_fee_cents ?? 0);
+  const minimum = Number(pricing.min_amount_cents ?? 0);
+  const rulesVersion = Number(pricing.pricing_rules_version ?? 0);
+
+  if (rulesVersion === 3 && pricing.profile_name === "Chargeurs.ch Client" && period > 0 && perPeriod >= 0) {
+    const firstPeriod = Math.max(minimum, initial + perPeriod);
+    return `${cents(firstPeriod, currency)} / ${period} min · ${copy.then} +${cents(perPeriod, currency)} / ${period} min`;
+  }
+
+  const tiers = Array.isArray(pricing.tiers)
+    ? pricing.tiers
+      .map((tier) => ({ upper: Number(tier?.upper_minutes ?? 0), total: Number(tier?.total_cents ?? 0) }))
+      .filter((tier) => tier.upper > 0 && tier.total >= 0)
+      .sort((a, b) => a.upper - b.upper)
+    : [];
+  if (pricing.tiered === true && tiers.length > 0) {
+    const first = tiers[0];
+    const last = tiers[tiers.length - 1];
+    if (first.upper === last.upper) return `${cents(first.total, currency)} / ${first.upper} min`;
+    return `${cents(first.total, currency)} → ${cents(last.total, currency)} · ${copy.accordingToDuration}`;
+  }
+
+  return period > 0 ? `${cents(perPeriod, currency)} / ${period} min` : "—";
 }
 
 export default function PaymentChoice() {
@@ -153,9 +196,17 @@ export default function PaymentChoice() {
 
   const currency = status?.currency ?? "CHF";
   const pricing = status?.pricing;
-  const period = Number(pricing?.period_minutes ?? 30);
-  const perPeriod = Number(pricing?.price_per_period_cents ?? 0);
-  const hourly = period > 0 ? Math.round(perPeriod * 60 / period) : 0;
+  const tiers = Array.isArray(pricing?.tiers) ? pricing.tiers : [];
+  const tierDailyCap = pricing?.tiered === true
+    ? tiers
+      .map((tier) => ({ upper: Number(tier?.upper_minutes ?? 0), total: Number(tier?.total_cents ?? 0) }))
+      .filter((tier) => tier.upper > 0 && tier.upper <= 1440 && tier.total >= 0)
+      .sort((a, b) => a.upper - b.upper)
+      .at(-1)?.total ?? 0
+    : 0;
+  const displayDailyCap = Number(pricing?.daily_cap_cents ?? 0) > 0
+    ? Number(pricing?.daily_cap_cents)
+    : tierDailyCap;
 
   return (
     <div className="relative min-h-screen overflow-hidden px-5 py-8 text-foreground">
@@ -167,9 +218,9 @@ export default function PaymentChoice() {
             <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">{c.title}</h1>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">{c.subtitle}</p>
             <div className="mt-6 flex flex-wrap justify-center gap-3 text-sm">
-              <span className="glass rounded-full px-4 py-2"><strong>{c.price}:</strong> {cents(hourly, currency)} / h</span>
+              <span className="glass rounded-full px-4 py-2"><strong>{c.price}:</strong> {pricingLabel(pricing, currency, lang)}</span>
               <span className="glass rounded-full px-4 py-2"><strong>{c.guarantee}:</strong> {cents(status.deposit_amount_cents, currency)}</span>
-              <span className="glass rounded-full px-4 py-2"><strong>{c.dailyCap}:</strong> {cents(pricing?.daily_cap_cents, currency)}</span>
+              {displayDailyCap > 0 && <span className="glass rounded-full px-4 py-2"><strong>{c.dailyCap}:</strong> {cents(displayDailyCap, currency)}</span>}
               <span className="glass rounded-full px-4 py-2"><strong>{c.nonReturn}:</strong> {cents(pricing?.unreturned_fee_cents, currency)}</span>
             </div>
           </section>
