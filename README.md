@@ -5,26 +5,44 @@ Chargeurs.ch est une plateforme de location de batteries externes / powerbanks d
 Le dépôt contient l'application web publique, les écrans kiosk, l'espace client, l'administration, le moteur tarifaire, le Rental Orchestrator et les fonctions Supabase utilisées pour Stripe et ChargeNow.
 
 > Source opérationnelle canonique de préproduction : `docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md`.
-> `docs/PROJECT_BIBLE.md` et les rapports datés restent des éléments d’historique.
+> `docs/PROJECT_BIBLE.md` et les rapports datés restent des éléments d’historique et ne doivent plus servir de source tarifaire courante.
 
 ## Parcours produit cible
 
 1. Le client voit une borne Chargeurs.ch.
-2. Il scanne le QR code affiché par le kiosk.
-3. Le client accepte explicitement les documents contractuels, puis Stripe autorise ou collecte la garantie affichée dans le snapshot tarifaire selon le moyen de paiement.
-4. Le backend confirme le paiement puis demande l'éjection d'une batterie précise à ChargeNow.
-5. La location devient active après confirmation matérielle.
-6. Le retour physique est corrélé à la batterie et au slot.
-7. Le moteur calcule le montant final et effectue la capture, l'annulation ou le remboursement approprié.
-8. En cas de non-retour confirmé, le montant prévu dans le snapshot tarifaire accepté s’applique selon le processus autorisé et audité.
+2. Il choisit le parcours Express ou connecte son compte Chargeurs.ch.
+3. Le serveur crée un snapshot tarifaire immuable pour cette location.
+4. Le client vérifie les montants et accepte explicitement les documents contractuels.
+5. Express utilise la garantie Stripe prévue dans son snapshot.
+6. Un membre disposant d'au moins 30 CHF de solde prépayé disponible peut réserver 30 CHF dans son solde Chargeurs.ch au lieu de fournir une deuxième garantie bancaire.
+7. Le backend n'autorise l'éjection qu'après une autorité financière serveur confirmée (`authorized` ou `prepaid`) et la validation des garde-fous matériels.
+8. La location devient active uniquement après confirmation physique de la remise de la batterie.
+9. Au retour, le moteur calcule le prix depuis le snapshot accepté, règle le rail financier correspondant et libère le surplus éventuel.
+10. Pour les nouvelles locations v3, un non-retour confirmé à 72 heures produit un total contractuel de 30 CHF, et non une pénalité ajoutée au prix accumulé.
 
-## Règles tarifaires canoniques
+## Tarification pilote canonique — nouvelles locations v3
 
-Les profils tarifaires sont administrés côté serveur. Avant l’acceptation, le
-kiosk ou le parcours web affiche le snapshot immuable de la location : période,
-tarif, plafond journalier, garantie, délai et montant de non-retour. Ne pas
-recopier de montants historiques depuis cette documentation dans une CGV ou une
-interface client.
+### Express
+
+- jusqu'à 30 minutes : **1,90 CHF** ;
+- jusqu'à 2 heures : **3,90 CHF** ;
+- jusqu'à 6 heures : **5,90 CHF** ;
+- jusqu'à 24 heures : **7,90 CHF** ;
+- le mécanisme de garantie de référence du pilote est **30 CHF** ;
+- non-retour à **72 heures : 30 CHF au total**.
+
+### Client avec solde prépayé Chargeurs.ch
+
+- premières 30 minutes : **1,00 CHF** ;
+- chaque tranche supplémentaire de 30 minutes commencée : **+0,40 CHF** ;
+- plafond : **5,90 CHF par période de 24 heures** ;
+- avec au moins **30 CHF disponibles**, le backend réserve 30 CHF dans le solde prépayé et ne crée pas de garantie Stripe supplémentaire ;
+- au retour, seul le prix réel est consommé et le reste de la réservation est libéré ;
+- non-retour à **72 heures : 30 CHF au total**.
+
+Pour le pilote, un solde inférieur à 30 CHF ne doit pas être combiné avec une garantie Stripe partielle : le client recharge jusqu'au seuil requis ou utilise le parcours de garantie Stripe complet. Les recharges et les réservations sont des écritures serveur de ledger ; le navigateur ne peut jamais créditer ou débiter lui-même un solde.
+
+Ces règles sont introduites sous `pricing_rules_version = 3`. Les locations v1/v2 déjà créées conservent définitivement leur `pricing_snapshot` historique et ne sont jamais recalculées avec la v3.
 
 Les montants doivent provenir exclusivement d'un snapshot tarifaire serveur. Le navigateur et le kiosk ne sont jamais une source de vérité financière.
 
@@ -59,18 +77,21 @@ Routes principales :
 - Row-Level Security
 - mutations privilégiées réservées au rôle serveur `service_role`
 
-### Paiements
+### Paiements et solde prépayé
 
-- Stripe Checkout et PaymentIntent
-- cartes : autorisation puis capture finale lorsque la méthode est éligible
-- TWINT et méthodes à capture automatique : collecte initiale puis remboursement du solde inutilisé
-- webhooks Stripe comme preuve du paiement
+- Stripe Checkout et PaymentIntent pour les rails Stripe ;
+- cartes éligibles : autorisation puis capture finale ;
+- TWINT et méthodes à capture automatique : collecte initiale puis remboursement du solde inutilisé ;
+- webhooks Stripe comme preuve des événements Stripe ;
+- ledger Chargeurs.ch pour les crédits prépayés, réservations, engagements et libérations ;
+- `membership_prepaid` est un rail interne distinct de Stripe : aucun PaymentIntent ne doit être créé lorsqu'il gagne le first-rail-wins.
 
 ### Matériel
 
-- API et callbacks ChargeNow
-- aucune commande matérielle n'est autorisée directement depuis le navigateur
-- kiosks liés à une seule station par token
+- API et callbacks ChargeNow ;
+- aucune commande matérielle n'est autorisée directement depuis le navigateur ;
+- kiosks liés à une seule station par token ;
+- une autorité financière confirmée ne constitue jamais, à elle seule, une preuve d'éjection physique.
 
 ### Android
 
@@ -78,7 +99,7 @@ Le projet Android natif consolidé se trouve dans `android-kiosk/`. Il inclut le
 
 ## Rental Orchestrator
 
-Le Rental Orchestrator est destiné à devenir l'autorité unique du cycle de location :
+Le Rental Orchestrator est l'autorité du cycle de location :
 
 - machine à états stricte ;
 - événements typés et idempotents ;
@@ -86,23 +107,24 @@ Le Rental Orchestrator est destiné à devenir l'autorité unique du cycle de lo
 - journal immuable ;
 - incidents opérationnels ;
 - compensation ;
-- réconciliation Stripe / ChargeNow / état local.
+- réconciliation Stripe / solde prépayé / ChargeNow / état local.
 
 Le frontend, le kiosk et les webhooks ne doivent jamais imposer directement un état final.
 
-## État réel du projet
+## État de préproduction
 
-La branche de livraison consolide le frontend, le règlement Stripe, l'API plateforme, ChargeNow, le RBAC/organisations, l'enrôlement et Android. Restent non prouvés sans les accès du propriétaire :
+La PR de hardening consolide le frontend, Stripe TEST, le ledger membre, ChargeNow, l'enrôlement, les contrats et la préparation du pilote. Une CI verte valide le code du dépôt ; elle ne remplace pas une preuve physique de terrain ni une validation juridique/comptable.
 
-- application de toutes les migrations récentes ;
-- autorisation et capture partielle Stripe test ;
-- remboursement partiel TWINT ;
-- éjection et retour ChargeNow corrélés ;
-- cycle complet sur DTA21269 ;
-- APK release signé, installé et testé sur la tablette réelle ;
-- protocole série fournisseur, volontairement bloqué en `NOT_CONFIGURED`.
+Restent notamment à valider avant production commerciale :
 
-Une CI verte valide la qualité du code du dépôt. Elle ne prouve pas une connexion réelle à Stripe, Supabase ou ChargeNow.
+- déploiement coordonné et validation staging des fonctions/migrations v3 ;
+- tests contrôlés du rail membre prépayé sans Stripe et du fallback Express ;
+- éjection/retour physique sur les bornes qualifiées ;
+- identité légale, adresse et revue humaine des CGV/confidentialité ;
+- qualification comptable/juridique suisse du solde prépayé ;
+- plan commercial Vercel ;
+- runtime Stripe LIVE séparé et explicitement approuvé ;
+- sauvegarde chiffrée/offsite et procédure de restauration.
 
 ## Sécurité de bêta
 
@@ -117,6 +139,7 @@ Ne pas activer ce réglage avant :
 - validation des migrations sur un Supabase staging distinct ;
 - déploiement des Edge Functions staging ;
 - tests Stripe contrôlés ;
+- tests du ledger prépayé sur données de test ;
 - synchronisation ChargeNow en lecture seule ;
 - premier scénario matériel approuvé.
 
@@ -160,8 +183,8 @@ Tous les domaines sont configurables ; aucun domaine temporaire n'est une hypoth
 
 ## Gouvernance
 
-Toute modification des règles métier, de l'architecture, de l'ordre d'intégration ou du domaine actif doit être enregistrée dans `docs/PROJECT_BIBLE.md` avant fusion.
+Toute modification des règles métier, de l'architecture, de l'ordre d'intégration ou du domaine actif doit être enregistrée dans `docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md` avant fusion. Les documents historiques ne doivent jamais reprendre le statut de source de vérité sans décision explicite.
 
 ## Documentation de livraison
 
-Commencer par `ARCHITECTURE.md`, `DEPLOYMENT.md`, `REQUIRED_CREDENTIALS.md`, `PRODUCTION_CHECKLIST.md`, `KNOWN_LIMITATIONS.md` et `FINAL_DELIVERY_REPORT.md`. Les guides Stripe, ChargeNow, Android, provisionnement, sécurité, incidents et exploitation sont à la racine du dépôt.
+Commencer par `docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md`, `ARCHITECTURE.md`, `DEPLOYMENT.md`, `REQUIRED_CREDENTIALS.md`, `PRODUCTION_CHECKLIST.md`, `KNOWN_LIMITATIONS.md` et `FINAL_DELIVERY_REPORT.md`. Les guides Stripe, ChargeNow, Android, provisionnement, sécurité, incidents et exploitation sont à la racine du dépôt.
