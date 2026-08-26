@@ -6,8 +6,8 @@ const migration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260827020000_member_prepaid_payment_rail.sql"),
   "utf8",
 );
-const endpoint = readFileSync(
-  resolve(process.cwd(), "supabase/functions/authorize-member-prepaid-rental/index.ts"),
+const acceptance = readFileSync(
+  resolve(process.cwd(), "supabase/functions/record-rental-contract-acceptance/index.ts"),
   "utf8",
 );
 
@@ -48,10 +48,11 @@ describe("member prepaid payment rail", () => {
     expect(migration).toContain("'released_cents', 3000 - v_final");
   });
 
-  it("does not create or mutate Stripe from the prepaid authorization endpoint", () => {
-    expect(endpoint).not.toContain("stripe.paymentIntents");
-    expect(endpoint).not.toContain("STRIPE_SECRET_KEY");
-    expect(endpoint).toContain("authorize_member_prepaid_rental");
-    expect(endpoint).toContain("eject-after-payment");
+  it("attempts prepaid authorization only after acceptance and never creates Stripe from that path", () => {
+    expect(acceptance).not.toContain("stripe.paymentIntents");
+    expect(acceptance).not.toContain("STRIPE_SECRET_KEY");
+    expect(acceptance).toContain("authorize_member_prepaid_rental");
+    expect(acceptance).toContain("prepaidAuthorized");
+    expect(acceptance).toContain("eject-after-payment");
   });
 });
