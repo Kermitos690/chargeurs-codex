@@ -57,6 +57,52 @@
         }
       })();
     </script>
+    <script>
+      // Defensive compatibility guard for kiosks that can transiently combine
+      // the current Terminal rail with the removed legacy cancellation screen.
+      // The canonical React flow already resets directly to Home. This only
+      // intervenes when the old rendered copy is actually observed on a kiosk.
+      (function installLegacyCancellationEscape() {
+        try {
+          var path = window.location.pathname || "";
+          var isKioskPath = path === "/kiosk" || path.indexOf("/kiosk/") === 0;
+          if (!isKioskPath) return;
+
+          var redirectKey = "chargeurs:kiosk:legacy-cancel-redirect-at";
+          var legacyMarkers = [
+            "La demande de location a été annulée",
+            "Votre demande a été annulée",
+            "Location annulée",
+            "Rental cancelled"
+          ];
+
+          function legacyCancellationVisible() {
+            var text = document.body && document.body.innerText ? document.body.innerText : "";
+            for (var i = 0; i < legacyMarkers.length; i += 1) {
+              if (text.indexOf(legacyMarkers[i]) !== -1) return true;
+            }
+            return false;
+          }
+
+          function escapeLegacyCancellation() {
+            if (!legacyCancellationVisible()) return;
+            var now = Date.now();
+            var previous = Number(window.sessionStorage.getItem(redirectKey) || "0");
+            if (previous && now - previous < 5000) return;
+            window.sessionStorage.setItem(redirectKey, String(now));
+            window.location.replace(path + "?kiosk_return_home=" + now);
+          }
+
+          window.addEventListener("DOMContentLoaded", function () {
+            escapeLegacyCancellation();
+            var observer = new MutationObserver(escapeLegacyCancellation);
+            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+          });
+        } catch (error) {
+          // Never block kiosk startup if a legacy browser rejects this guard.
+        }
+      })();
+    </script>
     <title>Chargeurs.ch — Location de powerbanks et recharge natel en Suisse romande</title>
     <meta name="description" content="Louez une batterie externe pour votre natel ou smartphone à Lausanne, Épalinges et en Suisse romande. Bornes Chargeurs.ch, paiement QR sécurisé, 1.50 CHF/h et plafond journalier de 18 CHF." />
     <meta name="keywords" content="location powerbank Lausanne, batterie externe Lausanne, recharge natel Lausanne, chargeur smartphone Lausanne, louer powerbank Vaud, borne recharge téléphone Suisse romande, powerbank Épalinges, batterie iPhone, batterie Samsung, power bank bar restaurant hôtel" />
