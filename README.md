@@ -4,27 +4,27 @@ Chargeurs.ch est une plateforme de location de batteries externes / powerbanks d
 
 Le dépôt contient l'application web publique, les écrans kiosk, l'espace client, l'administration, le moteur tarifaire, le Rental Orchestrator et les fonctions Supabase utilisées pour Stripe et ChargeNow.
 
-> Source opérationnelle canonique : `docs/PROJECT_BIBLE.md`.
+> Source opérationnelle canonique de préproduction : `docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md`.
+> `docs/PROJECT_BIBLE.md` et les rapports datés restent des éléments d’historique.
 
 ## Parcours produit cible
 
 1. Le client voit une borne Chargeurs.ch.
 2. Il scanne le QR code affiché par le kiosk.
-3. Stripe autorise ou collecte la base initiale de 30 CHF selon le moyen de paiement.
+3. Le client accepte explicitement les documents contractuels, puis Stripe autorise ou collecte la garantie affichée dans le snapshot tarifaire selon le moyen de paiement.
 4. Le backend confirme le paiement puis demande l'éjection d'une batterie précise à ChargeNow.
 5. La location devient active après confirmation matérielle.
 6. Le retour physique est corrélé à la batterie et au slot.
 7. Le moteur calcule le montant final et effectue la capture, l'annulation ou le remboursement approprié.
-8. En cas de non-retour confirmé, le total prévu est de 99 CHF.
+8. En cas de non-retour confirmé, le montant prévu dans le snapshot tarifaire accepté s’applique selon le processus autorisé et audité.
 
 ## Règles tarifaires canoniques
 
-- Base initiale : 30 CHF
-- Prix : 1,50 CHF par heure
-- Incrément : 30 minutes, soit 0,75 CHF
-- Plafond journalier : 18 CHF
-- Non-retour : 99 CHF au total
-- Supplément potentiel après les 30 CHF initiaux : 69 CHF
+Les profils tarifaires sont administrés côté serveur. Avant l’acceptation, le
+kiosk ou le parcours web affiche le snapshot immuable de la location : période,
+tarif, plafond journalier, garantie, délai et montant de non-retour. Ne pas
+recopier de montants historiques depuis cette documentation dans une CGV ou une
+interface client.
 
 Les montants doivent provenir exclusivement d'un snapshot tarifaire serveur. Le navigateur et le kiosk ne sont jamais une source de vérité financière.
 
