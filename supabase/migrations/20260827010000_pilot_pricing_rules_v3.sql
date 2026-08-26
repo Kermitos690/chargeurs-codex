@@ -10,7 +10,6 @@
 -- Existing rental_sessions are never rewritten. Their immutable pricing_snapshot
 -- keeps pricing_rules_version 1 or 2 and is settled with its historical rules.
 
--- Fail closed if the two intended pilot profiles cannot be identified uniquely.
 do $preflight$
 declare
   v_premium_count integer;
@@ -33,8 +32,7 @@ begin
 end
 $preflight$;
 
--- Express: keep all approved ordinary tier values unchanged. Only normalize the
--- guarantee/non-return contract to the new v3 target-total semantics.
+-- Express ordinary tiers are intentionally untouched.
 update public.price_profiles
 set deposit_cents = 3000,
     unreturned_fee_cents = 3000,
@@ -279,7 +277,6 @@ begin
     if v_min_amount > 0 and v_capped < v_min_amount then v_capped := v_min_amount; end if;
   end if;
 
-  -- max_amount remains an absolute safety ceiling for every version.
   if v_max_amount > 0 and v_capped > v_max_amount then v_capped := v_max_amount; v_cap_reached := true; end if;
 
   if v_rounding = 'up_5' then v_capped := (ceil(v_capped::numeric / 5) * 5)::integer;
@@ -346,14 +343,15 @@ begin
   ) then raise exception 'PILOT_PRICING_V3_EXPRESS_ASSERTION_FAILED'; end if;
 
   select count(*) into v_bad
-  from (
-    values (30,190),(120,390),(360,590),(1440,790)
-  ) expected(upper_minutes,total_cents)
-  full join public.price_profile_tiers t
-    on t.price_profile_id = v_premium
-   and t.upper_minutes = expected.upper_minutes
+  from (values (30,190),(120,390),(360,590),(1440,790)) expected(upper_minutes,total_cents)
+  left join (
+    select upper_minutes,total_cents
+    from public.price_profile_tiers
+    where price_profile_id = v_premium
+  ) t
+    on t.upper_minutes = expected.upper_minutes
    and t.total_cents = expected.total_cents
-  where expected.upper_minutes is null or t.upper_minutes is null;
+  where t.upper_minutes is null;
   if v_bad <> 0 or (select count(*) from public.price_profile_tiers where price_profile_id = v_premium) <> 4 then
     raise exception 'PILOT_PRICING_V3_EXPRESS_TIERS_CHANGED';
   end if;
