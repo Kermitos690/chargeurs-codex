@@ -35,6 +35,10 @@
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/create-stripe-checkout"
     },
     {
+      "source": "/api/kiosk/record-rental-contract-acceptance",
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/record-rental-contract-acceptance"
+    },
+    {
       "source": "/api/kiosk/cancel-checkout",
       "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/cancel-kiosk-checkout"
     },
