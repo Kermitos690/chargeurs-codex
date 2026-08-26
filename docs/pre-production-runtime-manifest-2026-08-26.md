@@ -1,21 +1,22 @@
 # Chargeurs.ch runtime manifest — 2026-08-26
 
 This manifest is intentionally conservative: the branch can prove what is
-versioned, while only an authenticated Supabase export can prove deployed code.
-No runtime was mutated during this audit.
+versioned, while authenticated staging exports record deployed code. Only the
+two targeted hardening migrations were applied to staging; no Edge Function was
+deployed, renamed or deleted.
 
 | Critical path | Classification | Git evidence | Required next action |
 | --- | --- | --- | --- |
 | Public rental-session creation | VERSIONED_NOT_DEPLOYED | `create-rental-session` | Compare deployed digest before production. |
 | Public Stripe Checkout | VERSIONED_NOT_DEPLOYED | `public-stripe-checkout`, `create-stripe-checkout` | Compare deployed digest. |
 | Stripe webhook gateway / canonical webhook | VERSIONED_NOT_DEPLOYED | `stripe-webhook-gateway`, `stripe-webhook` | Compare deployed digest. |
-| Stripe Terminal backend | DEPLOYED_BUT_NOT_VERSIONED | Referenced by Vercel and Android; absent from current tree | Export exact deployed source, dependencies and digest; commit before any deploy. |
+| Stripe Terminal backend | VERSIONED_NOT_DEPLOYED | Staging export v14, verify_jwt=false, digest `edcd1d72024c60760a5ed0fdffca11d6f4ee72696cfa6c4d7765884d45fdca7e` | Source was recovered exactly, then this branch added a contract-acceptance guard; deploy only after legal review and staging validation. |
 | Eject after payment | VERSIONED_NOT_DEPLOYED | `eject-after-payment` | Compare deployed digest. |
 | ChargeNow callback/event gateway | VERSIONED_NOT_DEPLOYED | `chargenow-rent-callback`, `cabinet-event-push` | Compare deployed digest. |
 | Rental settlement / return | VERSIONED_NOT_DEPLOYED | `settle-rental-payment`, `kiosk-return-summary`, `kiosk-cabinet-snapshot` | Compare deployed digest. |
 | Kiosk enrollment/authentication | VERSIONED_NOT_DEPLOYED | `kiosk-enroll`, shared enrollment code | Compare deployed digest. |
 | Advertising runtime | VERSIONED_NOT_DEPLOYED | `kiosk-ads-playlist`, `kiosk-ads-clock` | Compare deployed digest. |
-| Notification dispatcher (`noop`) | DEPLOYED_BUT_NOT_VERSIONED | Historical source has independent instance-sync and billed-push flags; Pass Studio confirmed that any delivered provider push consumes a credit | Export exact deployed source; keep both automatic paths disabled, then deploy a new canonical slug only after source review. |
+| Notification dispatcher (`noop`) | DEPLOYED_AND_VERSIONED | Staging export v20, verify_jwt=false, digest `76977b4711e4a38cf94557a51f8ae289024632fd82a080b3dbdf79df7928dd76` | Source recovered exactly; keep both automatic paths disabled, then deploy a new canonical slug only after source review. |
 | Transactional e-mail worker | VERSIONED_NOT_DEPLOYED | `process-rental-email-outbox` | Compare deployed digest. |
 | Wallet / PassStudio path | VERSIONED_NOT_DEPLOYED | `account-privacy`, shared PassStudio code | Compare deployed digest; keep automatic pushes disabled. Custom Pass field labels are mapped to stable provider keys in source; manually set pass #1002 to `unique` distribution and verify its returned `fieldLabels` before enabling it. |
 
@@ -42,7 +43,6 @@ application fails rather than leaving a silent P0 exposure.
 
 ## Required safe remote procedure
 
-Use an authenticated, read-only Supabase function export to record each slug,
-deployment digest and active cron target. Do not deploy, rename or delete
-`stripe-terminal-backend` or `noop` until that export has been reviewed against
-this manifest.
+The staging exports for `stripe-terminal-backend` and `noop` were reviewed
+and recovered here. Do not deploy, rename or delete either function until the
+remaining production/source comparisons have been completed.
