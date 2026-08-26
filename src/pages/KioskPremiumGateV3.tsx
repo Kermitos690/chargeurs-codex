@@ -68,7 +68,7 @@ function secureSupportLabel(lang: string) {
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-transaction-v3-final-exit-home-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-2026-1280x720";
     root.dataset.kioskHomeGolden = "true";
     root.classList.add("kiosk-v3");
 
@@ -190,7 +190,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v3-final-exit-home-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-ads-restored-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
       <KioskSystemFooter />
