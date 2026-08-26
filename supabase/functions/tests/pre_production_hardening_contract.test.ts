@@ -9,6 +9,9 @@ const budget = await Deno.readTextFile(
 const dispatcherCronMigration = await Deno.readTextFile(
   new URL("../../migrations/20260826210000_reduce_notification_dispatcher_edge_cadence.sql", import.meta.url),
 );
+const accountPrivacy = await Deno.readTextFile(
+  new URL("../account-privacy/index.ts", import.meta.url),
+);
 
 Deno.test("P0: historical DTA21269 reconciliation primitive is denied to anon", () => {
   assertMatch(migration, /reconcile_dta21269_pre_release_missing_authorization_projection/);
@@ -43,8 +46,17 @@ Deno.test("P1: e-mail worker is bounded at five minutes, not an Edge hot loop", 
 Deno.test("P1: non-critical Wallet dispatcher runs every five minutes", () => {
   assertMatch(dispatcherCronMigration, /chargeurs-plus-push-outbox/);
   assertMatch(dispatcherCronMigration, /schedule := '\*\/5 \* \* \* \*'/);
+  assertMatch(budget, /chargeurs-membership-email-outbox/);
   assertMatch(budget, /chargeurs-plus-push-outbox/);
-  assertMatch(budget, /`noop` \(unversioned dispatcher\)/);
-  assertMatch(budget, /17,280/);
-  assertMatch(budget, /82,368/);
+  assertMatch(budget, /chargeurs-plus-push-reminders/);
+  assertMatch(budget, /guest-wallet-price-transitions/);
+  assertMatch(budget, /every 1 min/);
+  assertMatch(budget, /25,920/);
+  assertMatch(budget, /91,008/);
+});
+
+Deno.test("P1: disabled PassStudio sync cannot queue a manual provider refresh", () => {
+  assertMatch(accountPrivacy, /customer_wallet\.pass_studio_instance_sync/);
+  assertMatch(accountPrivacy, /status: "current"/);
+  assert(accountPrivacy.indexOf("if (!instanceSyncEnabled)") < accountPrivacy.indexOf("enqueue_customer_wallet_sync_event"));
 });
