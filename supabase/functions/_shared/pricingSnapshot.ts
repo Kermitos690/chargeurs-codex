@@ -20,7 +20,7 @@ type Tier = {
 
 type FrozenRules = {
   currency: string;
-  pricingRulesVersion: 1 | 2;
+  pricingRulesVersion: 1 | 2 | 3;
   initialFeeCents: number;
   includedMinutes: number;
   periodMinutes: number;
@@ -38,6 +38,13 @@ type FrozenRules = {
   taxPercent: number;
   tiered: boolean;
   tiers: Tier[];
+};
+
+type FrozenInput = {
+  snapshot: Record<string, unknown>;
+  startAt: string;
+  endAt: string;
+  returnState: FrozenReturnState;
 };
 
 function integerField(
@@ -92,7 +99,9 @@ function frozenTiers(snapshot: Record<string, unknown>, tiered: boolean): Tier[]
 
 function frozenRules(snapshot: Record<string, unknown>, expectedCurrency: string): FrozenRules {
   const version = integerField(snapshot, "pricing_rules_version", { positive: true });
-  if (version !== 1 && version !== 2) throw new PricingSnapshotError("PRICING_SNAPSHOT_VERSION_UNSUPPORTED");
+  if (version !== 1 && version !== 2 && version !== 3) {
+    throw new PricingSnapshotError("PRICING_SNAPSHOT_VERSION_UNSUPPORTED");
+  }
 
   const currency = typeof snapshot.currency === "string" ? snapshot.currency.toUpperCase() : "";
   if (!currency || currency !== expectedCurrency.toUpperCase()) {
@@ -104,7 +113,7 @@ function frozenRules(snapshot: Record<string, unknown>, expectedCurrency: string
     throw new PricingSnapshotError("PRICING_SNAPSHOT_INVALID_ROUNDING");
   }
 
-  const tiered = version === 2 && snapshot.tiered === true;
+  const tiered = version >= 2 && snapshot.tiered === true;
   if (version === 1 && snapshot.tiered === true) {
     throw new PricingSnapshotError("PRICING_SNAPSHOT_VERSION_TIER_MISMATCH");
   }
@@ -145,11 +154,7 @@ function applyRoundingAndTax(rules: FrozenRules, cappedCents: number) {
   return { cappedCents, taxCents, finalCents: cappedCents + taxCents };
 }
 
-function computeV1(
-  rules: FrozenRules,
-  input: { snapshot: Record<string, unknown>; startAt: string; endAt: string; returnState: FrozenReturnState },
-  totalMinutes: number,
-): Record<string, unknown> {
+function computeV1(rules: FrozenRules, input: FrozenInput, totalMinutes: number): Record<string, unknown> {
   const billableMinutes = totalMinutes <= rules.includedMinutes + rules.graceMinutes
     ? 0
     : totalMinutes - rules.includedMinutes;
@@ -218,18 +223,13 @@ function computeV1(
   };
 }
 
-function computeV2(
-  rules: FrozenRules,
-  input: { snapshot: Record<string, unknown>; startAt: string; endAt: string; returnState: FrozenReturnState },
-  totalMinutes: number,
-): Record<string, unknown> {
+function durationPricing(rules: FrozenRules, totalMinutes: number) {
   let billedPeriods = 0;
   let durationCents = 0;
   let initialFeeCents = rules.initialFeeCents;
 
   if (rules.tiered) {
-    // Mirrors public.compute_profile_pricing: tier totals already represent the
-    // complete duration price, so configured initial_fee_cents is not added.
+    // Tier totals already represent the complete duration price.
     initialFeeCents = 0;
     const targetMinutes = Math.max(totalMinutes, 1);
     const tier = rules.tiers.find((candidate) => candidate.upperMinutes >= targetMinutes);
@@ -248,9 +248,71 @@ function computeV2(
     durationCents = billedPeriods * rules.pricePerPeriodCents;
   }
 
-  // v2 mirrors the authoritative DB pricing engine. Settlement finalization
-  // represents an active rental, so crossing the configured threshold or an
-  // explicit not-returned outcome adds the fee before ordinary caps.
+  return { billedPeriods, durationCents, initialFeeCents };
+}
+
+function commonSnapshotFields(
+  rules: FrozenRules,
+  input: FrozenInput,
+  totalMinutes: number,
+  pricingRulesVersion: 2 | 3,
+  values: {
+    billedPeriods: number;
+    durationCents: number;
+    initialFeeCents: number;
+    additionalFeesCents: number;
+    subtotalCents: number;
+    capsApplied: Array<{ type: string; value: number }>;
+    finalized: { taxCents: number; finalCents: number };
+    nonReturnTotalApplied?: boolean;
+  },
+): Record<string, unknown> {
+  return {
+    profile_id: input.snapshot.profile_id,
+    profile_name: input.snapshot.profile_name,
+    profile_version: input.snapshot.profile_version,
+    source: "rental_snapshot",
+    pricing_rules_version: pricingRulesVersion,
+    currency: rules.currency,
+    start: input.startAt,
+    end: input.endAt,
+    rental_state: "active",
+    return_state: input.returnState,
+    total_minutes: totalMinutes,
+    billed_periods: values.billedPeriods,
+    period_minutes: rules.periodMinutes,
+    price_per_period_cents: rules.pricePerPeriodCents,
+    initial_fee_cents: values.initialFeeCents,
+    duration_cents: values.durationCents,
+    additional_fees_cents: values.additionalFeesCents,
+    subtotal_cents: values.subtotalCents,
+    caps_applied: values.capsApplied,
+    tax_percent: rules.taxPercent,
+    tax_cents: values.finalized.taxCents,
+    final_cents: values.finalized.finalCents,
+    amount: values.finalized.finalCents / 100,
+    deposit_cents: rules.depositCents,
+    tiered: rules.tiered,
+    tiers: rules.tiers.map((tier) => ({ upper_minutes: tier.upperMinutes, total_cents: tier.totalCents })),
+    included_minutes: rules.includedMinutes,
+    grace_minutes: rules.graceMinutes,
+    daily_cap_cents: rules.dailyCapCents,
+    total_cap_cents: rules.totalCapCents,
+    max_amount_cents: rules.maxAmountCents,
+    min_amount_cents: rules.minAmountCents,
+    late_fee_cents: rules.lateFeeCents,
+    unreturned_fee_cents: rules.unreturnedFeeCents,
+    unreturned_after_minutes: rules.unreturnedAfterMinutes,
+    ...(pricingRulesVersion === 3 ? { non_return_total_applied: values.nonReturnTotalApplied === true } : {}),
+    computed_at: new Date().toISOString(),
+  };
+}
+
+function computeV2(rules: FrozenRules, input: FrozenInput, totalMinutes: number): Record<string, unknown> {
+  const { billedPeriods, durationCents, initialFeeCents } = durationPricing(rules, totalMinutes);
+
+  // Preserve v2 historical semantics exactly: the configured non-return amount
+  // is additive and ordinary caps are still applied afterwards.
   const nonReturn =
     input.returnState === "not_returned" ||
     (rules.unreturnedAfterMinutes > 0 && totalMinutes >= rules.unreturnedAfterMinutes);
@@ -276,46 +338,70 @@ function computeV2(
     cappedCents = rules.minAmountCents;
     capsApplied.push({ type: "min", value: rules.minAmountCents });
   }
-  const finalized = applyRoundingAndTax(rules, cappedCents);
 
-  return {
-    profile_id: input.snapshot.profile_id,
-    profile_name: input.snapshot.profile_name,
-    profile_version: input.snapshot.profile_version,
-    source: "rental_snapshot",
-    pricing_rules_version: 2,
-    currency: rules.currency,
-    start: input.startAt,
-    end: input.endAt,
-    rental_state: "active",
-    return_state: input.returnState,
-    total_minutes: totalMinutes,
-    billed_periods: billedPeriods,
-    period_minutes: rules.periodMinutes,
-    price_per_period_cents: rules.pricePerPeriodCents,
-    initial_fee_cents: initialFeeCents,
-    duration_cents: durationCents,
-    additional_fees_cents: additionalFeesCents,
-    subtotal_cents: subtotalCents,
-    caps_applied: capsApplied,
-    tax_percent: rules.taxPercent,
-    tax_cents: finalized.taxCents,
-    final_cents: finalized.finalCents,
-    amount: finalized.finalCents / 100,
-    deposit_cents: rules.depositCents,
-    tiered: rules.tiered,
-    tiers: rules.tiers.map((tier) => ({ upper_minutes: tier.upperMinutes, total_cents: tier.totalCents })),
-    included_minutes: rules.includedMinutes,
-    grace_minutes: rules.graceMinutes,
-    daily_cap_cents: rules.dailyCapCents,
-    total_cap_cents: rules.totalCapCents,
-    max_amount_cents: rules.maxAmountCents,
-    min_amount_cents: rules.minAmountCents,
-    late_fee_cents: rules.lateFeeCents,
-    unreturned_fee_cents: rules.unreturnedFeeCents,
-    unreturned_after_minutes: rules.unreturnedAfterMinutes,
-    computed_at: new Date().toISOString(),
-  };
+  return commonSnapshotFields(rules, input, totalMinutes, 2, {
+    billedPeriods,
+    durationCents,
+    initialFeeCents,
+    additionalFeesCents,
+    subtotalCents,
+    capsApplied,
+    finalized: applyRoundingAndTax(rules, cappedCents),
+  });
+}
+
+function computeV3(rules: FrozenRules, input: FrozenInput, totalMinutes: number): Record<string, unknown> {
+  const { billedPeriods, durationCents, initialFeeCents } = durationPricing(rules, totalMinutes);
+  const baseSubtotalCents = initialFeeCents + durationCents;
+  const nonReturn =
+    input.returnState === "not_returned" ||
+    (rules.unreturnedAfterMinutes > 0 && totalMinutes >= rules.unreturnedAfterMinutes);
+
+  // v3 pilot semantics: unreturned_fee_cents is the contractual TOTAL amount.
+  // Ordinary duration/day caps are bypassed once the 72h non-return threshold is
+  // reached. v1/v2 snapshots remain frozen under their historical semantics.
+  let additionalFeesCents = 0;
+  let subtotalCents = baseSubtotalCents;
+  let cappedCents = subtotalCents;
+  const capsApplied: Array<{ type: string; value: number }> = [];
+
+  if (nonReturn) {
+    additionalFeesCents = Math.max(0, rules.unreturnedFeeCents - baseSubtotalCents);
+    subtotalCents = baseSubtotalCents + additionalFeesCents;
+    cappedCents = rules.unreturnedFeeCents;
+    capsApplied.push({ type: "non_return_total", value: rules.unreturnedFeeCents });
+  } else {
+    if (!rules.tiered && rules.dailyCapCents > 0) {
+      const billedDays = Math.max(1, Math.ceil(totalMinutes / 1440));
+      const cap = rules.dailyCapCents * billedDays;
+      if (cappedCents > cap) { cappedCents = cap; capsApplied.push({ type: "daily", value: cap }); }
+    }
+    if (rules.totalCapCents > 0 && cappedCents > rules.totalCapCents) {
+      cappedCents = rules.totalCapCents;
+      capsApplied.push({ type: "total", value: rules.totalCapCents });
+    }
+    if (rules.minAmountCents > 0 && cappedCents < rules.minAmountCents) {
+      cappedCents = rules.minAmountCents;
+      capsApplied.push({ type: "min", value: rules.minAmountCents });
+    }
+  }
+
+  // max_amount_cents remains a final safety ceiling even for non-return.
+  if (rules.maxAmountCents > 0 && cappedCents > rules.maxAmountCents) {
+    cappedCents = rules.maxAmountCents;
+    capsApplied.push({ type: "max", value: rules.maxAmountCents });
+  }
+
+  return commonSnapshotFields(rules, input, totalMinutes, 3, {
+    billedPeriods,
+    durationCents,
+    initialFeeCents,
+    additionalFeesCents,
+    subtotalCents,
+    capsApplied,
+    finalized: applyRoundingAndTax(rules, cappedCents),
+    nonReturnTotalApplied: nonReturn,
+  });
 }
 
 export function computeFinalPricingFromSnapshot(input: {
@@ -331,7 +417,7 @@ export function computeFinalPricingFromSnapshot(input: {
   if (endMs < startMs) throw new PricingSnapshotError("PRICING_DATE_INVALID");
   const totalMinutes = Math.max(0, Math.ceil((endMs - startMs) / 60_000));
 
-  return rules.pricingRulesVersion === 1
-    ? computeV1(rules, input, totalMinutes)
-    : computeV2(rules, input, totalMinutes);
+  if (rules.pricingRulesVersion === 1) return computeV1(rules, input, totalMinutes);
+  if (rules.pricingRulesVersion === 2) return computeV2(rules, input, totalMinutes);
+  return computeV3(rules, input, totalMinutes);
 }
