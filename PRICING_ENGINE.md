@@ -2,11 +2,10 @@
 
 ## Règles canoniques
 
-- CHF ; garantie 3 000 centimes ;
-- 75 centimes par période de 30 minutes, soit 1,50 CHF/heure ;
-- plafond journalier 1 800 centimes ;
-- non-retour et maximum total 9 900 centimes ;
-- complément maximal connu après garantie : 6 900 centimes.
+Les montants ne sont pas documentés ici comme valeurs commerciales fixes. Le
+profil actif affecté à une station et le `pricing_snapshot` immuable de chaque
+location sont les seules sources de vérité pour la période, la garantie, le
+plafond journalier, le délai et le montant de non-retour.
 
 ## Résolution
 
@@ -20,7 +19,10 @@ Modifier un profil publié ne change jamais une location en cours. Un trigger `B
 
 ## Calcul final
 
-La durée est arrondie au nombre supérieur de périodes. Le plafond journalier s'applique à la location normale. Le non-retour est un total contractuel de 99 CHF, pas une surcharge ajoutée puis plafonnée à 18 CHF. Taxes, arrondis, minimum et maximum proviennent du snapshot.
+La durée est arrondie au nombre supérieur de périodes. Le plafond journalier
+s'applique à la location normale. Le non-retour est un total contractuel défini
+dans le snapshot, et non une surcharge silencieuse. Taxes, arrondis, minimum
+et maximum proviennent du snapshot.
 
 ## Extension
 
