@@ -185,7 +185,9 @@ export default function AccountPass() {
       if (error || !data?.ok) throw new Error(String(data?.error ?? "WALLET_PASS_UNAVAILABLE"));
       const addToWalletUrl = String(data.addToWalletUrl ?? "");
       if (!/^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl)) throw new Error("WALLET_URL_INVALID");
-      setWalletMessage(action === "sync" ? "Pass synchronisé. Ouverture du Wallet…" : "Pass créé. Ouverture du Wallet…");
+      setWalletMessage(action === "sync"
+        ? (data.status === "current" ? "Pass ouvert. Sa synchronisation fournisseur est désactivée pendant le pilote." : "Pass synchronisé. Ouverture du Wallet…")
+        : "Pass créé. Ouverture du Wallet…");
       await load();
       window.location.assign(addToWalletUrl);
     } catch {
@@ -300,10 +302,10 @@ export default function AccountPass() {
         <article className="glass rounded-3xl p-6">
           <div className="flex items-center gap-3"><Smartphone className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Apple Wallet / Google Wallet</h2></div>
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{membershipActive ? `Votre Pass est relié au solde Chargeurs+ actuel (${formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)}). Ouvrez-le pour forcer une synchronisation Pass Studio.` : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{membershipActive ? `Votre Pass est relié au solde Chargeurs+ actuel (${formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)}). Son ouverture reste disponible ; les synchronisations fournisseur automatiques sont désactivées pendant le pilote.` : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}</p>
           <Button className="mt-5 w-full rounded-2xl bg-black py-6 text-base font-bold text-white hover:bg-black/85" disabled={!membershipActive || Boolean(walletAction)} onClick={() => void addToWallet()}>
             {walletAction ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <WalletCards className="mr-2 h-5 w-5" />}
-            {providerStatus === "issued" ? "Ouvrir / synchroniser mon Wallet" : "Ajouter à Apple / Google Wallet"}
+            {providerStatus === "issued" ? "Ouvrir mon Wallet" : "Ajouter à Apple / Google Wallet"}
           </Button>
           <p className="mt-3 text-xs text-muted-foreground">Le lien d’ajout Pass Studio est généré côté serveur et n’expose aucune clé fournisseur.</p>
           {state.walletPass ? <p className="mt-3 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}
