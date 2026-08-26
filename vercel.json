@@ -36,7 +36,7 @@
     },
     {
       "source": "/api/kiosk/record-rental-contract-acceptance",
-      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/record-rental-contract-acceptance"
+      "destination": "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-customer-options"
     },
     {
       "source": "/api/kiosk/cancel-checkout",
