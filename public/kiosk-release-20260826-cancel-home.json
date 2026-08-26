@@ -1,0 +1,1 @@
+{"reason":"force production refresh after DTA21277 cancellation-home regression check","expected":"confirmed terminal cancellation returns directly to kiosk home","date":"2026-08-26"}
