@@ -79,7 +79,14 @@ export default function KioskPremiumGateV3() {
       if (homeReturnTimer !== null) return;
       homeReturnTimer = window.setTimeout(() => {
         homeReturnTimer = null;
-        window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
+        // V2 deliberately blocks ordinary Home requests while a release/final
+        // stage is mounted. A financially-final cancellation therefore cannot
+        // rely on that guarded callback: reload the same kiosk route instead.
+        // The boot resume-state check remains authoritative and will only land
+        // on Home when no active rental/payment still requires kiosk action.
+        const url = new URL(window.location.href);
+        url.searchParams.set("kiosk_return_home", String(Date.now()));
+        window.location.replace(`${url.pathname}${url.search}${url.hash}`);
       }, 0);
     };
 
