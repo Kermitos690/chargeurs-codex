@@ -8,8 +8,8 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const TERMS_VERSION = "terms-2026-08-10-v1";
-const PRIVACY_VERSION = "privacy-2026-08-10-v1";
+const TERMS_VERSION = "terms-2026-08-26-preproduction-v2";
+const PRIVACY_VERSION = "privacy-2026-08-26-preproduction-v2";
 
 const PROGRESS_STATES = new Set([
   "payment_succeeded", "ejecting", "ejected", "active_rental", "battery_taken", "battery_returned", "completed",
@@ -47,8 +47,8 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Plafond journalier",
     nonReturn: "Non-retour",
-    continueCard: "Continuer avec carte / wallet",
-    continueTwint: "Continuer avec TWINT",
+    continueCard: "Autoriser la garantie et louer",
+    continueTwint: "Payer la garantie et louer",
     secure: "Paiement sécurisé par Stripe",
     loading: "Chargement de votre location…",
     invalid: "Cette session de location n’est plus disponible.",
@@ -68,8 +68,8 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Tageslimit",
     nonReturn: "Nichtrückgabe",
-    continueCard: "Mit Karte / Wallet fortfahren",
-    continueTwint: "Mit TWINT fortfahren",
+    continueCard: "Garantie autorisieren und mieten",
+    continueTwint: "Garantie zahlen und mieten",
     secure: "Sichere Zahlung mit Stripe",
     loading: "Miete wird geladen…",
     invalid: "Diese Mietsitzung ist nicht mehr verfügbar.",
@@ -89,8 +89,8 @@ const COPY = {
     guarantee: "Guarantee",
     dailyCap: "Daily cap",
     nonReturn: "Non-return",
-    continueCard: "Continue with card / wallet",
-    continueTwint: "Continue with TWINT",
+    continueCard: "Authorise guarantee and rent",
+    continueTwint: "Pay guarantee and rent",
     secure: "Secure payment by Stripe",
     loading: "Loading your rental…",
     invalid: "This rental session is no longer available.",
@@ -198,7 +198,7 @@ export default function PaymentChoice() {
 
           <label className="glass mt-6 flex cursor-pointer items-start gap-3 rounded-2xl p-4 text-sm text-muted-foreground">
             <Checkbox checked={accepted} onCheckedChange={(value) => setAccepted(value === true)} />
-            <span>{c.legal} <a href="/legal/terms" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Conditions</a> · <a href="/legal/privacy" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Privacy</a></span>
+            <span>{c.legal} <a href="/legal/conditions" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Conditions</a> · <a href="/legal/confidentialite" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Privacy</a></span>
           </label>
           {error && <p className="mt-4 text-center text-sm font-semibold text-destructive">{error}</p>}
           <div className="mt-5 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-4 w-4 text-success" />{c.secure}</div>
