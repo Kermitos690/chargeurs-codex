@@ -1,0 +1,47 @@
+name: Vercel claim transfer
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/vercel-claim-transfer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  request-transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Vercel claim code
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_SOURCE_TRANSFER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::Missing VERCEL_SOURCE_TRANSFER_TOKEN repository secret"
+            exit 1
+          fi
+
+          response="$({
+            curl --silent --show-error --fail-with-body \
+              --request POST \
+              --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+              --header "Content-Type: application/json" \
+              "https://api.vercel.com/projects/chargeurs-ch-staging/transfer-request?teamId=team_abDGf3iEKUokzMPUB580flN0"
+          } 2>curl-error.txt)" || {
+            echo "::error::Vercel transfer request failed"
+            if [ -s curl-error.txt ]; then cat curl-error.txt; fi
+            exit 1
+          }
+
+          code="$(printf '%s' "$response" | jq -r '.code // empty')"
+          if [ -z "$code" ]; then
+            message="$(printf '%s' "$response" | jq -r '.error.message // .message // "Vercel returned no claim code"')"
+            echo "::error::${message}"
+            exit 1
+          fi
+
+          echo "Claim URL: https://vercel.com/claim-deployment?code=${code}"
