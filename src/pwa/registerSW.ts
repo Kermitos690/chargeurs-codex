@@ -1,7 +1,7 @@
 // Kiosk PWA service-worker registration — the ONLY registrar in the app.
 // Refuses to register in dev / Lovable preview / iframe and supports ?sw=off.
-// Update activation is controlled (prompt mode) so the app never reloads
-// during an active rental or payment.
+// Update activation is controlled so the app never visibly reloads after a
+// rental, payment, or cancellation.
 import { registerSW } from "virtual:pwa-register";
 
 let _updateSW: ((reload?: boolean) => Promise<void>) | null = null;
@@ -27,11 +27,16 @@ export function isUpdateWaiting(): boolean {
   return _needRefresh;
 }
 
-// Apply a pending update by activating the new SW and reloading. The CALLER is
-// responsible for only invoking this when no rental/payment is in progress.
+// Activate the pending worker without reloading the currently displayed kiosk.
+// This is deliberate: after a confirmed cancellation the React state can return
+// directly to Home, instead of briefly showing a terminal state and then a blue
+// app boot screen. The activated worker serves the fresh bundle on the next
+// natural page load / native app restart.
 export async function applyKioskUpdate(): Promise<void> {
   if (_updateSW && _needRefresh) {
-    await _updateSW(true);
+    await _updateSW(false);
+    _needRefresh = false;
+    emit();
   }
 }
 
