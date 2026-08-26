@@ -22,6 +22,10 @@ const dispatcherCronMigration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260826210000_reduce_notification_dispatcher_edge_cadence.sql"),
   "utf8",
 );
+const accountPrivacy = readFileSync(
+  resolve(process.cwd(), "supabase/functions/account-privacy/index.ts"),
+  "utf8",
+);
 
 describe("pre-production zero-cost hardening migration", () => {
   it("denies anonymous execution of the historical DTA21269 reconciliation primitive", () => {
@@ -50,14 +54,25 @@ describe("pre-production zero-cost hardening migration", () => {
   it("keeps the non-critical Wallet dispatcher at a five-minute Edge cadence", () => {
     expect(dispatcherCronMigration).toContain("chargeurs-plus-push-outbox");
     expect(dispatcherCronMigration).toContain("schedule := '*/5 * * * *'");
+    expect(budget).toContain("chargeurs-membership-email-outbox");
     expect(budget).toContain("chargeurs-plus-push-outbox");
-    expect(budget).toContain("`noop` (unversioned dispatcher)");
-    expect(budget).toContain("17,280");
-    expect(budget).toContain("82,368");
+    expect(budget).toContain("chargeurs-plus-push-reminders");
+    expect(budget).toContain("guest-wallet-price-transitions");
+    expect(budget).toContain("every 1 min");
+    expect(budget).toContain("25,920");
+    expect(budget).toContain("91,008");
   });
 
   it("maps Custom Pass field labels back to their stable provider field keys", () => {
     expect(passStudioContract).toContain("fieldLabels?: Record<string, string>");
     expect(passStudioWallet).toContain("pass.fieldLabels?.[key] ?? key");
+  });
+
+  it("does not queue a manual PassStudio refresh while provider sync is disabled", () => {
+    expect(accountPrivacy).toContain('"customer_wallet.pass_studio_instance_sync"');
+    expect(accountPrivacy).toContain('status: "current"');
+    expect(accountPrivacy.indexOf("if (!instanceSyncEnabled)")).toBeLessThan(
+      accountPrivacy.indexOf("enqueue_customer_wallet_sync_event"),
+    );
   });
 });
