@@ -34,6 +34,23 @@ function isProtectedSupportTitle(title: string) {
   return /support|vérification|verification|überprüfung|intervention|eingriff|revue manuelle|manual review|manuelle prüfung|paiement confirmé\s*[—-]|payment confirmed\s*[—-]|zahlung bestätigt\s*[—-]/i.test(normalized);
 }
 
+/*
+ * Financially final exits must never strand the customer on a retry screen.
+ * These labels are rendered only after the scoped rental/session projection has
+ * reached a final cancelled/failed/expired/refunded state. Technical failures
+ * and support/reconciliation states are deliberately excluded.
+ */
+function isFinalPaymentExitTitle(title: string) {
+  const normalized = title.trim().toLowerCase();
+  if (!normalized) return false;
+  return /^(annulé|paiement non abouti|qr code expiré|remboursé|cancelled|canceled|payment failed|payment declined|qr code expired|refunded|abgebrochen|zahlung fehlgeschlagen|zahlung abgelehnt|qr-code abgelaufen|erstattet)$/i.test(normalized);
+}
+
+function isCancellationProgressTitle(title: string) {
+  const normalized = title.trim().toLowerCase();
+  return /^(annulation sécurisée en cours|secure cancellation in progress|sicherer abbruch läuft)$/i.test(normalized);
+}
+
 function secureSupportLabel(lang: string) {
   const normalized = lang.toLowerCase();
   if (normalized.startsWith("de")) return "✓ Sichere Zahlung über Stripe";
@@ -51,27 +68,69 @@ function secureSupportLabel(lang: string) {
 export default function KioskPremiumGateV3() {
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskVersion = "p0-deterministic-transaction-v2-ads-restored-2026-1280x720";
+    root.dataset.kioskVersion = "p0-deterministic-transaction-v3-final-exit-home-2026-1280x720";
     root.dataset.kioskHomeGolden = "true";
     root.classList.add("kiosk-v3");
 
+    let cancellationProgressObserved = false;
+    let homeReturnTimer: number | null = null;
+
+    const requestTrueHome = () => {
+      if (homeReturnTimer !== null) return;
+      homeReturnTimer = window.setTimeout(() => {
+        homeReturnTimer = null;
+        window.dispatchEvent(new CustomEvent("chargeurs:kiosk-return-home"));
+      }, 0);
+    };
+
     const syncScene = () => {
       let scene = "";
+      const productLayer = document.querySelector<HTMLElement>(".kv3-product-layer");
       const home = document.querySelector<HTMLElement>(".kv3-product-layer > .ck2-home");
       const releaseStage = document.querySelector<HTMLElement>(".kv3-product-layer .kiosk-release-stage");
       const releaseTitle = releaseStage?.querySelector<HTMLElement>("h2")?.textContent?.trim() ?? "";
       const protectedSupport = Boolean(releaseStage && isProtectedSupportTitle(releaseTitle));
+      const paymentRailStage = document.querySelector<HTMLElement>(".kv3-product-layer .kiosk-payment-rail-stage");
+      const paymentRailTitle = paymentRailStage?.querySelector<HTMLElement>("h2")?.textContent?.trim() ?? "";
+
+      if (isCancellationProgressTitle(paymentRailTitle)) cancellationProgressObserved = true;
+
+      const finalPaymentExit = productLayer
+        ? Array.from(productLayer.querySelectorAll<HTMLElement>("h2"))
+            .map((heading) => heading.textContent?.trim() ?? "")
+            .find(isFinalPaymentExitTitle)
+        : undefined;
+
+      if (finalPaymentExit) {
+        root.dataset.kioskLastScene = "final-payment-exit";
+        requestTrueHome();
+        return;
+      }
 
       if (home) scene = "home";
       else if (document.querySelector(".kv3-product-layer > .ck2-connected")) scene = "connected";
       else if (document.querySelector(".kv3-product-layer > .ck2-member")) scene = "member";
       else if (document.querySelector(".kv3-product-layer .kiosk-qr-stage")) scene = "payment";
-      else if (document.querySelector(".kv3-product-layer .kiosk-payment-rail-stage")) scene = "payment-choice";
+      else if (paymentRailStage) scene = "payment-choice";
       else if (document.querySelector(".kv3-product-layer .kiosk-pricing-stage")) scene = "pricing";
       else if (document.querySelector(".kv3-product-layer .kiosk-idle-stage")) scene = "selection";
       else if (document.querySelector(".kv3-product-layer .h-20.w-20.animate-spin.text-primary")) scene = "starting";
       else if (document.querySelector(".kv3-product-layer .kiosk-ready-stage")) scene = "success";
       else if (releaseStage) scene = protectedSupport ? "support" : "release";
+
+      // Current Kiosk.tsx already removes its cancelled scene and locally resets
+      // after canonical terminal cancellation. In the premium shell that local
+      // reset lands on battery selection, not the true public Home. A transition
+      // from a confirmed cancellation flow back to selection therefore promotes
+      // the outer V2 shell to its real Home. If cancellation fails, the payment
+      // stage remains mounted and this branch never fires.
+      if (scene === "selection" && cancellationProgressObserved) {
+        cancellationProgressObserved = false;
+        root.dataset.kioskLastScene = "cancelled-to-selection";
+        requestTrueHome();
+        return;
+      }
+      if (scene === "home") cancellationProgressObserved = false;
 
       if (scene) root.dataset.kioskScene = scene;
       else delete root.dataset.kioskScene;
@@ -116,6 +175,7 @@ export default function KioskPremiumGateV3() {
     return () => {
       sceneObserver.disconnect();
       langObserver.disconnect();
+      if (homeReturnTimer !== null) window.clearTimeout(homeReturnTimer);
       delete root.dataset.kioskVersion;
       delete root.dataset.kioskHomeGolden;
       delete root.dataset.kioskScene;
@@ -130,7 +190,7 @@ export default function KioskPremiumGateV3() {
   }, []);
 
   return (
-    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v2-ads-restored-2026">
+    <div className="kv3-runtime" data-presentation-owner="p0-deterministic-transaction-v3-final-exit-home-2026">
       <div className="kv3-product-layer"><KioskPremiumGateV2 /></div>
       <KioskAdvertisingSynchronizedLayer />
       <KioskSystemFooter />
