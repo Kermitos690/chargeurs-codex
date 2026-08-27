@@ -12,7 +12,23 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  public-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Public Pages DNS and HTTP check
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "--- DNS ---"
+          dig +short chargeurs-ch-staging-cf.pages.dev || true
+          echo "--- HEAD ---"
+          curl -sSIL --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/ || true
+          echo "--- BUILD CHECK ---"
+          curl -sS --max-time 15 -D - https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
+          echo
+
+  imac-check:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
     steps:
