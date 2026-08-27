@@ -53,6 +53,8 @@ const initial: State = {
   walletNotifications: [],
 };
 
+const PILOT_MEMBER_RATE_LABEL = "2 CHF jusqu’à 2 h · puis +1 CHF / h commencée";
+
 export default function AccountPass() {
   const [state, setState] = useState<State>(initial);
   const [walletHistoryError, setWalletHistoryError] = useState(false);
@@ -247,15 +249,15 @@ export default function AccountPass() {
         <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_320px]">
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Info icon={CircleDollarSign} label="Tarif membre" value={plan ? `${formatCents(plan.hourly_cents, plan.currency)} / h` : "—"} />
-              <Info icon={CalendarClock} label="Plafond journalier" value={plan ? `${formatCents(plan.daily_cap_cents, plan.currency)} / jour` : "—"} />
+              <Info icon={CircleDollarSign} label="Tarif membre pilote" value={PILOT_MEMBER_RATE_LABEL} />
+              <Info icon={CalendarClock} label="Plafond journalier" value="5.90 CHF / 24 h" />
               <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
               <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
-              <Info icon={WalletCards} label="Crédit location disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
+              <Info icon={WalletCards} label="Solde prépayé disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
               {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit attribué par période" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
               <Info icon={CalendarClock} label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"} value={cancellationScheduled ? (periodEnd ? formatAccountDate(periodEnd) : "—") : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")} />
             </div>
-            <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
+            <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le prix faisant foi reste le snapshot affiché avant chaque location. Pour une location membre v3, si au moins 30 CHF sont disponibles, le backend peut réserver 30 CHF dans le solde prépayé sans créer une seconde garantie Stripe ; au retour, seul le prix réel est consommé et le reste est libéré. Si le solde est insuffisant, le parcours de garantie Stripe complet reste séparé.</p>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
