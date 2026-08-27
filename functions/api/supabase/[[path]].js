@@ -23,7 +23,7 @@ const FORWARDED_REQUEST_HEADERS = [
   "x-upsert",
 ];
 
-function json(body, status) {
+function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -48,7 +48,13 @@ function buildUpstreamHeaders(request) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+
+  // The publishable key is intentionally public and is the same browser key the
+  // direct Supabase client uses. Do not ever replace this with a service-role key.
   headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  if (!headers.has("authorization")) {
+    headers.set("authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+  }
   if (!headers.has("accept")) headers.set("accept", "application/json");
   return headers;
 }
@@ -68,8 +74,48 @@ function buildResponseHeaders(response) {
   return headers;
 }
 
+async function healthCheck() {
+  const url = new URL("/auth/v1/settings", SUPABASE_ORIGIN);
+  const headers = new Headers({
+    accept: "application/json",
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+  });
+
+  const started = Date.now();
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers,
+      redirect: "follow",
+    });
+    const text = await response.text();
+    return json({
+      ok: response.ok,
+      reachable: true,
+      upstreamStatus: response.status,
+      latencyMs: Date.now() - started,
+      contentType: response.headers.get("content-type") || "",
+      bodyKind: text.trim().startsWith("{") ? "json" : text.trim().startsWith("<") ? "html" : "text",
+    }, response.ok ? 200 : 502);
+  } catch (error) {
+    return json({
+      ok: false,
+      reachable: false,
+      state: "fetch_failed",
+      latencyMs: Date.now() - started,
+      message: error instanceof Error ? error.message : String(error),
+    }, 502);
+  }
+}
+
 export async function onRequest(context) {
   const incoming = new URL(context.request.url);
+
+  if (incoming.pathname === "/api/supabase/health") {
+    return healthCheck();
+  }
+
   const path = upstreamPath(incoming.pathname);
   if (!path) return json({ error: "supabase_route_not_allowed" }, 404);
 
