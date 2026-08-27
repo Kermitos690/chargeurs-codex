@@ -10,6 +10,10 @@ const acceptance = readFileSync(
   resolve(process.cwd(), "supabase/functions/kiosk-customer-options/index.ts"),
   "utf8",
 );
+const ejectAfterPayment = readFileSync(
+  resolve(process.cwd(), "supabase/functions/eject-after-payment/index.ts"),
+  "utf8",
+);
 const vercelConfig = readFileSync(resolve(process.cwd(), "vercel.json"), "utf8");
 
 describe("member prepaid payment rail", () => {
@@ -55,6 +59,15 @@ describe("member prepaid payment rail", () => {
     expect(acceptance).toContain("authorize_member_prepaid_rental");
     expect(acceptance).toContain("prepaidAuthorized");
     expect(acceptance).toContain("eject-after-payment");
+  });
+
+  it("supports every pilot station without bypassing the station-specific physical proof gate", () => {
+    expect(ejectAfterPayment).toContain('"DTA21269"');
+    expect(ejectAfterPayment).toContain('"DTA21277"');
+    expect(ejectAfterPayment).toContain('"DTA22032"');
+    expect(ejectAfterPayment).toContain('["authorized", "prepaid"]');
+    expect(ejectAfterPayment).toContain("hasQualifiedO2OnlyProof");
+    expect(ejectAfterPayment).toContain("O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING");
   });
 
   it("routes contract acceptance through the existing kiosk function to stay within the free Edge-function cap", () => {
