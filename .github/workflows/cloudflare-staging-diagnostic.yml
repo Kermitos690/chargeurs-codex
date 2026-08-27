@@ -8,9 +8,10 @@ on:
     paths:
       - .github/workflows/cloudflare-staging-diagnostic.yml
       - wrangler.toml
-      - functions/api/supabase/**
       - src/integrations/supabase/**
       - src/pages/Account*.tsx
+      - functions/api/volt-*.js
+      - functions/_shared/volt-knowledge.js
 
 permissions:
   contents: read
@@ -20,44 +21,65 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Wait for Cloudflare deployment and validate Supabase health
+      - name: Wait for Cloudflare deployment and validate account login page
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://chargeurs-ch-staging-cf.pages.dev/api/supabase/health'
+          URL='https://chargeurs-ch-staging-cf.pages.dev/compte/login'
           for attempt in $(seq 1 24); do
-            echo "health attempt $attempt"
-            RESPONSE="$(curl -sS --max-time 20 -w '\n%{http_code}' "$URL" || true)"
-            BODY="$(printf '%s' "$RESPONSE" | sed '$d')"
-            STATUS="$(printf '%s' "$RESPONSE" | tail -n1)"
-            echo "HTTP $STATUS $BODY"
-            if [ "$STATUS" = "200" ] && printf '%s' "$BODY" | grep -q '"ok":true' && printf '%s' "$BODY" | grep -q '"reachable":true' && printf '%s' "$BODY" | grep -q '"upstreamStatus":200'; then
+            echo "page attempt $attempt"
+            STATUS="$(curl -sS -L --max-time 20 -o /tmp/account.html -w '%{http_code}' "$URL" || true)"
+            echo "HTTP $STATUS"
+            if [ "$STATUS" = "200" ] && grep -q 'Chargeurs.ch' /tmp/account.html; then
               exit 0
             fi
             sleep 10
           done
-          echo 'Supabase health never became ready' >&2
+          echo 'Cloudflare account page never became ready' >&2
           exit 1
+
+      - name: Validate direct Supabase Auth health and CORS
+        shell: bash
+        env:
+          SUPABASE_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d
+          APP_ORIGIN: https://chargeurs-ch-staging-cf.pages.dev
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 20 \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            "$SUPABASE_URL/auth/v1/health" >/tmp/auth-health.json
+          cat /tmp/auth-health.json
+
+          curl -sS --max-time 20 -D /tmp/preflight.headers -o /tmp/preflight.body \
+            -X OPTIONS \
+            -H "Origin: $APP_ORIGIN" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: apikey,authorization,content-type,x-client-info' \
+            "$SUPABASE_URL/auth/v1/token?grant_type=password"
+          cat /tmp/preflight.headers
+          grep -Eiq '^access-control-allow-origin: (\*|https://chargeurs-ch-staging-cf\.pages\.dev)' /tmp/preflight.headers
 
       - name: Validate password-auth transport with deliberate invalid credentials
         shell: bash
+        env:
+          SUPABASE_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d
+          APP_ORIGIN: https://chargeurs-ch-staging-cf.pages.dev
         run: |
           set -euo pipefail
-          RESPONSE="$(curl -sS --max-time 20 -w '\n%{http_code}' \
+          STATUS="$(curl -sS --max-time 20 -D /tmp/auth.headers -o /tmp/auth.body -w '%{http_code}' \
+            -H "Origin: $APP_ORIGIN" \
             -H 'Content-Type: application/json' \
-            -d '{"email":"cloudflare-proxy-probe@example.invalid","password":"definitely-not-a-real-password"}' \
-            'https://chargeurs-ch-staging-cf.pages.dev/api/supabase/auth/v1/token?grant_type=password')"
-          BODY="$(printf '%s' "$RESPONSE" | sed '$d')"
-          STATUS="$(printf '%s' "$RESPONSE" | tail -n1)"
-          echo "HTTP $STATUS $BODY"
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_PUBLISHABLE_KEY" \
+            -d '{"email":"cloudflare-browser-probe@example.invalid","password":"definitely-not-a-real-password"}' \
+            "$SUPABASE_URL/auth/v1/token?grant_type=password")"
+          cat /tmp/auth.headers
+          cat /tmp/auth.body
           test "$STATUS" = "400"
-          printf '%s' "$BODY" | grep -Eq 'invalid_credentials|Invalid login credentials'
-
-      - name: Validate account login page
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSIL --max-time 20 https://chargeurs-ch-staging-cf.pages.dev/compte/login >/dev/null
+          grep -Eq 'invalid_credentials|Invalid login credentials' /tmp/auth.body
+          grep -Eiq '^access-control-allow-origin: (\*|https://chargeurs-ch-staging-cf\.pages\.dev)' /tmp/auth.headers
 
       - name: Volt AI runtime status
         shell: bash
@@ -73,30 +95,7 @@ jobs:
           set -euo pipefail
           BODY="$(curl -fsS --max-time 30 \
             -H 'Content-Type: application/json' \
-            -d '{"mode":"public","message":"Yo-Yo ça va ?","history":[],"locale":"fr"}' \
+            -d '{"mode":"public","message":"Quels sont les tarifs de location ?","history":[],"locale":"fr"}' \
             https://chargeurs-ch-staging-cf.pages.dev/api/volt-chat)"
           echo "$BODY"
           printf '%s' "$BODY" | grep -q '"ok":true'
-
-  imac-check:
-    runs-on: [self-hosted, macOS]
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cloudflare authentication check
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx --yes wrangler@4.35.0 whoami
-
-      - name: Pages DNS and HTTP check
-        shell: bash
-        run: |
-          set -euo pipefail
-          (dig +short chargeurs-ch-staging-cf.pages.dev || nslookup chargeurs-ch-staging-cf.pages.dev || true)
-          curl -fsSIL --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/ || true
-
-# retrigger: 2026-08-27T10:02+02:00
