@@ -31,6 +31,36 @@ const QUICK_ACTIONS = [
 
 function id(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
+function isCloudflareStagingHost() {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "chargeurs-ch-staging-cf.pages.dev" || host.endsWith(".chargeurs-ch-staging-cf.pages.dev");
+}
+
+async function invokeVoltCase(body: Record<string, unknown>, mode: VoltMode) {
+  if (!isCloudflareStagingHost()) return supabase.functions.invoke("public-contact", { body });
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (mode === "client") {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
+  try {
+    const response = await fetch("/api/volt-support", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => null);
+    return { data, error: response.ok ? null : new Error(data?.error ?? `HTTP_${response.status}`) };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 // UI-only preview. The server independently recomputes all category/priority/escalation
 // fields before it creates a support case, so changing this function cannot grant access.
 function previewTriage(raw: string): Triage {
@@ -68,7 +98,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
     setBusy(true); setError(null);
     const body: Record<string, unknown> = { action: "volt_case", mode, message: text, stationId, rentalId, locale: lang };
     if (mode === "public") { body.name = identity.name.trim(); body.email = identity.email.trim(); }
-    const { data, error: invokeError } = await supabase.functions.invoke("public-contact", { body });
+    const { data, error: invokeError } = await invokeVoltCase(body, mode);
     setBusy(false);
     if (invokeError || !data?.ok) {
       const code = data?.error ?? "REQUEST_NOT_RECORDED";
