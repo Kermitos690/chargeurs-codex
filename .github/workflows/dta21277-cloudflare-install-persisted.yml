@@ -35,16 +35,75 @@ jobs:
           APK="$HOME/chargeurs-builds/dta21277/cloudflare-159/Chargeurs_CH_Kiosk_1.0.59-terminal-sdk580-cloudflare-runtime-staging.apk"
           ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
           ADB="$ANDROID_HOME_VALUE/platform-tools/adb"
-          APKSIGNER="$(find "$ANDROID_HOME_VALUE/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -1)"
 
-          test -s "$APK" || { echo "Persisted verified APK is missing" >&2; exit 50; }
-          test -x "$ADB" && test -x "$APKSIGNER" || { echo "Android tools unavailable" >&2; exit 51; }
+          JAVA_HOME_VALUE=""
+          for candidate in \
+            "${JAVA_HOME:-}" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-x64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-aarch64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+            "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home" \
+            "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+          do
+            if [ -n "$candidate" ] && [ -x "$candidate/bin/java" ]; then
+              JAVA_HOME_VALUE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$JAVA_HOME_VALUE" ] && [ -d "$HOME/Library/Caches/chargeurs-jdk" ]; then
+            JAVA_BIN="$(find "$HOME/Library/Caches/chargeurs-jdk" -type f -path '*/Contents/Home/bin/java' -perm -u+x 2>/dev/null | head -1 || true)"
+            [ -z "$JAVA_BIN" ] || JAVA_HOME_VALUE="${JAVA_BIN%/bin/java}"
+          fi
+          if [ -z "$JAVA_HOME_VALUE" ]; then
+            echo "JAVA_GATE=FAIL"
+            exit 49
+          fi
+          export JAVA_HOME="$JAVA_HOME_VALUE"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          echo "JAVA_GATE=PASS"
+
+          if [ ! -s "$APK" ]; then
+            echo "PERSISTED_APK_EXISTS=FAIL"
+            exit 50
+          fi
+          echo "PERSISTED_APK_EXISTS=PASS"
+
+          if [ ! -x "$ADB" ]; then
+            echo "ADB_TOOL_GATE=FAIL"
+            exit 51
+          fi
+          echo "ADB_TOOL_GATE=PASS"
+
+          APKSIGNER="$(find "$ANDROID_HOME_VALUE/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | tail -1 || true)"
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "APKSIGNER_TOOL_GATE=FAIL"
+            exit 51
+          fi
+          echo "APKSIGNER_TOOL_GATE=PASS"
+
           ACTUAL_APK_SHA="$(shasum -a 256 "$APK" | awk '{print $1}')"
-          test "$ACTUAL_APK_SHA" = "$EXPECTED_APK_SHA" || { echo "Persisted APK checksum mismatch" >&2; exit 52; }
-          APK_SIGNER="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null \
+          if [ "$ACTUAL_APK_SHA" != "$EXPECTED_APK_SHA" ]; then
+            echo "APK_CHECKSUM_GATE=FAIL"
+            exit 52
+          fi
+          echo "APK_CHECKSUM_GATE=PASS"
+
+          set +e
+          APK_CERT_OUT="$($APKSIGNER verify --print-certs "$APK" 2>&1)"
+          APKSIGNER_RC=$?
+          set -e
+          if [ "$APKSIGNER_RC" -ne 0 ]; then
+            echo "APK_SIGNATURE_VERIFY=FAIL"
+            exit 53
+          fi
+          APK_SIGNER="$(printf '%s\n' "$APK_CERT_OUT" \
             | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
             | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          test "$APK_SIGNER" = "$EXPECTED_SIGNER" || { echo "Persisted APK signer mismatch" >&2; exit 53; }
+          if [ "$APK_SIGNER" != "$EXPECTED_SIGNER" ]; then
+            echo "APK_SIGNER_GATE=FAIL"
+            exit 53
+          fi
+          echo "APK_SIGNER_GATE=PASS"
           echo "PERSISTED_APK_GATE=PASS"
           echo "PAYMENT_ACTION=NONE"
           echo "HARDWARE_EJECTION_ACTION=NONE"
@@ -59,26 +118,33 @@ jobs:
           }
 
           SERIAL=""
-
-          # First reproduce the exact route that succeeded during the 1.0.58 field migration.
           if "$ADB" -s "$TARGET_MDNS" get-state >/dev/null 2>&1; then
             SERIAL="$TARGET_MDNS"
+            echo "ADB_EXACT_MDNS_STATE=PASS"
+          else
+            echo "ADB_EXACT_MDNS_STATE=MISS"
           fi
 
-          # If mDNS has a fresh endpoint, connect to that endpoint without logging its address.
           if [ -z "$SERIAL" ]; then
             ENDPOINT="$("$ADB" mdns services 2>/dev/null \
-              | awk '$1 ~ /^adb-3d24b8cbb7d560bc-r6qk3T/ {print $3; exit}')"
+              | awk '$1 ~ /^adb-3d24b8cbb7d560bc-r6qk3T/ {print $3; exit}' || true)"
             if [ -n "$ENDPOINT" ]; then
+              echo "ADB_MDNS_DISCOVERY=PASS"
               "$ADB" connect "$ENDPOINT" >/dev/null 2>&1 || true
               if "$ADB" -s "$ENDPOINT" get-state >/dev/null 2>&1; then
                 SERIAL="$ENDPOINT"
+                echo "ADB_MDNS_CONNECT=PASS"
+              else
+                echo "ADB_MDNS_CONNECT=FAIL"
               fi
+            else
+              echo "ADB_MDNS_DISCOVERY=MISS"
             fi
           fi
 
-          # Last read-only fallback: inspect already-authorized devices and select only the exact binding.
           if [ -z "$SERIAL" ]; then
+            AUTH_DEVICE_COUNT="$("$ADB" devices | awk 'NR>1 && $2 == "device" {n++} END {print n+0}')"
+            echo "ADB_AUTHORIZED_DEVICE_COUNT=$AUTH_DEVICE_COUNT"
             while IFS= read -r candidate; do
               [ -n "$candidate" ] || continue
               station="$(read_pref "$candidate" chargeurs_kiosk_config station_id || true)"
@@ -90,12 +156,15 @@ jobs:
             done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
           fi
 
-          [ -n "$SERIAL" ] || { echo "ADB_TARGET_UNAVAILABLE=DTA21277" >&2; exit 54; }
+          if [ -z "$SERIAL" ]; then
+            echo "ADB_TARGET_UNAVAILABLE=DTA21277"
+            exit 54
+          fi
 
           STATION_ID="$(read_pref "$SERIAL" chargeurs_kiosk_config station_id || true)"
           DEVICE_ID="$(read_pref "$SERIAL" chargeurs_device_identity public_id || true)"
-          [ "$STATION_ID" = "$TARGET_STATION" ] || { echo "Station binding mismatch" >&2; exit 55; }
-          [ "$DEVICE_ID" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || { echo "Device identity mismatch" >&2; exit 56; }
+          [ "$STATION_ID" = "$TARGET_STATION" ] || { echo "STATION_BINDING_GATE=FAIL"; exit 55; }
+          [ "$DEVICE_ID" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || { echo "DEVICE_IDENTITY_GATE=FAIL"; exit 56; }
           echo "ADB_TARGET_CONFIRMED=DTA21277"
 
           DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
@@ -103,11 +172,11 @@ jobs:
           OLD_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
           case "$OLD_CODE" in
             158|159) ;;
-            *) echo "Unexpected installed versionCode=$OLD_CODE" >&2; exit 57 ;;
+            *) echo "INSTALLED_VERSION_GATE=FAIL"; exit 57 ;;
           esac
 
           BASE_PATH="$("$ADB" -s "$SERIAL" shell pm path "$PKG" | head -1 | sed 's/^package://' | tr -d '\r')"
-          [ -n "$BASE_PATH" ] || exit 58
+          [ -n "$BASE_PATH" ] || { echo "INSTALLED_APK_PATH_GATE=FAIL"; exit 58; }
           BACKUP_DIR="$HOME/chargeurs-field-backups/dta21277-$(date +%Y%m%d-%H%M%S)"
           mkdir -p "$BACKUP_DIR"
           chmod 700 "$BACKUP_DIR"
@@ -116,11 +185,11 @@ jobs:
           OLD_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/pre-update-base.apk" 2>/dev/null \
             | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
             | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "Installed signer mismatch" >&2; exit 59; }
+          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "INSTALLED_SIGNER_GATE=FAIL"; exit 59; }
 
           BEFORE_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
             | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
-          [ -n "$BEFORE_CONFIG_SHA" ] || exit 60
+          [ -n "$BEFORE_CONFIG_SHA" ] || { echo "SECURE_CONFIG_PREFLIGHT=FAIL"; exit 60; }
           echo "INSTALLED_BEFORE_VERSION_CODE=$OLD_CODE"
           echo "INSTALLED_BEFORE_VERSION_NAME=$OLD_NAME"
           echo "INSTALLED_SIGNER_GATE=PASS"
@@ -139,7 +208,7 @@ jobs:
           AFTER_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
             | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
           if [ "$AFTER_CONFIG_SHA" != "$BEFORE_CONFIG_SHA" ]; then
-            echo "Secure config changed during package replacement; attempting rollback" >&2
+            echo "SECURE_CONFIG_PRESERVED=FAIL"
             "$ADB" -s "$SERIAL" install -r -d "$BACKUP_DIR/pre-update-base.apk" >/dev/null 2>&1 || true
             exit 63
           fi
