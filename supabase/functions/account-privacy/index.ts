@@ -24,13 +24,14 @@ async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, use
 
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
   await claimVerifiedEmailRentals(db, user);
-  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult, passSummary] = await Promise.all([
+  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult, walletNotificationsResult, passSummary] = await Promise.all([
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships").select("id,status,starts_at,renews_at,ends_at,plan_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_wallet_passes").select("id,membership_id,public_pass_id,status,provider_status,provider,provider_pass_id,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
     db.from("customer_membership_credit_balances").select("balance_cents,currency,next_expiry_at,last_activity_at").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
+    db.from("customer_wallet_native_notifications").select("id,event_type,title,message,created_at,delivered_at").eq("user_id", user.id).eq("status", "delivered").order("created_at", { ascending: false }).limit(10),
     loadPassAccountSummary(db, user.id),
   ]);
   if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
@@ -39,6 +40,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
   if (walletResult.error) throw new Error("WALLET_PASS_UNAVAILABLE");
   if (pointsResult.error) throw new Error("CHARGEPOINTS_UNAVAILABLE");
   if (rentalCreditResult.error) throw new Error("MEMBERSHIP_CREDIT_UNAVAILABLE");
+  if (walletNotificationsResult.error) throw new Error("WALLET_NOTIFICATION_HISTORY_UNAVAILABLE");
   const rentals = rentalsResult.data ?? [];
   const rentalIds = rentals.map((rental) => String(rental.id));
   let payments: unknown[] = []; let refunds: unknown[] = []; let incidents: unknown[] = [];
@@ -54,6 +56,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
   return {
     profile: profileResult.data ?? null, rentals, payments, refunds, incidents,
     membership: membershipResult.data ?? null, walletPass: walletResult.data ?? null,
+    walletNotifications: walletNotificationsResult.data ?? [],
     chargePoints: { balance: Number(pointsResult.data?.balance ?? 0), lastActivityAt: pointsResult.data?.last_activity_at ?? null },
     rentalCredit: { balanceCents: Number(rentalCreditResult.data?.balance_cents ?? 0), currency: String(rentalCreditResult.data?.currency ?? "CHF"), nextExpiryAt: rentalCreditResult.data?.next_expiry_at ?? null, lastActivityAt: rentalCreditResult.data?.last_activity_at ?? null },
     pass: passSummary,
