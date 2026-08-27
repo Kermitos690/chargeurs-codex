@@ -35,15 +35,15 @@ for (const [needle, label] of [
 }
 
 for (const needle of [
-  '[120, 200]',
-  '[121, 300]',
-  '[180, 300]',
-  '[181, 400]',
-  '[240, 400]',
-  '[241, 500]',
-  '[300, 500]',
-  '[301, 590]',
-  'assertEquals(price(memberSnapshot(), 4320).final_cents, 3000)',
+  "[120, 200]",
+  "[121, 300]",
+  "[180, 300]",
+  "[181, 400]",
+  "[240, 400]",
+  "[241, 500]",
+  "[300, 500]",
+  "[301, 590]",
+  "assertEquals(price(memberSnapshot(), 4320).final_cents, 3000)",
 ]) {
   requireContains("v3 pricing vectors", pricingTests, needle);
 }
@@ -67,9 +67,12 @@ for (const needle of [
   requireContains("prepaid regression test", prepaidTests, needle);
 }
 
+requireContains("README", readme, "2,00 CHF");
+requireContains("README", readme, "5,90 CHF");
+requireContains("canonical overview", canonical, "2.00 CHF");
+requireContains("canonical overview", canonical, "5.90 CHF");
+
 for (const [label, content] of [["README", readme], ["canonical overview", canonical]]) {
-  requireContains(label, content, "2.00 CHF");
-  requireContains(label, content, "5.90 CHF");
   requireContains(label, content, "72");
   requireContains(label, content, "30 CHF");
   requireNotContains(label, content, "1.00 CHF covers the first 30 min");
@@ -79,6 +82,7 @@ for (const [label, content] of [["README", readme], ["canonical overview", canon
 
 requireContains("TESTING.md", testing, "Validation ciblée préproduction v3");
 requireContains("CI workflow", workflow, "Chargeurs.ch Pre-production V3 CI");
+requireContains("CI workflow", workflow, "node scripts/check-preproduction-v3-contract.mjs");
 requireContains("CI workflow", workflow, "npm ci");
 requireContains("CI workflow", workflow, "npm run typecheck");
 requireContains("CI workflow", workflow, "npm run build");
