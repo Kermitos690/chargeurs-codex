@@ -27,7 +27,7 @@ using (exists (
 
 alter table public.loyalty_missions drop constraint if exists loyalty_missions_metric_check;
 alter table public.loyalty_missions add constraint loyalty_missions_metric_check
-  check (metric in ('activated_rentals','completed_rentals','distinct_stations','spent_cents','campaign_paid_credit_spent_cents'));
+  check (metric in ('completed_rentals','distinct_stations','spent_cents','campaign_paid_credit_spent_cents'));
 
 create or replace function public.allocate_wallet_debit_server(p_debit_entry_id uuid)
 returns integer
