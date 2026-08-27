@@ -60,6 +60,28 @@ public final class KioskConfigValidatorTest {
     }
 
     @Test
+    public void pinnedEnrollmentCanUseSeparateCompiledRuntimeOrigin() {
+        String enrollment = KioskConfigValidator.normalizeBaseUrl(BuildConfig.KIOSK_PUBLIC_BASE_URL);
+        String compiledRuntime = KioskConfigValidator.normalizeBaseUrl(BuildConfig.KIOSK_WEB_BASE_URL);
+        if (enrollment == null || compiledRuntime == null) return;
+
+        assertEquals(
+            compiledRuntime,
+            KioskConfigValidator.runtimeBaseUrlForEnrollment(enrollment)
+        );
+        assertTrue(KioskConfigValidator.isAllowedUrl(
+            compiledRuntime + "/kiosk/DTA21269",
+            enrollment
+        ));
+        if (!compiledRuntime.equals(enrollment)) {
+            assertFalse(KioskConfigValidator.isAllowedUrl(
+                enrollment + "/kiosk/DTA21269",
+                enrollment
+            ));
+        }
+    }
+
+    @Test
     public void buildsTheLockedKioskRoute() {
         assertEquals(
             "https://chargeurs.ch/kiosk/DTA21269",
