@@ -44,11 +44,16 @@ function VoltMascot({ compact = false }: { compact?: boolean }) {
 
 export function VoltWidget() {
   const location = useLocation();
+  const hidden = location.pathname.startsWith("/kiosk") || location.pathname.startsWith("/admin");
+  if (hidden) return null;
+  return <VoltWidgetActive />;
+}
+
+function VoltWidgetActive() {
+  const location = useLocation();
   const { user } = useCustomer();
   const [open, setOpen] = useState(false);
   const [introVisible, setIntroVisible] = useState(false);
-
-  const hidden = location.pathname.startsWith("/kiosk") || location.pathname.startsWith("/admin");
   const isClient = Boolean(user);
 
   const context = useMemo(() => {
@@ -60,14 +65,14 @@ export function VoltWidget() {
   }, [location.search]);
 
   useEffect(() => {
-    if (hidden || open) return;
+    if (open) return;
     const timer = window.setTimeout(() => setIntroVisible(true), 900);
     const closeTimer = window.setTimeout(() => setIntroVisible(false), 6500);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(closeTimer);
     };
-  }, [hidden, open]);
+  }, [open]);
 
   useEffect(() => {
     const openVolt = () => setOpen(true);
@@ -78,8 +83,6 @@ export function VoltWidget() {
   useEffect(() => {
     if (open) setIntroVisible(false);
   }, [open]);
-
-  if (hidden) return null;
 
   const displayName = String(user?.user_metadata?.display_name ?? user?.user_metadata?.full_name ?? "");
 
