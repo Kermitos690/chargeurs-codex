@@ -15,13 +15,19 @@ function isChargeursCloudflareStagingHost() {
     || host.endsWith('.chargeurs-ch-staging-cf.pages.dev');
 }
 
-// Cloudflare Pages may retain build variables from an older deployment. On the
-// dedicated Chargeurs.ch Cloudflare staging host, pin the browser client to the
-// known Chargeurs staging project so a stale VITE_* value cannot silently send
-// authentication or customer data to another Supabase project.
 const FORCE_CHARGEURS_STAGING = isChargeursCloudflareStagingHost();
+
+// Safari / in-app browsers can fail before reaching Supabase when the frontend
+// makes a direct cross-origin request from pages.dev. On the dedicated
+// Cloudflare staging host, route Supabase HTTP traffic through a same-origin
+// Pages Function. The proxy is allowlisted to the staging project and injects
+// only the public publishable key; no service-role credential is involved.
+const CLOUDFLARE_SUPABASE_PROXY_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/api/supabase`
+  : STAGING_SUPABASE_URL;
+
 const SUPABASE_URL = FORCE_CHARGEURS_STAGING
-  ? STAGING_SUPABASE_URL
+  ? CLOUDFLARE_SUPABASE_PROXY_URL
   : (import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL);
 const SUPABASE_PUBLISHABLE_KEY = FORCE_CHARGEURS_STAGING
   ? STAGING_SUPABASE_PUBLISHABLE_KEY
