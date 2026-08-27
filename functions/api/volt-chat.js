@@ -8,6 +8,13 @@ const MAX_CONTEXT_HINT = 700;
 const MAX_BODY_BYTES = 36_000;
 const KNOWLEDGE_LIMIT = 8;
 
+const PUBLIC_PILOT_PRICING = [
+  { maxHours: 0.5, label: "30 minutes", amount: "CHF 1.90" },
+  { maxHours: 2, label: "2 heures", amount: "CHF 3.90" },
+  { maxHours: 6, label: "6 heures", amount: "CHF 5.90" },
+  { maxHours: 24, label: "24 heures", amount: "CHF 7.90" },
+];
+
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -39,8 +46,17 @@ function normalizeHistory(value) {
     .filter((item) => item.content);
 }
 
-function triageVolt(raw) {
+function informationalCategory(raw) {
   const text = raw.toLocaleLowerCase("fr");
+  if (/(prix|tarif|combien|co[ûu]t|palier|heure|heures|minute|minutes)/.test(text)) return "pricing";
+  if (/(paiement|payer|carte|twint|apple pay|google pay|remboursement)/.test(text)) return "payment";
+  if (/(retour|rendre|restitution|restituer)/.test(text)) return "return";
+  if (/(compte|pass|profil|connexion|connecter|cr[ée]dit|points|abonnement|adh[ée]sion|wallet)/.test(text)) return "account";
+  return "general";
+}
+
+function triageVolt(currentMessage, conversation) {
+  const text = currentMessage.toLocaleLowerCase("fr");
 
   if (/(pay[ée].*(ne sort|sort pas)|batterie.*(ne sort|sort pas|bloqu)|[ée]ject.*(bloqu|[ée]chou)|eject.*(bloqu|echou))/.test(text)) {
     return { category: "ejection", priority: "high", escalate: true };
@@ -57,25 +73,48 @@ function triageVolt(raw) {
   if (/(humain|personne|contacter|contact|support|parler [àa])/.test(text)) {
     return { category: "contact", priority: "normal", escalate: true };
   }
-  if (/(prix|tarif|combien|co[ûu]t)/.test(text)) {
-    return { category: "pricing", priority: "normal", escalate: false };
-  }
-  if (/(paiement|payer|carte|twint|apple pay|google pay|remboursement)/.test(text)) {
-    return { category: "payment", priority: "normal", escalate: false };
-  }
-  if (/(retour|rendre|restitution|restituer)/.test(text)) {
-    return { category: "return", priority: "normal", escalate: false };
-  }
-  if (/(compte|pass|profil|connexion|connecter|cr[ée]dit|points|abonnement|adh[ée]sion|wallet)/.test(text)) {
-    return { category: "account", priority: "normal", escalate: false };
-  }
-  return { category: "general", priority: "normal", escalate: false };
+
+  return { category: informationalCategory(conversation), priority: "normal", escalate: false };
 }
 
-function fallbackReply(chunks, triage) {
-  if (triage.category === "pricing") {
-    return "Je peux répondre à partir de la grille tarifaire Chargeurs.ch publiée, mais le moteur IA est momentanément indisponible. Reformulez avec la durée souhaitée et je vérifierai le palier correspondant dans la base de connaissances.";
+function parseNumber(value) {
+  const parsed = Number(String(value).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractDurationHours(raw) {
+  const text = raw.toLocaleLowerCase("fr");
+  const compact = text.match(/(\d+(?:[.,]\d+)?)\s*h(?:\s*(\d{1,2})\s*(?:min|m))?/);
+  if (compact) {
+    const hours = parseNumber(compact[1]);
+    const minutes = compact[2] ? Number(compact[2]) : 0;
+    if (hours !== null && minutes >= 0 && minutes < 60) return hours + minutes / 60;
   }
+
+  const hourMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:heure|heures)/);
+  const minuteMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:minute|minutes|min)/);
+  const hours = hourMatch ? parseNumber(hourMatch[1]) : 0;
+  const minutes = minuteMatch ? parseNumber(minuteMatch[1]) : 0;
+  if (hours === null || minutes === null) return null;
+  if (!hourMatch && !minuteMatch) return null;
+  return hours + minutes / 60;
+}
+
+function publicPricingReply(message) {
+  const duration = extractDurationHours(message);
+  if (duration === null || duration <= 0) {
+    return "La grille publique du pilote est de CHF 1.90 jusqu’à 30 minutes, CHF 3.90 jusqu’à 2 heures, CHF 5.90 jusqu’à 6 heures et CHF 7.90 jusqu’à 24 heures.";
+  }
+  const tier = PUBLIC_PILOT_PRICING.find((entry) => duration <= entry.maxHours);
+  if (!tier) {
+    return "La grille publique que je peux confirmer va jusqu’à 24 heures, à CHF 7.90. Pour une durée supérieure, je ne vais pas extrapoler un montant qui n’est pas publié dans mes sources.";
+  }
+  const durationLabel = duration < 1 ? `${Math.round(duration * 60)} minutes` : `${Number.isInteger(duration) ? duration : duration.toFixed(1)} heure${duration > 1 ? "s" : ""}`;
+  return `Pour ${durationLabel}, la grille publique du pilote correspond au palier jusqu’à ${tier.label} : ${tier.amount}.`;
+}
+
+function fallbackReply(chunks, triage, message) {
+  if (triage.category === "pricing") return publicPricingReply(message);
   if (triage.category === "return" && !triage.escalate) {
     return "Une batterie peut être rendue dans une borne compatible du réseau disposant d'un emplacement libre. La disponibilité d'une borne précise doit toutefois être vérifiée en temps réel.";
   }
@@ -137,16 +176,14 @@ export async function onRequest(context) {
 
   const conversationQuery = [...history.slice(-6).map((item) => item.content), message, contextHint].filter(Boolean).join("\n");
   const chunks = retrieveVoltKnowledge(conversationQuery, KNOWLEDGE_LIMIT);
-  // Escalation is decided from the current message. Conversation history helps reasoning,
-  // but an old incident keyword must not make every later message an incident forever.
-  const triage = triageVolt(message);
+  const triage = triageVolt(message, conversationQuery);
   const sources = [...new Set(chunks.map((chunk) => chunk.source))];
   const knowledgeMeta = voltKnowledgeMeta();
 
   if (!context.env?.AI || typeof context.env.AI.run !== "function") {
     return json({
       ok: true,
-      reply: fallbackReply(chunks, triage),
+      reply: fallbackReply(chunks, triage, message),
       triage,
       provider: "knowledge-fallback",
       model: null,
@@ -184,7 +221,7 @@ export async function onRequest(context) {
     console.error("Volt Workers AI failure", error instanceof Error ? error.message : String(error));
     return json({
       ok: true,
-      reply: fallbackReply(chunks, triage),
+      reply: fallbackReply(chunks, triage, message),
       triage,
       provider: "knowledge-fallback",
       model: MODEL,
