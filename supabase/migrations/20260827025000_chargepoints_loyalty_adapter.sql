@@ -51,5 +51,5 @@ begin
 end;
 $function$;
 
-revoke all on function public.append_customer_chargepoints(uuid,bigint,text,text,text,uuid,uuid,text,jsonb) from public, anon;
-grant execute on function public.append_customer_chargepoints(uuid,bigint,text,text,text,uuid,uuid,text,jsonb) to authenticated, service_role;
+revoke all on function public.append_customer_chargepoints(uuid,bigint,text,text,text,uuid,uuid,text,jsonb) from public, anon, authenticated;
+grant execute on function public.append_customer_chargepoints(uuid,bigint,text,text,text,uuid,uuid,text,jsonb) to service_role;
