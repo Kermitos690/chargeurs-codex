@@ -3,7 +3,7 @@ import { MessageCircle, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useCustomer } from "@/hooks/useCustomer";
-import { VoltAssistant } from "@/components/support/VoltAssistant";
+import { VoltAssistantV2 } from "@/components/support/VoltAssistantV2";
 
 function VoltMascot({ compact = false }: { compact?: boolean }) {
   const size = compact ? 46 : 72;
@@ -121,7 +121,7 @@ function VoltWidgetActive() {
               </div>
 
               <div className="max-h-[min(72vh,44rem)] overflow-y-auto p-2 sm:p-3 [&>section]:rounded-[1.35rem] [&>section]:border-white/10 [&>section>header]:hidden">
-                <VoltAssistant
+                <VoltAssistantV2
                   mode={isClient ? "client" : "public"}
                   userName={displayName}
                   userEmail={user?.email ?? ""}
