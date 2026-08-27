@@ -119,7 +119,6 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
     if (busy || caseId) return;
     if (mode === "public" && !identityReady()) {
       setPendingCase({ text, triage });
-      addVoltMessage("Pour transmettre ce dossier, j'ai besoin d'un nom et d'une adresse email valide. Ces informations servent uniquement à identifier et suivre la demande.");
       return;
     }
     setBusy(true); setError(null);
@@ -172,7 +171,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
     setEngine(chat?.provider === "workers-ai" && chat?.aiReady ? "ai" : chat?.ok ? "knowledge" : "fallback");
     addVoltMessage(reply);
 
-    if (triage.escalate && !caseId) await createCase(clean, triage);
+    if (triage.escalate && !caseId) setPendingCase({ text: clean, triage });
   };
 
   const submitMessage = (event: FormEvent) => { event.preventDefault(); const value = input; setInput(""); void handleUserMessage(value); };
@@ -184,8 +183,23 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       <div className="max-h-[32rem] space-y-4 overflow-y-auto px-5 py-6 sm:px-7" aria-live="polite">
         {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={message.role === "user" ? "max-w-[88%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground" : "max-w-[88%] rounded-2xl rounded-bl-md border border-border bg-background/70 px-4 py-3 text-sm leading-6 text-foreground"}>{message.text}</div></div>)}
         {busy && <div className="flex justify-start"><div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-border bg-background/70 px-4 py-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Volt cherche dans les informations Chargeurs.ch…</div></div>}
-        {pendingCase && !caseId && mode === "public" && <form onSubmit={submitIdentity} className="rounded-2xl border border-primary/25 bg-primary/5 p-4"><div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><p className="text-sm font-medium">Transmission au support</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><Input aria-label="Votre nom" placeholder="Votre nom" required minLength={2} maxLength={120} value={identity.name} onChange={(event) => setIdentity((current) => ({ ...current, name: event.target.value }))} /><Input aria-label="Votre email" placeholder="vous@exemple.ch" type="email" required maxLength={254} value={identity.email} onChange={(event) => setIdentity((current) => ({ ...current, email: event.target.value }))} /></div>{error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}<Button type="submit" disabled={busy} className="mt-4 rounded-full bg-gradient-primary font-bold">{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Transmettre le dossier</Button></form>}
-        {error && !(pendingCase && mode === "public") && <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        {pendingCase && !caseId && (
+          mode === "public" ? (
+            <form onSubmit={submitIdentity} className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
+              <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Une vérification support peut être utile</p><p className="mt-1 text-xs text-muted-foreground">Volt n’envoie rien automatiquement. Si vous souhaitez transmettre ce cas, indiquez vos coordonnées puis confirmez.</p></div></div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2"><Input aria-label="Votre nom" placeholder="Votre nom" required minLength={2} maxLength={120} value={identity.name} onChange={(event) => setIdentity((current) => ({ ...current, name: event.target.value }))} /><Input aria-label="Votre email" placeholder="vous@exemple.ch" type="email" required maxLength={254} value={identity.email} onChange={(event) => setIdentity((current) => ({ ...current, email: event.target.value }))} /></div>
+              {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+              <div className="mt-4 flex flex-wrap gap-2"><Button type="submit" disabled={busy} className="rounded-full bg-gradient-primary font-bold">{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Transmettre au support</Button><Button type="button" variant="ghost" className="rounded-full" onClick={() => { setPendingCase(null); setError(null); }}>Pas maintenant</Button></div>
+            </form>
+          ) : (
+            <div className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
+              <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><p className="text-sm font-medium">Une vérification support peut être utile</p><p className="mt-1 text-xs text-muted-foreground">Votre compte n’est pas modifié et aucun dossier n’est envoyé sans votre confirmation.</p></div></div>
+              {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+              <div className="mt-4 flex flex-wrap gap-2"><Button type="button" disabled={busy} className="rounded-full bg-gradient-primary font-bold" onClick={() => void createCase(pendingCase.text, pendingCase.triage)}>{busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Transmettre au support</Button><Button type="button" variant="ghost" className="rounded-full" onClick={() => { setPendingCase(null); setError(null); }}>Pas maintenant</Button></div>
+            </div>
+          )
+        )}
+        {error && !pendingCase && <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {caseId && <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm text-success"><div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" />Dossier transmis</div><p className="mt-1">Référence <span className="font-mono">{caseId.slice(0, 8)}</span>.</p></div>}
       </div>
       <div className="border-t border-border/70 bg-card/30 px-5 py-5 sm:px-7">
