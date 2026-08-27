@@ -49,10 +49,6 @@ function buildUpstreamHeaders(request) {
     if (value) headers.set(name, value);
   }
 
-  // The legacy anon key remains an intentionally public, low-privilege key and
-  // is retained by Supabase for compatibility. It is used only for the
-  // Cloudflare -> Supabase transport. A real signed-in user JWT, when present,
-  // always replaces the anon bearer token.
   headers.set("apikey", SUPABASE_ANON_KEY);
   const authorization = request.headers.get("authorization");
   const publishableBearer = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
@@ -82,6 +78,11 @@ function buildResponseHeaders(response) {
   return headers;
 }
 
+function safeDiagnosticBody(text) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  return compact.slice(0, 800);
+}
+
 async function healthCheck() {
   const url = new URL("/auth/v1/health", SUPABASE_ORIGIN);
   const headers = new Headers({
@@ -102,9 +103,13 @@ async function healthCheck() {
       ok: response.ok,
       reachable: true,
       upstreamStatus: response.status,
+      upstreamStatusText: response.statusText,
       latencyMs: Date.now() - started,
       contentType: response.headers.get("content-type") || "",
+      cfRay: response.headers.get("cf-ray") || "",
+      server: response.headers.get("server") || "",
       bodyKind: text.trim().startsWith("{") ? "json" : text.trim().startsWith("<") ? "html" : "text",
+      upstreamBody: safeDiagnosticBody(text),
     }, response.ok ? 200 : 502);
   } catch (error) {
     return json({
