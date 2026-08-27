@@ -1,8 +1,8 @@
-import { Bot, LifeBuoy, ShieldCheck, Zap } from "lucide-react";
+import { Bot, LifeBuoy, MessageCircle, ShieldCheck, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PublicNav } from "@/components/public/PublicNav";
 import { LiquidBackground } from "@/components/LiquidBackground";
-import { VoltAssistant } from "@/components/support/VoltAssistant";
+import { Button } from "@/components/ui/button";
 
 const FEATURES = [
   { icon: Zap, title: "Diagnostic immédiat", text: "Volt reconnaît les problèmes fréquents de location, de retour, de paiement ou de borne et prépare le bon contexte." },
@@ -11,18 +11,23 @@ const FEATURES = [
 ];
 
 export default function Support() {
+  const openVolt = () => window.dispatchEvent(new Event("volt:open"));
+
   return (
     <div className="relative min-h-screen">
       <LiquidBackground />
       <PublicNav />
-      <main className="mx-auto max-w-6xl px-6 pb-20 pt-32 sm:px-10">
+      <main className="mx-auto max-w-6xl px-6 pb-28 pt-32 sm:px-10">
         <section className="glass-strong liquid-border overflow-hidden rounded-3xl p-8 sm:p-12">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary"><Bot className="h-4 w-4" />Volt · Assistant Chargeurs.ch</span>
-            <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success">Support intégré</span>
+            <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-semibold text-success">Disponible sur tout le site</span>
           </div>
-          <h1 className="mt-6 max-w-4xl font-display text-4xl font-extrabold sm:text-6xl">Une seule porte d'entrée pour obtenir de l'aide.</h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">Posez votre question à Volt. S'il peut vous orienter immédiatement, il le fait. Si le problème nécessite une vérification humaine, il prépare automatiquement un dossier support structuré.</p>
+          <h1 className="mt-6 max-w-4xl font-display text-4xl font-extrabold sm:text-6xl">Besoin d'aide ? Appelez Volt.</h1>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">Volt vous accompagne sans vous faire quitter la page que vous consultez. Touchez la petite batterie en bas à droite, posez votre question et, si une intervention humaine est nécessaire, Volt prépare le dossier support.</p>
+          <Button type="button" onClick={openVolt} className="mt-7 rounded-full bg-gradient-primary px-7 py-6 font-bold shadow-glow">
+            <MessageCircle className="mr-2 h-5 w-5" />Ouvrir Volt
+          </Button>
         </section>
 
         <section className="mt-8 grid gap-4 md:grid-cols-3">
@@ -34,10 +39,6 @@ export default function Support() {
             </article>
           ))}
         </section>
-
-        <div className="mt-8">
-          <VoltAssistant mode="public" />
-        </div>
 
         <section className="mt-10 rounded-3xl border border-border bg-card/60 p-6 sm:p-8">
           <h2 className="font-display text-xl font-bold">Correspondance formelle</h2>
