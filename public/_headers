@@ -5,5 +5,11 @@
 /kiosk/*
   Cache-Control: no-store, max-age=0
 
+/admin
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/admin/*
+  Cache-Control: no-store, max-age=0, must-revalidate
+
 /index.html
   Cache-Control: no-store, max-age=0
