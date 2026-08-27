@@ -1,0 +1,63 @@
+name: DTA21277 v160 source trace
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-v160-source-trace.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-v160-source-trace
+  cancel-in-progress: true
+
+jobs:
+  trace:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 8
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: false
+      - name: Trace committed and local v160 source evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --all --tags --prune >/dev/null 2>&1 || true
+          echo "TRACE_HEAD=$(git rev-parse HEAD)"
+
+          echo "=== COMMITTED_STRING_MATCHES ==="
+          git grep -n -I -E '1\.0\.60|versionCode[[:space:]]*=[[:space:]]*160|usb-discovery-staging|usb discovery' $(git rev-list --all 2>/dev/null | head -n 500) -- 'android-kiosk/**' 'scripts/**' '.github/workflows/**' 2>/dev/null | head -n 120 || true
+
+          echo "=== COMMIT_MESSAGE_MATCHES ==="
+          git log --all --date=iso --pretty='%H %ad %s' --grep='usb.*discover\|discover.*usb\|DTA21277' -i -n 80 || true
+
+          echo "=== REF_CONTAINMENT_FOR_USB_COMMITS ==="
+          for sha in $(git log --all --pretty='%H' --grep='usb.*discover\|discover.*usb' -i -n 30); do
+            echo "COMMIT=$sha"
+            git branch -a --contains "$sha" 2>/dev/null | sed 's/^/  REF=/' || true
+          done
+
+          echo "=== DANGLING_COMMITS_WITH_V160_EVIDENCE ==="
+          git fsck --no-reflogs --unreachable 2>/dev/null \
+            | awk '$2=="commit" {print $3}' \
+            | while read -r sha; do
+                msg=$(git show -s --format='%s' "$sha" 2>/dev/null || true)
+                if printf '%s' "$msg" | grep -Eiq 'usb|21277|160'; then
+                  echo "DANGLING=$sha MSG=$msg"
+                fi
+              done
+
+          echo "=== WORKTREE_SOURCE_MATCHES ==="
+          find "$HOME" -maxdepth 6 -type f \( -name 'build.gradle.kts' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \) \
+            -not -path '*/Library/*' -not -path '*/.gradle/*' -not -path '*/node_modules/*' -print0 2>/dev/null \
+            | xargs -0 grep -IlE '1\.0\.60-terminal-sdk580-usb-discovery|versionCode[[:space:]]*=[[:space:]]*160|usb-discovery-staging' 2>/dev/null \
+            | head -n 80 || true
+
+          echo "DTA21277_V160_SOURCE_TRACE=PASS"
