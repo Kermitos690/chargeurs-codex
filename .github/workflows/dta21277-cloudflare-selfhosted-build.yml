@@ -17,6 +17,9 @@ jobs:
   build-staging-apk:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 35
+    env:
+      LANG: C
+      LC_ALL: C
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
