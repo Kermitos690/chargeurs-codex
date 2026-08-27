@@ -8,6 +8,7 @@ const finalPricingMigration = read("supabase/migrations/20260827030000_member_pr
 const prepaidMigration = read("supabase/migrations/20260827020000_member_prepaid_payment_rail.sql");
 const pricingTests = read("supabase/functions/tests/pricing_settlement_v3.test.ts");
 const prepaidTests = read("src/test/memberPrepaidRail.test.ts");
+const ejectAfterPayment = read("supabase/functions/eject-after-payment/index.ts");
 const readme = read("README.md");
 const canonical = read("docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md");
 const testing = read("TESTING.md");
@@ -63,9 +64,18 @@ for (const needle of [
   "authorize_member_prepaid_rental",
   "eject-after-payment",
   "functions/v1/kiosk-customer-options",
+  "DTA22032",
+  "O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING",
 ]) {
   requireContains("prepaid regression test", prepaidTests, needle);
 }
+
+for (const station of ["DTA21269", "DTA21277", "DTA22032"]) {
+  requireContains("pilot hardware release gate", ejectAfterPayment, `"${station}"`);
+}
+requireContains("pilot hardware release gate", ejectAfterPayment, '["authorized", "prepaid"]');
+requireContains("pilot hardware release gate", ejectAfterPayment, "hasQualifiedO2OnlyProof");
+requireContains("pilot hardware release gate", ejectAfterPayment, "O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING");
 
 requireContains("README", readme, "2,00 CHF");
 requireContains("README", readme, "5,90 CHF");
@@ -96,4 +106,5 @@ if (failures.length > 0) {
 console.log("Pre-production v3 contract check PASS");
 console.log("Canonical member pricing: CHF 2.00 through 2h, then +CHF 1.00 per started hour, cap CHF 5.90/24h.");
 console.log("Canonical non-return: CHF 30 total at 72h for new v3 rentals.");
+console.log("All three pilot stations are present behind the station-specific physical-proof release gate.");
 console.log("Prepaid rail markers, tests, docs and safe CI entrypoint are present.");
