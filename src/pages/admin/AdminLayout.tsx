@@ -48,7 +48,7 @@ function NavGroups({ roles, onNavigate }: { roles: string[]; onNavigate?: () => 
 }
 
 export default function AdminLayout() {
-  const { user, roles, isAdmin, loading } = useAuth();
+  const { user, roles, isAdmin, loading, authError } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -68,6 +68,21 @@ export default function AdminLayout() {
   }
   if (!user) {
     return <Navigate to="/admin/login" replace />;
+  }
+  if (authError) {
+    return (
+      <div className="relative grid min-h-screen place-items-center px-5 text-center">
+        <LiquidBackground />
+        <div className="glass-strong max-w-md rounded-3xl p-10">
+          <p className="mb-2 text-lg font-semibold">Impossible de vérifier votre accès administrateur.</p>
+          <p className="mb-6 text-sm text-muted-foreground">{authError}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button onClick={() => window.location.reload()} variant="default">Réessayer</Button>
+            <Button onClick={signOut} variant="ghost">Se déconnecter</Button>
+          </div>
+        </div>
+      </div>
+    );
   }
   if (!isAdmin) {
     return (
@@ -96,7 +111,6 @@ export default function AdminLayout() {
     <div className="relative min-h-screen">
       <LiquidBackground />
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className="glass-strong sticky top-0 hidden h-screen w-64 flex-col p-5 lg:flex">
           <div className="mb-6"><BrandLogo size="sm" /></div>
           <ScrollArea className="-mx-2 flex-1 px-2">
@@ -107,7 +121,6 @@ export default function AdminLayout() {
           </Button>
         </aside>
 
-        {/* Mobile top bar with hamburger sheet */}
         <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
           <BrandLogo size="sm" />
           <Sheet open={open} onOpenChange={setOpen}>
