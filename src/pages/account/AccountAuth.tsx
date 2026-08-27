@@ -24,6 +24,37 @@ function safeCustomerNext(value: string | null): string {
   }
 }
 
+function authErrorMessage(err: unknown): string {
+  if (!err) return "Erreur de connexion inconnue.";
+
+  if (typeof err === "string") {
+    const value = err.trim();
+    if (value && value !== "{}") return value;
+  }
+
+  if (err instanceof Error) {
+    const value = String(err.message || "").trim();
+    if (value && value !== "{}") {
+      if (/failed to fetch|load failed|network/i.test(value)) {
+        return "Le service de compte n'est pas joignable pour le moment. Réessayez dans quelques instants.";
+      }
+      return value;
+    }
+  }
+
+  if (typeof err === "object") {
+    const candidate = err as Record<string, unknown>;
+    const fields = ["message", "error_description", "error", "code", "status"];
+    for (const field of fields) {
+      const value = candidate[field];
+      if (typeof value === "string" && value.trim() && value.trim() !== "{}") return value.trim();
+      if (typeof value === "number") return `Erreur de connexion (HTTP ${value}).`;
+    }
+  }
+
+  return "Le service de compte a renvoyé une erreur technique. Réessayez ; si elle persiste, le diagnostic serveur est disponible.";
+}
+
 export default function AccountAuth() {
   const nav = useNavigate();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -41,8 +72,6 @@ export default function AccountAuth() {
   const googleAuthEnabled = import.meta.env.VITE_ENABLE_GOOGLE_AUTH === "true";
 
   const navigateAfterPasswordSignIn = async (userId: string) => {
-    // A scan explicitly asking to return to a pairing wins over the ordinary
-    // role landing page. Admin roles can still use a customer account journey.
     if (nextPath !== "/compte") {
       nav(nextPath, { replace: true });
       return;
@@ -118,7 +147,8 @@ export default function AccountAuth() {
       if (!data.user) throw new Error("Connexion incomplète. Réessayez.");
       await navigateAfterPasswordSignIn(data.user.id);
     } catch (err) {
-      toast.error((err as Error).message ?? "Erreur");
+      console.error("Account auth failure", err);
+      toast.error(authErrorMessage(err));
     } finally { setLoading(false); }
   };
 
