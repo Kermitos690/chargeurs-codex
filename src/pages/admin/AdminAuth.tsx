@@ -43,6 +43,11 @@ export default function AdminAuth() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Recovery mode must remain visible and user-driven. Do not auto-redirect
+    // because of a stale/reusable session while the user is trying to reset
+    // their password.
+    if (mode !== "login") return;
+
     let cancelled = false;
     void (async () => {
       try {
@@ -53,7 +58,7 @@ export default function AdminAuth() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [mode]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -67,7 +72,6 @@ export default function AdminAuth() {
         }));
         if (error) throw error;
         toast.success("Email de réinitialisation envoyé (si le compte existe).");
-        setMode("login");
         return;
       }
 
