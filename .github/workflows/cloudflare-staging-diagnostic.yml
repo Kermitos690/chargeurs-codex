@@ -7,6 +7,10 @@ on:
       - feat/cloudflare-staging-20260827
     paths:
       - .github/workflows/cloudflare-staging-diagnostic.yml
+      - wrangler.toml
+      - functions/api/supabase/**
+      - src/integrations/supabase/**
+      - src/pages/Account*.tsx
 
 permissions:
   contents: read
@@ -14,54 +18,73 @@ permissions:
 jobs:
   public-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Public Pages DNS and HTTP check
+      - name: Wait for Cloudflare deployment and validate Supabase health
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- DNS ---"
-          dig +short chargeurs-ch-staging-cf.pages.dev || true
-          echo "--- HEAD ---"
-          curl -sSIL --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/ || true
-          echo "--- BUILD CHECK ---"
-          curl -sS --max-time 15 -D - https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
-          echo
+          URL='https://chargeurs-ch-staging-cf.pages.dev/api/supabase/health'
+          for attempt in $(seq 1 24); do
+            echo "health attempt $attempt"
+            RESPONSE="$(curl -sS --max-time 20 -w '\n%{http_code}' "$URL" || true)"
+            BODY="$(printf '%s' "$RESPONSE" | sed '$d')"
+            STATUS="$(printf '%s' "$RESPONSE" | tail -n1)"
+            echo "HTTP $STATUS $BODY"
+            if [ "$STATUS" = "200" ] && printf '%s' "$BODY" | grep -q '"ok":true' && printf '%s' "$BODY" | grep -q '"reachable":true' && printf '%s' "$BODY" | grep -q '"upstreamStatus":200'; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Supabase health never became ready' >&2
+          exit 1
+
+      - name: Validate password-auth transport with deliberate invalid credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl -sS --max-time 20 -w '\n%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"cloudflare-proxy-probe@example.invalid","password":"definitely-not-a-real-password"}' \
+            'https://chargeurs-ch-staging-cf.pages.dev/api/supabase/auth/v1/token?grant_type=password')"
+          BODY="$(printf '%s' "$RESPONSE" | sed '$d')"
+          STATUS="$(printf '%s' "$RESPONSE" | tail -n1)"
+          echo "HTTP $STATUS $BODY"
+          test "$STATUS" = "400"
+          printf '%s' "$BODY" | grep -Eq 'invalid_credentials|Invalid login credentials'
+
+      - name: Validate account login page
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSIL --max-time 20 https://chargeurs-ch-staging-cf.pages.dev/compte/login >/dev/null
 
       - name: Volt AI runtime status
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- VOLT AI STATUS ---"
-          curl -fsS --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/api/volt-ai-status
-          echo
+          BODY="$(curl -fsS --max-time 20 https://chargeurs-ch-staging-cf.pages.dev/api/volt-ai-status)"
+          echo "$BODY"
+          printf '%s' "$BODY" | grep -q '"workersAIReady":true'
 
       - name: Volt chat provider probe
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- VOLT CHAT ---"
-          curl -fsS --max-time 25 \
+          BODY="$(curl -fsS --max-time 30 \
             -H 'Content-Type: application/json' \
             -d '{"mode":"public","message":"Yo-Yo ça va ?","history":[],"locale":"fr"}' \
-            https://chargeurs-ch-staging-cf.pages.dev/api/volt-chat
-          echo
+            https://chargeurs-ch-staging-cf.pages.dev/api/volt-chat)"
+          echo "$BODY"
+          printf '%s' "$BODY" | grep -q '"ok":true'
 
   imac-check:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "RUNNER_NAME=$RUNNER_NAME"
-          sw_vers || true
-          node --version
-          npm --version
 
       - name: Cloudflare authentication check
         shell: bash
@@ -73,12 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- DNS ---"
           (dig +short chargeurs-ch-staging-cf.pages.dev || nslookup chargeurs-ch-staging-cf.pages.dev || true)
-          echo "--- HEAD ---"
           curl -fsSIL --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/ || true
-          echo "--- BUILD CHECK ---"
-          curl -fsS --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
-          echo
 
-# retrigger: 2026-08-27T08:43+02:00
+# retrigger: 2026-08-27T10:02+02:00
