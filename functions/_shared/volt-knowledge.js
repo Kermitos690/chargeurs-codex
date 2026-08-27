@@ -5,6 +5,39 @@ const STOP = new Set([
   "the","and","for","from","that","this","with","you","your","are","was","were","have","has","not","but","can","will",
 ]);
 
+const SYNONYMS = {
+  abonnement: ["adhesion", "pass", "membre"],
+  adhesion: ["abonnement", "pass", "membre"],
+  batterie: ["powerbank", "chargeur"],
+  powerbank: ["batterie", "chargeur"],
+  borne: ["station", "kiosque"],
+  station: ["borne", "kiosque"],
+  prix: ["tarif", "cout", "montant"],
+  tarif: ["prix", "cout", "montant"],
+  cout: ["prix", "tarif", "montant"],
+  paiement: ["transaction", "stripe", "reglement"],
+  paye: ["paiement", "transaction", "reglement"],
+  argent: ["paiement", "credit", "remboursement", "montant"],
+  remboursement: ["rembourse", "refund", "paiement"],
+  rembourse: ["remboursement", "refund", "paiement"],
+  caution: ["garantie", "deposit"],
+  garantie: ["caution", "deposit"],
+  retour: ["rendu", "restitution", "restituee"],
+  rendu: ["retour", "restitution", "restituee"],
+  restituee: ["retour", "rendu", "restitution"],
+  bloque: ["blocage", "incident", "support"],
+  bloquee: ["blocage", "incident", "support"],
+  ejecte: ["ejection", "liberation", "batterie"],
+  ejection: ["liberation", "batterie", "sortie"],
+  wallet: ["pass", "portefeuille"],
+  points: ["chargepoints", "credit"],
+  chargepoints: ["points", "credit"],
+  credit: ["solde", "wallet", "chargepoints"],
+  location: ["rental", "batterie"],
+  historique: ["locations", "paiements", "transactions"],
+  support: ["aide", "incident", "assistance"],
+};
+
 function normalize(value) {
   return String(value ?? "")
     .normalize("NFD")
@@ -13,14 +46,20 @@ function normalize(value) {
 }
 
 function tokens(value) {
-  return normalize(value)
+  const base = normalize(value)
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length >= 3 && !STOP.has(token));
+  const expanded = [];
+  for (const token of base) {
+    expanded.push(token);
+    for (const synonym of SYNONYMS[token] ?? []) expanded.push(synonym);
+  }
+  return [...new Set(expanded)];
 }
 
 function scoreChunk(chunk, queryTokens, queryText) {
   const haystack = normalize(`${chunk.source} ${chunk.content}`);
-  let score = 0;
+  let score = chunk.source === "docs/volt/customer-knowledge.md" ? 2 : 0;
   const unique = new Set(queryTokens);
   for (const token of unique) {
     if (haystack.includes(token)) score += token.length >= 7 ? 4 : 2;
@@ -31,7 +70,7 @@ function scoreChunk(chunk, queryTokens, queryText) {
   return score;
 }
 
-export function retrieveVoltKnowledge(query, limit = 6) {
+export function retrieveVoltKnowledge(query, limit = 8) {
   const normalizedQuery = normalize(query);
   const queryTokens = tokens(normalizedQuery);
   if (!queryTokens.length || !Array.isArray(VOLT_KNOWLEDGE)) return [];
