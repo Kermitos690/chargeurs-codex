@@ -27,7 +27,7 @@ export default function Partners() {
             <p className="mt-5 text-lg text-muted-foreground">Bars, restaurants, hôtels, clubs, salles de sport, festivals et lieux culturels peuvent proposer un service de recharge mobile simple, visible et pilotable à distance.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild className="rounded-full bg-gradient-primary px-7 py-6 font-bold shadow-glow"><a href="mailto:partenaires@chargeurs.ch?subject=Devenir partenaire Chargeurs.ch">Demander une installation</a></Button>
-              <Button asChild variant="ghost" className="rounded-full border border-border px-7 py-6"><Link to="/">Voir le service client</Link></Button>
+              <Button asChild variant="ghost" className="rounded-full border border-border px-7 py-6"><Link to="/support">Voir le service client</Link></Button>
             </div>
           </div>
         </section>

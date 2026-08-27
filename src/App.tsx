@@ -17,6 +17,7 @@ import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx"
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
 import { KioskNativeIdleUpdateGuard } from "./components/kiosk/KioskNativeIdleUpdateGuard.tsx";
 import { KioskIdentityGate } from "./components/kiosk/KioskIdentityGate.tsx";
+import { VoltWidget } from "./components/support/VoltWidget.tsx";
 
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
@@ -61,6 +62,7 @@ import AdminBatteryQualification from "./pages/admin/AdminBatteryQualification.t
 import AdminCustomerProgram from "./pages/admin/AdminCustomerProgram.tsx";
 import AdminAdvertising from "./pages/admin/AdminAdvertising.tsx";
 import AdminInventory from "./pages/admin/AdminInventory.tsx";
+import AdminVoltSupport from "./pages/admin/AdminVoltSupport.tsx";
 import "./pages/admin/admin-advertising.css";
 import LegalPage from "./pages/LegalPage.tsx";
 
@@ -74,6 +76,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
+          <VoltWidget />
           <KioskReturnOverlay />
           <KioskHelpLauncher />
           <KioskOffersLauncher />
@@ -124,6 +127,7 @@ const App = () => (
               <Route path="shops" element={<AdminShops />} />
               <Route path="advertising" element={<AdminAdvertising />} />
               <Route path="inventory" element={<AdminInventory />} />
+              <Route path="support" element={<AdminVoltSupport />} />
               <Route path="rental-flow-health" element={<AdminRentalFlowHealth />} />
               <Route path="test-monitor" element={<AdminTestMonitor />} />
               <Route path="battery-qualification" element={<AdminBatteryQualification />} />
