@@ -1,0 +1,3 @@
+CHARGEURS_CLOUDFLARE_ADMIN_BUILD_OK
+commit-marker=admin-recovery-20260827-0643
+expected-auth-fix=4a1e9cbb3d0cc0bf2ab3484ce1440e86d22b7341
