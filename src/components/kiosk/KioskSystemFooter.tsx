@@ -19,7 +19,8 @@ type CustomerOptions = {
   guest?: GuestPricing | null;
 };
 
-type ConnectionState = "online" | "limited" | "offline" | "checking";
+type BackendState = "ok" | "auth" | "error" | null;
+export type KioskFooterConnectionState = "online" | "auth" | "limited" | "offline" | "checking";
 
 const FOOTER_BACKEND_REFRESH_MS = 10 * 60_000;
 
@@ -29,6 +30,7 @@ const COPY = {
     daily: "Plafond 24 h",
     deposit: "Caution",
     online: "En ligne",
+    auth: "Identité à réactiver",
     limited: "Connexion limitée",
     offline: "Hors ligne",
     checking: "Vérification…",
@@ -38,6 +40,7 @@ const COPY = {
     daily: "24 h cap",
     deposit: "Deposit",
     online: "Online",
+    auth: "Identity recovery required",
     limited: "Limited connection",
     offline: "Offline",
     checking: "Checking…",
@@ -47,6 +50,7 @@ const COPY = {
     daily: "24-h-Limit",
     deposit: "Garantie",
     online: "Online",
+    auth: "Identität muss reaktiviert werden",
     limited: "Eingeschränkte Verbindung",
     offline: "Offline",
     checking: "Prüfung…",
@@ -56,6 +60,17 @@ const COPY = {
 function money(cents: number | null | undefined, currency = "CHF") {
   if (cents == null || !Number.isFinite(Number(cents)) || Number(cents) <= 0) return "—";
   return `${(Number(cents) / 100).toFixed(2)} ${currency}`;
+}
+
+export function kioskFooterConnectionState(input: {
+  networkOffline: boolean;
+  backendState: BackendState;
+}): KioskFooterConnectionState {
+  if (input.networkOffline) return "offline";
+  if (input.backendState === "ok") return "online";
+  if (input.backendState === "auth") return "auth";
+  if (input.backendState === "error") return "limited";
+  return "checking";
 }
 
 export function KioskSystemFooter() {
@@ -68,17 +83,17 @@ export function KioskSystemFooter() {
 
   const copy = COPY[lang];
   const [options, setOptions] = useState<CustomerOptions | null>(null);
-  const [backendOk, setBackendOk] = useState<boolean | null>(null);
+  const [backendState, setBackendState] = useState<BackendState>(null);
   const [now, setNow] = useState(() => new Date());
 
   const refresh = useCallback(async () => {
     if (net === "offline") {
-      setBackendOk(false);
+      setBackendState("error");
       return;
     }
     const token = readKioskToken();
     if (!token || !stationId) {
-      setBackendOk(null);
+      setBackendState(null);
       return;
     }
     const result = await invokeKioskEdgeProxy<CustomerOptions>(
@@ -86,8 +101,12 @@ export function KioskSystemFooter() {
       { stationId },
       { "X-Kiosk-Token": token },
     );
+    if (result.status === 401 || result.status === 403) {
+      setBackendState("auth");
+      return;
+    }
     const ok = result.data?.ok === true && result.status != null && result.status >= 200 && result.status < 300;
-    setBackendOk(ok);
+    setBackendState(ok ? "ok" : "error");
     if (ok && result.data) setOptions(result.data);
   }, [net, stationId]);
 
@@ -114,13 +133,10 @@ export function KioskSystemFooter() {
   const dailyCap = dayTier?.total_cents ?? guest?.daily_cap_cents ?? null;
   const deposit = guest?.deposit_cents ?? null;
 
-  const connection: ConnectionState = net === "offline"
-    ? "offline"
-    : backendOk === true
-      ? "online"
-      : backendOk === false
-        ? "limited"
-        : "checking";
+  const connection = kioskFooterConnectionState({
+    networkOffline: net === "offline",
+    backendState,
+  });
 
   const time = new Intl.DateTimeFormat(lang === "fr" ? "fr-CH" : lang === "de" ? "de-CH" : "en-GB", {
     hour: "2-digit",
@@ -131,11 +147,13 @@ export function KioskSystemFooter() {
 
   const statusLabel = connection === "online"
     ? copy.online
-    : connection === "limited"
-      ? copy.limited
-      : connection === "offline"
-        ? copy.offline
-        : copy.checking;
+    : connection === "auth"
+      ? copy.auth
+      : connection === "limited"
+        ? copy.limited
+        : connection === "offline"
+          ? copy.offline
+          : copy.checking;
 
   return (
     <>
@@ -153,7 +171,7 @@ export function KioskSystemFooter() {
 
       <footer
         className="kiosk-system-footer"
-        data-connection={connection}
+        data-connection={connection === "auth" ? "limited" : connection}
         data-station={stationId || "unconfigured"}
         data-terminal={terminalAvailable ? "true" : "false"}
         aria-label={`${stationId} · ${statusLabel}`}
@@ -167,7 +185,7 @@ export function KioskSystemFooter() {
           <strong className="kiosk-system-footer__station">{stationId || "DTA—"}</strong>
           <span className="kiosk-system-footer__time"><Clock3 aria-hidden="true" />{time}</span>
           <span className="kiosk-system-footer__network">
-            {connection === "offline" ? <WifiOff aria-hidden="true" /> : <Wifi aria-hidden="true" />}
+            {connection === "offline" ? <WifiOff aria-hidden="true" /> : connection === "auth" ? <ShieldCheck aria-hidden="true" /> : <Wifi aria-hidden="true" />}
             <b aria-hidden="true" />
             {statusLabel}
           </span>
