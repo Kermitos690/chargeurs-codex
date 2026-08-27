@@ -6,7 +6,11 @@ import { kioskAwareFetch } from '@/lib/kioskFetch';
 // Public browser credentials for the Chargeurs.ch staging project. These are
 // deliberately safe to ship in the frontend; never place a service-role key here.
 const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
-const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
+// Keep Cloudflare staging on the still-active legacy anon JWT while the project
+// is migrating to Supabase's opaque sb_publishable_* keys. supabase-js copies
+// the unauthenticated browser key into Authorization; a JWT anon key avoids an
+// API-gateway compatibility edge case and matches the proven legacy Auth path.
+const STAGING_SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4';
 
 function isChargeursCloudflareStagingHost() {
   if (typeof window === 'undefined') return false;
@@ -20,8 +24,7 @@ const FORCE_CHARGEURS_STAGING = isChargeursCloudflareStagingHost();
 // Keep authentication in the browser and call the staging Supabase project
 // directly. The previous same-origin Pages Function proxy was removed from the
 // client path because Cloudflare-to-Supabase server subrequests returned a 502
-// before GoTrue was reached. This direct URL + publishable key is the same public
-// transport already proven on the working Vercel staging client.
+// before GoTrue was reached.
 const SUPABASE_URL = FORCE_CHARGEURS_STAGING
   ? STAGING_SUPABASE_URL
   : (import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL);
