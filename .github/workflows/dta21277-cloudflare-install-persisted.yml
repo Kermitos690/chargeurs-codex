@@ -1,0 +1,162 @@
+name: DTA21277 install persisted Cloudflare APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-cloudflare-install-persisted.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-cloudflare-install-persisted
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 12
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - name: Verify persisted APK and update DTA21277 only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_STATION="DTA21277"
+          TARGET_MDNS="adb-3d24b8cbb7d560bc-r6qk3T._adb-tls-connect._tcp"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          EXPECTED_SIGNER="1e4d4c12ec3b21a3ff7186fb7bdcf4097f13b0a8d7a6b6fc7ba7dbebd92042f6"
+          EXPECTED_APK_SHA="a5676e95c63ca83f88b6dea19a8a57a75b2d5ffed3fd22be29cc3c61f0184205"
+          PKG="ch.chargeurs.kiosk.staging"
+          APK="$HOME/chargeurs-builds/dta21277/cloudflare-159/Chargeurs_CH_Kiosk_1.0.59-terminal-sdk580-cloudflare-runtime-staging.apk"
+          ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          ADB="$ANDROID_HOME_VALUE/platform-tools/adb"
+          APKSIGNER="$(find "$ANDROID_HOME_VALUE/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -1)"
+
+          test -s "$APK" || { echo "Persisted verified APK is missing" >&2; exit 50; }
+          test -x "$ADB" && test -x "$APKSIGNER" || { echo "Android tools unavailable" >&2; exit 51; }
+          ACTUAL_APK_SHA="$(shasum -a 256 "$APK" | awk '{print $1}')"
+          test "$ACTUAL_APK_SHA" = "$EXPECTED_APK_SHA" || { echo "Persisted APK checksum mismatch" >&2; exit 52; }
+          APK_SIGNER="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          test "$APK_SIGNER" = "$EXPECTED_SIGNER" || { echo "Persisted APK signer mismatch" >&2; exit 53; }
+          echo "PERSISTED_APK_GATE=PASS"
+          echo "PAYMENT_ACTION=NONE"
+          echo "HARDWARE_EJECTION_ACTION=NONE"
+          echo "CHARGENOW_ACTION=NONE"
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" \
+              | tr -d '\r' \
+              | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" \
+              | head -1
+          }
+
+          SERIAL=""
+
+          # First reproduce the exact route that succeeded during the 1.0.58 field migration.
+          if "$ADB" -s "$TARGET_MDNS" get-state >/dev/null 2>&1; then
+            SERIAL="$TARGET_MDNS"
+          fi
+
+          # If mDNS has a fresh endpoint, connect to that endpoint without logging its address.
+          if [ -z "$SERIAL" ]; then
+            ENDPOINT="$("$ADB" mdns services 2>/dev/null \
+              | awk '$1 ~ /^adb-3d24b8cbb7d560bc-r6qk3T/ {print $3; exit}')"
+            if [ -n "$ENDPOINT" ]; then
+              "$ADB" connect "$ENDPOINT" >/dev/null 2>&1 || true
+              if "$ADB" -s "$ENDPOINT" get-state >/dev/null 2>&1; then
+                SERIAL="$ENDPOINT"
+              fi
+            fi
+          fi
+
+          # Last read-only fallback: inspect already-authorized devices and select only the exact binding.
+          if [ -z "$SERIAL" ]; then
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              station="$(read_pref "$candidate" chargeurs_kiosk_config station_id || true)"
+              device_id="$(read_pref "$candidate" chargeurs_device_identity public_id || true)"
+              if [ "$station" = "$TARGET_STATION" ] && [ "$device_id" = "$EXPECTED_DEVICE_PUBLIC_ID" ]; then
+                SERIAL="$candidate"
+                break
+              fi
+            done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
+          fi
+
+          [ -n "$SERIAL" ] || { echo "ADB_TARGET_UNAVAILABLE=DTA21277" >&2; exit 54; }
+
+          STATION_ID="$(read_pref "$SERIAL" chargeurs_kiosk_config station_id || true)"
+          DEVICE_ID="$(read_pref "$SERIAL" chargeurs_device_identity public_id || true)"
+          [ "$STATION_ID" = "$TARGET_STATION" ] || { echo "Station binding mismatch" >&2; exit 55; }
+          [ "$DEVICE_ID" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || { echo "Device identity mismatch" >&2; exit 56; }
+          echo "ADB_TARGET_CONFIRMED=DTA21277"
+
+          DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          OLD_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          OLD_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          case "$OLD_CODE" in
+            158|159) ;;
+            *) echo "Unexpected installed versionCode=$OLD_CODE" >&2; exit 57 ;;
+          esac
+
+          BASE_PATH="$("$ADB" -s "$SERIAL" shell pm path "$PKG" | head -1 | sed 's/^package://' | tr -d '\r')"
+          [ -n "$BASE_PATH" ] || exit 58
+          BACKUP_DIR="$HOME/chargeurs-field-backups/dta21277-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BACKUP_DIR"
+          chmod 700 "$BACKUP_DIR"
+          "$ADB" -s "$SERIAL" pull "$BASE_PATH" "$BACKUP_DIR/pre-update-base.apk" >/dev/null
+
+          OLD_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/pre-update-base.apk" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "Installed signer mismatch" >&2; exit 59; }
+
+          BEFORE_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          [ -n "$BEFORE_CONFIG_SHA" ] || exit 60
+          echo "INSTALLED_BEFORE_VERSION_CODE=$OLD_CODE"
+          echo "INSTALLED_BEFORE_VERSION_NAME=$OLD_NAME"
+          echo "INSTALLED_SIGNER_GATE=PASS"
+
+          if [ "$OLD_CODE" = "158" ]; then
+            INSTALL_OUT="$("$ADB" -s "$SERIAL" install -r "$APK" 2>&1)" || {
+              printf '%s\n' "$INSTALL_OUT" >&2
+              exit 61
+            }
+            printf '%s\n' "$INSTALL_OUT" | grep -q 'Success' || { printf '%s\n' "$INSTALL_OUT" >&2; exit 62; }
+            echo "IN_PLACE_UPDATE=PASS"
+          else
+            echo "IN_PLACE_UPDATE=ALREADY_VERSION_159"
+          fi
+
+          AFTER_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          if [ "$AFTER_CONFIG_SHA" != "$BEFORE_CONFIG_SHA" ]; then
+            echo "Secure config changed during package replacement; attempting rollback" >&2
+            "$ADB" -s "$SERIAL" install -r -d "$BACKUP_DIR/pre-update-base.apk" >/dev/null 2>&1 || true
+            exit 63
+          fi
+
+          FINAL_DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          FINAL_CODE="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          FINAL_NAME="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ "$FINAL_CODE" = "159" ] || exit 64
+          [ "$(read_pref "$SERIAL" chargeurs_kiosk_config station_id || true)" = "$TARGET_STATION" ] || exit 65
+          [ "$(read_pref "$SERIAL" chargeurs_device_identity public_id || true)" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || exit 66
+
+          "$ADB" -s "$SERIAL" shell am force-stop "$PKG" >/dev/null 2>&1 || true
+          "$ADB" -s "$SERIAL" shell am start -W -n "$PKG/ch.chargeurs.kiosk.MainActivity" >/dev/null
+          sleep 5
+
+          echo "FINAL_VERSION_CODE=$FINAL_CODE"
+          echo "FINAL_VERSION_NAME=$FINAL_NAME"
+          echo "SECURE_CONFIG_PRESERVED=PASS"
+          echo "DEVICE_BINDING_PRESERVED=PASS"
+          echo "DTA21277_CLOUDFLARE_UPDATE=PASS"
