@@ -1,0 +1,58 @@
+name: DTA21277 wireless ADB visibility
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-adb-visibility.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 5
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - name: Classify ADB services without exposing endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADB="${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb"
+          [ -x "$ADB" ] || { echo "ADB_TOOL=FAIL"; exit 2; }
+          "$ADB" start-server >/dev/null 2>&1 || true
+          sleep 2
+
+          SERVICES="$("$ADB" mdns services 2>/dev/null || true)"
+          CONNECT_COUNT="$(printf '%s\n' "$SERVICES" | grep -c '_adb-tls-connect\._tcp' || true)"
+          PAIR_COUNT="$(printf '%s\n' "$SERVICES" | grep -c '_adb-tls-pairing\._tcp' || true)"
+          TARGET_CONNECT_COUNT="$(printf '%s\n' "$SERVICES" | grep -E 'adb-3d24b8cbb7d560bc-r6qk3T.*_adb-tls-connect\._tcp' | wc -l | tr -d ' ' || true)"
+          TARGET_PAIR_COUNT="$(printf '%s\n' "$SERVICES" | grep -E 'adb-3d24b8cbb7d560bc-r6qk3T.*_adb-tls-pairing\._tcp' | wc -l | tr -d ' ' || true)"
+
+          STATES="$("$ADB" devices | awk 'NR>1 && NF>=2 {print $2}' || true)"
+          DEVICE_COUNT="$(printf '%s\n' "$STATES" | grep -c '^device$' || true)"
+          UNAUTHORIZED_COUNT="$(printf '%s\n' "$STATES" | grep -c '^unauthorized$' || true)"
+          OFFLINE_COUNT="$(printf '%s\n' "$STATES" | grep -c '^offline$' || true)"
+
+          echo "ADB_MDNS_CONNECT_SERVICE_COUNT=$CONNECT_COUNT"
+          echo "ADB_MDNS_PAIRING_SERVICE_COUNT=$PAIR_COUNT"
+          echo "DTA21277_HISTORICAL_CONNECT_SERVICE_COUNT=${TARGET_CONNECT_COUNT:-0}"
+          echo "DTA21277_HISTORICAL_PAIRING_SERVICE_COUNT=${TARGET_PAIR_COUNT:-0}"
+          echo "ADB_STATE_DEVICE_COUNT=$DEVICE_COUNT"
+          echo "ADB_STATE_UNAUTHORIZED_COUNT=$UNAUTHORIZED_COUNT"
+          echo "ADB_STATE_OFFLINE_COUNT=$OFFLINE_COUNT"
+
+          if [ "$TARGET_CONNECT_COUNT" -gt 0 ] && [ "$DEVICE_COUNT" -eq 0 ]; then
+            echo "DIAGNOSIS=TARGET_CONNECT_VISIBLE_BUT_NOT_AUTHORIZED"
+          elif [ "$TARGET_PAIR_COUNT" -gt 0 ]; then
+            echo "DIAGNOSIS=TARGET_PAIRING_SERVICE_VISIBLE"
+          elif [ "$PAIR_COUNT" -gt 0 ] && [ "$CONNECT_COUNT" -eq 0 ]; then
+            echo "DIAGNOSIS=PAIRING_SERVICE_ONLY"
+          elif [ "$CONNECT_COUNT" -gt 0 ]; then
+            echo "DIAGNOSIS=NONMATCHING_CONNECT_SERVICE_VISIBLE"
+          else
+            echo "DIAGNOSIS=NO_CONNECTABLE_ADB_SERVICE"
+          fi
