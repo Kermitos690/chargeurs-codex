@@ -1,3 +1,6 @@
+const SUPABASE_URL = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
+const PUBLIC_KEY = "sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d";
+
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
   headers: {
@@ -7,7 +10,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
   },
 });
 
-async function probe(url) {
+async function probeGet(url) {
   const started = Date.now();
   try {
     const response = await fetch(url, { method: "GET", redirect: "manual" });
@@ -28,12 +31,42 @@ async function probe(url) {
   }
 }
 
+async function probeRecover() {
+  const started = Date.now();
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        apikey: PUBLIC_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email: "nobody@example.invalid" }),
+    });
+    return {
+      ok: true,
+      status: response.status,
+      contentType: response.headers.get("content-type") || null,
+      location: response.headers.get("location") || null,
+      elapsedMs: Date.now() - started,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      name: error instanceof Error ? error.name : null,
+      error: error instanceof Error ? error.message : String(error),
+      elapsedMs: Date.now() - started,
+    };
+  }
+}
+
 export async function onRequestGet() {
-  const [external, supabase] = await Promise.all([
-    probe("https://example.com/"),
-    probe("https://xqepbqnaenoeyfjkjnzl.supabase.co/auth/v1/health"),
+  const [external, supabase, recover] = await Promise.all([
+    probeGet("https://example.com/"),
+    probeGet(`${SUPABASE_URL}/auth/v1/health`),
+    probeRecover(),
   ]);
-  return json({ ok: true, version: 1, external, supabase });
+  return json({ ok: true, version: 2, external, supabase, recover });
 }
 
 export function onRequest() {
