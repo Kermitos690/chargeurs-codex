@@ -2,8 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(
+const originalV3Migration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260827010000_pilot_pricing_rules_v3.sql"),
+  "utf8",
+);
+const finalMemberMigration = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827030000_member_pricing_v3_final.sql"),
   "utf8",
 );
 const frozenPricing = readFileSync(
@@ -15,40 +19,57 @@ const v3Tests = readFileSync(
   "utf8",
 );
 
+const finalPricingDocs = [
+  readFileSync(resolve(process.cwd(), "README.md"), "utf8"),
+  readFileSync(resolve(process.cwd(), "PRICING_ENGINE.md"), "utf8"),
+  readFileSync(resolve(process.cwd(), "docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md"), "utf8"),
+].join("\n");
+
 describe("approved pilot pricing v3", () => {
   it("keeps Express public tiers unchanged", () => {
-    expect(migration).toContain("values (30,190),(120,390),(360,590),(1440,790)");
-    expect(migration).not.toContain("delete from public.price_profile_tiers");
+    expect(originalV3Migration).toContain("values (30,190),(120,390),(360,590),(1440,790)");
+    expect(originalV3Migration).not.toContain("delete from public.price_profile_tiers");
+    expect(finalMemberMigration).toContain("(VALUES (30,190),(120,390),(360,590),(1440,790))");
   });
 
-  it("encodes member pricing as CHF 1 then +CHF 0.40 per started 30 minutes with CHF 5.90 daily cap", () => {
-    expect(migration).toContain("initial_fee_cents = 60");
-    expect(migration).toContain("period_minutes = 30");
-    expect(migration).toContain("price_per_period_cents = 40");
-    expect(migration).toContain("daily_cap_cents = 590");
-    expect(migration).toContain("min_amount_cents = 100");
-    expect(v3Tests).toContain("[30, 100]");
-    expect(v3Tests).toContain("[31, 140]");
-    expect(v3Tests).toContain("[420, 590]");
+  it("encodes CHF 2 through 2h then +CHF 1 per started hour with a CHF 5.90 daily cap", () => {
+    expect(finalMemberMigration).toContain("initial_fee_cents = 100");
+    expect(finalMemberMigration).toContain("included_minutes = 60");
+    expect(finalMemberMigration).toContain("period_minutes = 60");
+    expect(finalMemberMigration).toContain("price_per_period_cents = 100");
+    expect(finalMemberMigration).toContain("daily_cap_cents = 590");
+    expect(finalMemberMigration).toContain("min_amount_cents = 200");
+    expect(v3Tests).toContain("[120, 200]");
+    expect(v3Tests).toContain("[121, 300]");
+    expect(v3Tests).toContain("[301, 590]");
+    expect(finalPricingDocs).toContain("CHF 2");
+    expect(finalPricingDocs).toContain("CHF 1");
+  });
+
+  it("tests both authoritative DB calculators at all commercial boundaries", () => {
+    expect(finalMemberMigration).toContain("compute_customer_pricing_snapshot");
+    expect(finalMemberMigration).toContain("customer_wallet_pricing_state");
+    expect(finalMemberMigration).toContain("(1441,1180)");
+    expect(finalMemberMigration).toContain("(4319,1770)");
+    expect(finalMemberMigration).toContain("(4320,3000)");
   });
 
   it("defines non-return at 72h as CHF 30 total, not an additive penalty", () => {
-    expect(migration).toContain("unreturned_fee_cents = 3000");
-    expect(migration).toContain("unreturned_after_minutes = 4320");
-    expect(migration).toContain("'type', 'non_return_total'");
+    expect(finalMemberMigration).toContain("unreturned_fee_cents = 3000");
+    expect(finalMemberMigration).toContain("unreturned_after_minutes = 4320");
     expect(frozenPricing).toContain('type: "non_return_total"');
     expect(v3Tests).toContain("assertEquals(result.final_cents, 3000)");
   });
 
-  it("introduces v3 without reinterpreting existing v1/v2 rental snapshots", () => {
+  it("corrects new rentals without rewriting historical rental snapshots", () => {
     expect(frozenPricing).toContain("pricingRulesVersion: 1 | 2 | 3");
     expect(frozenPricing).toContain("Preserve v2 historical semantics exactly");
-    expect(migration).toContain("Existing rental_sessions are never rewritten");
-    expect(migration).not.toContain("update public.rental_sessions");
+    expect(finalMemberMigration).toContain("does not touch rental_sessions");
+    expect(finalMemberMigration).not.toMatch(/UPDATE\s+public\.rental_sessions/i);
   });
 
   it("keeps all three pilot stations mapped for guest and member pricing", () => {
-    expect(migration).toContain("('DTA21269'),('DTA21277'),('DTA22032')");
-    expect(migration).toContain("('guest'),('member')");
+    expect(finalMemberMigration).toContain("('DTA21269'),('DTA21277'),('DTA22032')");
+    expect(finalMemberMigration).toContain("('guest'),('member')");
   });
 });
