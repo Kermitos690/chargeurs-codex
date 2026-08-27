@@ -1,0 +1,199 @@
+name: DTA21277 Cloudflare install with proven ADB discovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-cloudflare-install-retry.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-cloudflare-install-retry
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 12
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - name: Reconnect and update DTA21277 only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_STATION="DTA21277"
+          TARGET_MDNS="adb-3d24b8cbb7d560bc-r6qk3T._adb-tls-connect._tcp"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          EXPECTED_SIGNER="1e4d4c12ec3b21a3ff7186fb7bdcf4097f13b0a8d7a6b6fc7ba7dbebd92042f6"
+          EXPECTED_APK_SHA="a5676e95c63ca83f88b6dea19a8a57a75b2d5ffed3fd22be29cc3c61f0184205"
+          PKG="ch.chargeurs.kiosk.staging"
+          APK="$HOME/chargeurs-builds/dta21277/cloudflare-159/Chargeurs_CH_Kiosk_1.0.59-terminal-sdk580-cloudflare-runtime-staging.apk"
+          ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          ADB="$ANDROID_HOME_VALUE/platform-tools/adb"
+
+          JAVA_HOME_VALUE=""
+          for candidate in \
+            "${JAVA_HOME:-}" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-x64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-aarch64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+          do
+            if [ -n "$candidate" ] && [ -x "$candidate/bin/java" ]; then
+              JAVA_HOME_VALUE="$candidate"
+              break
+            fi
+          done
+          [ -n "$JAVA_HOME_VALUE" ] || { echo "JAVA_GATE=FAIL"; exit 70; }
+          export JAVA_HOME="$JAVA_HOME_VALUE" PATH="$JAVA_HOME_VALUE/bin:$PATH"
+
+          APKSIGNER="$ANDROID_HOME_VALUE/build-tools/36.0.0/apksigner"
+          if [ ! -x "$APKSIGNER" ]; then
+            APKSIGNER="$(find "$ANDROID_HOME_VALUE/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | tail -1 || true)"
+          fi
+
+          [ -s "$APK" ] || { echo "PERSISTED_APK_GATE=FAIL missing"; exit 71; }
+          [ -x "$ADB" ] || { echo "ADB_TOOL_GATE=FAIL"; exit 72; }
+          [ -x "$APKSIGNER" ] || { echo "APKSIGNER_TOOL_GATE=FAIL"; exit 73; }
+          [ "$(shasum -a 256 "$APK" | awk '{print $1}')" = "$EXPECTED_APK_SHA" ] || { echo "APK_CHECKSUM_GATE=FAIL"; exit 74; }
+
+          NEW_SIGNER="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$NEW_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "APK_SIGNER_GATE=FAIL"; exit 75; }
+          echo "PERSISTED_APK_GATE=PASS"
+          echo "PAYMENT_ACTION=NONE"
+          echo "HARDWARE_EJECTION_ACTION=NONE"
+          echo "CHARGENOW_ACTION=NONE"
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" 2>/dev/null \
+              | tr -d '\r' \
+              | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" \
+              | head -1
+          }
+
+          target_matches() {
+            local serial="$1" station device
+            "$ADB" -s "$serial" get-state >/dev/null 2>&1 || return 1
+            station="$(read_pref "$serial" chargeurs_kiosk_config station_id || true)"
+            device="$(read_pref "$serial" chargeurs_device_identity public_id || true)"
+            [ "$station" = "$TARGET_STATION" ] && [ "$device" = "$EXPECTED_DEVICE_PUBLIC_ID" ]
+          }
+
+          "$ADB" start-server >/dev/null 2>&1 || true
+          if "$ADB" mdns check >/dev/null 2>&1; then
+            echo "ADB_MDNS_BACKEND=PASS"
+          else
+            echo "ADB_MDNS_BACKEND=UNAVAILABLE"
+          fi
+
+          SERIAL=""
+          for attempt in 1 2 3 4 5 6; do
+            echo "ADB_DISCOVERY_ATTEMPT=$attempt"
+
+            if target_matches "$TARGET_MDNS"; then
+              SERIAL="$TARGET_MDNS"
+              echo "ADB_TARGET_PATH=EXACT_MDNS"
+              break
+            fi
+
+            SERVICES="$("$ADB" mdns services 2>/dev/null || true)"
+            while IFS= read -r endpoint; do
+              [ -n "$endpoint" ] || continue
+              "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+            done < <(printf '%s\n' "$SERVICES" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' | sort -u || true)
+
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if target_matches "$candidate"; then
+                SERIAL="$candidate"
+                echo "ADB_TARGET_PATH=DISCOVERED_AUTHORIZED"
+                break
+              fi
+            done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
+
+            [ -z "$SERIAL" ] || break
+            sleep 2
+          done
+
+          if [ -z "$SERIAL" ]; then
+            AUTH_COUNT="$("$ADB" devices | awk 'NR>1 && $2 == "device" {n++} END {print n+0}')"
+            SERVICE_COUNT="$("$ADB" mdns services 2>/dev/null | awk 'NF {n++} END {print n+0}' || true)"
+            echo "ADB_AUTHORIZED_DEVICE_COUNT=${AUTH_COUNT:-0}"
+            echo "ADB_MDNS_SERVICE_COUNT=${SERVICE_COUNT:-0}"
+            echo "DTA21277_UPDATE=BLOCKED_ADB_NOT_REACHABLE"
+            exit 76
+          fi
+
+          echo "ADB_TARGET_CONFIRMED=DTA21277"
+
+          DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          OLD_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          OLD_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          case "$OLD_CODE" in
+            158|159) ;;
+            *) echo "INSTALLED_VERSION_GATE=FAIL"; exit 77 ;;
+          esac
+
+          INSTALLED_PATH="$("$ADB" -s "$SERIAL" shell pm path "$PKG" | tr -d '\r' | sed -n 's/^package://p' | head -1)"
+          [ -n "$INSTALLED_PATH" ] || { echo "INSTALLED_APK_PATH_GATE=FAIL"; exit 78; }
+
+          BACKUP_DIR="$HOME/chargeurs-field-backups/dta21277-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BACKUP_DIR"
+          chmod 700 "$BACKUP_DIR"
+          "$ADB" -s "$SERIAL" pull "$INSTALLED_PATH" "$BACKUP_DIR/pre-update-base.apk" >/dev/null
+
+          OLD_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/pre-update-base.apk" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "INSTALLED_SIGNER_GATE=FAIL"; exit 79; }
+
+          BEFORE_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          [ -n "$BEFORE_CONFIG_SHA" ] || { echo "SECURE_CONFIG_PREFLIGHT=FAIL"; exit 80; }
+
+          echo "INSTALLED_BEFORE_VERSION_CODE=$OLD_CODE"
+          echo "INSTALLED_BEFORE_VERSION_NAME=$OLD_NAME"
+          echo "INSTALLED_SIGNER_GATE=PASS"
+
+          if [ "$OLD_CODE" = "158" ]; then
+            INSTALL_OUT="$("$ADB" -s "$SERIAL" install -r "$APK" 2>&1)" || {
+              echo "IN_PLACE_UPDATE=FAIL"
+              printf '%s\n' "$INSTALL_OUT" >&2
+              exit 81
+            }
+            printf '%s\n' "$INSTALL_OUT" | grep -q 'Success' || { echo "IN_PLACE_UPDATE=FAIL"; exit 82; }
+            echo "IN_PLACE_UPDATE=PASS"
+          else
+            echo "IN_PLACE_UPDATE=ALREADY_VERSION_159"
+          fi
+
+          AFTER_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          if [ "$AFTER_CONFIG_SHA" != "$BEFORE_CONFIG_SHA" ]; then
+            echo "SECURE_CONFIG_PRESERVED=FAIL"
+            "$ADB" -s "$SERIAL" install -r -d "$BACKUP_DIR/pre-update-base.apk" >/dev/null 2>&1 || true
+            exit 83
+          fi
+
+          FINAL_DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          FINAL_CODE="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          FINAL_NAME="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ "$FINAL_CODE" = "159" ] || { echo "FINAL_VERSION_GATE=FAIL"; exit 84; }
+          target_matches "$SERIAL" || { echo "FINAL_BINDING_GATE=FAIL"; exit 85; }
+
+          "$ADB" -s "$SERIAL" shell am force-stop "$PKG" >/dev/null 2>&1 || true
+          "$ADB" -s "$SERIAL" shell am start -W -n "$PKG/ch.chargeurs.kiosk.MainActivity" >/dev/null
+          sleep 5
+
+          echo "FINAL_VERSION_CODE=$FINAL_CODE"
+          echo "FINAL_VERSION_NAME=$FINAL_NAME"
+          echo "SECURE_CONFIG_PRESERVED=PASS"
+          echo "DEVICE_BINDING_PRESERVED=PASS"
+          echo "DTA21277_CLOUDFLARE_UPDATE=PASS"
