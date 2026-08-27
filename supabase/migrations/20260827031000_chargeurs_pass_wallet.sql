@@ -26,6 +26,7 @@ declare
 begin
   if p_user_id is null or p_amount_cents=0 or coalesce(trim(p_idempotency_key),'')='' then raise exception 'WALLET_ENTRY_INVALID'; end if;
   if p_type not in ('credit','debit','hold','release','refund','adjust','bonus','topup') then raise exception 'WALLET_ENTRY_TYPE_INVALID'; end if;
+  if p_credit_kind not in ('paid','promo','refund','reservation','other') then raise exception 'WALLET_CREDIT_KIND_INVALID'; end if;
 
   insert into public.wallets(user_id,currency) values(p_user_id,'CHF')
   on conflict(user_id,currency) do nothing;
@@ -34,7 +35,18 @@ begin
 
   select * into v_entry from public.wallet_ledger where idempotency_key=p_idempotency_key;
   if found then
-    if v_entry.wallet_id<>v_wallet.id or v_entry.amount_cents<>p_amount_cents then raise exception 'WALLET_IDEMPOTENCY_CONFLICT'; end if;
+    if v_entry.wallet_id<>v_wallet.id
+       or v_entry.amount_cents<>p_amount_cents
+       or v_entry.type<>p_type
+       or v_entry.credit_kind<>p_credit_kind
+       or v_entry.source_type is distinct from p_source_type
+       or v_entry.source_id is distinct from p_source_id
+       or v_entry.campaign_id is distinct from p_campaign_id
+       or v_entry.reward_id is distinct from p_reward_id
+       or v_entry.ref_rental_session_id is distinct from p_ref_rental_session_id
+       or v_entry.ref_stripe_id is distinct from p_ref_stripe_id then
+      raise exception 'WALLET_IDEMPOTENCY_CONFLICT';
+    end if;
     return query select v_entry.id,v_wallet.id,coalesce(v_entry.balance_after_cents,0),false;
     return;
   end if;
@@ -72,6 +84,10 @@ declare
   v_entry record;
   v_enrollment_id uuid;
 begin
+  if coalesce(trim(p_stripe_checkout_session_id),'')='' or coalesce(trim(p_stripe_payment_intent_id),'')='' then
+    raise exception 'PASS_TOPUP_STRIPE_REFERENCE_REQUIRED';
+  end if;
+
   select * into v_topup from public.wallet_topups where id=p_topup_id for update;
   if not found then raise exception 'PASS_TOPUP_NOT_FOUND'; end if;
   select * into v_wallet from public.wallets where id=v_topup.wallet_id for update;
@@ -79,11 +95,14 @@ begin
   select * into v_campaign from public.loyalty_campaigns where id=v_topup.campaign_id for update;
   if not found or v_campaign.code<>'launch_offer_45' then raise exception 'PASS_CAMPAIGN_INVALID'; end if;
 
+  if v_topup.payment_purpose is distinct from 'chargeurs_pass_topup' then raise exception 'PASS_TOPUP_PURPOSE_MISMATCH'; end if;
   if upper(coalesce(p_currency,''))<>upper(v_campaign.currency)
      or p_amount_cents<>v_campaign.purchase_price_cents
      or v_topup.amount_cents<>v_campaign.purchase_price_cents
      or upper(v_topup.currency)<>upper(v_campaign.currency) then raise exception 'PASS_TOPUP_AMOUNT_MISMATCH'; end if;
   if v_topup.stripe_checkout_session_id is distinct from p_stripe_checkout_session_id then raise exception 'PASS_TOPUP_CHECKOUT_MISMATCH'; end if;
+  if v_topup.stripe_payment_intent_id is not null
+     and v_topup.stripe_payment_intent_id is distinct from p_stripe_payment_intent_id then raise exception 'PASS_TOPUP_PAYMENT_INTENT_MISMATCH'; end if;
 
   select * into v_entry from public.append_wallet_entry_server(
     v_wallet.user_id,v_campaign.purchased_credit_cents,'topup','pass_topup:'||p_stripe_checkout_session_id,
