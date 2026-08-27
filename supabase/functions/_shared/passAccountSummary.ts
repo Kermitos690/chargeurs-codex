@@ -3,7 +3,12 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0
 export async function loadPassAccountSummary(db: SupabaseClient, userId: string) {
   const nowIso = new Date().toISOString();
 
-  const [{ data: wallet, error: walletError }, { data: campaign, error: campaignError }, { data: pricing, error: pricingError }] = await Promise.all([
+  const [
+    { data: wallet, error: walletError },
+    { data: campaign, error: campaignError },
+    { data: pricing, error: pricingError },
+    { data: chargePoints, error: chargePointsError },
+  ] = await Promise.all([
     db.from("wallets").select("id,currency,created_at,updated_at").eq("user_id", userId).eq("currency", "CHF").maybeSingle(),
     db.from("loyalty_campaigns")
       .select("id,code,name,description,currency,purchase_price_cents,purchased_credit_cents,reward_value_cap_cents,active,valid_from,valid_to,config")
@@ -12,10 +17,15 @@ export async function loadPassAccountSummary(db: SupabaseClient, userId: string)
     db.from("price_profiles")
       .select("id,name,currency,version,initial_fee_cents,period_minutes,price_per_period_cents,min_amount_cents,daily_cap_cents,total_cap_cents,max_amount_cents,deposit_cents,unreturned_fee_cents,unreturned_after_minutes")
       .eq("name", "Chargeurs.ch Client").eq("active", true).order("priority", { ascending: false }).limit(1).maybeSingle(),
+    db.from("customer_chargepoints_balances")
+      .select("balance,last_activity_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
   if (walletError) throw new Error("PASS_WALLET_UNAVAILABLE");
   if (campaignError) throw new Error("PASS_CAMPAIGN_UNAVAILABLE");
   if (pricingError) throw new Error("PASS_PRICING_UNAVAILABLE");
+  if (chargePointsError) throw new Error("PASS_CHARGEPOINTS_UNAVAILABLE");
 
   let balanceCents = 0;
   let walletLastActivityAt: string | null = null;
@@ -32,9 +42,15 @@ export async function loadPassAccountSummary(db: SupabaseClient, userId: string)
     walletLastActivityAt = lastEntry?.created_at ?? null;
   }
 
+  const chargePointsSummary = {
+    balance: Number(chargePoints?.balance ?? 0),
+    lastActivityAt: chargePoints?.last_activity_at ?? null,
+  };
+
   if (!campaign) {
     return {
       wallet: { balanceCents, currency: "CHF", lastActivityAt: walletLastActivityAt },
+      chargePoints: chargePointsSummary,
       launchOffer: null,
       pricing: pricing ?? null,
     };
@@ -89,6 +105,7 @@ export async function loadPassAccountSummary(db: SupabaseClient, userId: string)
 
   return {
     wallet: { balanceCents, currency: "CHF", lastActivityAt: walletLastActivityAt },
+    chargePoints: chargePointsSummary,
     launchOffer: {
       campaign,
       enrollment: enrollment ?? null,
