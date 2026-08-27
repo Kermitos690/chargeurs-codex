@@ -1,5 +1,4 @@
 const PUBLIC_CONTACT_URL = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/public-contact";
-const STABLE_CLOUDFLARE_ORIGIN = "https://chargeurs-ch-staging-cf.pages.dev";
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -11,41 +10,26 @@ function json(body, status = 200) {
   });
 }
 
-function isTrustedCloudflareRequest(request) {
-  const url = new URL(request.url);
-  const host = url.hostname;
-  const allowedHost = host === "chargeurs-ch-staging-cf.pages.dev" || host.endsWith(".chargeurs-ch-staging-cf.pages.dev");
-  if (!allowedHost) return false;
-
-  const expectedOrigin = `https://${host}`;
-  const origin = request.headers.get("Origin");
-  if (origin) return origin === expectedOrigin;
-
-  const referer = request.headers.get("Referer");
-  if (referer) {
-    try {
-      return new URL(referer).origin === expectedOrigin;
-    } catch {
-      return false;
-    }
-  }
-
-  const fetchSite = request.headers.get("Sec-Fetch-Site");
-  return fetchSite === "same-origin" || fetchSite === "same-site";
+function isCloudflareProjectHost(request) {
+  const host = new URL(request.url).hostname;
+  return host === "chargeurs-ch-staging-cf.pages.dev" || host.endsWith(".chargeurs-ch-staging-cf.pages.dev");
 }
 
 export async function onRequest(context) {
   const method = context.request.method.toUpperCase();
-  if (method === "OPTIONS") return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
-  if (method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
-
-  if (!isTrustedCloudflareRequest(context.request)) {
-    return json({ ok: false, error: "ORIGIN_FORBIDDEN" }, 403);
+  if (method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
+  if (method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+  if (!isCloudflareProjectHost(context.request)) return json({ ok: false, error: "HOST_FORBIDDEN" }, 403);
 
+  const requestUrl = new URL(context.request.url);
   const headers = new Headers();
   headers.set("Content-Type", "application/json");
-  headers.set("Origin", STABLE_CLOUDFLARE_ORIGIN);
+  headers.set("Origin", `https://${requestUrl.hostname}`);
 
   const authorization = context.request.headers.get("Authorization");
   if (authorization) headers.set("Authorization", authorization);
