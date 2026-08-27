@@ -67,18 +67,20 @@ export default defineConfig(({ mode }) => ({
         // Let a downloaded fix take control immediately; the current page is not
         // force-reloaded, avoiding any interruption to an active transaction.
         skipWaiting: true,
-        // OAuth callback and admin routes must never be served from cache / fallback.
+        // OAuth callback, account and admin routes must never be served from the
+        // kiosk navigation fallback. Account auth must always use the fresh shell.
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/~oauth/, /^\/admin/, /\/functions\//, /\/rest\//, /\/auth\//],
+        navigateFallbackDenylist: [/^\/~oauth/, /^\/admin/, /^\/compte/, /\/functions\//, /\/rest\//, /\/auth\//],
         runtimeCaching: [
           {
             // HTML navigations: network-first for public/kiosk pages only.
-            // Admin stays network-only so an old kiosk worker can never serve
-            // a stale authentication bundle on Safari or another browser.
+            // Account and admin stay out of the kiosk cache so Safari can never
+            // revive an old authentication bundle after a deployment.
             urlPattern: ({ url, request, sameOrigin }) =>
               sameOrigin
               && request.mode === "navigate"
               && !url.pathname.startsWith("/admin")
+              && !url.pathname.startsWith("/compte")
               && !url.pathname.startsWith("/~oauth"),
             handler: "NetworkFirst",
             options: {
