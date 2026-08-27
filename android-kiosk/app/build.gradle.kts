@@ -44,8 +44,10 @@ val stagingSigningReady = listOf(
 ).all { it.isNotBlank() } && file(stagingStorePath.get()).isFile
 
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
+// Keep the durable enrollment origin stable so already-paired kiosks can reuse
+// their encrypted credential after the frontend runtime moves to Cloudflare.
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
-val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-cf.pages.dev"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -60,15 +62,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // The DTA21269 currently runs versionCode 141. A normal Android
-        // upgrade must increase this value; no downgrade install is permitted.
-        // 1.0.50 is a temporary STAGING simulator build.  1.0.51 is the
-        // normal WisePad build that can restore it in-place afterwards.
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 151
+        // The DTA21269 currently reports a pre-1.0.50 staging runtime. Keep the
+        // reconnect artifact safely above every deployed staging version.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 152
         versionName = if (stagingSimulatedTerminalReaderVersion)
             "1.0.50-terminal-simulated-reader-reconcile"
         else
-            "1.0.51-terminal-simulated-reader-restore"
+            "1.0.52-cloudflare-runtime-reconnect"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
