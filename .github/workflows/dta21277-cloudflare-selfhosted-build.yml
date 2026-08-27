@@ -94,7 +94,6 @@ jobs:
           ./gradlew --no-daemon --console=plain clean testDebugUnitTest lintStaging assembleStaging
 
       - name: Verify APK identity and fail-closed contract
-        id: verify
         shell: bash
         run: |
           set -euo pipefail
@@ -113,10 +112,7 @@ jobs:
           signer="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null \
             | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
             | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
-          test "$signer" = "$EXPECTED_SIGNER" || {
-            echo "Built APK signer mismatch" >&2
-            exit 24
-          }
+          test "$signer" = "$EXPECTED_SIGNER" || { echo "Built APK signer mismatch" >&2; exit 24; }
 
           grep -F 'implementation("com.stripe:stripeterminal:5.8.0")' android-kiosk/app/build.gradle.kts
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' android-kiosk/app/build.gradle.kts
@@ -140,14 +136,126 @@ jobs:
           paymentMode=TEST_ONLY
           signerCertificateSha256=$signer
           apkSha256=$APK_SHA
-          installAction=NONE
+          installAction=ADB_INSTALL_R_DTA21277_ONLY
           EOF
-          echo "artifact_name=$NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Upload verified APK only
-        uses: actions/upload-artifact@v4
-        with:
-          name: dta21277-${{ steps.verify.outputs.artifact_name }}
-          retention-days: 7
-          if-no-files-found: error
-          path: dist/*
+          PERSIST_DIR="$HOME/chargeurs-builds/dta21277/cloudflare-159"
+          mkdir -p "$PERSIST_DIR"
+          chmod 700 "$HOME/chargeurs-builds" "$HOME/chargeurs-builds/dta21277" "$PERSIST_DIR" 2>/dev/null || true
+          cp dist/* "$PERSIST_DIR/"
+          echo "VERIFIED_APK=$PERSIST_DIR/$NAME" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$APK_SHA" >> "$GITHUB_ENV"
+          echo "VERIFIED_APK_SHA256=$APK_SHA"
+          echo "APK_CONTRACT_GATE=PASS"
+
+      - name: Install in place on DTA21277 only
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TARGET_STATION="DTA21277"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          EXPECTED_SIGNER="1e4d4c12ec3b21a3ff7186fb7bdcf4097f13b0a8d7a6b6fc7ba7dbebd92042f6"
+          PKG="ch.chargeurs.kiosk.staging"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -1)"
+          test -s "$VERIFIED_APK" && test -x "$ADB" && test -x "$APKSIGNER"
+
+          echo "TARGET_STATION=$TARGET_STATION"
+          echo "PAYMENT_ACTION=NONE"
+          echo "HARDWARE_EJECTION_ACTION=NONE"
+          echo "CHARGENOW_ACTION=NONE"
+
+          while IFS= read -r endpoint; do
+            [ -n "$endpoint" ] || continue
+            "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+          done < <("$ADB" mdns services 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' | sort -u || true)
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" \
+              | tr -d '\r' \
+              | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" \
+              | head -1
+          }
+
+          SERIAL=""
+          while IFS= read -r candidate; do
+            [ -n "$candidate" ] || continue
+            station="$(read_pref "$candidate" chargeurs_kiosk_config station_id || true)"
+            device_id="$(read_pref "$candidate" chargeurs_device_identity public_id || true)"
+            if [ "$station" = "$TARGET_STATION" ] && [ "$device_id" = "$EXPECTED_DEVICE_PUBLIC_ID" ]; then
+              SERIAL="$candidate"
+              break
+            fi
+          done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
+
+          [ -n "$SERIAL" ] || { echo "DTA21277 is not reachable over authorized ADB" >&2; exit 31; }
+          echo "ADB_TARGET_CONFIRMED=$TARGET_STATION"
+
+          DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          OLD_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          OLD_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          case "$OLD_CODE" in
+            158|159) ;;
+            *) echo "Unexpected installed versionCode=$OLD_CODE" >&2; exit 32 ;;
+          esac
+
+          BASE_PATH="$("$ADB" -s "$SERIAL" shell pm path "$PKG" | head -1 | sed 's/^package://' | tr -d '\r')"
+          [ -n "$BASE_PATH" ] || { echo "Installed APK path unavailable" >&2; exit 33; }
+          BACKUP_DIR="$HOME/chargeurs-field-backups/dta21277-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BACKUP_DIR"
+          chmod 700 "$BACKUP_DIR"
+          "$ADB" -s "$SERIAL" pull "$BASE_PATH" "$BACKUP_DIR/pre-update-base.apk" >/dev/null
+
+          OLD_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/pre-update-base.apk" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "Installed DTA21277 signer mismatch" >&2; exit 34; }
+
+          BEFORE_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          [ -n "$BEFORE_CONFIG_SHA" ] || { echo "Secure kiosk config unavailable before update" >&2; exit 35; }
+
+          echo "INSTALLED_BEFORE_VERSION_CODE=$OLD_CODE"
+          echo "INSTALLED_BEFORE_VERSION_NAME=$OLD_NAME"
+          echo "INSTALLED_SIGNER_GATE=PASS"
+
+          if [ "$OLD_CODE" = "158" ]; then
+            INSTALL_OUT="$("$ADB" -s "$SERIAL" install -r "$VERIFIED_APK" 2>&1)" || {
+              printf '%s\n' "$INSTALL_OUT" >&2
+              exit 36
+            }
+            printf '%s\n' "$INSTALL_OUT" | grep -q 'Success' || { printf '%s\n' "$INSTALL_OUT" >&2; exit 37; }
+            echo "IN_PLACE_UPDATE=PASS"
+          else
+            echo "IN_PLACE_UPDATE=ALREADY_VERSION_159"
+          fi
+
+          AFTER_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" \
+            | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          if [ "$AFTER_CONFIG_SHA" != "$BEFORE_CONFIG_SHA" ]; then
+            echo "Secure kiosk config changed during package replacement; attempting APK rollback" >&2
+            "$ADB" -s "$SERIAL" install -r -d "$BACKUP_DIR/pre-update-base.apk" >/dev/null 2>&1 || true
+            exit 38
+          fi
+
+          FINAL_DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          FINAL_CODE="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          FINAL_NAME="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ "$FINAL_CODE" = "159" ] || { echo "Final versionCode mismatch: $FINAL_CODE" >&2; exit 39; }
+
+          FINAL_STATION="$(read_pref "$SERIAL" chargeurs_kiosk_config station_id || true)"
+          FINAL_DEVICE_ID="$(read_pref "$SERIAL" chargeurs_device_identity public_id || true)"
+          [ "$FINAL_STATION" = "$TARGET_STATION" ] || exit 40
+          [ "$FINAL_DEVICE_ID" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || exit 41
+
+          "$ADB" -s "$SERIAL" shell am force-stop "$PKG" >/dev/null 2>&1 || true
+          "$ADB" -s "$SERIAL" shell am start -W -n "$PKG/ch.chargeurs.kiosk.MainActivity" >/dev/null
+          sleep 5
+
+          echo "FINAL_VERSION_CODE=$FINAL_CODE"
+          echo "FINAL_VERSION_NAME=$FINAL_NAME"
+          echo "SECURE_CONFIG_PRESERVED=PASS"
+          echo "DEVICE_BINDING_PRESERVED=PASS"
+          echo "DTA21277_CLOUDFLARE_UPDATE=PASS"
