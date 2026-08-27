@@ -11,7 +11,6 @@ const ALLOWED_PREFIXES = [
 
 const FORWARDED_REQUEST_HEADERS = [
   "accept",
-  "authorization",
   "content-type",
   "x-client-info",
   "x-supabase-api-version",
@@ -49,12 +48,15 @@ function buildUpstreamHeaders(request) {
     if (value) headers.set(name, value);
   }
 
-  // The publishable key is intentionally public and is the same browser key the
-  // direct Supabase client uses. Do not ever replace this with a service-role key.
+  // New Supabase publishable keys belong in `apikey`, not as a bearer JWT.
+  // Preserve Authorization only when it contains a real user/session token.
   headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
-  if (!headers.has("authorization")) {
-    headers.set("authorization", `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+  const authorization = request.headers.get("authorization");
+  const publishableBearer = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
+  if (authorization && authorization !== publishableBearer) {
+    headers.set("authorization", authorization);
   }
+
   if (!headers.has("accept")) headers.set("accept", "application/json");
   return headers;
 }
@@ -79,7 +81,6 @@ async function healthCheck() {
   const headers = new Headers({
     accept: "application/json",
     apikey: SUPABASE_PUBLISHABLE_KEY,
-    authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
   });
 
   const started = Date.now();
