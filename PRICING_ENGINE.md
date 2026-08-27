@@ -1,11 +1,11 @@
-# Moteur tarifaire
+# Moteur tarifaire canonique
 
 ## Règles canoniques
 
 Le profil actif affecté à une station et le `pricing_snapshot` immuable de chaque
 location restent les seules sources de vérité exécutables. Les règles commerciales
-ci-dessous sont la politique **approuvée pour le pilote v3** et doivent être
-représentées dans le snapshot avant activation en staging/production.
+ci-dessous sont la politique **approuvée pour le pilote v3**. Le navigateur ne
+calcule jamais lui-même le montant financier faisant foi.
 
 ### Express / guest
 
@@ -18,18 +18,20 @@ représentées dans le snapshot avant activation en staging/production.
 
 ### Client avec solde prépayé
 
-- les 30 premières minutes coûtent **1,00 CHF** ;
-- chaque tranche supplémentaire de 30 minutes commencée ajoute **0,40 CHF** ;
+- **2,00 CHF jusqu'à 2 heures** ;
+- après 2 heures, **+1,00 CHF par heure supplémentaire commencée** ;
 - plafond : **5,90 CHF par période de 24 h** ;
-- le profil technique encode cette formule avec `initial_fee_cents=60`,
-  `period_minutes=30`, `price_per_period_cents=40` et `min_amount_cents=100` ;
-  les 60 centimes ne constituent pas un frais distinct à afficher au client.
+- le profil technique final encode cette formule avec
+  `initial_fee_cents=100`, `included_minutes=60`, `period_minutes=60`,
+  `price_per_period_cents=100` et `min_amount_cents=200` ;
+- cette représentation technique donne exactement : 0–120 min = 2,00 CHF,
+  121–180 min = 3,00 CHF, 181–240 min = 4,00 CHF,
+  241–300 min = 5,00 CHF, puis 5,90 CHF jusqu'à 24 h.
 
-Le rail de paiement par solde prépayé doit réserver **30 CHF** dans le ledger
+Le rail de paiement par solde prépayé réserve **30 CHF** dans le ledger
 Chargeurs.ch lorsqu'au moins 30 CHF sont disponibles. Cette réservation interne
-est la cible approuvée ; elle ne doit pas être présentée comme active tant que le
-rail prépayé complet (réservation, état financier, éjection et règlement) n'est
-pas déployé et validé de bout en bout.
+n'est pas une seconde garantie Stripe. Elle reste soumise aux garde-fous serveur,
+à l'acceptation contractuelle et au contrôle matériel avant éjection.
 
 ### Non-retour
 
@@ -72,12 +74,18 @@ un **total contractuel cible** défini dans le snapshot. Les versions v1/v2 gard
 leur comportement historique. Taxes, arrondis, minimum et maximum proviennent du
 snapshot ; les profils pilote v3 sont configurés avec une taxe tarifaire à 0.
 
-## Déploiement v3
+## Migrations v3
 
-La migration `20260827010000_pilot_pricing_rules_v3.sql` et le calculateur de
-settlement v3 doivent être déployés de manière coordonnée. Ne pas appliquer la
-migration seule sur staging si `settle-rental-payment` utilise encore un helper
-qui ne comprend pas `pricing_rules_version=3`.
+`20260827010000_pilot_pricing_rules_v3.sql` a introduit la version de calcul v3.
+`20260827030000_member_pricing_v3_final.sql` est la correction tarifaire finale
+et seule référence pour les nouvelles locations membre v3. Une migration déjà
+appliquée n'est jamais réécrite pour modifier l'historique.
+
+Le calculateur de settlement TypeScript/Deno et les fonctions PostgreSQL
+`compute_customer_pricing_snapshot` et `customer_wallet_pricing_state` doivent
+rester compatibles avec cette configuration. La migration corrective contient
+des assertions sur tous les points de bascule commerciaux ainsi que sur les trois
+bornes pilote.
 
 ## Extension
 
