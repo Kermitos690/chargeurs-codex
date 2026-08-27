@@ -1,6 +1,7 @@
 name: Direct Vercel kiosk release
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -9,6 +10,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: direct-vercel-kiosk-release
+  cancel-in-progress: false
 
 jobs:
   deploy-production:
