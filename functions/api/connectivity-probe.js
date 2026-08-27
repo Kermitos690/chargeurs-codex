@@ -1,5 +1,5 @@
 const SUPABASE_URL = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
-const PUBLIC_KEY = "sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d";
+const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4";
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -10,42 +10,19 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
   },
 });
 
-async function probeGet(url) {
+async function request(url, init = {}) {
   const started = Date.now();
   try {
-    const response = await fetch(url, { method: "GET", redirect: "manual" });
+    const response = await fetch(url, { redirect: "manual", ...init });
+    const text = await response.text();
+    let body = text;
+    try { body = text ? JSON.parse(text) : null; } catch {}
     return {
       ok: true,
       status: response.status,
       contentType: response.headers.get("content-type") || null,
-      location: response.headers.get("location") || null,
       elapsedMs: Date.now() - started,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      name: error instanceof Error ? error.name : null,
-      error: error instanceof Error ? error.message : String(error),
-      elapsedMs: Date.now() - started,
-    };
-  }
-}
-
-async function probePost(url, body, headers = {}) {
-  const started = Date.now();
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      redirect: "manual",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    });
-    return {
-      ok: true,
-      status: response.status,
-      contentType: response.headers.get("content-type") || null,
-      location: response.headers.get("location") || null,
-      elapsedMs: Date.now() - started,
+      body,
     };
   } catch (error) {
     return {
@@ -58,13 +35,28 @@ async function probePost(url, body, headers = {}) {
 }
 
 export async function onRequestGet() {
-  const [external, supabase, recover, edgeFunction] = await Promise.all([
-    probeGet("https://example.com/"),
-    probeGet(`${SUPABASE_URL}/auth/v1/health`),
-    probePost(`${SUPABASE_URL}/auth/v1/recover`, { email: "nobody@example.invalid" }, { apikey: PUBLIC_KEY }),
-    probePost(`${SUPABASE_URL}/functions/v1/chargenow-admin`, {}, { apikey: PUBLIC_KEY }),
+  const publicHeaders = {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+  };
+
+  const [external, authHealth, invalidLogin, rest] = await Promise.all([
+    request("https://example.com/"),
+    request(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } }),
+    request(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { ...publicHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "cloudflare-probe@example.invalid", password: "not-a-real-password" }),
+    }),
+    request(`${SUPABASE_URL}/rest/v1/user_roles?select=role&limit=1`, { headers: publicHeaders }),
   ]);
-  return json({ ok: true, version: 3, external, supabase, recover, edgeFunction });
+
+  const healthy = external.status === 200
+    && authHealth.status === 200
+    && invalidLogin.status === 400
+    && rest.status === 200;
+
+  return json({ ok: healthy, version: 4, external, authHealth, invalidLogin, rest }, healthy ? 200 : 502);
 }
 
 export function onRequest() {
