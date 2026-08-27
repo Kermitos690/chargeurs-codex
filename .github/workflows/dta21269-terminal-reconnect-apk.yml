@@ -67,8 +67,10 @@ jobs:
         working-directory: android-kiosk
         env:
           CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          # Preserve the durable enrollment origin so DTA21269 reuses its existing encrypted token.
           CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
-          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          # The WebView itself now runs exclusively from Cloudflare Pages.
+          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging-cf.pages.dev
           CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
           CHARGEURS_STAGING_KEYSTORE_PATH: /home/runner/.android/debug.keystore
           CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
@@ -86,14 +88,20 @@ jobs:
           backend="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/StripeTerminalBackendClient.java"
           bridge="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java"
           manifest="android-kiosk/app/src/main/AndroidManifest.xml"
+          config="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfig.java"
+          validator="android-kiosk/app/src/main/java/ch/chargeurs/kiosk/KioskConfigValidator.java"
 
           test -s "$apk"
-          grep -F 'versionCode = 131' "$gradle"
-          grep -F 'versionName = "1.0.31-terminal-contract-restore"' "$gradle"
-          grep -F 'implementation("com.stripe:stripeterminal:2.23.4")' "$gradle"
+          grep -F 'versionCode = if (stagingSimulatedTerminalReaderVersion) 150 else 152' "$gradle"
+          grep -F '"1.0.52-cloudflare-runtime-reconnect"' "$gradle"
+          grep -F 'implementation("com.stripe:stripeterminal:3.0.0")' "$gradle"
+          grep -F 'val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"' "$gradle"
+          grep -F 'val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-cf.pages.dev"' "$gradle"
           grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' "$gradle"
           grep -F 'buildConfigField("boolean", "STRIPE_TERMINAL_USB_TEST_ENABLED", "true")' "$gradle"
-          grep -F 'SDK_COMPAT = "2.23.4-test-only"' "$runtime"
+          grep -F 'SDK_COMPAT = "3.0.0-test-only"' "$runtime"
+          grep -F 'resolveRuntimeBaseUrl' "$config"
+          grep -F 'resolveRuntimeBaseUrl' "$validator"
           grep -F 'void requestReconnect()' "$runtime"
           grep -F 'discoveryGeneration' "$runtime"
           grep -F 'getPaymentReaderStatus()' "$bridge"
@@ -112,8 +120,8 @@ jobs:
 
           badging="$($aapt_path dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
-          printf '%s\n' "$badging" | grep -F "versionCode='131'"
-          printf '%s\n' "$badging" | grep -F "versionName='1.0.31-terminal-contract-restore-staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='152'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.52-cloudflare-runtime-reconnect-staging'"
 
           "$apksigner_path" verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           cert_digest="$(sed -n 's/^.*certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -1 | tr '[:upper:]' '[:lower:]')"
@@ -132,6 +140,7 @@ jobs:
           grep -F 'WisePadUsbProbe' /tmp/dex_strings.txt
           grep -F 'ChargeursKioskApplication' /tmp/dex_strings.txt
           grep -F 'stripe-terminal-backend' /tmp/dex_strings.txt
+          grep -F 'chargeurs-ch-staging-cf.pages.dev' /tmp/dex_strings.txt
 
       - name: Prepare artifact and provenance
         id: artifact
@@ -140,7 +149,7 @@ jobs:
           set -euo pipefail
           apk="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
           mkdir -p dist
-          name="Chargeurs_CH_Kiosk_1.0.31-terminal-contract-restore-staging.apk"
+          name="Chargeurs_CH_Kiosk_1.0.52-cloudflare-runtime-reconnect-staging.apk"
           cp "$apk" "dist/$name"
           apk_sha="$(sha256sum "dist/$name" | awk '{print $1}')"
           signer_sha="$(cat /tmp/apk_signer_sha256)"
@@ -148,11 +157,12 @@ jobs:
           cat > dist/PROVENANCE.txt <<EOF
           sha=$GITHUB_SHA
           package=ch.chargeurs.kiosk.staging
-          versionCode=131
-          versionName=1.0.31-terminal-contract-restore-staging
+          versionCode=152
+          versionName=1.0.52-cloudflare-runtime-reconnect-staging
           environment=STAGING_TEST
-          frontend=https://chargeurs-ch-staging.vercel.app
-          stripeTerminalSdk=2.23.4
+          enrollmentOrigin=https://chargeurs-ch-staging.vercel.app
+          frontend=https://chargeurs-ch-staging-cf.pages.dev
+          stripeTerminalSdk=3.0.0
           readerMode=USB_WISEPAD_3
           simulatedReader=false
           expectedReader=tmr_GnorJgwc2oWVq3
