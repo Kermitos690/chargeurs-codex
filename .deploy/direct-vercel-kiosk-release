@@ -1,5 +1,5 @@
-release=dta21277-terminal-cancellation-stale-state-fix
-source_commit=fc5e6cae74e706eea2241b269c29daa7361fe974
-triggered_at=2026-08-25T18:40:00Z
+release=kiosk-native-auth-self-recovery
+source_commit=97909c4280699b7bed88218350b77dd876e838f0
+triggered_at=2026-08-27T00:49:00Z
 requested_by=gaetan
-reason=force-prebuilt-production-release-bypassing-vercel-hosted-build-rate-limit
+reason=restore-kiosk-native-credential-after-webview-session-loss
