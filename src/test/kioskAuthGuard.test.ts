@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { shouldShowKioskAuthGuard } from "@/components/kiosk/KioskV3AuthGuard";
+import {
+  shouldAttemptNativeAuthRecovery,
+  shouldShowKioskAuthGuard,
+} from "@/components/kiosk/KioskV3AuthGuard";
 
 describe("kiosk authentication fail-safe", () => {
   it("blocks when no runtime kiosk token is available", () => {
@@ -35,6 +38,36 @@ describe("kiosk authentication fail-safe", () => {
       nativeWrapper: true,
       nativeSessionCredentialPresent: true,
       authenticationRejected: false,
+    })).toBe(false);
+  });
+
+  it("requests one native restart when the native credential disappeared", () => {
+    expect(shouldAttemptNativeAuthRecovery({
+      guardActive: true,
+      nativeWrapper: true,
+      nativeSessionCredentialPresent: false,
+      restartAvailable: true,
+      recentlyAttempted: false,
+    })).toBe(true);
+  });
+
+  it("does not restart when recovery was already attempted", () => {
+    expect(shouldAttemptNativeAuthRecovery({
+      guardActive: true,
+      nativeWrapper: true,
+      nativeSessionCredentialPresent: false,
+      restartAvailable: true,
+      recentlyAttempted: true,
+    })).toBe(false);
+  });
+
+  it("does not weaken auth when the native restart bridge is unavailable", () => {
+    expect(shouldAttemptNativeAuthRecovery({
+      guardActive: true,
+      nativeWrapper: true,
+      nativeSessionCredentialPresent: false,
+      restartAvailable: false,
+      recentlyAttempted: false,
     })).toBe(false);
   });
 });
