@@ -51,7 +51,7 @@ export async function onRequestPost(context) {
   if (action === "recover") {
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!email) return json({ error: "email_required" }, 400);
-    const redirectTo = new URL("/rescue-admin.html", context.request.url).toString();
+    const redirectTo = new URL("/rescue-admin-v2.html", context.request.url).toString();
     return relay(`${SUPABASE_URL}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
       headers: baseHeaders,
@@ -92,6 +92,7 @@ export async function onRequestPost(context) {
 }
 
 export function onRequest(context) {
+  if (context.request.method === "GET") return json({ ok: true, bridge: "cloudflare", version: 2 });
   if (context.request.method === "POST") return onRequestPost(context);
   return json({ error: "method_not_allowed" }, 405);
 }
