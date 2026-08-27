@@ -3,8 +3,9 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ShieldCheck, RefreshCw, Loader2, Inbox, LockKeyhole, Radio } from "lucide-react";
+import { BatteryCharging, Inbox, Loader2, LockKeyhole, Radio, RefreshCw, ShieldCheck } from "lucide-react";
 
 const REQUEST_ROLES = new Set(["super_admin", "admin", "operations_admin", "support_agent"]);
 
@@ -16,13 +17,26 @@ type StationOption = {
   status: string | null;
 };
 
+type MaintenancePermit = {
+  permitId: string;
+  stationId: string;
+  slotNum: number;
+  batteryId: string;
+  slotUpdatedAt: string | null;
+  expiresAt: string;
+  confirmation: string;
+};
+
 export default function AdminMaintenance() {
-  const { roles, canWrite } = useAuth();
+  const { roles, canWrite, isSuperAdmin } = useAuth();
   const canHandleRequests = roles.some((role) => REQUEST_ROLES.has(role));
   const [stationId, setStationId] = useState("");
   const [stations, setStations] = useState<StationOption[]>([]);
   const [stationsLoading, setStationsLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [slotNum, setSlotNum] = useState("1");
+  const [permit, setPermit] = useState<MaintenancePermit | null>(null);
+  const [confirmation, setConfirmation] = useState("");
   const [requests, setRequests] = useState<Array<{
     id: string; request_type: string; name: string; email: string; station_id: string | null;
     organization: string | null; message: string; status: string; created_at: string;
@@ -70,6 +84,7 @@ export default function AdminMaintenance() {
 
   useEffect(() => { void loadRequests(); }, [loadRequests]);
   useEffect(() => { void loadStations(); }, [loadStations]);
+  useEffect(() => { setPermit(null); setConfirmation(""); }, [stationId, slotNum]);
 
   const setRequestStatus = async (id: string, status: "in_progress" | "resolved") => {
     if (!canHandleRequests) return;
@@ -101,12 +116,64 @@ export default function AdminMaintenance() {
     }
   };
 
+  const prepareMaintenanceEjection = async () => {
+    if (!isSuperAdmin || !stationId) return;
+    const slot = Number(slotNum);
+    if (!Number.isInteger(slot) || slot < 1 || slot > 128) {
+      toast.error("Choisissez un slot entre 1 et 128. Le slot 0 est interdit.");
+      return;
+    }
+    setBusy("prepare_eject_by_repair");
+    setPermit(null);
+    setConfirmation("");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
+        body: { actionType: "prepare_eject_by_repair", stationId, slotNum: slot },
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error ?? error?.message ?? "Préparation de l’éjection impossible");
+        return;
+      }
+      setPermit(data as MaintenancePermit);
+      toast.success(`Permis créé pour ${data.batteryId} — valable 5 minutes.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const executeMaintenanceEjection = async () => {
+    if (!isSuperAdmin || !permit) return;
+    if (confirmation.trim().toUpperCase() !== permit.confirmation) {
+      toast.error("La phrase de confirmation ne correspond pas exactement.");
+      return;
+    }
+    setBusy("execute_eject_by_repair");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-maintenance-action", {
+        body: {
+          actionType: "execute_eject_by_repair",
+          permitId: permit.permitId,
+          confirmation: confirmation.trim(),
+        },
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error ?? error?.message ?? "Éjection maintenance refusée");
+        return;
+      }
+      toast.success(`Commande C2 envoyée pour ${permit.batteryId}. Vérifiez la sortie physique avant toute autre action.`);
+      setPermit(null);
+      setConfirmation("");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const selectedStation = stations.find((station) => station.station_id === stationId) ?? null;
 
   return (
     <div className="animate-fade-in max-w-3xl space-y-6">
       <h1 className="font-display text-3xl font-bold">Maintenance</h1>
-      <p className="text-muted-foreground">Support et diagnostics non destructifs. Les mutations physiques génériques ne sont pas exposées comme boutons ordinaires.</p>
+      <p className="text-muted-foreground">Support, diagnostics et atelier matériel. Les commandes physiques restent ciblées, super-admin et auditées.</p>
 
       {canHandleRequests ? (
         <section className="glass liquid-border space-y-4 rounded-2xl p-6">
@@ -169,14 +236,69 @@ export default function AdminMaintenance() {
         </>
       )}
 
+      {isSuperAdmin && (
+        <section className="rounded-2xl border border-warning/40 bg-warning/5 p-6">
+          <h2 className="font-display text-lg font-bold"><BatteryCharging className="mr-2 inline h-5 w-5" />Atelier — éjection maintenance C2</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Une seule batterie par commande. Aucun paiement et aucune location ne sont créés. Le backend vérifie la batterie présente, interdit le slot 0 et consomme le permis avant l’appel fournisseur.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="w-full sm:w-32">
+              <label htmlFor="maintenance-slot" className="text-sm text-muted-foreground">Slot</label>
+              <Input id="maintenance-slot" type="number" min={1} max={128} step={1} value={slotNum} onChange={(event) => setSlotNum(event.target.value)} />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!busy || !stationId}
+              onClick={() => void prepareMaintenanceEjection()}
+              className="gap-2"
+            >
+              {busy === "prepare_eject_by_repair" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Préparer l’éjection
+            </Button>
+          </div>
+
+          {permit && (
+            <div className="mt-5 space-y-4 rounded-xl border border-warning/35 bg-background/60 p-4">
+              <div className="text-sm">
+                <p><strong>Borne :</strong> {permit.stationId} · <strong>slot :</strong> {permit.slotNum}</p>
+                <p><strong>Batterie verrouillée :</strong> <span className="font-mono">{permit.batteryId}</span></p>
+                <p className="text-xs text-muted-foreground">Permis valable jusqu’à {new Date(permit.expiresAt).toLocaleTimeString("fr-CH")}.</p>
+              </div>
+              <div>
+                <label htmlFor="maintenance-confirmation" className="text-sm text-muted-foreground">Recopiez exactement pour confirmer</label>
+                <p className="mt-1 select-all font-mono text-sm font-semibold">{permit.confirmation}</p>
+                <Input
+                  id="maintenance-confirmation"
+                  className="mt-2 font-mono"
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <Button
+                type="button"
+                disabled={!!busy || confirmation.trim().toUpperCase() !== permit.confirmation}
+                onClick={() => void executeMaintenanceEjection()}
+                className="gap-2"
+              >
+                {busy === "execute_eject_by_repair" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BatteryCharging className="h-4 w-4" />}
+                Éjecter cette batterie — maintenance
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="rounded-2xl border border-primary/25 bg-primary/5 p-6">
         <h2 className="font-display text-lg font-bold"><Radio className="mr-2 inline h-5 w-5" />Event Push ChargeNow</h2>
         <p className="mt-2 text-sm text-muted-foreground">Le webhook global est géré centralement et n’est plus modifiable depuis cette page. Consultez <Link className="text-primary underline" to="/admin/api-health">Santé API</Link> pour son état réel.</p>
       </section>
 
       <section className="rounded-2xl border border-warning/35 bg-warning/5 p-6">
-        <h2 className="font-display text-lg font-bold"><LockKeyhole className="mr-2 inline h-5 w-5" />Actions physiques verrouillées</h2>
-        <p className="mt-2 text-sm text-muted-foreground">POP et configuration fournisseur générique sont bloqués par design. Une éjection de maintenance n’est possible qu’avec un permis serveur explicite, limité à une borne et un slot, et n’est donc pas présentée comme un bouton permanent.</p>
+        <h2 className="font-display text-lg font-bold"><LockKeyhole className="mr-2 inline h-5 w-5" />Actions physiques protégées</h2>
+        <p className="mt-2 text-sm text-muted-foreground">POP, éjection multiple et configuration fournisseur générique restent bloqués. Seul C2 maintenance peut être exécuté par un super-admin avec un permis court, ciblé sur une borne, un slot et la batterie réellement observée.</p>
       </section>
     </div>
   );
