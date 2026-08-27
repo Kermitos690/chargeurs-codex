@@ -1,3 +1,3 @@
-Cloudflare Pages rebuild trigger for enriched Volt V2.
+Cloudflare Pages rebuild trigger for Volt V2.
 No runtime logic change.
-Rebuild requested after Volt knowledge/context/triage updates at 92b22f325d63a1dc52a5ee62a75e1ea94ef9a392.
+Rebuild requested after GROQ_API_KEY was added to Cloudflare Pages secrets.
