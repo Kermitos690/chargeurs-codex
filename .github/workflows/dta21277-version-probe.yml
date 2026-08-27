@@ -1,0 +1,76 @@
+name: DTA21277 installed version probe
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-version-probe.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-version-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 5
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - name: Read DTA21277 installed version only
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_STATION="DTA21277"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          TARGET_MDNS="adb-3d24b8cbb7d560bc-r6qk3T._adb-tls-connect._tcp"
+          PKG="ch.chargeurs.kiosk.staging"
+          ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          ADB="$ANDROID_HOME_VALUE/platform-tools/adb"
+
+          [ -x "$ADB" ] || { echo "ADB_TOOL_GATE=FAIL"; exit 70; }
+          "$ADB" start-server >/dev/null 2>&1 || true
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" 2>/dev/null \
+              | tr -d '\r' \
+              | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" \
+              | head -1
+          }
+
+          target_matches() {
+            local serial="$1" station device
+            "$ADB" -s "$serial" get-state >/dev/null 2>&1 || return 1
+            station="$(read_pref "$serial" chargeurs_kiosk_config station_id || true)"
+            device="$(read_pref "$serial" chargeurs_device_identity public_id || true)"
+            [ "$station" = "$TARGET_STATION" ] && [ "$device" = "$EXPECTED_DEVICE_PUBLIC_ID" ]
+          }
+
+          SERIAL=""
+          if target_matches "$TARGET_MDNS"; then
+            SERIAL="$TARGET_MDNS"
+          else
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if target_matches "$candidate"; then
+                SERIAL="$candidate"
+                break
+              fi
+            done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
+          fi
+
+          [ -n "$SERIAL" ] || { echo "DTA21277_PROBE=BLOCKED_ADB_NOT_REACHABLE"; exit 71; }
+          echo "ADB_TARGET_CONFIRMED=DTA21277"
+
+          DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          VERSION_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          VERSION_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ -n "$VERSION_CODE" ] || { echo "VERSION_CODE_GATE=FAIL"; exit 72; }
+          echo "INSTALLED_VERSION_CODE=$VERSION_CODE"
+          echo "INSTALLED_VERSION_NAME=$VERSION_NAME"
+          echo "DTA21277_VERSION_PROBE=PASS"
