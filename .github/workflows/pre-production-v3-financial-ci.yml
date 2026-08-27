@@ -1,0 +1,64 @@
+name: Chargeurs.ch Pre-production V3 CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-production-v3-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-v3:
+    name: Typecheck, v3 contracts and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run focused Vitest contracts
+        run: >-
+          npx vitest run
+          src/test/pilotPricingV3.test.ts
+          src/test/memberPrepaidRail.test.ts
+          src/test/legalContract.test.ts
+          src/test/preProductionHardening.test.ts
+
+      - name: Run pure Deno pricing and hardening contracts
+        run: >-
+          deno test --allow-read --no-check
+          supabase/functions/tests/pricing_settlement_v2.test.ts
+          supabase/functions/tests/pricing_settlement_v3.test.ts
+          supabase/functions/tests/pre_production_hardening_contract.test.ts
+
+      - name: Build with kiosk guardrails
+        run: npm run build
+
+      - name: Safety note
+        if: always()
+        run: |
+          echo "This workflow uses no project secrets, no database writes, no Stripe calls and no hardware commands."
