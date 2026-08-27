@@ -3,7 +3,9 @@ const PROVIDERS = [
     provider: "groq",
     keyName: "GROQ_API_KEY",
     endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    model: "llama-3.3-70b-versatile",
+    // Llama 3.3 70B was shut down by Groq on 2026-08-16.
+    // Qwen 3.6 27B is an active recommended replacement and is available on the Free Plan.
+    model: "qwen/qwen3.6-27b",
   },
   {
     provider: "openrouter",
@@ -69,16 +71,22 @@ export async function callVoltFreeAI(env, messages) {
     }
 
     try {
+      const body = {
+        model: target.model,
+        messages,
+        stream: false,
+        temperature: 0.25,
+        max_tokens: 500,
+      };
+      // Keep customer-support latency and token use low on Groq's reasoning-capable Qwen model.
+      if (target.provider === "groq" && target.model === "qwen/qwen3.6-27b") {
+        body.reasoning_effort = "none";
+      }
+
       const response = await fetchWithTimeout(target.endpoint, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          model: target.model,
-          messages,
-          stream: false,
-          temperature: 0.25,
-          max_tokens: 500,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
