@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/check-kiosk-geometry.mjs && node scripts/check-kiosk-safe-frame.mjs && node scripts/check-kiosk-selection-readability.mjs && node scripts/check-kiosk-global-legibility.mjs && node scripts/check-kiosk-footer-clarity.mjs && node scripts/materialize-cinematic-art.mjs",
+    "prebuild": "node scripts/build-volt-knowledge.mjs && node scripts/check-kiosk-geometry.mjs && node scripts/check-kiosk-safe-frame.mjs && node scripts/check-kiosk-selection-readability.mjs && node scripts/check-kiosk-global-legibility.mjs && node scripts/check-kiosk-footer-clarity.mjs && node scripts/materialize-cinematic-art.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
