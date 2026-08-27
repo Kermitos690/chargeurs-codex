@@ -55,9 +55,52 @@ public final class KioskConfigValidator {
         }
     }
 
+    /**
+     * Resolve the WebView runtime origin without changing the durable enrollment
+     * origin stored in SecureConfigStore.
+     *
+     * Only the build-pinned enrollment origin is eligible for the separate
+     * KIOSK_WEB_BASE_URL. Arbitrary configs used by tests or diagnostics retain
+     * their own origin. A non-empty but invalid compiled runtime URL fails
+     * closed instead of silently broadening navigation.
+     */
+    static String runtimeBaseUrlForEnrollment(String enrollmentBaseUrl) {
+        String normalizedEnrollment = normalizeBaseUrl(enrollmentBaseUrl);
+        if (normalizedEnrollment == null) {
+            throw new IllegalArgumentException("INVALID_KIOSK_ENROLLMENT_BASE_URL");
+        }
+
+        String pinnedRaw = BuildConfig.KIOSK_PUBLIC_BASE_URL == null
+            ? ""
+            : BuildConfig.KIOSK_PUBLIC_BASE_URL.trim();
+        if (pinnedRaw.isEmpty()) return normalizedEnrollment;
+
+        String normalizedPinned = normalizeBaseUrl(pinnedRaw);
+        if (normalizedPinned == null) {
+            throw new IllegalArgumentException("INVALID_KIOSK_PINNED_BASE_URL");
+        }
+        if (!normalizedEnrollment.equals(normalizedPinned)) return normalizedEnrollment;
+
+        String runtimeRaw = BuildConfig.KIOSK_WEB_BASE_URL == null
+            ? ""
+            : BuildConfig.KIOSK_WEB_BASE_URL.trim();
+        if (runtimeRaw.isEmpty()) return normalizedEnrollment;
+
+        String normalizedRuntime = normalizeBaseUrl(runtimeRaw);
+        if (normalizedRuntime == null) {
+            throw new IllegalArgumentException("INVALID_KIOSK_WEB_BASE_URL");
+        }
+        return normalizedRuntime;
+    }
+
     public static boolean isAllowedUrl(String candidate, String baseUrl) {
-        String normalizedBase = normalizeBaseUrl(baseUrl);
-        if (candidate == null || normalizedBase == null) return false;
+        final String normalizedBase;
+        try {
+            normalizedBase = runtimeBaseUrlForEnrollment(baseUrl);
+        } catch (IllegalArgumentException error) {
+            return false;
+        }
+        if (candidate == null) return false;
         try {
             URI candidateUri = new URI(candidate);
             URI baseUri = new URI(normalizedBase);
