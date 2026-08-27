@@ -9,6 +9,20 @@ const ALLOWED_PREFIXES = [
   "storage/v1",
 ];
 
+const FORWARDED_REQUEST_HEADERS = [
+  "accept",
+  "authorization",
+  "content-type",
+  "x-client-info",
+  "x-supabase-api-version",
+  "prefer",
+  "range",
+  "accept-profile",
+  "content-profile",
+  "cache-control",
+  "x-upsert",
+];
+
 function json(body, status) {
   return new Response(JSON.stringify(body), {
     status,
@@ -26,6 +40,32 @@ function upstreamPath(pathname) {
   if (!path || path.includes("..") || path.includes("\\")) return null;
   if (!ALLOWED_PREFIXES.some((allowed) => path === allowed || path.startsWith(`${allowed}/`))) return null;
   return path;
+}
+
+function buildUpstreamHeaders(request) {
+  const headers = new Headers();
+  for (const name of FORWARDED_REQUEST_HEADERS) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  if (!headers.has("accept")) headers.set("accept", "application/json");
+  return headers;
+}
+
+function buildResponseHeaders(response) {
+  const headers = new Headers();
+  const contentType = response.headers.get("content-type");
+  const location = response.headers.get("location");
+  const range = response.headers.get("content-range");
+  const preferenceApplied = response.headers.get("preference-applied");
+
+  if (contentType) headers.set("content-type", contentType);
+  if (location) headers.set("location", location);
+  if (range) headers.set("content-range", range);
+  if (preferenceApplied) headers.set("preference-applied", preferenceApplied);
+  headers.set("cache-control", "no-store");
+  return headers;
 }
 
 export async function onRequest(context) {
@@ -53,18 +93,7 @@ export async function onRequest(context) {
   const upstream = new URL(`/${path}`, SUPABASE_ORIGIN);
   upstream.search = incoming.search;
 
-  const headers = new Headers(context.request.headers);
-  headers.delete("host");
-  headers.delete("content-length");
-  headers.delete("cf-connecting-ip");
-  headers.delete("cf-ipcountry");
-  headers.delete("cf-ray");
-  headers.delete("x-forwarded-for");
-  headers.delete("x-forwarded-proto");
-  headers.delete("origin");
-  headers.delete("referer");
-  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
-
+  const headers = buildUpstreamHeaders(context.request);
   const body = method === "GET" || method === "HEAD"
     ? undefined
     : await context.request.arrayBuffer();
@@ -74,18 +103,15 @@ export async function onRequest(context) {
       method,
       headers,
       body,
-      redirect: "manual",
+      redirect: "follow",
     });
 
-    const responseHeaders = new Headers(response.headers);
-    responseHeaders.delete("access-control-allow-origin");
-    responseHeaders.delete("access-control-allow-credentials");
-    responseHeaders.set("Cache-Control", "no-store");
+    const responseBody = method === "HEAD" ? null : await response.arrayBuffer();
 
-    return new Response(response.body, {
+    return new Response(responseBody, {
       status: response.status,
       statusText: response.statusText,
-      headers: responseHeaders,
+      headers: buildResponseHeaders(response),
     });
   } catch (error) {
     console.error("Cloudflare Supabase proxy upstream failure", {
@@ -93,6 +119,9 @@ export async function onRequest(context) {
       method,
       error: error instanceof Error ? error.message : String(error),
     });
-    return json({ error: "supabase_upstream_unavailable" }, 502);
+    return json({
+      error: "supabase_upstream_unavailable",
+      message: "Le service de compte est momentanément indisponible.",
+    }, 502);
   }
 }
