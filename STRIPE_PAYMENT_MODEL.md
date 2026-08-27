@@ -25,6 +25,8 @@ Lorsque la méthode ne permet pas la capture manuelle, le montant de garantie du
 
 ## Membre — solde prépayé Chargeurs.ch
 
+Le tarif membre pilote v3 est **2 CHF jusqu'à 2 heures, puis +1 CHF par heure supplémentaire commencée, avec un plafond de 5.90 CHF par 24 heures**.
+
 Lorsque `customer_segment=member`, que le snapshot est en `pricing_rules_version=3` et qu'au moins **30 CHF** sont disponibles dans le ledger :
 
 1. le client accepte les documents contractuels ;
@@ -35,7 +37,7 @@ Lorsque `customer_segment=member`, que le snapshot est en `pricing_rules_version
 6. la session devient financièrement couverte avec `settlement_status=prepaid` ;
 7. l'éjection reste soumise aux mêmes garde-fous matériels que pour Stripe.
 
-Au retour, le prix v3 est recalculé exclusivement depuis le snapshot historique : seul ce montant est engagé dans le ledger et le reste de la réservation de 30 CHF est libéré. Par exemple, une location membre coûtant 2,20 CHF engage 2,20 CHF et libère 27,80 CHF.
+Au retour, le prix v3 est recalculé exclusivement depuis le snapshot historique : seul ce montant est engagé dans le ledger et le reste de la réservation de 30 CHF est libéré. Exemple : une location de **2 heures** coûte **2 CHF**, engage 2 CHF et libère 28 CHF de la réservation. Une location de **2 h 01** coûte **3 CHF**, engage 3 CHF et libère 27 CHF.
 
 Si le solde disponible est inférieur à 30 CHF, le rail prépayé est libéré sans réservation partielle et le client utilise le parcours de garantie Stripe complet ou recharge son solde avant une nouvelle tentative.
 
