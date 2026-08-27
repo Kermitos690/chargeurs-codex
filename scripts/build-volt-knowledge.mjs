@@ -4,10 +4,11 @@ import path from "node:path";
 const ROOT = process.cwd();
 const OUTPUT = path.join(ROOT, "functions/_generated/volt-knowledge.generated.js");
 
-// Volt public knowledge is deliberately allowlisted. Never ingest the whole repo:
+// Volt public/client knowledge is deliberately allowlisted. Never ingest the whole repo:
 // backend functions, admin code, hardware procedures, secrets, CI and migrations
 // are not appropriate context for a customer-facing assistant.
 const ALLOWED_FILES = [
+  "docs/volt/customer-knowledge.md",
   "README.md",
   "src/pages/Index.tsx",
   "src/pages/Support.tsx",
