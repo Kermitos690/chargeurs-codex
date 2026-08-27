@@ -89,17 +89,19 @@ async function invokeVoltCase(body: Record<string, unknown>, mode: VoltMode) {
 // Escalation remains server-controlled when a support case is actually created.
 function previewTriage(raw: string): Required<Triage> {
   const text = raw.toLocaleLowerCase("fr");
-  if (/(ne sort|sort pas|éject|eject|distribu|batterie.*bloqu)/.test(text)) return { category: "ejection", priority: "high", escalate: true, reply: "Je vois un problème de distribution. Je peux préparer un dossier prioritaire pour que le support vérifie le paiement, la borne et l’éjection." };
-  if (/(retour|rendu|rendue|restitution|toujours.*location|location.*continue)/.test(text)) return { category: "return", priority: "high", escalate: true, reply: "Le retour semble ne pas avoir été reconnu correctement. Je peux transmettre le dossier au support avec le contexte disponible." };
-  if (/(paiement|payé|paye|carte|débit|debit|factur|rembours|rembourse|garantie|caution)/.test(text)) return { category: "payment", priority: "normal", escalate: true, reply: "Je peux faire vérifier ce problème de paiement par le support. Ne transmettez jamais votre numéro de carte complet." };
-  if (/(cass|endommag|écran|ecran|borne.*hors|borne.*marche|slot)/.test(text)) return { category: "station", priority: "high", escalate: true, reply: "Merci pour le signalement. Je peux créer un dossier afin que l’équipe vérifie la borne concernée." };
-  if (/(humain|personne|contacter|contact|support|parler à|parler a)/.test(text)) return { category: "contact", priority: "normal", escalate: true, reply: "Oui. Je peux transmettre votre demande dans la file support Chargeurs.ch." };
-  if (/(prix|tarif|combien|coût|cout)/.test(text)) return { category: "pricing", priority: "normal", escalate: false, reply: "Je vais chercher les informations tarifaires publiées par Chargeurs.ch." };
-  if (/(compte|pass|profil|connexion|connecter|crédit|credit|points)/.test(text)) return { category: "account", priority: "normal", escalate: false, reply: "Je vais regarder ce que les informations Chargeurs.ch permettent de confirmer sur ce point." };
+  if (/(pay[ée].*(ne sort|sort pas)|batterie.*(ne sort|sort pas|bloqu)|[ée]ject.*(bloqu|[ée]chou)|eject.*(bloqu|echou))/.test(text)) return { category: "ejection", priority: "high", escalate: true, reply: "Le paiement et la libération de la batterie sont deux étapes distinctes. Si la batterie ne sort pas après paiement, le support peut vérifier la transaction, la borne et l'éjection." };
+  if (/((rendu|rendue|restitu[ée]).*(pas reconnu|non reconnu|continue|toujours)|retour.*(pas reconnu|non reconnu|[ée]chou)|location.*(continue|toujours active))/.test(text)) return { category: "return", priority: "high", escalate: true, reply: "Si la batterie a été rendue mais que la location continue, le retour doit être vérifié côté serveur. Je peux transmettre le dossier au support." };
+  if (/(d[ée]bit.*(double|deux fois|inattendu|incorrect)|factur.*(double|deux fois|inattendu|incorrect)|paiement.*([ée]chou|refus|bloqu)|rembours.*(pas|attend|retard)|montant.*(faux|incorrect|inattendu))/.test(text)) return { category: "payment", priority: "normal", escalate: true, reply: "Ce problème de paiement mérite une vérification. Ne transmettez jamais votre numéro de carte complet." };
+  if (/(cass|endommag|[ée]cran.*(noir|bloqu|marche pas)|borne.*(hors|marche pas|ne fonctionne)|slot.*(bloqu|cass))/.test(text)) return { category: "station", priority: "high", escalate: true, reply: "La borne semble avoir un incident matériel ou de disponibilité. Je peux transmettre le signalement au support." };
+  if (/(humain|personne|contacter|contact|support|parler [àa])/.test(text)) return { category: "contact", priority: "normal", escalate: true, reply: "Oui. Je peux transmettre votre demande dans la file support Chargeurs.ch." };
+  if (/(prix|tarif|combien|co[ûu]t)/.test(text)) return { category: "pricing", priority: "normal", escalate: false, reply: "Je vais utiliser la grille Chargeurs.ch publiée pour répondre précisément." };
+  if (/(paiement|payer|carte|twint|apple pay|google pay|remboursement)/.test(text)) return { category: "payment", priority: "normal", escalate: false, reply: "Je vais répondre à partir des règles de paiement Chargeurs.ch disponibles." };
+  if (/(retour|rendre|restitution|restituer)/.test(text)) return { category: "return", priority: "normal", escalate: false, reply: "Je vais vous expliquer le fonctionnement du retour sans supposer l'état d'une borne précise." };
+  if (/(compte|pass|profil|connexion|connecter|cr[ée]dit|points|abonnement|adh[ée]sion|wallet)/.test(text)) return { category: "account", priority: "normal", escalate: false, reply: "Je vais regarder ce que les informations Chargeurs.ch permettent de confirmer sur ce point." };
   return { category: "general", priority: "normal", escalate: false, reply: "Décrivez-moi ce qui s’est passé et je vais chercher dans les informations Chargeurs.ch disponibles." };
 }
 
-export function VoltAssistant({ mode, userName = "", userEmail = "", stationId = "", rentalId = "", contextHint: _contextHint = "", onCaseCreated }: Props) {
+export function VoltAssistant({ mode, userName = "", userEmail = "", stationId = "", rentalId = "", contextHint = "", onCaseCreated }: Props) {
   const { lang } = useI18n();
   const [messages, setMessages] = useState<VoltMessage[]>([{ id: id("volt"), role: "volt", text: mode === "client" ? "Bonjour, je suis Volt. Posez-moi votre question : je peux chercher dans les informations Chargeurs.ch et tenir compte de notre conversation." : "Bonjour, je suis Volt, l'assistant Chargeurs.ch. Posez-moi votre question ou choisissez un cas fréquent ci-dessous." }]);
   const [input, setInput] = useState("");
@@ -155,6 +157,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       history,
       stationId,
       rentalId,
+      contextHint: mode === "client" ? contextHint : "",
       locale: lang,
     });
     setBusy(false);
