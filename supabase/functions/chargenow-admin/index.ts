@@ -19,6 +19,7 @@ const SENSITIVE_CODES = new Set(["A1"]);
 const TEST_STATION = "DTA21269"; // dedicated Chargeurs.ch staging pilot
 
 type Result = { ok: boolean; status: number; data: unknown; error: string | null };
+type MaintenanceInvokeResult = { ok: boolean; status: number; data: Record<string, unknown> | null; error: string | null };
 
 async function dispatch(code: string, p: Record<string, unknown>, superAdminMutation = false): Promise<Result> {
   const s = (k: string, d = "") => String(p[k] ?? d);
@@ -64,10 +65,6 @@ async function dispatch(code: string, p: Record<string, unknown>, superAdminMuta
   }
 }
 
-// Operations that only read the documented provider API. The suite runs them
-// sequentially and never calls a mutation, even though a few documented reads
-// happen to use POST. A detail request is skipped, not guessed, when the list
-// calls did not supply a sample identifier from this organization.
 const SAFE_READ_CODES = [
   "O1", "O3", "O5", "O6", "C4", "C5", "C6", "C7", "C8",
   "S1", "S2", "P1", "P2", "R1", "E2", "E3",
@@ -92,7 +89,6 @@ function firstString(value: unknown, keys: string[]): string {
   return "";
 }
 
-// Mutation classification used to seed Level A / Level C verdicts.
 const MUTATION_META: Record<string, { name: string; dangerous: boolean }> = {
   O2: { name: "Create Rent Order", dangerous: false },
   O3: { name: "Query Rent Order Status", dangerous: false },
@@ -120,7 +116,6 @@ function confirmationPhrase(code: string, params: Record<string, unknown>): stri
   return `EXECUTER ${code}`;
 }
 
-// Redact obvious secret-bearing keys before persisting a test_runs row.
 function redactForLog(obj: unknown): unknown {
   if (!obj || typeof obj !== "object") return obj ?? null;
   const clone = JSON.parse(JSON.stringify(obj));
@@ -135,6 +130,73 @@ function redactForLog(obj: unknown): unknown {
   return clone;
 }
 
+async function invokeMaintenance(req: Request, body: Record<string, unknown>): Promise<MaintenanceInvokeResult> {
+  const supabaseUrl = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const authorization = req.headers.get("Authorization") ?? "";
+  if (!supabaseUrl || !anonKey || !authorization) {
+    return { ok: false, status: 500, data: null, error: "MAINTENANCE_DELEGATION_NOT_CONFIGURED" };
+  }
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/admin-maintenance-action`, {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        apikey: anonKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+    const text = await response.text();
+    let data: Record<string, unknown> | null = null;
+    try { data = text ? JSON.parse(text) as Record<string, unknown> : null; } catch { data = { raw: text }; }
+    const ok = response.ok && data?.ok === true;
+    return {
+      ok,
+      status: response.status,
+      data,
+      error: ok ? null : String(data?.error ?? `HTTP_${response.status}`),
+    };
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: String(error) };
+  }
+}
+
+async function dispatchWorkshopC2(req: Request, params: Record<string, unknown>, confirmation: string): Promise<Result> {
+  const stationId = String(params.cabinetid ?? params.cabinetId ?? "").trim();
+  const slotNum = Number(params.slotNum);
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(stationId)) return { ok: false, status: 400, data: null, error: "VALID_STATION_REQUIRED" };
+  if (!Number.isInteger(slotNum) || slotNum < 1 || slotNum > 128) return { ok: false, status: 400, data: null, error: "VALID_SLOT_REQUIRED" };
+
+  const prepared = await invokeMaintenance(req, {
+    actionType: "prepare_eject_by_repair",
+    stationId,
+    slotNum,
+  });
+  if (!prepared.ok || !prepared.data) {
+    return { ok: false, status: prepared.status, data: prepared.data, error: prepared.error ?? "MAINTENANCE_PREPARE_FAILED" };
+  }
+
+  const permitId = String(prepared.data.permitId ?? "");
+  const preparedConfirmation = String(prepared.data.confirmation ?? "").trim().toUpperCase();
+  if (!permitId || preparedConfirmation !== confirmation) {
+    return { ok: false, status: 409, data: prepared.data, error: "MAINTENANCE_TARGET_CONFIRMATION_MISMATCH" };
+  }
+
+  const executed = await invokeMaintenance(req, {
+    actionType: "execute_eject_by_repair",
+    permitId,
+    confirmation,
+  });
+  const providerResult = executed.data?.result ?? executed.data;
+  return {
+    ok: executed.ok,
+    status: executed.status,
+    data: providerResult,
+    error: executed.ok ? null : executed.error ?? "MAINTENANCE_EXECUTE_FAILED",
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -154,7 +216,6 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ---- Bulk: run every safe, documented provider read and record proof ----
     if (action === "run_safe_live") {
       const results: Record<string, Result> = {};
       const stationParams = { deviceId: TEST_STATION, cabinetId: TEST_STATION };
@@ -195,10 +256,6 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ---- Level A: record the (already-passing) contract-test verdicts ----
-    // The actual assertions live in tests/chargenow_mutations_contract.test.ts.
-    // This action persists the proven verdict per mutation into test_runs so the
-    // admin monitor reflects it. Mock-only proofs NEVER claim physical proof.
     if (action === "record_contract_results") {
       const rows = Object.entries(MUTATION_META).map(([code, m]) => ({
         endpoint_code: code,
@@ -228,13 +285,11 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ---- Level B: run ONLY the non-destructive mutations live (no payment) ----
     if (action === "run_safe_live_mutations") {
       return new Response(JSON.stringify({ ok: false, error: "PROVIDER_MUTATION_DISABLED" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // ---- Single op invoke ----
     const code: string = body.code;
     if (!code) {
       return new Response(JSON.stringify({ ok: false, error: "MISSING_CODE" }),
@@ -271,7 +326,6 @@ Deno.serve(async (req) => {
     const cabinetId = String(params.cabinetid ?? params.cabinetId ?? "") || null;
 
     if (dryRun) {
-      // Level C dry-run: prove the call WOULD be built, without firing it.
       await db.from("test_runs").insert({
         endpoint_code: code,
         endpoint_name: MUTATION_META[code]?.name ?? code,
@@ -293,7 +347,9 @@ Deno.serve(async (req) => {
     }
 
     const t0 = Date.now();
-    const res = await dispatch(code, params, isMutation && confirm);
+    const res = code === "C2"
+      ? await dispatchWorkshopC2(req, params, confirmation)
+      : await dispatch(code, params, isMutation && confirm);
     const dt = Date.now() - t0;
     await logApi(db, { service: "chargenow", endpoint: `op:${code}`, method: "POST", status_code: res.status, request: params, response: res.data, error: res.error });
     await db.from("api_coverage").update({
@@ -318,7 +374,7 @@ Deno.serve(async (req) => {
       error: res.error,
       performed_by: adminId,
     });
-    if (isDangerous) {
+    if (isDangerous && code !== "C2") {
       await db.from("maintenance_actions").insert({
         station_id: cabinetId ?? "", action_type: code,
         params, result: res.data ?? { error: res.error }, performed_by: adminId,
