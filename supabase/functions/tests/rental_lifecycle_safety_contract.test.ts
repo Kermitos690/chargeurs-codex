@@ -7,15 +7,18 @@ const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-act
 const refundSource = await Deno.readTextFile("supabase/functions/_shared/stripeRefundRuntime.ts");
 
 Deno.test("uncertain ejection results never trigger automatic retry or refund", () => {
-  assert(ejectSource.includes("hardwareCommandIssued = true"));
-  assert(ejectSource.includes("EJECTION_RECONCILIATION_REQUIRED"));
-  assert(ejectSource.includes("Aucun retry ou remboursement automatique"));
-  assert(ejectSource.includes('state: "eject_failed"'));
+  assert(ejectSource.includes("O2_PROVIDER_RESULT_AMBIGUOUS"));
+  assert(ejectSource.includes("aucune seconde commande ne sera envoyée"));
+  assert(ejectSource.includes("noSecondHardwareCommand: true"));
+  assert(ejectSource.includes('new URL(`${BASE}/rent/order/create`)'));
+  assert(ejectSource.includes("fetch(endpoint.toString()"));
+  assertEquals(ejectSource.includes("automatic_refund"), false);
 });
 
 Deno.test("ChargeNow release callbacks require exact battery identity", () => {
   assert(callbackSource.includes("RELEASE_IDENTITY_INCOMPLETE"));
-  assert(callbackSource.includes("RELEASE_BATTERY_MISMATCH"));
+  assert(callbackSource.includes("RELEASE_RESERVATION_MISMATCH"));
+  assert(callbackSource.includes("verifyCallback"));
   assert(callbackSource.includes('eventType: "battery_released"'));
   assert(callbackSource.includes('eventType: "rental_activated"'));
   assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);

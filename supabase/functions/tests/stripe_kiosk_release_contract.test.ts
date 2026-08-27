@@ -57,33 +57,30 @@ Deno.test("Checkout endpoint authenticates before disclosing or creating a Check
   const source = await Deno.readTextFile(
     "supabase/functions/create-stripe-checkout/index.ts",
   );
-  const authAt = source.indexOf("await verifyKioskDevice(req, db, stationId)");
-  const bindingAt = source.indexOf(
-    "evaluateCheckoutKioskBinding(session, kioskAuth.device)",
-  );
-  const cachedUrlAt = source.indexOf("session.checkout_url &&");
+  const authAt = source.indexOf("const device = await auth(req, db, stationId)");
+  const bindingAt = source.indexOf("session.kiosk_device_id ?? \"\") !== String(device.id)");
+  const contractAt = source.indexOf("CONTRACT_ACCEPTANCE_REQUIRED");
+  const cachedUrlAt = source.indexOf("if (session.stripe_checkout_session_id)");
   const stripeCreateAt = source.indexOf("stripe.checkout.sessions.create");
   assert(authAt >= 0);
   assert(bindingAt > authAt);
+  assert(contractAt > bindingAt);
+  assert(contractAt < cachedUrlAt);
   assert(cachedUrlAt > bindingAt);
   assert(stripeCreateAt > bindingAt);
-  const cachedPaymentRepairAt = source.indexOf("cachedPaymentError");
-  assert(cachedPaymentRepairAt > cachedUrlAt);
-  assert(cachedPaymentRepairAt < stripeCreateAt);
   assert(source.includes("onConflict: \"stripe_session_id\""));
   assert(source.includes("x-kiosk-token"));
   assertEquals(source.includes("body.kioskToken"), false);
 });
 
-Deno.test("Checkout keeps dynamic payment methods on one prepaid/refund strategy", async () => {
+Deno.test("Checkout keeps the explicit card-hold and TWINT settlement strategies", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/create-stripe-checkout/index.ts",
   );
-  assertEquals(source.includes("payment_method_types:"), false);
-  assertEquals(source.includes("payment_method_options:"), false);
-  assertEquals(source.includes('capture_method: "manual"'), false);
-  assert(source.includes("rental_deposit_checkout:v2:"));
-  assert(source.includes('settlement_strategy: "prepaid_refund"'));
+  assert(source.includes('payment_method_types: ["card", "twint"]'));
+  assert(source.includes('payment_method_options: { card: { capture_method: "manual"'));
+  assert(source.includes("rental_direct_checkout:v8:"));
+  assert(source.includes('card_capture: "manual", twint_capture: "automatic"'));
 });
 
 Deno.test("Stripe Checkout payment upsert has a non-partial database conflict target", async () => {
@@ -101,38 +98,18 @@ Deno.test("ChargeNow order projection has a real rental-session conflict target"
   assert(/ADD CONSTRAINT\s+apifox_orders_rental_session_id_key\s+UNIQUE \(rental_session_id\)/i.test(migration));
 });
 
-Deno.test("disabled hardware is persisted as a terminal support state without automatic refund", async () => {
+Deno.test("hardware release is O2 callback-only and needs physical proof before one command", async () => {
   const source = await Deno.readTextFile(
     "supabase/functions/eject-after-payment/index.ts",
   );
-  const migration = await Deno.readTextFile(
-    "supabase/migrations/20260806000812_add_one_time_rental_ejection_permits.sql",
-  );
-  const gateAt = source.indexOf("if (!areHardwareEjectionsEnabled() && !oneTimeTestResume)");
-  const providerConfigAt = source.indexOf("if (!isChargeNowConfigured())");
-  const hardwareAt = source.indexOf("hardwareCommandIssued = true");
-  assert(gateAt >= 0);
-  assert(providerConfigAt > gateAt);
-  assert(hardwareAt > gateAt);
-  assert(source.includes("await markHardwareReleaseBlocked(db, session)"));
-  assert(source.includes('state: "needs_support"'));
-  assert(source.includes("automatic_refund: false"));
-  assert(source.includes("terminal: true"));
-  assert(source.includes('eventType: "rental_failed"'));
-  assert(source.includes("release_blocked:${session.id}:${code}"));
-  // The permit is service-role-only, time limited and consumed atomically.
-  assert(migration.includes("one_time_rental_ejection_permits"));
-  assert(migration.toUpperCase().includes("ENABLE ROW LEVEL SECURITY"));
-  assert(source.includes('chargeNowMode() === "test"'));
-  assert(source.includes("permit.rental_session_id === session.id"));
-  assert(source.includes("permit.slot_num === requestedSlotNum"));
-  assert(source.includes("rental.one_time_test_ejection_consumed"));
-  assert(source.includes("actor: \"one_time_ejection_permit\""));
-  assert(source.includes("orderCreateWithOneTimeRentalPermit"));
-
-  const disabledBranch = source.slice(gateAt, providerConfigAt);
-  assertEquals(
-    disabledBranch.includes("compensateBeforeHardwareRequest"),
-    false,
-  );
+  assert(source.includes("O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING"));
+  assert(source.includes("RELEASE_BASELINE_MISSING_OR_MISMATCH"));
+  assert(source.includes('state: "ejecting"'));
+  assert(source.includes('endpoint", "/rent/order/create"'));
+  assert(source.includes("noSecondHardwareCommand: true"));
+  // C3 is queried only as negative qualification evidence; no C3 command is
+  // constructed or sent by this release path.
+  assert(source.includes('new URL(`${BASE}/rent/order/create`)'));
+  assert(source.includes("fetch(endpoint.toString()"));
+  assertEquals(source.includes("automatic_refund"), false);
 });

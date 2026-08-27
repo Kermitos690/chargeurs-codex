@@ -43,7 +43,7 @@ Deno.test("pairing administration binds organization and supports audited cancel
 
 Deno.test("kiosk enrollment applies a keyed source rate limit without logging plaintext", async () => {
   const source = await Deno.readTextFile("supabase/functions/kiosk-enroll/index.ts");
-  const migration = await Deno.readTextFile("supabase/migrations/20260731132542_kiosk_numeric_enrollment_rate_limits.sql");
+  const migration = await Deno.readTextFile("supabase/migrations/20260809024615_kiosk_numeric_enrollment_rate_limits.sql");
   assert(source.includes("KIOSK_ENROLLMENT_RATE_LIMIT_SALT"));
   assert(source.includes("p_source_hash: sourceHash"));
   assert(migration.includes("kiosk_enrollment_attempts"));

@@ -124,9 +124,10 @@ Deno.test("settlement runtime never resolves the current pricing assignment", as
 
 Deno.test("Checkout rejects a missing, modified, or incomplete frozen snapshot before payment", async () => {
   const source = await Deno.readTextFile("supabase/functions/create-stripe-checkout/index.ts");
-  assertEquals(source.includes("!storedHash || recomputedHash !== storedHash"), true);
+  assertEquals(source.includes("!storedHash"), true);
+  assertEquals(source.includes("recomputedHash !== storedHash"), true);
   assertEquals(source.includes("SNAPSHOT_BINDING_MISMATCH"), true);
   assertEquals(source.includes("computeFinalPricingFromSnapshot"), true);
-  assertEquals(source.indexOf("computeFinalPricingFromSnapshot") !== source.lastIndexOf("computeFinalPricingFromSnapshot"), true);
-  assertEquals(source.lastIndexOf("computeFinalPricingFromSnapshot") < source.indexOf("stripe.checkout.sessions.create"), true);
+  assertEquals(source.includes("validFrozenSnapshot(snapshot, currency, session.created_at)"), true);
+  assertEquals(source.indexOf("validFrozenSnapshot") < source.indexOf("stripe.checkout.sessions.create"), true);
 });

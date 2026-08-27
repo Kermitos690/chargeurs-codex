@@ -5,6 +5,10 @@
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { computeFinalPricingFromSnapshot } from "../_shared/pricingSnapshot.ts";
+
+const TERMS_VERSION = "terms-2026-08-26-preproduction-v2";
+const PRIVACY_VERSION = "privacy-2026-08-26-preproduction-v2";
 
 const headers = {
   ...corsHeaders,
@@ -24,6 +28,25 @@ function canonicalize(value: unknown): string {
   return `{${Object.keys(obj).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(obj[key])}`).join(",")}}`;
 }
 async function snapshotHash(value: unknown) { return sha256(canonicalize(value)); }
+
+// A Checkout must bind to the same complete, immutable tariff that will be
+// used at settlement.  This deliberately runs before any Stripe object is
+// retrieved or created: a legacy/incomplete snapshot is not payable.
+function validFrozenSnapshot(snapshot: Record<string, unknown>, currency: string, createdAt: unknown): boolean {
+  if (typeof createdAt !== "string" || !Number.isFinite(Date.parse(createdAt))) return false;
+  try {
+    computeFinalPricingFromSnapshot({
+      snapshot,
+      expectedCurrency: currency,
+      startAt: createdAt,
+      endAt: createdAt,
+      returnState: "normal",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function auth(req: Request, db: any, stationId: string) {
   const token = (req.headers.get("X-Kiosk-Token") ?? "").trim();
@@ -103,6 +126,11 @@ Deno.serve(async (req) => {
     if (String(session.kiosk_device_id ?? "") !== String(device.id)) return json({ ok: false, error: "KIOSK_DEVICE_MISMATCH" }, 403);
     if (session.expires_at && Date.parse(session.expires_at) < Date.now()) return json({ ok: false, error: "SESSION_EXPIRED" }, 410);
     if (session.paid_at) return json({ ok: false, error: "SESSION_ALREADY_PAID" }, 409);
+    if (
+      session.contract_terms_version !== TERMS_VERSION ||
+      session.contract_privacy_version !== PRIVACY_VERSION ||
+      !session.contract_accepted_at
+    ) return json({ ok: false, error: "CONTRACT_ACCEPTANCE_REQUIRED" }, 409);
 
     const secretKey = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
     if (!(secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_"))) return json({ ok: false, error: "STRIPE_TEST_KEY_REQUIRED" }, 503);
@@ -111,10 +139,21 @@ Deno.serve(async (req) => {
     if (!appOrigin) return json({ ok: false, error: "PUBLIC_APP_URL_NOT_CONFIGURED" }, 503);
 
     const snapshot = session.pricing_snapshot as Record<string, unknown> | null;
-    const depositCents = Math.round(Number(session.deposit_amount_cents ?? snapshot?.deposit_cents ?? 0));
-    if (!snapshot || !Number.isInteger(depositCents) || depositCents <= 0) return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
+    const currency = String(session.currency ?? "CHF").toUpperCase();
+    const snapshotDepositCents = Math.round(Number(snapshot?.deposit_cents ?? 0));
+    const sessionDepositCents = session.deposit_amount_cents == null
+      ? null
+      : Math.round(Number(session.deposit_amount_cents));
+    if (!snapshot || !Number.isInteger(snapshotDepositCents) || snapshotDepositCents <= 0) return json({ ok: false, error: "PRICING_NOT_CONFIGURED" }, 409);
     const storedHash = typeof session.pricing_snapshot_hash === "string" ? session.pricing_snapshot_hash : "";
-    if (storedHash && await snapshotHash(snapshot) !== storedHash) return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
+    const recomputedHash = await snapshotHash(snapshot);
+    if (
+      !storedHash ||
+      recomputedHash !== storedHash ||
+      (sessionDepositCents !== null && (!Number.isInteger(sessionDepositCents) || sessionDepositCents !== snapshotDepositCents)) ||
+      !validFrozenSnapshot(snapshot, currency, session.created_at)
+    ) return json({ ok: false, error: "SNAPSHOT_BINDING_MISMATCH" }, 409);
+    const depositCents = snapshotDepositCents;
 
     const stripe = new Stripe(secretKey, { apiVersion: "2025-09-30.clover" as any, httpClient: Stripe.createFetchHttpClient() });
 
@@ -129,8 +168,7 @@ Deno.serve(async (req) => {
 
     await ensurePaymentStarted(db, session);
     const lang = session.customer_language === "de" || session.customer_language === "en" ? session.customer_language : "fr";
-    const currency = String(session.currency ?? "CHF").toLowerCase();
-    if (currency !== "chf") return json({ ok: false, error: "TWINT_REQUIRES_CHF" }, 409);
+    if (currency !== "CHF") return json({ ok: false, error: "TWINT_REQUIRES_CHF" }, 409);
     const publicCode = String(session.public_session_code ?? "");
     const expiresAt = Math.floor(Date.now() / 1000) + 30 * 60;
     const pricingHash = storedHash || await snapshotHash(snapshot);
@@ -138,6 +176,7 @@ Deno.serve(async (req) => {
       rental_session_id: String(session.id), public_session_code: publicCode, station_id: stationId,
       kiosk_device_id: String(session.kiosk_device_id ?? ""), pricing_snapshot_hash: pricingHash,
       deposit_amount_cents: String(depositCents), payment_purpose: "rental_guarantee",
+      terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION,
     };
 
     const checkout = await stripe.checkout.sessions.create({
@@ -149,7 +188,7 @@ Deno.serve(async (req) => {
       payment_method_options: { card: { capture_method: "manual", setup_future_usage: "off_session" } },
       payment_intent_data: { description: "Chargeurs.ch — garantie de location", metadata },
       expires_at: expiresAt,
-      line_items: [{ price_data: { currency, product_data: { name: "Chargeurs.ch — Garantie de location", description: "30 CHF de garantie. Le prix réel est calculé au retour de la batterie." }, unit_amount: depositCents }, quantity: 1 }],
+      line_items: [{ price_data: { currency: currency.toLowerCase(), product_data: { name: "Chargeurs.ch — Garantie de location", description: "30 CHF de garantie. Le prix réel est calculé au retour de la batterie." }, unit_amount: depositCents }, quantity: 1 }],
       metadata,
       custom_text: { submit: { message: "Le prix final est calculé au retour. Carte et wallets compatibles : réservation bancaire temporaire. TWINT : débit puis remboursement de la différence." } },
       success_url: `${appOrigin}/pay/${encodeURIComponent(String(session.id))}/success?c=${encodeURIComponent(publicCode)}&lang=${lang}`,
