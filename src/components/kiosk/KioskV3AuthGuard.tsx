@@ -7,9 +7,12 @@ import { readKioskToken } from "@/lib/kioskFetch";
 import { KIOSK_AUTH_REQUIRED_EVENT } from "@/lib/kioskEdgeProxy";
 
 type Language = "fr" | "en" | "de";
-type NativeWindow = Window & { ChargeursNative?: unknown };
+type NativeBridge = { restartApp?: () => void };
+type NativeWindow = Window & { ChargeursNative?: NativeBridge };
 
 const AUTO_RECOVERY_KEY = "chargeurs_kiosk_auth_auto_recovery_attempted";
+const NATIVE_RECOVERY_KEY = "chargeurs_kiosk_auth_native_recovery_attempted_at";
+const NATIVE_RECOVERY_COOLDOWN_MS = 10 * 60_000;
 
 type Copy = {
   eyebrow: string;
@@ -51,8 +54,12 @@ const COPY: Record<Language, Copy> = {
   },
 };
 
+function nativeBridge(): NativeBridge | undefined {
+  return (window as NativeWindow).ChargeursNative;
+}
+
 function nativeWrapperPresent(): boolean {
-  return Boolean((window as NativeWindow).ChargeursNative);
+  return Boolean(nativeBridge());
 }
 
 function nativeSessionCredentialMissing(): boolean {
@@ -92,6 +99,43 @@ function clearAuthRecoveryAttempt(): void {
   }
 }
 
+function nativeRecoveryRecentlyAttempted(now = Date.now()): boolean {
+  try {
+    const raw = window.localStorage.getItem(NATIVE_RECOVERY_KEY);
+    if (!raw) return false;
+    const attemptedAt = Number(raw);
+    if (!Number.isFinite(attemptedAt) || attemptedAt <= 0 || now < attemptedAt) {
+      window.localStorage.removeItem(NATIVE_RECOVERY_KEY);
+      return false;
+    }
+    if (now - attemptedAt >= NATIVE_RECOVERY_COOLDOWN_MS) {
+      window.localStorage.removeItem(NATIVE_RECOVERY_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    // Without durable storage we cannot prove the restart is bounded, so do not
+    // attempt automatic native recovery.
+    return true;
+  }
+}
+
+function markNativeRecoveryAttempted(): void {
+  try {
+    window.localStorage.setItem(NATIVE_RECOVERY_KEY, String(Date.now()));
+  } catch {
+    // The eligibility check fails closed when durable storage is unavailable.
+  }
+}
+
+function clearNativeRecoveryAttempt(): void {
+  try {
+    window.localStorage.removeItem(NATIVE_RECOVERY_KEY);
+  } catch {
+    // Best effort only.
+  }
+}
+
 export function shouldShowKioskAuthGuard(input: {
   runtimeTokenPresent: boolean;
   nativeWrapper: boolean;
@@ -102,6 +146,20 @@ export function shouldShowKioskAuthGuard(input: {
   if (!input.runtimeTokenPresent) return true;
   if (input.nativeWrapper && !input.nativeSessionCredentialPresent) return true;
   return false;
+}
+
+export function shouldAttemptNativeAuthRecovery(input: {
+  guardActive: boolean;
+  nativeWrapper: boolean;
+  nativeSessionCredentialPresent: boolean;
+  restartAvailable: boolean;
+  recentlyAttempted: boolean;
+}): boolean {
+  return input.guardActive
+    && input.nativeWrapper
+    && !input.nativeSessionCredentialPresent
+    && input.restartAvailable
+    && !input.recentlyAttempted;
 }
 
 export function KioskV3AuthGuard() {
@@ -129,14 +187,6 @@ export function KioskV3AuthGuard() {
     return () => window.clearTimeout(timer);
   }, [authenticationRejected]);
 
-  // Once the page remains healthy for a few seconds, allow a future isolated
-  // startup race to self-heal again without weakening persistent auth failures.
-  useEffect(() => {
-    if (authenticationRejected || !localCredentialReady()) return;
-    const timer = window.setTimeout(clearAuthRecoveryAttempt, 5000);
-    return () => window.clearTimeout(timer);
-  }, [authenticationRejected, retryNonce]);
-
   const state = useMemo(() => {
     const runtimeTokenPresent = Boolean(readKioskToken());
     const nativeWrapper = nativeWrapperPresent();
@@ -154,6 +204,42 @@ export function KioskV3AuthGuard() {
     };
   }, [authenticationRejected, retryNonce]);
 
+  // If the native wrapper exists but its per-WebView credential disappeared,
+  // ask the APK to recreate the runtime from its secure enrollment store. The
+  // localStorage timestamp survives WebView recreation and limits this to one
+  // automatic attempt per cooldown. No credential is exposed to JavaScript.
+  useEffect(() => {
+    const bridge = nativeBridge();
+    if (!shouldAttemptNativeAuthRecovery({
+      guardActive: state.active,
+      nativeWrapper: state.nativeWrapper,
+      nativeSessionCredentialPresent: state.nativeSessionCredentialPresent,
+      restartAvailable: typeof bridge?.restartApp === "function",
+      recentlyAttempted: nativeRecoveryRecentlyAttempted(),
+    })) return;
+
+    markNativeRecoveryAttempted();
+    const timer = window.setTimeout(() => {
+      try {
+        bridge?.restartApp?.();
+      } catch {
+        setAuthenticationRejected(true);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [state.active, state.nativeWrapper, state.nativeSessionCredentialPresent]);
+
+  // Once the page remains healthy for a few seconds, allow a future isolated
+  // startup race or native runtime recreation to self-heal again.
+  useEffect(() => {
+    if (state.active || authenticationRejected || !localCredentialReady()) return;
+    const timer = window.setTimeout(() => {
+      clearAuthRecoveryAttempt();
+      clearNativeRecoveryAttempt();
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [state.active, authenticationRejected, retryNonce]);
+
   useEffect(() => {
     if (state.active) document.documentElement.dataset.kioskAuth = "required";
     else delete document.documentElement.dataset.kioskAuth;
@@ -164,10 +250,19 @@ export function KioskV3AuthGuard() {
 
   const retry = () => {
     clearAuthRecoveryAttempt();
+    clearNativeRecoveryAttempt();
     setAuthenticationRejected(false);
     setRetryNonce((value) => value + 1);
     window.setTimeout(() => {
-      if (localCredentialReady()) window.location.reload();
+      if (localCredentialReady()) {
+        window.location.reload();
+        return;
+      }
+      const bridge = nativeBridge();
+      if (typeof bridge?.restartApp === "function" && !nativeRecoveryRecentlyAttempted()) {
+        markNativeRecoveryAttempted();
+        bridge.restartApp();
+      }
     }, 80);
   };
 
