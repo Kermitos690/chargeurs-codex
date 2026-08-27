@@ -27,7 +27,7 @@ using (exists (
 
 alter table public.loyalty_missions drop constraint if exists loyalty_missions_metric_check;
 alter table public.loyalty_missions add constraint loyalty_missions_metric_check
-  check (metric in ('completed_rentals','distinct_stations','spent_cents','campaign_paid_credit_spent_cents'));
+  check (metric in ('activated_rentals','completed_rentals','distinct_stations','spent_cents','campaign_paid_credit_spent_cents'));
 
 create or replace function public.allocate_wallet_debit_server(p_debit_entry_id uuid)
 returns integer
@@ -44,6 +44,12 @@ declare
 begin
   select * into v_debit from public.wallet_ledger where id=p_debit_entry_id for update;
   if not found or v_debit.amount_cents>=0 or v_debit.type<>'debit' then raise exception 'WALLET_DEBIT_ENTRY_REQUIRED'; end if;
+
+  -- Serialize every allocation for one wallet. This prevents two concurrent
+  -- rental debits from consuming the same remaining paid/promo credit entry.
+  perform 1 from public.wallets where id=v_debit.wallet_id for update;
+  if not found then raise exception 'WALLET_NOT_FOUND'; end if;
+
   if exists(select 1 from public.wallet_spend_allocations where debit_entry_id=p_debit_entry_id) then
     select coalesce(sum(amount_cents),0)::integer into v_allocated from public.wallet_spend_allocations where debit_entry_id=p_debit_entry_id;
     return v_allocated;
@@ -55,7 +61,7 @@ begin
       greatest(0,l.amount_cents-coalesce((select sum(a.amount_cents) from public.wallet_spend_allocations a where a.credit_entry_id=l.id),0))::integer as remaining
     from public.wallet_ledger l
     where l.wallet_id=v_debit.wallet_id and l.amount_cents>0
-      and l.type in ('topup','bonus','credit','refund')
+      and l.type in ('topup','bonus','credit','refund','adjust')
       and l.created_at<=v_debit.created_at
     order by l.created_at,l.id
     for update
