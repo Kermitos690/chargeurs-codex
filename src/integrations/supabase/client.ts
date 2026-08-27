@@ -7,7 +7,6 @@ import { kioskAwareFetch } from '@/lib/kioskFetch';
 // deliberately safe to ship in the frontend; never place a service-role key here.
 const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
 const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
-const STAGING_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4';
 
 function isChargeursCloudflareStagingHost() {
   if (typeof window === 'undefined') return false;
@@ -18,16 +17,16 @@ function isChargeursCloudflareStagingHost() {
 
 const FORCE_CHARGEURS_STAGING = isChargeursCloudflareStagingHost();
 
-// Browser auth must stay browser -> Supabase directly. A same-origin Pages
-// Function proxy was tested and produced Cloudflare-to-Cloudflare 502 responses
-// before GoTrue was reached. The legacy anon key remains an intentionally public,
-// RLS-constrained browser key and is the most compatible transport for this staging
-// host. Other environments keep their configured publishable key.
+// Keep authentication in the browser and call the staging Supabase project
+// directly. The previous same-origin Pages Function proxy was removed from the
+// client path because Cloudflare-to-Supabase server subrequests returned a 502
+// before GoTrue was reached. This direct URL + publishable key is the same public
+// transport already proven on the working Vercel staging client.
 const SUPABASE_URL = FORCE_CHARGEURS_STAGING
   ? STAGING_SUPABASE_URL
   : (import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL);
 const SUPABASE_PUBLISHABLE_KEY = FORCE_CHARGEURS_STAGING
-  ? STAGING_SUPABASE_ANON_KEY
+  ? STAGING_SUPABASE_PUBLISHABLE_KEY
   : (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY);
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
