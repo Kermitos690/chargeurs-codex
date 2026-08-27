@@ -34,29 +34,44 @@ async function request(url, init = {}) {
   }
 }
 
-export async function onRequestGet() {
-  const publicHeaders = {
-    apikey: ANON_KEY,
-    Authorization: `Bearer ${ANON_KEY}`,
-  };
+const withApiKey = (path) => {
+  const url = new URL(path, SUPABASE_URL);
+  url.searchParams.set("apikey", ANON_KEY);
+  return url.toString();
+};
 
-  const [external, authHealth, invalidLogin, rest] = await Promise.all([
+export async function onRequestGet() {
+  const [external, authHealth, invalidLogin, restAnon, restFakeBearer] = await Promise.all([
     request("https://example.com/"),
-    request(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } }),
-    request(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    request(withApiKey("/auth/v1/health")),
+    request(withApiKey("/auth/v1/token?grant_type=password"), {
       method: "POST",
-      headers: { ...publicHeaders, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ email: "cloudflare-probe@example.invalid", password: "not-a-real-password" }),
     }),
-    request(`${SUPABASE_URL}/rest/v1/user_roles?select=role&limit=1`, { headers: publicHeaders }),
+    request(withApiKey("/rest/v1/user_roles?select=role&limit=1"), {
+      headers: { Accept: "application/json" },
+    }),
+    request(withApiKey("/rest/v1/user_roles?select=role&limit=1"), {
+      headers: { Accept: "application/json", Authorization: "Bearer deliberately-invalid-session-token" },
+    }),
   ]);
 
-  const healthy = external.status === 200
+  const queryKeyPathWorks = external.status === 200
     && authHealth.status === 200
     && invalidLogin.status === 400
-    && rest.status === 200;
+    && restAnon.status === 200
+    && [401, 403].includes(restFakeBearer.status);
 
-  return json({ ok: healthy, version: 4, external, authHealth, invalidLogin, rest }, healthy ? 200 : 502);
+  return json({
+    ok: queryKeyPathWorks,
+    version: 5,
+    external,
+    authHealth,
+    invalidLogin,
+    restAnon,
+    restFakeBearer,
+  }, queryKeyPathWorks ? 200 : 502);
 }
 
 export function onRequest() {
