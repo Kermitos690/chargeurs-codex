@@ -5,6 +5,7 @@ import {
   syncMembershipFromInvoice,
   syncMembershipSubscription,
 } from "../_shared/membershipStripe.ts";
+import { fulfilLaunchOfferCheckout } from "../_shared/passLaunchWebhook.ts";
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json"}});
 const db=()=>createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false}});
@@ -80,12 +81,16 @@ async function recoverManualCard(rawEvent:any){
   return {handled:true,replayed:false,release_status:release.status};
 }
 
-async function handleMembershipEvent(rawEvent:any){
+async function handleCustomerProgramEvent(rawEvent:any){
   const type=String(rawEvent?.type??"");
   const object=rawEvent?.data?.object??{};
   const eventId=String(rawEvent?.id??"");
   const admin=db();
 
+  if((type==="checkout.session.completed"||type==="checkout.session.async_payment_succeeded")&&object?.metadata?.payment_purpose==="chargeurs_pass_topup"){
+    const pass=await fulfilLaunchOfferCheckout(admin,object as Stripe.Checkout.Session);
+    return {handled:pass.handled,type,pass:pass.result};
+  }
   if(type==="checkout.session.completed"&&object?.metadata?.payment_purpose==="customer_membership"){
     const handled=await fulfilMembershipCheckout(admin,stripeClient(),object as Stripe.Checkout.Session,eventId);
     return {handled,type};
@@ -114,11 +119,11 @@ Deno.serve(async(req)=>{
   try{event=JSON.parse(raw);}catch{return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":"application/json"}});}
 
   try{
-    const membership=await handleMembershipEvent(event);
-    if(membership.handled) return json({received:true,forwarded:true,membership});
+    const program=await handleCustomerProgramEvent(event);
+    if(program.handled) return json({received:true,forwarded:true,program});
   }catch(error){
-    console.error("stripe-webhook-gateway membership",error instanceof Error?error.message:"UNKNOWN_ERROR");
-    return json({error:"MEMBERSHIP_WEBHOOK_PROCESSING_FAILED"},500);
+    console.error("stripe-webhook-gateway customer program",error instanceof Error?error.message:"UNKNOWN_ERROR");
+    return json({error:"CUSTOMER_PROGRAM_WEBHOOK_PROCESSING_FAILED"},500);
   }
 
   if(!["payment_intent.amount_capturable_updated","checkout.session.completed"].includes(String(event?.type??""))) return new Response(forwardedText,{status:forwarded.status,headers:{"content-type":"application/json"}});
