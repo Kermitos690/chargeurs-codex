@@ -29,6 +29,7 @@ type Status = {
     profile_name?: string | null;
     pricing_rules_version?: number | null;
     initial_fee_cents?: number | null;
+    included_minutes?: number | null;
     min_amount_cents?: number | null;
     period_minutes?: number | null;
     price_per_period_cents?: number | null;
@@ -55,6 +56,8 @@ const COPY = {
     dailyCap: "Plafond journalier",
     nonReturn: "Non-retour",
     then: "puis",
+    upTo: "jusqu’à",
+    startedHour: "par heure commencée",
     accordingToDuration: "selon la durée",
     continueCard: "Autoriser la garantie et louer",
     continueTwint: "Payer la garantie et louer",
@@ -78,6 +81,8 @@ const COPY = {
     dailyCap: "Tageslimit",
     nonReturn: "Nichtrückgabe",
     then: "danach",
+    upTo: "bis",
+    startedHour: "pro angefangene Stunde",
     accordingToDuration: "je nach Dauer",
     continueCard: "Garantie autorisieren und mieten",
     continueTwint: "Garantie zahlen und mieten",
@@ -101,6 +106,8 @@ const COPY = {
     dailyCap: "Daily cap",
     nonReturn: "Non-return",
     then: "then",
+    upTo: "up to",
+    startedHour: "per started hour",
     accordingToDuration: "depending on duration",
     continueCard: "Authorise guarantee and rent",
     continueTwint: "Pay guarantee and rent",
@@ -121,12 +128,17 @@ function pricingLabel(pricing: Status["pricing"], currency: string, lang: Lang) 
   const period = Number(pricing.period_minutes ?? 0);
   const perPeriod = Number(pricing.price_per_period_cents ?? 0);
   const initial = Number(pricing.initial_fee_cents ?? 0);
+  const included = Number(pricing.included_minutes ?? 0);
   const minimum = Number(pricing.min_amount_cents ?? 0);
   const rulesVersion = Number(pricing.pricing_rules_version ?? 0);
 
   if (rulesVersion === 3 && pricing.profile_name === "Chargeurs.ch Client" && period > 0 && perPeriod >= 0) {
-    const firstPeriod = Math.max(minimum, initial + perPeriod);
-    return `${cents(firstPeriod, currency)} / ${period} min · ${copy.then} +${cents(perPeriod, currency)} / ${period} min`;
+    const firstCoveredMinutes = included + period;
+    const firstPrice = Math.max(minimum, initial + perPeriod);
+    if (firstCoveredMinutes === 120 && period === 60) {
+      return `${cents(firstPrice, currency)} ${copy.upTo} 2 h · ${copy.then} +${cents(perPeriod, currency)} ${copy.startedHour}`;
+    }
+    return `${cents(firstPrice, currency)} / ${firstCoveredMinutes} min · ${copy.then} +${cents(perPeriod, currency)} / ${period} min`;
   }
 
   const tiers = Array.isArray(pricing.tiers)
