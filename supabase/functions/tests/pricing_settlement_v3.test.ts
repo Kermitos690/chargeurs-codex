@@ -41,17 +41,17 @@ function expressSnapshot(): Record<string, unknown> {
 
 function memberSnapshot(): Record<string, unknown> {
   return {
-    profile_id: "member-v3",
+    profile_id: "member-v3-final",
     profile_name: "Chargeurs.ch Client",
-    profile_version: 5,
+    profile_version: 6,
     pricing_rules_version: 3,
     currency: "CHF",
     tiered: false,
     tiers: [],
-    initial_fee_cents: 60,
-    included_minutes: 0,
-    period_minutes: 30,
-    price_per_period_cents: 40,
+    initial_fee_cents: 100,
+    included_minutes: 60,
+    period_minutes: 60,
+    price_per_period_cents: 100,
     grace_minutes: 0,
     daily_cap_cents: 590,
     total_cap_cents: 3000,
@@ -60,7 +60,7 @@ function memberSnapshot(): Record<string, unknown> {
     late_fee_cents: 0,
     unreturned_fee_cents: 3000,
     unreturned_after_minutes: 4320,
-    min_amount_cents: 100,
+    min_amount_cents: 200,
     rounding: "none",
     tax_percent: 0,
   };
@@ -93,21 +93,23 @@ Deno.test("v3 Express keeps the approved public tiers unchanged", () => {
   }
 });
 
-Deno.test("v3 member pricing is CHF 1 first 30 minutes then CHF 0.40 per started 30 minutes", () => {
+Deno.test("v3 member pricing is CHF 2 through 2h then CHF 1 per started additional hour", () => {
   const vectors = [
-    [0, 100],
-    [1, 100],
-    [30, 100],
-    [31, 140],
-    [60, 140],
-    [61, 180],
-    [90, 180],
-    [120, 220],
+    [0, 200],
+    [1, 200],
+    [30, 200],
+    [60, 200],
+    [61, 200],
+    [120, 200],
+    [121, 300],
     [180, 300],
-    [240, 380],
-    [360, 540],
-    [390, 580],
-    [420, 590],
+    [181, 400],
+    [240, 400],
+    [241, 500],
+    [300, 500],
+    [301, 590],
+    [360, 590],
+    [1440, 590],
   ] as const;
   for (const [minutes, expected] of vectors) {
     assertEquals(price(memberSnapshot(), minutes).final_cents, expected, `${minutes} minutes`);
