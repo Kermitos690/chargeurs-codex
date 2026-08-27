@@ -28,6 +28,25 @@ jobs:
           curl -sS --max-time 15 -D - https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
           echo
 
+      - name: Volt AI runtime status
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "--- VOLT AI STATUS ---"
+          curl -fsS --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/api/volt-ai-status
+          echo
+
+      - name: Volt chat provider probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "--- VOLT CHAT ---"
+          curl -fsS --max-time 25 \
+            -H 'Content-Type: application/json' \
+            -d '{"mode":"public","message":"Yo-Yo ça va ?","history":[],"locale":"fr"}' \
+            https://chargeurs-ch-staging-cf.pages.dev/api/volt-chat
+          echo
+
   imac-check:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
