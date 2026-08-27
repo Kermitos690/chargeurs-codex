@@ -7,7 +7,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   // The embedded tablet runs Android 8+ (minSdk 26), whose System WebView
-  // can be substantially older than Vite's moving browser baseline.  Keep
+  // can be substantially older than Vite's moving browser baseline. Keep
   // the kiosk bundle compatible with Chromium 61 instead of shipping syntax
   // that renders a native WebView as an empty page before React can recover.
   build: {
@@ -29,7 +29,10 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       // The kiosk wrapper (src/pwa/registerSW.ts) is the ONLY registrar.
       injectRegister: null,
-      // A fresh worker activates as soon as it has been downloaded. It does not\n      // reload the active page, so an in-progress rental or payment keeps running;\n      // the next navigation uses the new app shell instead of a stale kiosk UI.\n      registerType: "autoUpdate",
+      // A fresh worker activates as soon as it has been downloaded. It does not
+      // reload the active page, so an in-progress rental or payment keeps running;
+      // the next navigation uses the new app shell instead of a stale kiosk UI.
+      registerType: "autoUpdate",
       filename: "sw.js",
       // No SW in dev / Lovable preview.
       devOptions: { enabled: false },
@@ -54,19 +57,29 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        // This script makes the downloaded worker activate immediately. The page\n        // is deliberately not reloaded: an active rental/payment stays intact.\n        importScripts: ["/kiosk-sw-activate.js"],
+        // This script makes the downloaded worker activate immediately. The page
+        // is deliberately not reloaded: an active rental/payment stays intact.
+        importScripts: ["/kiosk-sw-activate.js"],
         // Precache the built app shell (hashed JS/CSS + icons).
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
-        // Let a downloaded fix take control immediately; the current page is not\n        // force-reloaded, avoiding any interruption to an active transaction.\n        skipWaiting: true,
-        // OAuth callback must never be served from cache / fallback.
+        // Let a downloaded fix take control immediately; the current page is not
+        // force-reloaded, avoiding any interruption to an active transaction.
+        skipWaiting: true,
+        // OAuth callback and admin routes must never be served from cache / fallback.
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/~oauth/, /^\/admin/, /\/functions\//, /\/rest\//, /\/auth\//],
         runtimeCaching: [
           {
-            // HTML navigations: always try the network first (fresh app shell).
-            urlPattern: ({ request }) => request.mode === "navigate",
+            // HTML navigations: network-first for public/kiosk pages only.
+            // Admin stays network-only so an old kiosk worker can never serve
+            // a stale authentication bundle on Safari or another browser.
+            urlPattern: ({ url, request, sameOrigin }) =>
+              sameOrigin
+              && request.mode === "navigate"
+              && !url.pathname.startsWith("/admin")
+              && !url.pathname.startsWith("/~oauth"),
             handler: "NetworkFirst",
             options: {
               cacheName: "kiosk-html",
