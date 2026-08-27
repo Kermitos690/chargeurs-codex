@@ -1,0 +1,47 @@
+name: Cloudflare staging diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/cloudflare-staging-20260827
+    paths:
+      - .github/workflows/cloudflare-staging-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RUNNER_NAME=$RUNNER_NAME"
+          sw_vers || true
+          node --version
+          npm --version
+
+      - name: Cloudflare authentication check
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.35.0 whoami
+
+      - name: Pages DNS and HTTP check
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "--- DNS ---"
+          (dig +short chargeurs-ch-staging-cf.pages.dev || nslookup chargeurs-ch-staging-cf.pages.dev || true)
+          echo "--- HEAD ---"
+          curl -fsSIL --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/ || true
+          echo "--- BUILD CHECK ---"
+          curl -fsS --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
+          echo
