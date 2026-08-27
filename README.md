@@ -33,16 +33,18 @@ Le dépôt contient l'application web publique, les écrans kiosk, l'espace clie
 
 ### Client avec solde prépayé Chargeurs.ch
 
-- premières 30 minutes : **1,00 CHF** ;
-- chaque tranche supplémentaire de 30 minutes commencée : **+0,40 CHF** ;
+- **2,00 CHF jusqu'à 2 heures** ;
+- après 2 heures : **+1,00 CHF par heure supplémentaire commencée** ;
 - plafond : **5,90 CHF par période de 24 heures** ;
 - avec au moins **30 CHF disponibles**, le backend réserve 30 CHF dans le solde prépayé et ne crée pas de garantie Stripe supplémentaire ;
 - au retour, seul le prix réel est consommé et le reste de la réservation est libéré ;
 - non-retour à **72 heures : 30 CHF au total**.
 
+Repères du premier jour : 0–120 min = 2,00 CHF ; 121–180 = 3,00 CHF ; 181–240 = 4,00 CHF ; 241–300 = 5,00 CHF ; dès 301 min et jusqu'à 24 h = 5,90 CHF.
+
 Pour le pilote, un solde inférieur à 30 CHF ne doit pas être combiné avec une garantie Stripe partielle : le client recharge jusqu'au seuil requis ou utilise le parcours de garantie Stripe complet. Les recharges et les réservations sont des écritures serveur de ledger ; le navigateur ne peut jamais créditer ou débiter lui-même un solde.
 
-Ces règles sont introduites sous `pricing_rules_version = 3`. Les locations v1/v2 déjà créées conservent définitivement leur `pricing_snapshot` historique et ne sont jamais recalculées avec la v3.
+Ces règles utilisent `pricing_rules_version = 3`. La correction finale du tarif membre est versionnée dans `supabase/migrations/20260827030000_member_pricing_v3_final.sql`. Les locations v1/v2 déjà créées conservent définitivement leur `pricing_snapshot` historique et ne sont jamais recalculées avec la v3.
 
 Les montants doivent provenir exclusivement d'un snapshot tarifaire serveur. Le navigateur et le kiosk ne sont jamais une source de vérité financière.
 
@@ -113,11 +115,11 @@ Le frontend, le kiosk et les webhooks ne doivent jamais imposer directement un �
 
 ## État de préproduction
 
-La PR de hardening consolide le frontend, Stripe TEST, le ledger membre, ChargeNow, l'enrôlement, les contrats et la préparation du pilote. Une CI verte valide le code du dépôt ; elle ne remplace pas une preuve physique de terrain ni une validation juridique/comptable.
+La PR de hardening consolide le frontend, Stripe TEST, le ledger membre, ChargeNow, l'enrôlement, les contrats et la préparation du pilote. Les migrations de base v3/prépayé et la correction finale du profil membre sont appliquées et vérifiables sur le Supabase staging ; cela ne remplace ni le déploiement des Edge Functions correspondantes, ni un test physique, ni une validation juridique/comptable.
 
 Restent notamment à valider avant production commerciale :
 
-- déploiement coordonné et validation staging des fonctions/migrations v3 ;
+- déploiement staging contrôlé des Edge Functions correspondant au code v3/prépayé ;
 - tests contrôlés du rail membre prépayé sans Stripe et du fallback Express ;
 - éjection/retour physique sur les bornes qualifiées ;
 - identité légale, adresse et revue humaine des CGV/confidentialité ;
