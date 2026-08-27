@@ -14,7 +14,7 @@ Status date: 2026-08-27. This is the current operations and contract reference. 
 
 ## Approved pilot pricing v3
 
-The commercial pricing decision is fixed in this branch. It is **not yet activated on staging**: the v3 pricing migration, prepaid-rail migration and matching Edge code must be deployed and validated together.
+The commercial pricing decision is fixed. The v3 pricing and prepaid database foundations are present on staging; the final member tariff is applied by the corrective migration `20260827030000_member_pricing_v3_final.sql`. This database state does **not** by itself prove the matching Edge runtime or a physical end-to-end rental.
 
 ### Express / guest
 
@@ -27,38 +27,42 @@ The commercial pricing decision is fixed in this branch. It is **not yet activat
 
 ### Member with prepaid Chargeurs.ch balance
 
-- 1.00 CHF covers the first 30 minutes;
-- +0.40 CHF per additional started 30-minute period;
-- 5.90 CHF maximum per 24-hour period.
+- **2.00 CHF through 2 hours**;
+- after 2 hours, **+1.00 CHF per started additional hour**;
+- **5.90 CHF maximum per started 24-hour period**.
 
-For a v3 member rental with at least 30 CHF available in the server-side balance, the approved rail is now versioned in the branch as `membership_prepaid`:
+The authoritative first-day boundaries are: 0–120 minutes = 2.00 CHF; 121–180 = 3.00 CHF; 181–240 = 4.00 CHF; 241–300 = 5.00 CHF; from 301 minutes through 24 hours = 5.90 CHF. The daily cap then scales by started 24-hour period until the non-return rule applies.
+
+For a v3 member rental with at least 30 CHF available in the server-side balance, the approved rail is `membership_prepaid`:
 
 1. the member pairing selects the member snapshot;
 2. the customer accepts the current contract/privacy versions;
 3. the server claims `membership_prepaid` under the existing first-rail-wins lock;
 4. exactly 30 CHF are reserved atomically in the internal ledger;
-5. the Rental Orchestrator records `payment_started` then `payment_authorized`;
-6. the rental receives `settlement_status=prepaid` without creating a Stripe PaymentIntent;
-7. the existing hardware gate still requires the canonical authorized state and physical qualification;
+5. the Rental Orchestrator records the financial authorization;
+6. no Stripe PaymentIntent is required for that internal reservation;
+7. the hardware gate remains separate and still requires its own qualification;
 8. at a normal return, the v3 price is committed from the reserved balance and the unused part is released.
 
-If fewer than 30 CHF are available, no partial balance reservation is retained and the customer falls back to the full Stripe-guarantee path (or later recharges the account). The pilot does not combine a partial internal balance with a partial Stripe guarantee.
+If fewer than 30 CHF are available, no partial balance reservation is retained and the customer falls back to the full Stripe-guarantee path or later recharges the account. The pilot does not combine a partial internal balance with a partial Stripe guarantee.
 
 ### Recharges
 
-The current staging ledger contains membership grants and rental reservation/settlement entries, but **does not yet contain a production-ready paid top-up entry type or Stripe top-up flow**. Future 20/50/100/200 CHF recharges must be implemented as a separate server-owned payment flow and may credit the ledger only after a trusted Stripe payment confirmation. A browser success page is not sufficient evidence to mint balance.
+The current staging ledger contains membership grants and rental reservation/settlement primitives, but a production-ready paid top-up journey still requires separate end-to-end validation. Future 20/50/100/200 CHF recharges may credit the ledger only after a trusted Stripe payment confirmation. A browser success page is not sufficient evidence to mint balance.
 
 ### Non-return
 
 For new `pricing_rules_version=3` rentals, no confirmed return at 72 hours means a **30 CHF contractual total**, not “duration price + 30 CHF penalty”. v1/v2 snapshots remain immutable and retain their historical settlement semantics.
 
-The v3 calculation is versioned, but automatic declaration/collection of a non-return remains disabled until the operator approves the exact operational/legal procedure. This avoids turning a pricing rule into an automatic financial action without final legal review.
+The v3 calculation is versioned, but automatic declaration/collection of a non-return remains blocked until the operator approves the exact operational/legal procedure. This avoids turning a pricing rule into an automatic financial action without final legal review.
 
 ## Runtime and operations
 
 The rental snapshot is computed server-side and stored with every session. It contains the price period, daily cap, guarantee, non-return amount, rules version and hash. Settlement rejects a missing or modified snapshot. A rental becomes active only after server-confirmed financial coverage and physical release evidence.
 
-The prepaid rail reuses the existing immutable membership-credit ledger and its idempotent reservation/commit/reversal RPCs. The new v3 DB contract extends the payment-rail lock with `membership_prepaid`; it does not reinterpret an old Stripe rail as wallet money.
+The final member profile is technically encoded as `initial_fee_cents=100`, `included_minutes=60`, `period_minutes=60`, `price_per_period_cents=100`, `min_amount_cents=200`, `daily_cap_cents=590`. This representation is implementation detail; the customer-facing rule is the simpler “2 CHF jusqu'à 2 h, puis +1 CHF par heure commencée, max 5.90 CHF/24 h”.
+
+The prepaid rail reuses the existing immutable membership-credit ledger and its idempotent reservation/commit/reversal RPCs. The v3 DB contract extends the payment-rail lock with `membership_prepaid`; it does not reinterpret an old Stripe rail as wallet money.
 
 The three fixed staging Edge crons run every five minutes: rental email outbox, membership email outbox and `noop` customer-notification dispatcher (25,920 invocations/month together). Other currently active scheduled jobs are database-local. See `pre-production-zero-cost-budget-2026-08-26.md`.
 
@@ -66,7 +70,7 @@ Raw advertising impressions are aggregated before deletion after 14 days. Financ
 
 ## Customer contract and payment path
 
-The kiosk records an explicit, unchecked acceptance of the current terms and privacy versions before financial commitment. The same acceptance endpoint may select `membership_prepaid` only after the acceptance has been persisted. If the member rail is unavailable, QR Checkout or Terminal still require the current acceptance.
+The kiosk records an explicit, unchecked acceptance of the current terms and privacy versions before financial commitment. If the member rail is unavailable, QR Checkout or Terminal still require the current acceptance. Values displayed at acceptance must come from the immutable server pricing snapshot.
 
 The current public legal routes are:
 
@@ -74,7 +78,7 @@ The current public legal routes are:
 - `/legal/confidentialite`
 - `/legal/mentions-legales`
 
-The product pricing decision is defined above, but public legal identity, postal address and final human Swiss legal/accounting review remain pending. Values displayed at acceptance must come from the immutable server pricing snapshot.
+The product pricing decision is defined above, but public legal identity, postal address and final human Swiss legal/accounting review remain pending.
 
 ## Paid external operations
 
@@ -87,17 +91,17 @@ Stripe payment creation, ChargeNow release commands, Resend sends and PassStudio
 | Document | Public route / role | Current status |
 | --- | --- | --- |
 | `src/pages/LegalPage.tsx` | Legal terms, privacy, legal notice | Pre-production text; company identity and final legal approval pending |
-| `src/pages/PaymentChoice.tsx` | Customer web Stripe payment acceptance | Canonical mobile/web Stripe acceptance UI |
+| `src/pages/PaymentChoice.tsx` | Customer web payment acceptance | Must display the immutable v3 pricing snapshot accurately |
 | `src/pages/Kiosk.tsx` | Kiosk contract review and transactional journey | Uses server snapshot and polls canonical rental state |
 | `PRICING_ENGINE.md` | Approved pilot pricing v3 and versioning semantics | Canonical engineering pricing reference |
 | `STRIPE_PAYMENT_MODEL.md` | Stripe + internal prepaid financial rails | Canonical engineering payment reference |
-| `docs/pre-production-runtime-manifest-2026-08-26.md` | Staging runtime inventory | Current hardening evidence |
+| `docs/pre-production-runtime-manifest-2026-08-26.md` | Staging runtime inventory | Historical runtime evidence; re-check before deployment |
 | `docs/pre-production-zero-cost-budget-2026-08-26.md` | Staging quota model | Current staging cron evidence |
 
 ## Current blockers before commercial production
 
-- coordinated staging deployment/validation of pricing v3 + prepaid rail + acceptance code;
-- real top-up flow is not yet implemented;
+- matching Edge runtime deployment and controlled end-to-end validation of v3 + prepaid + acceptance code;
+- paid top-up flow end-to-end validation;
 - legal entity/postal address and human Swiss consumer/privacy/accounting review;
 - explicit decision on automatic non-return declaration/collection;
 - Vercel commercial owner/plan verification;
@@ -108,4 +112,4 @@ Stripe payment creation, ChargeNow release commands, Resend sends and PassStudio
 
 ## Do not treat as production approval
 
-This branch is still **NO-GO for production**. The approved pricing is no longer a decision blocker, but deployment, prepaid top-up, legal, hosting, live-payment and physical-field gates remain.
+This branch is still **NO-GO for production**. The approved pricing is no longer a decision blocker, and the database calculators can be asserted on staging, but Edge-runtime, top-up, legal, hosting, live-payment and physical-field gates remain.
