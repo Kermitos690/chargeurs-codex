@@ -1,4 +1,5 @@
 const PUBLIC_CONTACT_URL = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/public-contact";
+const STABLE_CLOUDFLARE_ORIGIN = "https://chargeurs-ch-staging-cf.pages.dev";
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -26,10 +27,9 @@ export async function onRequest(context) {
   if (method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
   if (!isCloudflareProjectHost(context.request)) return json({ ok: false, error: "HOST_FORBIDDEN" }, 403);
 
-  const requestUrl = new URL(context.request.url);
   const headers = new Headers();
   headers.set("Content-Type", "application/json");
-  headers.set("Origin", `https://${requestUrl.hostname}`);
+  headers.set("Origin", STABLE_CLOUDFLARE_ORIGIN);
 
   const authorization = context.request.headers.get("Authorization");
   if (authorization) headers.set("Authorization", authorization);
