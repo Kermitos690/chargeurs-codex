@@ -58,9 +58,9 @@ jobs:
           KEYSTORE="$HOME/.android/debug.keystore"
           test -s "$KEYSTORE" || { echo "Expected local debug keystore is missing" >&2; exit 21; }
 
-          actual="$("$JAVA_HOME_VALUE/bin/keytool" -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey \
-            | sed -n 's/^[[:space:]]*SHA256: //p' \
-            | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          actual="$("$JAVA_HOME_VALUE/bin/keytool" -exportcert \
+            -keystore "$KEYSTORE" -storepass android -alias androiddebugkey \
+            | shasum -a 256 | awk '{print $1}' | tr '[:upper:]' '[:lower:]')"
           test "$actual" = "$EXPECTED_SIGNER" || {
             echo "DTA21277 signer mismatch; refusing to build a non-updatable APK" >&2
             echo "actual=$actual" >&2
