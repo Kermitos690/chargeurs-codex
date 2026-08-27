@@ -2,6 +2,11 @@ name: Chargeurs.ch GitHub Pages Preview
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/volt-support-foundation-20260827
+    paths:
+      - .github/workflows/github-pages-preview.yml
 
 permissions:
   contents: read
