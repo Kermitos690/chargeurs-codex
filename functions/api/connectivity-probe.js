@@ -31,17 +31,14 @@ async function probeGet(url) {
   }
 }
 
-async function probeRecover() {
+async function probePost(url, body, headers = {}) {
   const started = Date.now();
   try {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+    const response = await fetch(url, {
       method: "POST",
       redirect: "manual",
-      headers: {
-        apikey: PUBLIC_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email: "nobody@example.invalid" }),
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
     });
     return {
       ok: true,
@@ -61,12 +58,13 @@ async function probeRecover() {
 }
 
 export async function onRequestGet() {
-  const [external, supabase, recover] = await Promise.all([
+  const [external, supabase, recover, edgeFunction] = await Promise.all([
     probeGet("https://example.com/"),
     probeGet(`${SUPABASE_URL}/auth/v1/health`),
-    probeRecover(),
+    probePost(`${SUPABASE_URL}/auth/v1/recover`, { email: "nobody@example.invalid" }, { apikey: PUBLIC_KEY }),
+    probePost(`${SUPABASE_URL}/functions/v1/chargenow-admin`, {}, { apikey: PUBLIC_KEY }),
   ]);
-  return json({ ok: true, version: 2, external, supabase, recover });
+  return json({ ok: true, version: 3, external, supabase, recover, edgeFunction });
 }
 
 export function onRequest() {
