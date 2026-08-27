@@ -3,16 +3,29 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { kioskAwareFetch } from '@/lib/kioskFetch';
 
-// Vercel previously served a blank page when the reused frontend project did
-// not expose the Chargeurs.ch VITE_* variables to a deployment. These are
-// public browser credentials (never service-role secrets) for the staging
-// project, so the staging build has a fail-safe public fallback while the
-// Vercel project is being repurposed for Chargeurs.ch.
+// Public browser credentials for the Chargeurs.ch staging project. These are
+// deliberately safe to ship in the frontend; never place a service-role key here.
 const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
 const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY;
+function isChargeursCloudflareStagingHost() {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'chargeurs-ch-staging-cf.pages.dev'
+    || host.endsWith('.chargeurs-ch-staging-cf.pages.dev');
+}
+
+// Cloudflare Pages may retain build variables from an older deployment. On the
+// dedicated Chargeurs.ch Cloudflare staging host, pin the browser client to the
+// known Chargeurs staging project so a stale VITE_* value cannot silently send
+// authentication or customer data to another Supabase project.
+const FORCE_CHARGEURS_STAGING = isChargeursCloudflareStagingHost();
+const SUPABASE_URL = FORCE_CHARGEURS_STAGING
+  ? STAGING_SUPABASE_URL
+  : (import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL);
+const SUPABASE_PUBLISHABLE_KEY = FORCE_CHARGEURS_STAGING
+  ? STAGING_SUPABASE_PUBLISHABLE_KEY
+  : (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY);
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
 // Import the supabase client like this:
