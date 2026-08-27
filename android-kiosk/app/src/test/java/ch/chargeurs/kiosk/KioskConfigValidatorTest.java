@@ -60,6 +60,45 @@ public final class KioskConfigValidatorTest {
     }
 
     @Test
+    public void cloudflareRuntimeCanReplacePinnedVercelNavigationWithoutChangingEnrollmentOrigin() {
+        String enrolled = "https://chargeurs-ch-staging.vercel.app";
+        String runtime = "https://chargeurs-ch-staging-cf.pages.dev";
+
+        assertEquals(runtime, KioskConfigValidator.runtimeBaseUrl(enrolled, enrolled, runtime));
+        assertTrue(KioskConfigValidator.matchesPinnedBaseUrl(enrolled, enrolled));
+        assertTrue(KioskConfigValidator.isAllowedUrl(
+            runtime + "/kiosk/DTA21277",
+            enrolled,
+            enrolled,
+            runtime
+        ));
+        assertFalse(KioskConfigValidator.isAllowedUrl(
+            enrolled + "/kiosk/DTA21277",
+            enrolled,
+            enrolled,
+            runtime
+        ));
+    }
+
+    @Test
+    public void runtimeOverrideFailsClosedAndDoesNotHijackUnrelatedEnrollmentOrigins() {
+        String enrolled = "https://chargeurs-ch-staging.vercel.app";
+        assertNull(KioskConfigValidator.runtimeBaseUrl(
+            enrolled,
+            enrolled,
+            "javascript:alert(1)"
+        ));
+        assertEquals(
+            "https://chargeurs.ch",
+            KioskConfigValidator.runtimeBaseUrl(
+                "https://chargeurs.ch",
+                enrolled,
+                "https://chargeurs-ch-staging-cf.pages.dev"
+            )
+        );
+    }
+
+    @Test
     public void buildsTheLockedKioskRoute() {
         assertEquals(
             "https://chargeurs.ch/kiosk/DTA21269",

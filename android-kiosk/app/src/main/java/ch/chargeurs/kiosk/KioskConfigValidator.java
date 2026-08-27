@@ -55,8 +55,48 @@ public final class KioskConfigValidator {
         }
     }
 
+    /**
+     * Resolves the origin used by the WebView without changing the origin that
+     * was signed into the device enrollment. The override is honored only for
+     * a configuration that still matches the APK's pinned enrollment origin.
+     * A non-empty but invalid override fails closed instead of falling back.
+     */
+    public static String runtimeBaseUrl(
+        String enrolledBaseUrl,
+        String pinnedEnrollmentBaseUrl,
+        String webBaseUrl
+    ) {
+        String normalizedEnrolled = normalizeBaseUrl(enrolledBaseUrl);
+        if (normalizedEnrolled == null) return null;
+        if (!matchesPinnedBaseUrl(normalizedEnrolled, pinnedEnrollmentBaseUrl)) {
+            return normalizedEnrolled;
+        }
+        if (webBaseUrl == null || webBaseUrl.trim().isEmpty()) {
+            return normalizedEnrolled;
+        }
+        return normalizeBaseUrl(webBaseUrl);
+    }
+
     public static boolean isAllowedUrl(String candidate, String baseUrl) {
-        String normalizedBase = normalizeBaseUrl(baseUrl);
+        return isAllowedUrl(
+            candidate,
+            baseUrl,
+            BuildConfig.KIOSK_PUBLIC_BASE_URL,
+            BuildConfig.KIOSK_WEB_BASE_URL
+        );
+    }
+
+    static boolean isAllowedUrl(
+        String candidate,
+        String enrolledBaseUrl,
+        String pinnedEnrollmentBaseUrl,
+        String webBaseUrl
+    ) {
+        String normalizedBase = runtimeBaseUrl(
+            enrolledBaseUrl,
+            pinnedEnrollmentBaseUrl,
+            webBaseUrl
+        );
         if (candidate == null || normalizedBase == null) return false;
         try {
             URI candidateUri = new URI(candidate);

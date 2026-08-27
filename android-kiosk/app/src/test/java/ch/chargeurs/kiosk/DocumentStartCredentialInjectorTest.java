@@ -14,7 +14,7 @@ public final class DocumentStartCredentialInjectorTest {
         String script = DocumentStartCredentialInjector.script(
             "DTA21269",
             "012345678901234567890123456789012345",
-            "1.0.18-rc1-staging"
+            "1.0.59-terminal-sdk580-cloudflare-runtime-staging"
         );
         assertTrue(script.contains("sessionStorage.setItem('kiosk_token'"));
         assertTrue(script.contains("localStorage.removeItem('kiosk_token')"));
@@ -23,10 +23,10 @@ public final class DocumentStartCredentialInjectorTest {
     }
 
     @Test
-    public void injectorIsRestrictedToEnrolledHttpsOrigin() {
+    public void injectorAcceptsOnlyTheResolvedRuntimeHttpsOrigin() {
         assertEquals(
-            Collections.singleton("https://chargeurs-ch-staging.vercel.app"),
-            DocumentStartCredentialInjector.allowedOrigins("https://chargeurs-ch-staging.vercel.app")
+            Collections.singleton("https://chargeurs-ch-staging-cf.pages.dev"),
+            DocumentStartCredentialInjector.allowedOrigins("https://chargeurs-ch-staging-cf.pages.dev")
         );
     }
 

@@ -19,12 +19,26 @@ public final class KioskConfig {
         return kioskToken;
     }
 
+    /** Enrollment origin persisted with the encrypted kiosk credential. */
     public String baseUrl() {
         return baseUrl;
     }
 
+    /**
+     * Runtime WebView origin. During the Vercel -> Cloudflare migration this
+     * may differ from the enrollment origin without changing or reissuing the
+     * stored bearer token.
+     */
+    public String runtimeBaseUrl() {
+        return KioskConfigValidator.runtimeBaseUrl(
+            baseUrl,
+            BuildConfig.KIOSK_PUBLIC_BASE_URL,
+            BuildConfig.KIOSK_WEB_BASE_URL
+        );
+    }
+
     public String kioskUrl() {
-        return KioskConfigValidator.kioskUrl(baseUrl, stationId);
+        return KioskConfigValidator.kioskUrl(runtimeBaseUrl(), stationId);
     }
 
     public boolean isValid() {

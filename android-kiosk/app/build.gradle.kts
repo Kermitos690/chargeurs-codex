@@ -40,7 +40,7 @@ val stagingSigningReady = listOf(
 
 val stagingEnrollmentUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll"
 val stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"
-val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging.vercel.app"
+val stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-cf.pages.dev"
 val stagingTerminalBackendUrl = "https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend"
 
 fun quotedBuildConfig(value: String): String = "\"" + value
@@ -55,13 +55,13 @@ android {
         applicationId = "ch.chargeurs.kiosk"
         minSdk = 26
         targetSdk = 36
-        // Physical DTA21269 lane is always upgrade-only. 5.8.0 is the first
-        // field build using processPaymentIntent() and the SDK v5 reconnect state.
-        versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 158
+        // Physical DTA21277 is on versionCode 158. Keep the migration strictly
+        // upgrade-only while preserving the already field-proven Stripe 5.8 runtime.
+        versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 159
         versionName = if (stagingSimulatedTerminalReaderVersion)
             "1.0.57-terminal-sdk580-simulated"
         else
-            "1.0.58-terminal-sdk580-process-reconnect"
+            "1.0.59-terminal-sdk580-cloudflare-runtime"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
         buildConfigField("String", "ENROLLMENT_URL", quotedBuildConfig(enrollmentUrl.get()))
