@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Server, BatteryCharging, ShoppingCart, CreditCard, Tag,
   Store, Wrench, Activity, ListChecks, ClipboardCheck, HeartPulse, Radio, Settings,
   Building2, Users, TabletSmartphone, KeyRound, Gauge, Crown, Megaphone, Boxes,
-  type LucideIcon,
+  MessagesSquare, type LucideIcon,
 } from "lucide-react";
 
 export type AdminNavItem = {
@@ -26,6 +26,7 @@ const OPERATIONS_READ = [...OPERATIONS, "support_agent", "maintenance_technician
 const FINANCE = ["super_admin", "admin", "finance_admin"] as const;
 const FINANCE_READ = [...FINANCE, "support_agent", "operations_admin", "staff", "viewer"] as const;
 const SUPPORT = ["super_admin", "admin", "operations_admin", "support_agent", "maintenance_technician", "operator"] as const;
+const SUPPORT_INBOX = ["super_admin", "admin", "operations_admin", "support_agent"] as const;
 const ADVERTISING = ["super_admin", "admin", "operations_admin", "advertising_manager"] as const;
 const SUPER_ONLY = ["super_admin"] as const;
 
@@ -69,7 +70,10 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   },
   {
     label: "Support",
-    items: [{ to: "/admin/maintenance", icon: Wrench, label: "Maintenance", roles: SUPPORT }],
+    items: [
+      { to: "/admin/support", icon: MessagesSquare, label: "Volt / demandes", roles: SUPPORT_INBOX },
+      { to: "/admin/maintenance", icon: Wrench, label: "Maintenance", roles: SUPPORT },
+    ],
   },
   {
     label: "Technique",
