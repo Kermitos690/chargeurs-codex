@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import ChargeursLaunchPass from "./ChargeursLaunchPass";
 import {
   CustomerChargePoints,
   CustomerMembership,
@@ -211,6 +212,8 @@ export default function AccountPass() {
 
   return (
     <div className="space-y-6 pt-6">
+      <ChargeursLaunchPass />
+
       {membershipReturn === "success" && <div className="rounded-2xl border border-success/30 bg-success/10 p-4 text-sm text-success">Paiement d’adhésion reçu par Stripe. Le statut ci-dessous est mis à jour uniquement après confirmation du webhook signé.</div>}
       {membershipReturn === "cancelled" && <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">Souscription interrompue. Aucune adhésion n’est affichée comme active sans confirmation Stripe.</div>}
       {cancellationScheduled && <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">Renouvellement désactivé. Votre adhésion et vos avantages restent actifs jusqu’au {periodEnd ? formatAccountDate(periodEnd) : "terme de la période en cours"}.</div>}
@@ -257,7 +260,6 @@ export default function AccountPass() {
             </div>
             <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
           </div>
-
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
             {qrUrl ? <div className="mx-auto w-fit rounded-2xl bg-white p-3"><QRCodeSVG value={qrUrl} size={220} level="M" includeMargin={false} /></div> : <div className="mx-auto grid h-[244px] w-[244px] place-items-center rounded-2xl border border-dashed border-white/15 bg-black/20"><WalletCards className="h-14 w-14 text-white/30" /></div>}
             <p className="mt-4 text-sm font-bold">QR du Pass</p>
