@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { AlertTriangle, Bot, CheckCircle2, Loader2, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Loader2, Send, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,14 @@ const QUICK_ACTIONS = [
 ];
 
 function id(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
+
+function loadingLabel(raw: string) {
+  const text = raw.toLocaleLowerCase("fr");
+  if (/^(salut|bonjour|hello|hey|coucou|yo|yoyo|yop|ça va|ca va|comment ça va|comment ca va|merci)/.test(text)) return "Volt te répond…";
+  if (/(prix|tarif|combien|co[ûu]t|palier)/.test(text)) return "Volt vérifie les tarifs…";
+  if (/(paiement|payé|paye|retour|rendu|borne|batterie|location|compte|pass)/.test(text)) return "Volt vérifie les informations utiles…";
+  return "Volt réfléchit…";
+}
 
 function isCloudflareStagingHost() {
   if (typeof window === "undefined") return false;
@@ -108,9 +116,9 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
   const [identity, setIdentity] = useState({ name: userName, email: userEmail });
   const [pendingCase, setPendingCase] = useState<PendingCase | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingText, setLoadingText] = useState("Volt réfléchit…");
   const [caseId, setCaseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [engine, setEngine] = useState<"ai" | "knowledge" | "fallback">("knowledge");
 
   const identityReady = () => identity.name.trim().length >= 2 && /^\S+@\S+\.\S+$/.test(identity.email.trim());
   const addVoltMessage = (text: string) => setMessages((current) => [...current, { id: id("volt"), role: "volt", text }]);
@@ -121,6 +129,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       setPendingCase({ text, triage });
       return;
     }
+    setLoadingText("Volt transmet le dossier…");
     setBusy(true); setError(null);
     const body: Record<string, unknown> = { action: "volt_case", mode, message: text, stationId, rentalId, locale: lang };
     if (mode === "public") { body.name = identity.name.trim(); body.email = identity.email.trim(); }
@@ -149,6 +158,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
     }));
     setMessages((current) => [...current, { id: id("user"), role: "user", text: clean }]);
 
+    setLoadingText(loadingLabel(clean));
     setBusy(true);
     const { data: chat, error: chatError } = await invokeVoltChat({
       mode,
@@ -168,7 +178,6 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       escalate: chat?.triage?.escalate ?? fallback.escalate,
     };
     const reply = !chatError && chat?.ok && chat.reply ? chat.reply : fallback.reply;
-    setEngine(chat?.provider === "workers-ai" && chat?.aiReady ? "ai" : chat?.ok ? "knowledge" : "fallback");
     addVoltMessage(reply);
 
     if (triage.escalate && !caseId) setPendingCase({ text: clean, triage });
@@ -182,7 +191,7 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       <header className="border-b border-border/70 bg-card/40 px-5 py-5 sm:px-7"><div className="flex items-center justify-between gap-4"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary/15 text-primary shadow-glow"><Bot className="h-6 w-6" /></div><div><div className="flex items-center gap-2"><h2 className="font-display text-xl font-extrabold">Volt</h2><span className="rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[0.68rem] font-bold uppercase tracking-wide text-success">Chargeurs.ch</span></div><p className="text-xs text-muted-foreground">Assistant Chargeurs.ch · connaissance produit + support humain</p></div></div><ShieldCheck className="h-5 w-5 text-success" aria-label="Contexte protégé" /></div></header>
       <div className="max-h-[32rem] space-y-4 overflow-y-auto px-5 py-6 sm:px-7" aria-live="polite">
         {messages.map((message) => <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}><div className={message.role === "user" ? "max-w-[88%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm leading-6 text-primary-foreground" : "max-w-[88%] rounded-2xl rounded-bl-md border border-border bg-background/70 px-4 py-3 text-sm leading-6 text-foreground"}>{message.text}</div></div>)}
-        {busy && <div className="flex justify-start"><div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-border bg-background/70 px-4 py-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Volt cherche dans les informations Chargeurs.ch…</div></div>}
+        {busy && <div className="flex justify-start"><div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-border bg-background/70 px-4 py-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{loadingText}</div></div>}
         {pendingCase && !caseId && (
           mode === "public" ? (
             <form onSubmit={submitIdentity} className="rounded-2xl border border-primary/25 bg-primary/5 p-4">
@@ -205,7 +214,6 @@ export function VoltAssistant({ mode, userName = "", userEmail = "", stationId =
       <div className="border-t border-border/70 bg-card/30 px-5 py-5 sm:px-7">
         {!caseId && <div className="mb-4 flex flex-wrap gap-2">{QUICK_ACTIONS.map((action) => <button key={action.label} type="button" disabled={busy} onClick={() => void handleUserMessage(action.prompt)} className="rounded-full border border-border bg-background/70 px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground disabled:opacity-50">{action.label}</button>)}</div>}
         <form onSubmit={submitMessage} className="flex gap-2"><Input value={input} disabled={busy} maxLength={1200} onChange={(event) => setInput(event.target.value)} placeholder="Écrivez votre message à Volt…" aria-label="Message à Volt" /><Button type="submit" size="icon" disabled={busy || !input.trim()} className="shrink-0 rounded-xl bg-gradient-primary" aria-label="Envoyer">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</Button></form>
-        <div className="mt-3 flex items-start gap-2 text-[0.72rem] leading-5 text-muted-foreground"><Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" /><p>{engine === "ai" ? "Volt utilise le moteur IA Cloudflare et les informations Chargeurs.ch pertinentes pour répondre." : engine === "knowledge" ? "Volt consulte la base de connaissances Chargeurs.ch. Le moteur IA peut être indisponible sans bloquer le support." : "Volt fonctionne actuellement en mode de secours. Les actions sensibles restent toujours contrôlées côté serveur."}</p></div>
       </div>
     </section>
   );
