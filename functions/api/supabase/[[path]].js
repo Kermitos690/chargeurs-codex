@@ -1,5 +1,6 @@
 const SUPABASE_ORIGIN = "https://xqepbqnaenoeyfjkjnzl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4";
 const MAX_BODY_BYTES = 2_000_000;
 
 const ALLOWED_PREFIXES = [
@@ -48,13 +49,18 @@ function buildUpstreamHeaders(request) {
     if (value) headers.set(name, value);
   }
 
-  // New Supabase publishable keys belong in `apikey`, not as a bearer JWT.
-  // Preserve Authorization only when it contains a real user/session token.
-  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  // The legacy anon key remains an intentionally public, low-privilege key and
+  // is retained by Supabase for compatibility. It is used only for the
+  // Cloudflare -> Supabase transport. A real signed-in user JWT, when present,
+  // always replaces the anon bearer token.
+  headers.set("apikey", SUPABASE_ANON_KEY);
   const authorization = request.headers.get("authorization");
   const publishableBearer = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
-  if (authorization && authorization !== publishableBearer) {
+  const anonBearer = `Bearer ${SUPABASE_ANON_KEY}`;
+  if (authorization && authorization !== publishableBearer && authorization !== anonBearer) {
     headers.set("authorization", authorization);
+  } else {
+    headers.set("authorization", anonBearer);
   }
 
   if (!headers.has("accept")) headers.set("accept", "application/json");
@@ -77,10 +83,11 @@ function buildResponseHeaders(response) {
 }
 
 async function healthCheck() {
-  const url = new URL("/auth/v1/settings", SUPABASE_ORIGIN);
+  const url = new URL("/auth/v1/health", SUPABASE_ORIGIN);
   const headers = new Headers({
     accept: "application/json",
-    apikey: SUPABASE_PUBLISHABLE_KEY,
+    apikey: SUPABASE_ANON_KEY,
+    authorization: `Bearer ${SUPABASE_ANON_KEY}`,
   });
 
   const started = Date.now();
@@ -161,14 +168,16 @@ export async function onRequest(context) {
       headers: buildResponseHeaders(response),
     });
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     console.error("Cloudflare Supabase proxy upstream failure", {
       path,
       method,
-      error: error instanceof Error ? error.message : String(error),
+      error: detail,
     });
     return json({
       error: "supabase_upstream_unavailable",
       message: "Le service de compte est momentanément indisponible.",
+      detail,
     }, 502);
   }
 }
