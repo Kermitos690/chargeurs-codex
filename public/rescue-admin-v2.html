@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="robots" content="noindex,nofollow" />
+<meta http-equiv="Cache-Control" content="no-store,no-cache,must-revalidate" />
+<title>Chargeurs.ch — Admin secours v2</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#081225;color:#fff}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0,#173a8a55,transparent 40%),radial-gradient(circle at 100% 100%,#772bd455,transparent 45%),#081225;padding:24px}main{max-width:520px;margin:0 auto;padding-top:max(24px,env(safe-area-inset-top))}.card{background:#101b36e8;border:1px solid #ffffff26;border-radius:24px;padding:24px;box-shadow:0 20px 60px #0008}h1{font-size:28px;margin:0 0 6px}.sub{color:#b8c3dc;margin:0 0 20px;line-height:1.45}.section{border-top:1px solid #ffffff18;margin-top:22px;padding-top:22px}.hidden{display:none!important}label{display:block;font-size:13px;color:#c7d1e7;margin:14px 0 7px}input{width:100%;font:inherit;color:#fff;background:#071126;border:1px solid #ffffff2b;border-radius:14px;padding:14px 15px;outline:none}button{width:100%;border:0;border-radius:999px;padding:14px 18px;margin-top:14px;font:inherit;font-weight:750;color:#fff;background:linear-gradient(90deg,#2563eb,#7c3aed);cursor:pointer}button.secondary{background:#182544;border:1px solid #ffffff24}button.danger{background:linear-gradient(90deg,#c026d3,#ef4444)}button:disabled{opacity:.55}.status{margin-top:14px;padding:12px 14px;border-radius:14px;background:#071126;border:1px solid #ffffff1f;white-space:pre-wrap;word-break:break-word;font-size:13px;line-height:1.45}.ok{border-color:#22c55e66}.err{border-color:#ef444466}.warn{border-color:#f59e0b66}.tiny{font-size:12px;color:#9ba8c3;line-height:1.45}.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#18315f;color:#8fb2ff;font-size:12px;font-weight:700;margin-bottom:12px}
+</style>
+</head>
+<body><main><div class="card">
+<div class="badge">Staging Cloudflare · secours v2</div>
+<h1>Admin secours</h1>
+<p class="sub">Connexion via Cloudflare vers Supabase. Le mot de passe n’est ni enregistré ni journalisé par cette page.</p>
+<div id="bridgeStatus" class="status warn">Vérification du pont Cloudflare…</div>
+
+<div id="resetSection" class="section hidden">
+<h2>Nouveau mot de passe</h2>
+<p class="tiny">Lien de récupération détecté.</p>
+<label>Nouveau mot de passe</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" />
+<label>Confirmer</label><input id="newPassword2" type="password" autocomplete="new-password" minlength="8" />
+<button id="setPassword">Mettre à jour</button><div id="resetStatus" class="status hidden"></div>
+</div>
+
+<div id="loginSection" class="section">
+<label>E-mail admin</label><input id="email" type="email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" />
+<label>Mot de passe</label><input id="password" type="password" autocomplete="current-password" />
+<button id="login">Se connecter</button>
+<button id="recover" class="secondary">Envoyer un lien de réinitialisation</button>
+<div id="authStatus" class="status hidden"></div>
+</div>
+
+<div id="c2Section" class="section hidden">
+<h2>Maintenance C2</h2>
+<p class="tiny">Staging uniquement. Le backend vérifie toujours le JWT et le rôle super_admin.</p>
+<label>Borne</label><input value="DTA22032" readonly />
+<label>Slot</label><input value="2" readonly />
+<label>Confirmation</label><input value="EXECUTER C2 DTA22032 SLOT 2" readonly />
+<button id="dryRun" class="secondary">Vérifier sans éjecter</button>
+<button id="execute" class="danger">Exécuter C2 — slot 2</button>
+<div id="c2Status" class="status hidden"></div>
+</div>
+</div></main>
+<script>
+(() => {
+let accessToken=null; const $=id=>document.getElementById(id);
+const status=(el,text,kind='')=>{el.textContent=text;el.className=`status ${kind}`.trim();el.classList.remove('hidden')};
+const parse=async r=>{const t=await r.text();try{return t?JSON.parse(t):{}}catch{return{raw:t}}};
+async function bridge(action,payload={},token=null){const h={'Content-Type':'application/json'};if(token)h.Authorization=`Bearer ${token}`;const r=await fetch('/api/rescue-auth',{method:'POST',headers:h,body:JSON.stringify({action,...payload}),cache:'no-store'});return{r,data:await parse(r)}}
+
+fetch('/api/rescue-auth',{cache:'no-store'}).then(async r=>{const d=await parse(r);if(r.ok&&d.ok)status($('bridgeStatus'),'Pont Cloudflare prêt.','ok');else status($('bridgeStatus'),`Pont Cloudflare indisponible : HTTP ${r.status}`,'err')}).catch(e=>status($('bridgeStatus'),`Pont Cloudflare indisponible : ${e.message}`,'err'));
+
+const hash=new URLSearchParams(location.hash.replace(/^#/,''));const recoveryToken=hash.get('access_token');const recoveryType=hash.get('type');
+if(recoveryToken&&(!recoveryType||recoveryType==='recovery')){accessToken=recoveryToken;$('resetSection').classList.remove('hidden');$('loginSection').classList.add('hidden')}
+
+$('login').onclick=async()=>{const email=$('email').value.trim().toLowerCase(),password=$('password').value;if(!email||!password)return status($('authStatus'),'E-mail et mot de passe requis.','warn');$('login').disabled=true;try{const{r,data}=await bridge('login',{email,password});if(!r.ok||!data.access_token)throw new Error(data.msg||data.message||data.error_description||data.error||`HTTP ${r.status}`);accessToken=data.access_token;$('password').value='';status($('authStatus'),'Connexion Supabase réussie via Cloudflare.','ok');$('c2Section').classList.remove('hidden')}catch(e){status($('authStatus'),`Connexion refusée : ${e.message}`,'err')}finally{$('login').disabled=false}};
+
+$('recover').onclick=async()=>{const email=$('email').value.trim().toLowerCase();if(!email)return status($('authStatus'),'Saisissez votre e-mail.','warn');$('recover').disabled=true;try{const{r,data}=await bridge('recover',{email});if(!r.ok)throw new Error(data.msg||data.message||data.error_description||data.error||`HTTP ${r.status}`);status($('authStatus'),'Demande envoyée. Vérifiez votre boîte e-mail.','ok')}catch(e){status($('authStatus'),`Échec de récupération : ${e.message}`,'err')}finally{$('recover').disabled=false}};
+
+$('setPassword').onclick=async()=>{const p1=$('newPassword').value,p2=$('newPassword2').value;if(p1.length<8)return status($('resetStatus'),'Utilisez au moins 8 caractères.','warn');if(p1!==p2)return status($('resetStatus'),'Les deux mots de passe ne correspondent pas.','warn');$('setPassword').disabled=true;try{const{r,data}=await bridge('updatePassword',{password:p1},accessToken);if(!r.ok)throw new Error(data.msg||data.message||data.error_description||data.error||`HTTP ${r.status}`);history.replaceState(null,'','/rescue-admin-v2.html');accessToken=null;$('resetSection').classList.add('hidden');$('loginSection').classList.remove('hidden');status($('authStatus'),'Mot de passe mis à jour. Connectez-vous maintenant.','ok')}catch(e){status($('resetStatus'),`Échec de mise à jour : ${e.message}`,'err')}finally{$('setPassword').disabled=false}};
+
+async function c2(dryRun){if(!accessToken)return status($('c2Status'),'Reconnectez-vous avant l’opération.','warn');const b=dryRun?$('dryRun'):$('execute');b.disabled=true;try{const{r,data}=await bridge('c2',{dryRun},accessToken);if(!r.ok||data.ok===false)throw new Error(data.error||data.message||data.msg||`HTTP ${r.status}`);status($('c2Status'),`${dryRun?'Vérification':'Commande'} acceptée par le backend.\n${JSON.stringify(data,null,2)}`,'ok')}catch(e){status($('c2Status'),`${dryRun?'Vérification':'Commande'} refusée : ${e.message}`,'err')}finally{b.disabled=false}}
+$('dryRun').onclick=()=>c2(true);$('execute').onclick=()=>c2(false);
+})();
+</script></body></html>
