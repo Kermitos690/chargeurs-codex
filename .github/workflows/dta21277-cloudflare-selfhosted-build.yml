@@ -1,0 +1,136 @@
+name: DTA21277 Cloudflare self-hosted APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-cloudflare-selfhosted-build.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-cloudflare-selfhosted-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-staging-apk:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Verify local signing identity and Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_SIGNER="1e4d4c12ec3b21a3ff7186fb7bdcf4097f13b0a8d7a6b6fc7ba7dbebd92042f6"
+          KEYSTORE="$HOME/.android/debug.keystore"
+          test -s "$KEYSTORE" || { echo "Expected local debug keystore is missing" >&2; exit 21; }
+
+          actual="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey \
+            | sed -n 's/^[[:space:]]*SHA256: //p' \
+            | head -1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$EXPECTED_SIGNER" || {
+            echo "DTA21277 signer mismatch; refusing to build a non-updatable APK" >&2
+            echo "actual=$actual" >&2
+            exit 22
+          }
+
+          if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME:-}/bin/java" ]; then
+            for candidate in \
+              "$HOME/Library/Caches/chargeurs-jdk/temurin21-x64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+              "$HOME/Library/Caches/chargeurs-jdk/temurin21-aarch64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+              "/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+            do
+              if [ -x "$candidate/bin/java" ]; then
+                echo "JAVA_HOME=$candidate" >> "$GITHUB_ENV"
+                echo "$candidate/bin" >> "$GITHUB_PATH"
+                break
+              fi
+            done
+          fi
+
+          ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          test -x "$ANDROID_HOME_VALUE/platform-tools/adb" || { echo "Android SDK is missing" >&2; exit 23; }
+          echo "ANDROID_HOME=$ANDROID_HOME_VALUE" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME_VALUE" >> "$GITHUB_ENV"
+          echo "EXPECTED_SIGNER=$EXPECTED_SIGNER" >> "$GITHUB_ENV"
+
+      - name: Build and test version 159
+        working-directory: android-kiosk
+        env:
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging-cf.pages.dev
+          CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
+          CHARGEURS_STAGING_KEYSTORE_PATH: ${{ runner.home }}/.android/debug.keystore
+          CHARGEURS_STAGING_KEYSTORE_PASSWORD: android
+          CHARGEURS_STAGING_KEY_ALIAS: androiddebugkey
+          CHARGEURS_STAGING_KEY_PASSWORD: android
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          ./gradlew --no-daemon --console=plain clean testDebugUnitTest lintStaging assembleStaging
+
+      - name: Verify APK identity and fail-closed contract
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          test -s "$APK"
+
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -perm -u+x 2>/dev/null | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -1)"
+          test -x "$AAPT" && test -x "$APKSIGNER"
+
+          badging="$($AAPT dump badging "$APK" | head -1)"
+          printf '%s\n' "$badging" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
+          printf '%s\n' "$badging" | grep -F "versionCode='159'"
+          printf '%s\n' "$badging" | grep -F "versionName='1.0.59-terminal-sdk580-cloudflare-runtime-staging'"
+
+          signer="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          test "$signer" = "$EXPECTED_SIGNER" || {
+            echo "Built APK signer mismatch" >&2
+            exit 24
+          }
+
+          grep -F 'implementation("com.stripe:stripeterminal:5.8.0")' android-kiosk/app/build.gradle.kts
+          grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' android-kiosk/app/build.gradle.kts
+          grep -F 'stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-cf.pages.dev"' android-kiosk/app/build.gradle.kts
+          grep -F 'stagingKioskPublicBaseUrl = "https://chargeurs-ch-staging.vercel.app"' android-kiosk/app/build.gradle.kts
+
+          mkdir -p dist
+          NAME="Chargeurs_CH_Kiosk_1.0.59-terminal-sdk580-cloudflare-runtime-staging.apk"
+          cp "$APK" "dist/$NAME"
+          APK_SHA="$(shasum -a 256 "dist/$NAME" | awk '{print $1}')"
+          printf '%s  %s\n' "$APK_SHA" "$NAME" > dist/SHA256SUMS.txt
+          cat > dist/PROVENANCE.txt <<EOF
+          sha=$GITHUB_SHA
+          package=ch.chargeurs.kiosk.staging
+          versionCode=159
+          versionName=1.0.59-terminal-sdk580-cloudflare-runtime-staging
+          enrollmentOrigin=https://chargeurs-ch-staging.vercel.app
+          webRuntimeOrigin=https://chargeurs-ch-staging-cf.pages.dev
+          stripeTerminalSdk=5.8.0
+          physicalEjectionEnabled=false
+          paymentMode=TEST_ONLY
+          signerCertificateSha256=$signer
+          apkSha256=$APK_SHA
+          installAction=NONE
+          EOF
+          echo "artifact_name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload verified APK only
+        uses: actions/upload-artifact@v4
+        with:
+          name: dta21277-${{ steps.verify.outputs.artifact_name }}
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/*
