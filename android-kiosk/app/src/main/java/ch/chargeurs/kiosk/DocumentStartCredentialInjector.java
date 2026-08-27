@@ -22,7 +22,13 @@ final class DocumentStartCredentialInjector {
     private DocumentStartCredentialInjector() {}
 
     static boolean install(WebView webView, KioskConfig config, String appVersion) {
-        return install(webView, config, config.baseUrl(), appVersion);
+        String runtimeBaseUrl = KioskConfigValidator.resolveRuntimeBaseUrl(
+            config.baseUrl(),
+            BuildConfig.KIOSK_PUBLIC_BASE_URL,
+            BuildConfig.KIOSK_WEB_BASE_URL
+        );
+        if (runtimeBaseUrl == null) return false;
+        return install(webView, config, runtimeBaseUrl, appVersion);
     }
 
     static boolean install(
