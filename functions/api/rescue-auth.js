@@ -23,6 +23,24 @@ async function relay(url, init) {
   }
 }
 
+async function probe(url) {
+  try {
+    const response = await fetch(url, { method: "GET", redirect: "manual" });
+    return {
+      ok: true,
+      status: response.status,
+      contentType: response.headers.get("content-type") || null,
+      location: response.headers.get("location") || null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : null,
+    };
+  }
+}
+
 export async function onRequestPost(context) {
   let body;
   try { body = await context.request.json(); }
@@ -91,8 +109,14 @@ export async function onRequestPost(context) {
   return json({ error: "unsupported_action" }, 400);
 }
 
-export function onRequest(context) {
-  if (context.request.method === "GET") return json({ ok: true, bridge: "cloudflare", version: 2 });
+export async function onRequest(context) {
+  if (context.request.method === "GET") {
+    const url = new URL(context.request.url);
+    const target = url.searchParams.get("probe");
+    if (target === "external") return json({ target, result: await probe("https://example.com/") });
+    if (target === "supabase") return json({ target, result: await probe(`${SUPABASE_URL}/auth/v1/health`) });
+    return json({ ok: true, bridge: "cloudflare", version: 3 });
+  }
   if (context.request.method === "POST") return onRequestPost(context);
   return json({ error: "method_not_allowed" }, 405);
 }
