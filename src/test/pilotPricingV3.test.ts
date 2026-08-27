@@ -18,6 +18,8 @@ const v3Tests = readFileSync(
   resolve(process.cwd(), "supabase/functions/tests/pricing_settlement_v3.test.ts"),
   "utf8",
 );
+const paymentChoice = readFileSync(resolve(process.cwd(), "src/pages/PaymentChoice.tsx"), "utf8");
+const accountPass = readFileSync(resolve(process.cwd(), "src/pages/account/AccountPass.tsx"), "utf8");
 
 const finalPricingDocs = [
   readFileSync(resolve(process.cwd(), "README.md"), "utf8"),
@@ -44,6 +46,17 @@ describe("approved pilot pricing v3", () => {
     expect(v3Tests).toContain("[301, 590]");
     expect(finalPricingDocs).toMatch(/(?:2,00|2\.00) CHF/);
     expect(finalPricingDocs).toMatch(/(?:1,00|1\.00) CHF/);
+  });
+
+  it("renders the final nonlinear member rate on customer-facing screens", () => {
+    expect(paymentChoice).toContain("included_minutes?: number | null");
+    expect(paymentChoice).toContain("const firstCoveredMinutes = included + period");
+    expect(paymentChoice).toContain("firstCoveredMinutes === 120 && period === 60");
+    expect(paymentChoice).toContain('upTo: "jusqu’à"');
+    expect(paymentChoice).toContain('startedHour: "par heure commencée"');
+    expect(accountPass).toContain('PILOT_MEMBER_RATE_LABEL = "2 CHF jusqu’à 2 h · puis +1 CHF / h commencée"');
+    expect(accountPass).toContain('label="Solde prépayé disponible"');
+    expect(accountPass).not.toContain("formatCents(plan.hourly_cents");
   });
 
   it("tests both authoritative DB calculators at all commercial boundaries", () => {
