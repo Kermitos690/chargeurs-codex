@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": true
   },
   "installCommand": "npm ci --no-audit --no-fund",
   "buildCommand": "npm run build",
