@@ -19,12 +19,22 @@ public final class KioskConfig {
         return kioskToken;
     }
 
+    /**
+     * Enrollment origin persisted with the durable kiosk credential.
+     *
+     * This deliberately remains distinct from the WebView runtime origin so an
+     * in-place APK update can keep the existing pairing while the frontend is
+     * migrated from Vercel to Cloudflare.
+     */
     public String baseUrl() {
         return baseUrl;
     }
 
     public String kioskUrl() {
-        return KioskConfigValidator.kioskUrl(baseUrl, stationId);
+        return KioskConfigValidator.kioskUrl(
+            KioskConfigValidator.runtimeBaseUrlForEnrollment(baseUrl),
+            stationId
+        );
     }
 
     public boolean isValid() {
