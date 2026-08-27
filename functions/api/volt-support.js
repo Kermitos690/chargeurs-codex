@@ -11,20 +11,42 @@ function json(body, status = 200) {
   });
 }
 
+function isTrustedCloudflareRequest(request) {
+  const url = new URL(request.url);
+  const host = url.hostname;
+  const allowedHost = host === "chargeurs-ch-staging-cf.pages.dev" || host.endsWith(".chargeurs-ch-staging-cf.pages.dev");
+  if (!allowedHost) return false;
+
+  const expectedOrigin = `https://${host}`;
+  const origin = request.headers.get("Origin");
+  if (origin) return origin === expectedOrigin;
+
+  const referer = request.headers.get("Referer");
+  if (referer) {
+    try {
+      return new URL(referer).origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  const fetchSite = request.headers.get("Sec-Fetch-Site");
+  return fetchSite === "same-origin" || fetchSite === "same-site";
+}
+
 export async function onRequest(context) {
   const method = context.request.method.toUpperCase();
   if (method === "OPTIONS") return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   if (method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
-  const incomingOrigin = context.request.headers.get("Origin") || "";
-  const host = new URL(context.request.url).hostname;
-  const allowedHost = host === "chargeurs-ch-staging-cf.pages.dev" || host.endsWith(".chargeurs-ch-staging-cf.pages.dev");
-  const allowedOrigin = incomingOrigin === `https://${host}`;
-  if (!allowedHost || !allowedOrigin) return json({ ok: false, error: "ORIGIN_FORBIDDEN" }, 403);
+  if (!isTrustedCloudflareRequest(context.request)) {
+    return json({ ok: false, error: "ORIGIN_FORBIDDEN" }, 403);
+  }
 
   const headers = new Headers();
   headers.set("Content-Type", "application/json");
   headers.set("Origin", STABLE_CLOUDFLARE_ORIGIN);
+
   const authorization = context.request.headers.get("Authorization");
   if (authorization) headers.set("Authorization", authorization);
   const clientInfo = context.request.headers.get("x-client-info");
@@ -40,11 +62,13 @@ export async function onRequest(context) {
       body,
       redirect: "manual",
     });
+
     const responseHeaders = new Headers(upstream.headers);
     responseHeaders.set("Cache-Control", "no-store");
     responseHeaders.delete("Access-Control-Allow-Origin");
     responseHeaders.delete("Access-Control-Allow-Headers");
     responseHeaders.delete("Access-Control-Allow-Methods");
+
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
