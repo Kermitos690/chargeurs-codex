@@ -32,9 +32,6 @@ function safeErrorCode(error: unknown): string {
 }
 
 function webhookProjection(event: Stripe.Event): Record<string, unknown> {
-  // Preserve only identifiers needed to trace a signed webhook to its local
-  // rental. The raw Stripe event can contain customer data and is not needed
-  // for retry/idempotency semantics.
   const object = event.data.object as {
     id?: unknown;
     metadata?: Record<string, unknown> | null;
@@ -206,8 +203,6 @@ async function processPaymentIntent(
   }).eq("rental_session_id", session.id);
   if (paymentUpdateError) throw paymentUpdateError;
 
-  // Async methods can complete Checkout before funds are captured. The later
-  // async_payment_succeeded event re-enters with prepaid=true.
   if (!authorized && !prepaid) return true;
 
   let recomputedHash: string | null = null;
@@ -234,14 +229,8 @@ async function processPaymentIntent(
         ? "Incohérence du snapshot tarifaire — vérification manuelle requise."
         : `Montant initial ou devise incompatible avec la caution attendue.`,
       idempotencyKey: `payment_mismatch:${intent.id}`,
-      metadata: {
-        observedCents,
-        expectedCents,
-        observedCurrency,
-        expectedCurrency,
-      },
+      metadata: { observedCents, expectedCents, observedCurrency, expectedCurrency },
     });
-
     await auditLog(db, {
       action: "pricing.error",
       target: session.id,
@@ -289,7 +278,6 @@ async function processPaymentIntent(
 
   const customerEmail = checkout?.customer_details?.email ?? checkout?.customer_email ?? null;
   const { data: updated, error: updateError } = await db.from("rental_sessions").update({
-    // Compatibility projection for existing UI and functions.
     state: "payment_succeeded",
     stripe_payment_intent_id: intent.id,
     stripe_customer_id: customerId,
@@ -297,8 +285,8 @@ async function processPaymentIntent(
     stripe_payment_method_type: methodType,
     customer_email: customerEmail,
     amount_paid: amountCapturedCents / 100,
-      captured_amount_cents: amountCapturedCents,
-      membership_credit_reservation_status: session.customer_segment === "member" && membershipCreditReservedCents > 0 ? "reserved" : session.membership_credit_reservation_status ?? "none",
+    captured_amount_cents: amountCapturedCents,
+    membership_credit_reservation_status: session.customer_segment === "member" && membershipCreditReservedCents > 0 ? "reserved" : session.membership_credit_reservation_status ?? "none",
     settlement_strategy: strategy,
     settlement_status: authorized ? "authorized" : "prepaid",
     settlement_error: null,
@@ -335,15 +323,12 @@ async function fulfil(
 ): Promise<boolean> {
   const rentalSessionId = checkout.metadata?.rental_session_id;
   if (!rentalSessionId) return false;
-
   const session = await loadRental(db, rentalSessionId);
   if (!session) return false;
-
   const paymentIntentId = typeof checkout.payment_intent === "string"
     ? checkout.payment_intent
     : checkout.payment_intent?.id;
   if (!paymentIntentId) throw new Error("PAYMENT_INTENT_MISSING");
-
   const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
   return processPaymentIntent(db, stripe, session, intent, event, checkout);
 }
@@ -368,7 +353,6 @@ Deno.serve(async (req) => {
   const db = adminClient();
   const signature = req.headers.get("stripe-signature");
   const raw = await req.text();
-
   const stripeRuntime = validateStripeTestRuntime({ requireWebhookSecret: true });
   if (!stripeRuntime.ok) return json({ error: stripeRuntime.error }, 503);
   if (!signature) return json({ error: "MISSING_SIGNATURE" }, 400);
@@ -391,7 +375,6 @@ Deno.serve(async (req) => {
     p_payload: webhookProjection(event),
     p_lock_ttl_minutes: 10,
   });
-
   if (claimError) {
     await logApi(db, {
       service: "stripe",
@@ -427,15 +410,9 @@ Deno.serve(async (req) => {
       case "payment_intent.amount_capturable_updated": {
         const intent = event.data.object as Stripe.PaymentIntent;
         const rentalSessionId = intent.metadata?.rental_session_id;
-        if (!rentalSessionId) {
-          handled = false;
-          break;
-        }
+        if (!rentalSessionId) { handled = false; break; }
         const session = await loadRental(db, rentalSessionId);
-        if (!session) {
-          handled = false;
-          break;
-        }
+        if (!session) { handled = false; break; }
         handled = await processPaymentIntent(db, stripe, session, intent, event);
         break;
       }
@@ -443,15 +420,9 @@ Deno.serve(async (req) => {
       case "checkout.session.async_payment_failed": {
         const checkout = event.data.object as Stripe.Checkout.Session;
         const rentalSessionId = checkout.metadata?.rental_session_id;
-        if (!rentalSessionId) {
-          handled = false;
-          break;
-        }
+        if (!rentalSessionId) { handled = false; break; }
         const session = await loadRental(db, rentalSessionId);
-        if (!session) {
-          handled = false;
-          break;
-        }
+        if (!session) { handled = false; break; }
         if (!["authorized", "prepaid", "settled"].includes(String(session.settlement_status))) {
           await failPaymentRental(db, session, {
             code: "ASYNC_PAYMENT_FAILED",
@@ -465,21 +436,24 @@ Deno.serve(async (req) => {
       case "checkout.session.expired": {
         const checkout = event.data.object as Stripe.Checkout.Session;
         const rentalSessionId = checkout.metadata?.rental_session_id;
-        if (!rentalSessionId) {
-          handled = false;
-          break;
-        }
+        if (!rentalSessionId) { handled = false; break; }
         const session = await loadRental(db, rentalSessionId);
-        if (!session) {
-          handled = false;
-          break;
-        }
+        if (!session) { handled = false; break; }
         if (!["authorized", "prepaid", "settled"].includes(String(session.settlement_status))) {
-          await failPaymentRental(db, session, {
-            code: "CHECKOUT_EXPIRED",
-            message: "La session de paiement a expiré.",
-            idempotencyKey: `checkout_expired:${checkout.id}`,
-          });
+          try {
+            await failPaymentRental(db, session, {
+              code: "CHECKOUT_EXPIRED",
+              message: "La session de paiement a expiré.",
+              idempotencyKey: `checkout_expired:${checkout.id}`,
+            });
+          } catch (error) {
+            if (!(error instanceof OrchestratorError) || error.code !== "INVALID_TRANSITION") throw error;
+            await auditLog(db, {
+              action: "orchestrator.checkout_expired_transition_skipped",
+              target: String(session.id),
+              data: { checkout_id: checkout.id, prior_state: String(session.state ?? "") },
+            });
+          }
         }
         break;
       }
@@ -490,10 +464,7 @@ Deno.serve(async (req) => {
         const session = rentalSessionId
           ? await loadRental(db, rentalSessionId)
           : (await db.from("rental_sessions").select("*").eq("stripe_payment_intent_id", intent.id).maybeSingle()).data;
-        if (!session) {
-          handled = false;
-          break;
-        }
+        if (!session) { handled = false; break; }
         if (!["authorized", "prepaid", "settled"].includes(String(session.settlement_status))) {
           await failPaymentRental(db, session, {
             code: "PAYMENT_INTENT_FAILED",
@@ -510,10 +481,7 @@ Deno.serve(async (req) => {
         const paymentIntentId = typeof charge.payment_intent === "string"
           ? charge.payment_intent
           : charge.payment_intent?.id;
-        if (!paymentIntentId) {
-          handled = false;
-          break;
-        }
+        if (!paymentIntentId) { handled = false; break; }
         const { data: session, error: sessionReadError } = await db.from("rental_sessions")
           .select("*")
           .eq("stripe_payment_intent_id", paymentIntentId)
@@ -544,9 +512,6 @@ Deno.serve(async (req) => {
               metadata: { chargeId: charge.id, amountRefundedCents: charge.amount_refunded },
             });
           } catch (error) {
-            // A refund after a completed lifecycle is an accounting adjustment,
-            // not a reason to reject Stripe's webhook. Preserve the financial
-            // record and surface the transition mismatch through audit.
             if (!(error instanceof OrchestratorError) || error.code !== "INVALID_TRANSITION") throw error;
             await auditLog(db, {
               action: "orchestrator.refund_transition_skipped",
@@ -576,8 +541,6 @@ Deno.serve(async (req) => {
       error: code,
       response: { event_id: event.id, type: event.type },
     });
-    // A non-2xx response is intentional: Stripe will retry, and the database
-    // inbox will allow the failed event to be claimed again.
     return json({ error: "WEBHOOK_PROCESSING_FAILED" }, 500);
   }
 });
