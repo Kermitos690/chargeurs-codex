@@ -22,10 +22,21 @@ La PR de hardening contient un workflow sûr et sans secrets : `.github/workflow
 
 Il s'exécute sur la PR vers `main` et peut aussi être lancé manuellement depuis GitHub Actions. Il ne fait aucun write Supabase, aucun appel Stripe, aucun appel ChargeNow et aucune commande matérielle.
 
-Équivalent local exact :
+### Contrôle immédiat sans installation
+
+Depuis la racine du dépôt, avec Node 22 disponible :
+
+```bash
+node scripts/check-preproduction-v3-contract.mjs
+```
+
+Ce smoke check n'utilise aucune dépendance npm et vérifie que la migration tarifaire finale, le rail prépayé, les vecteurs de tests, la documentation canonique et le workflow CI sont présents et cohérents avec la v3 approuvée. Il ne remplace pas TypeScript, Vitest, Deno ou le build ; il garantit seulement que le contrat de test et ses fichiers sont matérialisés dans le dépôt.
+
+### Suite ciblée complète
 
 ```bash
 npm ci
+node scripts/check-preproduction-v3-contract.mjs
 npm run typecheck
 npx vitest run \
   src/test/pilotPricingV3.test.ts \
@@ -43,7 +54,7 @@ npm run build
 
 Le `npm run build` exécute aussi les garde-fous kiosk du `prebuild` avant le build Vite.
 
-Le workflow ciblé vérifie donc : TypeScript, contrats Vitest v3/prépayé/juridique/hardening, calcul pricing Deno v1/v2/v3 concerné et build avec garde-fous kiosk. Les tests nécessitant une base PostgreSQL, des secrets, Stripe TEST ou du matériel restent des gates séparés et explicites.
+Le workflow ciblé vérifie donc : contrat statique v3 sans dépendance, TypeScript, contrats Vitest v3/prépayé/juridique/hardening, calcul pricing Deno v1/v2/v3 concerné et build avec garde-fous kiosk. Les tests nécessitant une base PostgreSQL, des secrets, Stripe TEST ou du matériel restent des gates séparés et explicites.
 
 ## Stripe test
 
