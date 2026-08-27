@@ -17,6 +17,7 @@ import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx"
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
 import { KioskNativeIdleUpdateGuard } from "./components/kiosk/KioskNativeIdleUpdateGuard.tsx";
 import { KioskIdentityGate } from "./components/kiosk/KioskIdentityGate.tsx";
+import { VoltWidget } from "./components/support/VoltWidget.tsx";
 
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
@@ -75,6 +76,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
+          <VoltWidget />
           <KioskReturnOverlay />
           <KioskHelpLauncher />
           <KioskOffersLauncher />
