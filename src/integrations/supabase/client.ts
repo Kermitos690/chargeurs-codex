@@ -7,6 +7,7 @@ import { kioskAwareFetch } from '@/lib/kioskFetch';
 // deliberately safe to ship in the frontend; never place a service-role key here.
 const STAGING_SUPABASE_URL = 'https://xqepbqnaenoeyfjkjnzl.supabase.co';
 const STAGING_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_39LXZ2QrezT20u9dqDQX2Q_-yq4GX0d';
+const STAGING_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4';
 
 function isChargeursCloudflareStagingHost() {
   if (typeof window === 'undefined') return false;
@@ -17,20 +18,16 @@ function isChargeursCloudflareStagingHost() {
 
 const FORCE_CHARGEURS_STAGING = isChargeursCloudflareStagingHost();
 
-// Safari / in-app browsers can fail before reaching Supabase when the frontend
-// makes a direct cross-origin request from pages.dev. On the dedicated
-// Cloudflare staging host, route Supabase HTTP traffic through a same-origin
-// Pages Function. The proxy is allowlisted to the staging project and injects
-// only the public publishable key; no service-role credential is involved.
-const CLOUDFLARE_SUPABASE_PROXY_URL = typeof window !== 'undefined'
-  ? `${window.location.origin}/api/supabase`
-  : STAGING_SUPABASE_URL;
-
+// Browser auth must stay browser -> Supabase directly. A same-origin Pages
+// Function proxy was tested and produced Cloudflare-to-Cloudflare 502 responses
+// before GoTrue was reached. The legacy anon key remains an intentionally public,
+// RLS-constrained browser key and is the most compatible transport for this staging
+// host. Other environments keep their configured publishable key.
 const SUPABASE_URL = FORCE_CHARGEURS_STAGING
-  ? CLOUDFLARE_SUPABASE_PROXY_URL
+  ? STAGING_SUPABASE_URL
   : (import.meta.env.VITE_SUPABASE_URL || STAGING_SUPABASE_URL);
 const SUPABASE_PUBLISHABLE_KEY = FORCE_CHARGEURS_STAGING
-  ? STAGING_SUPABASE_PUBLISHABLE_KEY
+  ? STAGING_SUPABASE_ANON_KEY
   : (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STAGING_SUPABASE_PUBLISHABLE_KEY);
 const isPasswordRecoveryRoute = /\/(?:admin|compte)\/reset-password$/.test(window.location.pathname);
 
