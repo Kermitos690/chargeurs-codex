@@ -9,6 +9,7 @@ const prepaidMigration = read("supabase/migrations/20260827020000_member_prepaid
 const pricingTests = read("supabase/functions/tests/pricing_settlement_v3.test.ts");
 const prepaidTests = read("src/test/memberPrepaidRail.test.ts");
 const ejectAfterPayment = read("supabase/functions/eject-after-payment/index.ts");
+const settlement = read("supabase/functions/settle-rental-payment/index.ts");
 const readme = read("README.md");
 const canonical = read("docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md");
 const testing = read("TESTING.md");
@@ -22,6 +23,14 @@ function requireContains(label, content, needle) {
 
 function requireNotContains(label, content, needle) {
   if (content.includes(needle)) failures.push(`${label}: stale/forbidden ${JSON.stringify(needle)}`);
+}
+
+function requireBefore(label, content, first, second) {
+  const firstIndex = content.indexOf(first);
+  const secondIndex = content.indexOf(second);
+  if (firstIndex < 0 || secondIndex < 0 || firstIndex >= secondIndex) {
+    failures.push(`${label}: expected ${JSON.stringify(first)} before ${JSON.stringify(second)}`);
+  }
 }
 
 for (const [needle, label] of [
@@ -66,9 +75,24 @@ for (const needle of [
   "functions/v1/kiosk-customer-options",
   "DTA22032",
   "O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING",
+  "MEMBERSHIP_PREPAID_SETTLEMENT_PENDING",
 ]) {
   requireContains("prepaid regression test", prepaidTests, needle);
 }
+
+requireBefore(
+  "prepaid settlement Stripe independence",
+  settlement,
+  'existing.settlement_status === "settled"',
+  'existing.settlement_strategy === "membership_prepaid"',
+);
+requireBefore(
+  "prepaid settlement Stripe independence",
+  settlement,
+  'existing.settlement_strategy === "membership_prepaid"',
+  "STRIPE_TEST_MODE_REQUIRED",
+);
+requireContains("prepaid settlement Stripe independence", settlement, "MEMBERSHIP_PREPAID_SETTLEMENT_PENDING");
 
 for (const station of ["DTA21269", "DTA21277", "DTA22032"]) {
   requireContains("pilot hardware release gate", ejectAfterPayment, `"${station}"`);
@@ -106,5 +130,6 @@ if (failures.length > 0) {
 console.log("Pre-production v3 contract check PASS");
 console.log("Canonical member pricing: CHF 2.00 through 2h, then +CHF 1.00 per started hour, cap CHF 5.90/24h.");
 console.log("Canonical non-return: CHF 30 total at 72h for new v3 rentals.");
+console.log("Prepaid settlement returns before the Stripe runtime guard and never falls into Stripe settlement.");
 console.log("All three pilot stations are present behind the station-specific physical-proof release gate.");
 console.log("Prepaid rail markers, tests, docs and safe CI entrypoint are present.");
