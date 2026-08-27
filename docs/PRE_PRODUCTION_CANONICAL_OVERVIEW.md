@@ -14,7 +14,11 @@ Status date: 2026-08-27. This is the current operations and contract reference. 
 
 ## Approved pilot pricing v3
 
-The commercial pricing decision is fixed. The v3 pricing and prepaid database foundations are present on staging; the final member tariff is applied by the corrective migration `20260827030000_member_pricing_v3_final.sql`. This database state does **not** by itself prove the matching Edge runtime or a physical end-to-end rental.
+The commercial pricing decision is fixed.
+
+A read-only verification on 2026-08-27 shows that the staging database already reflects the intended final member v3 profile and contains the prepaid authorization/settlement primitives. The authoritative member pricing vectors checked through `compute_customer_pricing_snapshot` produced zero mismatches.
+
+However, `supabase_migrations.schema_migrations` does **not** record `20260827010000`, `20260827020000` or `20260827030000`. The database therefore has migration-ledger drift: the state resembles the intended migrations, but it must not be described as a clean migration application and no blind `supabase db push` should be run until that history is reconciled. This database state also does not prove that the matching Edge runtime is deployed at the branch HEAD or that a physical end-to-end rental has passed.
 
 ### Express / guest
 
@@ -86,6 +90,12 @@ Stripe payment creation, ChargeNow release commands, Resend sends and PassStudio
 
 `membership_prepaid` itself performs no Stripe operation: it reserves already-existing internal credit. Hardware release remains a separate post-authorization operation with its own safety gate.
 
+## Validation path
+
+The branch contains `.github/workflows/pre-production-v3-financial-ci.yml`, a safe PR/manual workflow that uses no project secrets, performs no Supabase write, makes no Stripe call and sends no hardware command. It runs TypeScript checking, focused Vitest contracts for v3/prepaid/legal/hardening, pure Deno pricing/hardening contracts and the web build including kiosk prebuild guardrails. The exact equivalent local commands are documented in `TESTING.md`.
+
+Database contract tests and any staging E2E remain separate because they require an explicitly controlled non-production database/runtime. A green repository CI is not a substitute for migration-history reconciliation or physical/payment proof.
+
 ## Documentation map
 
 | Document | Public route / role | Current status |
@@ -95,11 +105,13 @@ Stripe payment creation, ChargeNow release commands, Resend sends and PassStudio
 | `src/pages/Kiosk.tsx` | Kiosk contract review and transactional journey | Uses server snapshot and polls canonical rental state |
 | `PRICING_ENGINE.md` | Approved pilot pricing v3 and versioning semantics | Canonical engineering pricing reference |
 | `STRIPE_PAYMENT_MODEL.md` | Stripe + internal prepaid financial rails | Canonical engineering payment reference |
+| `TESTING.md` | Exact safe local/CI validation commands | Current testing reference |
 | `docs/pre-production-runtime-manifest-2026-08-26.md` | Staging runtime inventory | Historical runtime evidence; re-check before deployment |
 | `docs/pre-production-zero-cost-budget-2026-08-26.md` | Staging quota model | Current staging cron evidence |
 
 ## Current blockers before commercial production
 
+- reconcile the staging migration ledger for v3/prepaid before any migration push;
 - matching Edge runtime deployment and controlled end-to-end validation of v3 + prepaid + acceptance code;
 - paid top-up flow end-to-end validation;
 - legal entity/postal address and human Swiss consumer/privacy/accounting review;
@@ -112,4 +124,4 @@ Stripe payment creation, ChargeNow release commands, Resend sends and PassStudio
 
 ## Do not treat as production approval
 
-This branch is still **NO-GO for production**. The approved pricing is no longer a decision blocker, and the database calculators can be asserted on staging, but Edge-runtime, top-up, legal, hosting, live-payment and physical-field gates remain.
+This branch is still **NO-GO for production**. The approved pricing is no longer a decision blocker, and the current staging calculators can be checked read-only, but migration-history, Edge-runtime, top-up, legal, hosting, live-payment and physical-field gates remain.
