@@ -42,8 +42,8 @@ describe("approved pilot pricing v3", () => {
     expect(v3Tests).toContain("[120, 200]");
     expect(v3Tests).toContain("[121, 300]");
     expect(v3Tests).toContain("[301, 590]");
-    expect(finalPricingDocs).toContain("CHF 2");
-    expect(finalPricingDocs).toContain("CHF 1");
+    expect(finalPricingDocs).toMatch(/(?:2,00|2\.00) CHF/);
+    expect(finalPricingDocs).toMatch(/(?:1,00|1\.00) CHF/);
   });
 
   it("tests both authoritative DB calculators at all commercial boundaries", () => {
