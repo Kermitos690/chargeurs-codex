@@ -14,6 +14,10 @@ const ejectAfterPayment = readFileSync(
   resolve(process.cwd(), "supabase/functions/eject-after-payment/index.ts"),
   "utf8",
 );
+const settlement = readFileSync(
+  resolve(process.cwd(), "supabase/functions/settle-rental-payment/index.ts"),
+  "utf8",
+);
 const vercelConfig = readFileSync(resolve(process.cwd(), "vercel.json"), "utf8");
 
 describe("member prepaid payment rail", () => {
@@ -59,6 +63,16 @@ describe("member prepaid payment rail", () => {
     expect(acceptance).toContain("authorize_member_prepaid_rental");
     expect(acceptance).toContain("prepaidAuthorized");
     expect(acceptance).toContain("eject-after-payment");
+  });
+
+  it("keeps prepaid return settlement independent of Stripe runtime availability", () => {
+    const settledGuard = settlement.indexOf('existing.settlement_status === "settled"');
+    const prepaidGuard = settlement.indexOf('existing.settlement_strategy === "membership_prepaid"');
+    const stripeRuntimeGuard = settlement.indexOf("STRIPE_TEST_MODE_REQUIRED");
+    expect(settledGuard).toBeGreaterThanOrEqual(0);
+    expect(prepaidGuard).toBeGreaterThan(settledGuard);
+    expect(stripeRuntimeGuard).toBeGreaterThan(prepaidGuard);
+    expect(settlement).toContain("MEMBERSHIP_PREPAID_SETTLEMENT_PENDING");
   });
 
   it("supports every pilot station without bypassing the station-specific physical proof gate", () => {
