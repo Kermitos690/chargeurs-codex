@@ -15,19 +15,28 @@ import java.util.Set;
 /**
  * Installs the kiosk credential at document start, before any application
  * JavaScript can issue a protected request. The script is origin-restricted to
- * the enrolled Chargeurs.ch base URL and the token is never written to logs or
+ * the runtime Chargeurs.ch web origin and the token is never written to logs or
  * persistent WebView storage.
  */
 final class DocumentStartCredentialInjector {
     private DocumentStartCredentialInjector() {}
 
     static boolean install(WebView webView, KioskConfig config, String appVersion) {
+        return install(webView, config, config.baseUrl(), appVersion);
+    }
+
+    static boolean install(
+        WebView webView,
+        KioskConfig config,
+        String runtimeBaseUrl,
+        String appVersion
+    ) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false;
         try {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
                 script(config.stationId(), config.kioskToken(), appVersion),
-                allowedOrigins(config.baseUrl())
+                allowedOrigins(runtimeBaseUrl)
             );
             return true;
         } catch (RuntimeException error) {
