@@ -8,6 +8,10 @@ on:
       - "src/pages/kiosk-cinematic-home.css"
       - "src/pages/kiosk-da-master.css"
       - "src/components/LanguageSwitcher.tsx"
+      - "src/components/kiosk/**"
+      - "src/lib/kioskEdgeProxy.ts"
+      - "src/lib/kioskFetch.ts"
+      - "src/test/kiosk*.test.ts"
       - "src/i18n/**"
       - "package.json"
       - "package-lock.json"
@@ -20,7 +24,12 @@ on:
       - "src/pages/kiosk-cinematic-home.css"
       - "src/pages/kiosk-da-master.css"
       - "src/components/LanguageSwitcher.tsx"
+      - "src/components/kiosk/**"
+      - "src/lib/kioskEdgeProxy.ts"
+      - "src/lib/kioskFetch.ts"
+      - "src/test/kiosk*.test.ts"
       - "src/i18n/**"
+      - ".github/workflows/kiosk-ui-ci.yml"
 
 permissions:
   contents: read
