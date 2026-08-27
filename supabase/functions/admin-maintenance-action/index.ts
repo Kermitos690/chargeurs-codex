@@ -16,6 +16,10 @@ const TIMEOUT_MS = Number.isInteger(timeoutCandidate) && timeoutCandidate >= 100
 const PERMIT_TTL_MS = 5 * 60 * 1000;
 const STATION_RE = /^[A-Za-z0-9_-]{4,64}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TERMINAL_RENTAL_STATES = [
+  "completed", "expired", "payment_cancelled", "payment_expired",
+  "payment_failed", "refunded", "cancelled", "failed",
+];
 
 type ProviderResult = { ok: boolean; status: number; data: unknown; error: string | null };
 type SlotSnapshot = { station_id: string; slot_num: number; status: string | null; battery_id: string | null; updated_at: string | null };
@@ -129,6 +133,24 @@ async function loadSlot(db: SupabaseClient, stationId: string, slotNum: number):
   return data as SlotSnapshot | null;
 }
 
+async function stationIsOnline(db: SupabaseClient, stationId: string): Promise<boolean> {
+  const { data, error } = await db.from("stations")
+    .select("online")
+    .eq("station_id", stationId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.online === true;
+}
+
+async function hasActiveRental(db: SupabaseClient, batteryId: string): Promise<boolean> {
+  const { count, error } = await db.from("rental_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("battery_id", batteryId)
+    .not("state", "in", `(${TERMINAL_RENTAL_STATES.join(",")})`);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
@@ -194,17 +216,12 @@ Deno.serve(async (req) => {
       const slotNum = validSlot(body.slotNum);
       if (slotNum === null) return json({ ok: false, error: "VALID_SLOT_REQUIRED" }, 400);
 
-      const { data: station, error: stationError } = await db.from("stations")
-        .select("station_id,online,status")
-        .eq("station_id", body.stationId)
-        .maybeSingle();
-      if (stationError) throw stationError;
-      if (!station) return json({ ok: false, error: "STATION_NOT_FOUND" }, 404);
-      if (station.online !== true) return json({ ok: false, error: "STATION_NOT_ONLINE" }, 409);
+      if (!await stationIsOnline(db, body.stationId)) return json({ ok: false, error: "STATION_NOT_ONLINE" }, 409);
 
       const slot = await loadSlot(db, body.stationId, slotNum);
       if (!slot) return json({ ok: false, error: "SLOT_NOT_FOUND" }, 404);
       if (!slot.battery_id) return json({ ok: false, error: "SLOT_EMPTY" }, 409);
+      if (await hasActiveRental(db, slot.battery_id)) return json({ ok: false, error: "MAINTENANCE_ACTIVE_RENTAL_EXISTS" }, 409);
 
       const nowIso = new Date().toISOString();
       await db.from("maintenance_ejection_permits")
@@ -255,9 +272,14 @@ Deno.serve(async (req) => {
       const confirmation = String(body.confirmation ?? "").trim().toUpperCase();
       if (confirmation !== expectedConfirmation) return json({ ok: false, error: "CONFIRMATION_REQUIRED", expectedConfirmation }, 409);
 
+      if (!await stationIsOnline(db, permit.station_id)) return json({ ok: false, error: "STATION_NOT_ONLINE" }, 409);
+
       const slot = await loadSlot(db, permit.station_id, permit.slot_num);
       if (!slot || slot.battery_id !== permit.expected_battery_id) {
         return json({ ok: false, error: "BATTERY_CHANGED_SINCE_PERMIT", expectedBatteryId: permit.expected_battery_id, currentBatteryId: slot?.battery_id ?? null }, 409);
+      }
+      if (await hasActiveRental(db, permit.expected_battery_id)) {
+        return json({ ok: false, error: "MAINTENANCE_ACTIVE_RENTAL_EXISTS" }, 409);
       }
 
       const consumedAt = new Date().toISOString();
