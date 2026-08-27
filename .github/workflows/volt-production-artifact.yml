@@ -1,0 +1,40 @@
+name: Volt production artifact
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/volt-production-artifact.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production frontend
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-volt-production-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
