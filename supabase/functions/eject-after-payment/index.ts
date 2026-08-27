@@ -4,7 +4,7 @@
 // Each station must have its own successful O2-only physical qualification before release is enabled.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
-const SUPPORTED_STATIONS = new Set(["DTA21269", "DTA21270", "DTA21277"]);
+const SUPPORTED_STATIONS = new Set(["DTA21269", "DTA21270", "DTA21277", "DTA22032"]);
 const BASE = (Deno.env.get("CHARGENOW_API_BASE_URL") ?? "https://developer.chargenow.top/cdb-open-api/v1").replace(/\/$/, "");
 const BASIC_AUTH = (Deno.env.get("CHARGENOW_BASIC_AUTH") ?? "").replace(/^Basic\s+/i, "").trim();
 const BASIC_USER = Deno.env.get("CHARGENOW_BASIC_USERNAME") ?? "";
@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
     }
     if (session.state !== "payment_succeeded") return reply({ ok: false, error: "SESSION_NOT_RELEASABLE", state: session.state }, 409);
 
-    // Per-station qualification: updating code for both stations never silently enables unqualified hardware.
+    // Every supported station remains fail-closed until its own O2-only physical proof exists.
     if (!(await hasQualifiedO2OnlyProof(db, stationId))) {
       return reply({ ok: false, error: "O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING", stationId }, 409);
     }
