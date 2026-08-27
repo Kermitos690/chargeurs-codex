@@ -2,6 +2,7 @@ import { adminClient, auditLog } from "../_shared/db.ts";
 import { accountDeletionBlocked, safeDeletedEmail } from "../_shared/accountPrivacy.ts";
 import { handlePassStudioWallet } from "../_shared/passStudioWallet.ts";
 import { CHARGEURS_ACCOUNT_PASS_ID } from "../_shared/passStudio.ts";
+import { loadPassAccountSummary } from "../_shared/passAccountSummary.ts";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 function json(body: unknown, status = 200): Response {
@@ -23,13 +24,14 @@ async function claimVerifiedEmailRentals(db: ReturnType<typeof adminClient>, use
 
 async function customerData(db: ReturnType<typeof adminClient>, user: { id: string; email?: string | null }) {
   await claimVerifiedEmailRentals(db, user);
-  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult] = await Promise.all([
+  const [rentalsResult, profileResult, membershipResult, walletResult, pointsResult, rentalCreditResult, passSummary] = await Promise.all([
     db.from("rental_sessions").select("*").eq("customer_user_id", user.id),
     db.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     db.from("customer_memberships").select("id,status,starts_at,renews_at,ends_at,plan_id,cancel_at_period_end,stripe_current_period_start,stripe_current_period_end,customer_membership_plans(id,code,name,currency,annual_fee_cents,renewal_credit_cents,hourly_cents,daily_cap_cents,billing_interval,billing_interval_count,included_minutes,discount_percent)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_wallet_passes").select("id,membership_id,public_pass_id,status,provider_status,provider,provider_pass_id,pass_revision,token_version,apple_serial_number,google_object_id,last_generated_at,last_synced_at,revoked_at,created_at,updated_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     db.from("customer_chargepoints_balances").select("balance,last_activity_at").eq("user_id", user.id).maybeSingle(),
     db.from("customer_membership_credit_balances").select("balance_cents,currency,next_expiry_at,last_activity_at").eq("user_id", user.id).eq("currency", "CHF").maybeSingle(),
+    loadPassAccountSummary(db, user.id),
   ]);
   if (rentalsResult.error) throw new Error("RENTALS_UNAVAILABLE");
   if (profileResult.error) throw new Error("PROFILE_UNAVAILABLE");
@@ -54,6 +56,7 @@ async function customerData(db: ReturnType<typeof adminClient>, user: { id: stri
     membership: membershipResult.data ?? null, walletPass: walletResult.data ?? null,
     chargePoints: { balance: Number(pointsResult.data?.balance ?? 0), lastActivityAt: pointsResult.data?.last_activity_at ?? null },
     rentalCredit: { balanceCents: Number(rentalCreditResult.data?.balance_cents ?? 0), currency: String(rentalCreditResult.data?.currency ?? "CHF"), nextExpiryAt: rentalCreditResult.data?.next_expiry_at ?? null, lastActivityAt: rentalCreditResult.data?.last_activity_at ?? null },
+    pass: passSummary,
   };
 }
 
