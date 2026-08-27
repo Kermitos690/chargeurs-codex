@@ -1,2 +1,3 @@
 Cloudflare Pages rebuild trigger after syncing main into feat/cloudflare-staging-20260827 for Volt validation.
 No runtime logic change.
+Rebuild requested after Volt proxy origin normalization (de0c993c).
