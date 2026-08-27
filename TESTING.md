@@ -16,7 +16,34 @@ cd android-kiosk
 
 Les contrats PostgreSQL exigent une base jetable : utiliser les scripts `supabase/tests/*.sql`. Ne pas les exécuter contre la production.
 
-Dernière validation locale de livraison : 68 tests Vitest et 160 tests Deno réussis, builds web et Android réussis, audit npm production à 0 vulnérabilité. Les tests SQL n'ont pas été exécutés pendant cette session faute de serveur jetable ; ils restent un gate obligatoire de staging.
+## Validation ciblée préproduction v3
+
+La PR de hardening contient un workflow sûr et sans secrets : `.github/workflows/pre-production-v3-financial-ci.yml`.
+
+Il s'exécute sur la PR vers `main` et peut aussi être lancé manuellement depuis GitHub Actions. Il ne fait aucun write Supabase, aucun appel Stripe, aucun appel ChargeNow et aucune commande matérielle.
+
+Équivalent local exact :
+
+```bash
+npm ci
+npm run typecheck
+npx vitest run \
+  src/test/pilotPricingV3.test.ts \
+  src/test/memberPrepaidRail.test.ts \
+  src/test/legalContract.test.ts \
+  src/test/preProductionHardening.test.ts
+
+deno test --allow-read --no-check \
+  supabase/functions/tests/pricing_settlement_v2.test.ts \
+  supabase/functions/tests/pricing_settlement_v3.test.ts \
+  supabase/functions/tests/pre_production_hardening_contract.test.ts
+
+npm run build
+```
+
+Le `npm run build` exécute aussi les garde-fous kiosk du `prebuild` avant le build Vite.
+
+Le workflow ciblé vérifie donc : TypeScript, contrats Vitest v3/prépayé/juridique/hardening, calcul pricing Deno v1/v2/v3 concerné et build avec garde-fous kiosk. Les tests nécessitant une base PostgreSQL, des secrets, Stripe TEST ou du matériel restent des gates séparés et explicites.
 
 ## Stripe test
 
@@ -32,4 +59,4 @@ Boot, lock-task, plein écran, arrière bloqué, origine externe/TLS invalide, r
 
 ## Preuve
 
-Une CI verte prouve le code testé, pas un paiement live ou une action matérielle. Consigner les tests manuels avec date, opérateur, environnement, IDs non secrets et résultat.
+Une CI verte prouve le code testé, pas un paiement live, une migration staging ou une action matérielle. Consigner les tests manuels avec date, opérateur, environnement, IDs non secrets et résultat.
