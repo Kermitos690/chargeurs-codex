@@ -80,3 +80,5 @@ jobs:
           echo "--- BUILD CHECK ---"
           curl -fsS --max-time 15 https://chargeurs-ch-staging-cf.pages.dev/admin-build-check.txt || true
           echo
+
+# retrigger: 2026-08-27T08:43+02:00
