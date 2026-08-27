@@ -1,0 +1,282 @@
+name: DTA21277 Cloudflare v161 field update
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/dta21277-cloudflare-v161-field-update.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dta21277-cloudflare-v161-field-update
+  cancel-in-progress: false
+
+jobs:
+  build-verify-update:
+    if: github.ref_name == 'fix/android-cloudflare-origin-dta21277-v161-20260827'
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 40
+    env:
+      LANG: C
+      LC_ALL: C
+    steps:
+      - name: Checkout exact Cloudflare migration source
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Bootstrap trusted local JDK Android SDK and signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_SIGNER="1e4d4c12ec3b21a3ff7186fb7bdcf4097f13b0a8d7a6b6fc7ba7dbebd92042f6"
+
+          JAVA_HOME_VALUE=""
+          for candidate in \
+            "${JAVA_HOME:-}" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-x64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "$HOME/Library/Caches/chargeurs-jdk/temurin21-aarch64/unpack/jdk-21.0.12.1+1/Contents/Home" \
+            "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+            "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home" \
+            "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+          do
+            if [ -n "$candidate" ] && [ -x "$candidate/bin/java" ] && [ -x "$candidate/bin/keytool" ]; then
+              JAVA_HOME_VALUE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$JAVA_HOME_VALUE" ] && [ -d "$HOME/Library/Caches/chargeurs-jdk" ]; then
+            JAVA_BIN="$(find "$HOME/Library/Caches/chargeurs-jdk" -type f -path '*/Contents/Home/bin/java' -perm -u+x 2>/dev/null | head -1 || true)"
+            [ -z "$JAVA_BIN" ] || JAVA_HOME_VALUE="${JAVA_BIN%/bin/java}"
+          fi
+          [ -n "$JAVA_HOME_VALUE" ] || { echo "JDK_GATE=FAIL"; exit 20; }
+          echo "JAVA_HOME=$JAVA_HOME_VALUE" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_VALUE/bin" >> "$GITHUB_PATH"
+
+          KEYSTORE="$HOME/.android/debug.keystore"
+          [ -s "$KEYSTORE" ] || { echo "LOCAL_KEYSTORE_GATE=FAIL"; exit 21; }
+          ACTUAL_SIGNER="$("$JAVA_HOME_VALUE/bin/keytool" -exportcert -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | shasum -a 256 | awk '{print $1}' | tr '[:upper:]' '[:lower:]')"
+          [ "$ACTUAL_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "LOCAL_SIGNER_GATE=FAIL"; exit 22; }
+
+          ANDROID_HOME_VALUE="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          [ -x "$ANDROID_HOME_VALUE/platform-tools/adb" ] || { echo "ANDROID_SDK_GATE=FAIL"; exit 23; }
+          echo "ANDROID_HOME=$ANDROID_HOME_VALUE" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME_VALUE" >> "$GITHUB_ENV"
+          echo "EXPECTED_SIGNER=$EXPECTED_SIGNER" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_SIGNER_GATE=PASS"
+
+      - name: Verify v160 USB lineage and prepare v161 metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'STRIPE_LOCATION_PERMISSION_REQUEST = 4701' android-kiosk/app/src/main/java/ch/chargeurs/kiosk/NativeBridge.java
+          grep -F 'implementation("com.stripe:stripeterminal:5.8.0")' android-kiosk/app/build.gradle.kts
+          grep -F 'stagingKioskWebBaseUrl = "https://chargeurs-ch-staging-cf.pages.dev"' android-kiosk/app/build.gradle.kts
+          grep -F 'buildConfigField("boolean", "HARDWARE_EJECTION_ENABLED", "false")' android-kiosk/app/build.gradle.kts
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android-kiosk/app/build.gradle.kts')
+          s = p.read_text()
+          replacements = {
+              'versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 159':
+                  'versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 161',
+              '"1.0.59-terminal-sdk580-cloudflare-runtime"':
+                  '"1.0.61-terminal-sdk580-usb-discovery-cloudflare"',
+          }
+          for old, new in replacements.items():
+              if s.count(old) != 1:
+                  raise SystemExit(f'VERSION_SOURCE_GATE=FAIL expected exactly one match: {old}')
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+
+          grep -F 'versionCode = if (stagingSimulatedTerminalReaderVersion) 157 else 161' android-kiosk/app/build.gradle.kts
+          grep -F '"1.0.61-terminal-sdk580-usb-discovery-cloudflare"' android-kiosk/app/build.gradle.kts
+          echo "USB_LINEAGE_AND_V161_SOURCE_GATE=PASS"
+
+      - name: Test lint and build v161
+        working-directory: android-kiosk
+        env:
+          CHARGEURS_ENROLLMENT_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/kiosk-enroll
+          CHARGEURS_KIOSK_PUBLIC_BASE_URL: https://chargeurs-ch-staging.vercel.app
+          CHARGEURS_KIOSK_WEB_BASE_URL: https://chargeurs-ch-staging-cf.pages.dev
+          CHARGEURS_STRIPE_TERMINAL_BACKEND_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co/functions/v1/stripe-terminal-backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          unset CHARGEURS_STAGING_KEYSTORE_PATH CHARGEURS_STAGING_KEYSTORE_PASSWORD CHARGEURS_STAGING_KEY_ALIAS CHARGEURS_STAGING_KEY_PASSWORD || true
+          ./gradlew --no-daemon --console=plain clean testDebugUnitTest lintStaging assembleStaging
+          echo "GRADLE_V161_GATE=PASS"
+
+      - name: Verify and persist v161 APK locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-kiosk/app/build/outputs/apk/staging/app-staging.apk"
+          [ -s "$APK" ] || { echo "APK_GATE=FAIL"; exit 24; }
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -perm -u+x 2>/dev/null | sort -V | tail -1)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -1)"
+          [ -x "$AAPT" ] && [ -x "$APKSIGNER" ] || exit 25
+
+          BADGING="$($AAPT dump badging "$APK" | head -1)"
+          printf '%s\n' "$BADGING" | grep -F "package: name='ch.chargeurs.kiosk.staging'"
+          printf '%s\n' "$BADGING" | grep -F "versionCode='161'"
+          printf '%s\n' "$BADGING" | grep -F "versionName='1.0.61-terminal-sdk580-usb-discovery-cloudflare-staging'"
+
+          SIGNER="$($APKSIGNER verify --print-certs "$APK" 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$SIGNER" = "$EXPECTED_SIGNER" ] || { echo "BUILT_SIGNER_GATE=FAIL"; exit 26; }
+
+          NAME="Chargeurs_CH_Kiosk_1.0.61-terminal-sdk580-usb-discovery-cloudflare-staging.apk"
+          PERSIST_DIR="$HOME/chargeurs-builds/dta21277/cloudflare-161"
+          mkdir -p "$PERSIST_DIR"
+          chmod 700 "$HOME/chargeurs-builds" "$HOME/chargeurs-builds/dta21277" "$PERSIST_DIR" 2>/dev/null || true
+          cp "$APK" "$PERSIST_DIR/$NAME"
+          APK_SHA="$(shasum -a 256 "$PERSIST_DIR/$NAME" | awk '{print $1}')"
+          printf '%s  %s\n' "$APK_SHA" "$NAME" > "$PERSIST_DIR/SHA256SUMS.txt"
+          cat > "$PERSIST_DIR/PROVENANCE.txt" <<EOF
+          sourceSha=$GITHUB_SHA
+          sourceBase=daf955e6c4432c2f16b67655e7bcaa7cc6be0a88
+          package=ch.chargeurs.kiosk.staging
+          versionCode=161
+          versionName=1.0.61-terminal-sdk580-usb-discovery-cloudflare-staging
+          enrollmentOrigin=https://chargeurs-ch-staging.vercel.app
+          webRuntimeOrigin=https://chargeurs-ch-staging-cf.pages.dev
+          stripeTerminalSdk=5.8.0
+          usbDiscoveryPermissionFix=present
+          physicalEjectionEnabled=false
+          paymentAction=none
+          chargeNowAction=none
+          signerCertificateSha256=$SIGNER
+          apkSha256=$APK_SHA
+          EOF
+          echo "VERIFIED_APK=$PERSIST_DIR/$NAME" >> "$GITHUB_ENV"
+          echo "APKSIGNER=$APKSIGNER" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$APK_SHA" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$APK_SHA"
+          echo "APK_V161_CONTRACT_GATE=PASS"
+
+      - name: Locate and preflight DTA21277 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_STATION="DTA21277"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          TARGET_MDNS="adb-3d24b8cbb7d560bc-r6qk3T._adb-tls-connect._tcp"
+          PKG="ch.chargeurs.kiosk.staging"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+          "$ADB" start-server >/dev/null 2>&1 || true
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" 2>/dev/null | tr -d '\r' | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" | head -1
+          }
+          target_matches() {
+            local serial="$1" station device
+            "$ADB" -s "$serial" get-state >/dev/null 2>&1 || return 1
+            station="$(read_pref "$serial" chargeurs_kiosk_config station_id || true)"
+            device="$(read_pref "$serial" chargeurs_device_identity public_id || true)"
+            [ "$station" = "$TARGET_STATION" ] && [ "$device" = "$EXPECTED_DEVICE_PUBLIC_ID" ]
+          }
+
+          SERIAL=""
+          for attempt in 1 2 3 4 5 6; do
+            if target_matches "$TARGET_MDNS"; then SERIAL="$TARGET_MDNS"; break; fi
+            while IFS= read -r endpoint; do
+              [ -n "$endpoint" ] || continue
+              "$ADB" connect "$endpoint" >/dev/null 2>&1 || true
+            done < <("$ADB" mdns services 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]+' | sort -u || true)
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if target_matches "$candidate"; then SERIAL="$candidate"; break 2; fi
+            done < <("$ADB" devices | awk 'NR>1 && $2 == "device" {print $1}')
+            sleep 3
+          done
+          [ -n "$SERIAL" ] || { echo "ADB_DTA21277_GATE=FAIL"; exit 31; }
+          echo "ADB_TARGET_CONFIRMED=DTA21277"
+
+          DUMP="$("$ADB" -s "$SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          OLD_CODE="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          OLD_NAME="$(printf '%s\n' "$DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ "$OLD_CODE" = "160" ] || { echo "CURRENT_VERSION_GATE=FAIL code=$OLD_CODE"; exit 32; }
+          [ "$OLD_NAME" = "1.0.60-terminal-sdk580-usb-discovery-staging" ] || { echo "CURRENT_VERSION_NAME_GATE=FAIL"; exit 33; }
+
+          BASE_PATH="$("$ADB" -s "$SERIAL" shell pm path "$PKG" | head -1 | sed 's/^package://' | tr -d '\r')"
+          [ -n "$BASE_PATH" ] || exit 34
+          BACKUP_DIR="$HOME/chargeurs-field-backups/dta21277-v160-$(date +%Y%m%d-%H%M%S)"
+          mkdir -p "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
+          "$ADB" -s "$SERIAL" pull "$BASE_PATH" "$BACKUP_DIR/pre-update-v160.apk" >/dev/null
+          OLD_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/pre-update-v160.apk" 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$OLD_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "INSTALLED_SIGNER_GATE=FAIL"; exit 35; }
+
+          BEFORE_CONFIG_SHA="$("$ADB" -s "$SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          [ -n "$BEFORE_CONFIG_SHA" ] || { echo "CONFIG_BACKUP_GATE=FAIL"; exit 36; }
+          echo "$BEFORE_CONFIG_SHA" > "$BACKUP_DIR/kiosk-config.sha256"
+          echo "TARGET_SERIAL=$SERIAL" >> "$GITHUB_ENV"
+          echo "BACKUP_DIR=$BACKUP_DIR" >> "$GITHUB_ENV"
+          echo "BEFORE_CONFIG_SHA=$BEFORE_CONFIG_SHA" >> "$GITHUB_ENV"
+          echo "INSTALLED_BEFORE_VERSION_CODE=$OLD_CODE"
+          echo "INSTALLED_BEFORE_VERSION_NAME=$OLD_NAME"
+          echo "DTA21277_PREFLIGHT_GATE=PASS"
+          echo "PAYMENT_ACTION=NONE"
+          echo "CHARGENOW_ACTION=NONE"
+          echo "HARDWARE_EJECTION_ACTION=NONE"
+
+      - name: Update DTA21277 in place to v161 and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG="ch.chargeurs.kiosk.staging"
+          TARGET_STATION="DTA21277"
+          EXPECTED_DEVICE_PUBLIC_ID="c1651928-082d-4220-a4dc-77e9532ae8a2"
+          ADB="$ANDROID_HOME/platform-tools/adb"
+
+          INSTALL_OUT="$("$ADB" -s "$TARGET_SERIAL" install -r "$VERIFIED_APK" 2>&1)" || {
+            printf '%s\n' "$INSTALL_OUT" >&2
+            exit 40
+          }
+          printf '%s\n' "$INSTALL_OUT" | grep -q 'Success' || { printf '%s\n' "$INSTALL_OUT" >&2; exit 41; }
+          echo "IN_PLACE_UPDATE=PASS"
+
+          read_pref() {
+            local serial="$1" file="$2" key="$3"
+            "$ADB" -s "$serial" shell "run-as '$PKG' cat 'shared_prefs/$file.xml' 2>/dev/null" 2>/dev/null | tr -d '\r' | sed -n "s/.*<string name=\"$key\">\([^<]*\)<\\/string>.*/\1/p" | head -1
+          }
+
+          AFTER_CONFIG_SHA="$("$ADB" -s "$TARGET_SERIAL" shell "run-as '$PKG' cat shared_prefs/chargeurs_kiosk_config.xml 2>/dev/null" | tr -d '\r' | shasum -a 256 | awk '{print $1}')"
+          if [ "$AFTER_CONFIG_SHA" != "$BEFORE_CONFIG_SHA" ]; then
+            echo "SECURE_CONFIG_PRESERVATION_GATE=FAIL" >&2
+            exit 42
+          fi
+
+          FINAL_DUMP="$("$ADB" -s "$TARGET_SERIAL" shell dumpsys package "$PKG" | tr -d '\r')"
+          FINAL_CODE="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          FINAL_NAME="$(printf '%s\n' "$FINAL_DUMP" | sed -n 's/.*versionName=\(.*\)$/\1/p' | head -1)"
+          [ "$FINAL_CODE" = "161" ] || { echo "FINAL_VERSION_GATE=FAIL code=$FINAL_CODE"; exit 43; }
+          [ "$FINAL_NAME" = "1.0.61-terminal-sdk580-usb-discovery-cloudflare-staging" ] || { echo "FINAL_VERSION_NAME_GATE=FAIL"; exit 44; }
+
+          FINAL_STATION="$(read_pref "$TARGET_SERIAL" chargeurs_kiosk_config station_id || true)"
+          FINAL_DEVICE_ID="$(read_pref "$TARGET_SERIAL" chargeurs_device_identity public_id || true)"
+          [ "$FINAL_STATION" = "$TARGET_STATION" ] || { echo "FINAL_STATION_GATE=FAIL"; exit 45; }
+          [ "$FINAL_DEVICE_ID" = "$EXPECTED_DEVICE_PUBLIC_ID" ] || { echo "FINAL_DEVICE_GATE=FAIL"; exit 46; }
+
+          FINAL_BASE="$("$ADB" -s "$TARGET_SERIAL" shell pm path "$PKG" | head -1 | sed 's/^package://' | tr -d '\r')"
+          "$ADB" -s "$TARGET_SERIAL" pull "$FINAL_BASE" "$BACKUP_DIR/post-update-v161.apk" >/dev/null
+          FINAL_SIGNER="$($APKSIGNER verify --print-certs "$BACKUP_DIR/post-update-v161.apk" 2>/dev/null | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [ "$FINAL_SIGNER" = "$EXPECTED_SIGNER" ] || { echo "FINAL_SIGNER_GATE=FAIL"; exit 47; }
+
+          "$ADB" -s "$TARGET_SERIAL" shell am force-stop "$PKG" >/dev/null 2>&1 || true
+          "$ADB" -s "$TARGET_SERIAL" shell am start -W -n "$PKG/ch.chargeurs.kiosk.MainActivity" >/dev/null
+          sleep 6
+          "$ADB" -s "$TARGET_SERIAL" shell pidof "$PKG" >/dev/null || { echo "APP_RUNTIME_GATE=FAIL"; exit 48; }
+
+          echo "FINAL_VERSION_CODE=$FINAL_CODE"
+          echo "FINAL_VERSION_NAME=$FINAL_NAME"
+          echo "FINAL_SIGNER_GATE=PASS"
+          echo "SECURE_CONFIG_PRESERVED=PASS"
+          echo "APP_RUNTIME_GATE=PASS"
+          echo "DTA21277_CLOUDFLARE_V161_FIELD_UPDATE=PASS"
