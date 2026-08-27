@@ -80,6 +80,13 @@ Deno.serve(async (req) => {
         && Boolean(wallet?.provider_instance_id)
         && /^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl);
       if (existingPassStudioPass) {
+        const { data: syncSetting, error: syncSettingError } = await db.from("app_settings")
+          .select("value").eq("key", "customer_wallet.pass_studio_instance_sync").maybeSingle();
+        if (syncSettingError) return json({ ok: false, error: "WALLET_SYNC_CONFIG_UNAVAILABLE" }, 503);
+        const instanceSyncEnabled = (syncSetting?.value as { enabled?: unknown } | null)?.enabled === true;
+        if (!instanceSyncEnabled) {
+          return json({ ok: true, provider: "pass_studio", status: "current", addToWalletUrl, queued: false, synchronized: false });
+        }
         const { data: outboxId, error: queueError } = await db.rpc("enqueue_customer_wallet_sync_event", {
           p_user_id: user.id, p_event_type: "manual_sync", p_event_key: `wallet:manual:${user.id}:${crypto.randomUUID()}`,
           p_rental_session_id: null, p_payload: { source: "account_pass" }, p_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),

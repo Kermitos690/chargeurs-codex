@@ -153,14 +153,14 @@ Deno.test("v2 tier flag mismatch fails closed", () => {
   );
 });
 
-Deno.test("snapshot currency and version mismatches fail closed", () => {
+Deno.test("snapshot currency and unsupported version mismatches fail closed", () => {
   assertThrows(
     () => computeFinalPricingFromSnapshot({ snapshot: premiumSnapshot(), expectedCurrency: "EUR", startAt: START, endAt: endAt(60), returnState: "normal" }),
     PricingSnapshotError,
     "PRICING_SNAPSHOT_CURRENCY_MISMATCH",
   );
   const unsupported = premiumSnapshot();
-  unsupported.pricing_rules_version = 3;
+  unsupported.pricing_rules_version = 4;
   assertThrows(
     () => computeFinalPricingFromSnapshot({ snapshot: unsupported, expectedCurrency: "CHF", startAt: START, endAt: endAt(60), returnState: "normal" }),
     PricingSnapshotError,

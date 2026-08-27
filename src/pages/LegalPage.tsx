@@ -1,11 +1,10 @@
 import { Link, useParams } from "react-router-dom";
 import { PublicNav } from "@/components/public/PublicNav";
 import { LiquidBackground } from "@/components/LiquidBackground";
-import { formatChf, PUBLIC_PRICING } from "@/lib/publicPricing";
 
 type LegalKind = "conditions" | "confidentialite" | "mentions-legales";
 
-const LEGAL_VERSION = "10 août 2026 · conditions staging v1";
+const LEGAL_VERSION = "26 août 2026 · préproduction v2 · revue juridique requise";
 
 const TITLES: Record<LegalKind, string> = {
   conditions: "Conditions générales d'utilisation et de location",
@@ -19,10 +18,10 @@ function Conditions() {
     <p>Chargeurs.ch permet de louer une batterie externe auprès d'une borne du réseau, puis de la restituer dans une borne compatible disposant d'un emplacement libre. Avant le paiement, le client voit le tarif, le mécanisme de garantie applicable, le plafond journalier et le montant maximal prévu en cas de non-retour. La validation du parcours de paiement vaut acceptation de la version des présentes conditions et de la politique de confidentialité enregistrée avec la location. La location devient active uniquement après confirmation serveur du paiement ou de l'autorisation requise et confirmation physique de la remise de la batterie.</p>
 
     <h2>2. Prix de location</h2>
-    <p>Le tarif public est de {formatChf(1.9)} jusqu'à 30 minutes, {formatChf(3.9)} jusqu'à 2 heures, {formatChf(5.9)} jusqu'à 6 heures et {formatChf(PUBLIC_PRICING.dailyCap)} jusqu'à 24 heures. Après 24 heures, {formatChf(PUBLIC_PRICING.dailyCap)} s'ajoutent par période de 24 heures commencée. Le profil tarifaire applicable est figé côté serveur au début de la location.</p>
+    <p>Avant toute validation de paiement, l’écran de location affiche le tarif, la période de facturation, le plafond journalier, la garantie et le montant applicable en cas de non-retour. Le profil tarifaire applicable est figé côté serveur pour la location concernée ; ces montants affichés constituent le snapshot tarifaire de référence.</p>
 
     <h2>3. Paiement et garantie</h2>
-    <p>Aucune caution n'est configurée dans le pilote actuel. Tout mécanisme ultérieur de préautorisation ou de débit complémentaire devra être affiché au client et validé contractuellement avant son activation.</p>
+    <p>Le montant et la nature de la garantie sont affichés avant l’acceptation : une carte ou un wallet compatible peut faire l’objet d’une autorisation temporaire, tandis que TWINT peut faire l’objet d’un débit initial suivi d’un remboursement de la différence lorsque le montant final est inférieur. Aucun montant supplémentaire ne doit être présenté ou prélevé sans le fondement contractuel et les confirmations applicables.</p>
 
     <h2>4. Moyens de paiement</h2>
     <p>Les moyens effectivement disponibles sont ceux affichés dans le parcours de paiement. Aucun moyen de paiement ne doit être présenté comme disponible avant son test de bout en bout.</p>
@@ -34,7 +33,7 @@ function Conditions() {
     <p>Le client doit insérer correctement la batterie dans un emplacement compatible et attendre la détection du retour. La simple insertion mécanique ne suffit pas si l'identité de la batterie ou l'état du slot reste ambigu. La location se termine financièrement uniquement après la corrélation du retour, le calcul du prix et le règlement serveur. L'écran « Location terminée » et le reçu final ne sont affichés qu'une fois ces opérations confirmées.</p>
 
     <h2>7. Non-retour, perte ou batterie non restituée</h2>
-    <p>En cas de non-retour après 72 heures, le montant total peut atteindre {formatChf(PUBLIC_PRICING.nonReturnTotal)} selon les conditions affichées lors de la location. Toute perception doit être compatible avec le moyen de paiement, le droit applicable et les exigences d'authentification.</p>
+    <p>Le délai de non-retour et le montant correspondant sont affichés dans le snapshot tarifaire avant l’acceptation. Toute perception doit être compatible avec le moyen de paiement, le droit applicable et les exigences d’authentification. La proportionnalité de cette clause et de ses montants nécessite une revue juridique avant l’ouverture commerciale.</p>
 
     <h2>8. Paiement, confirmation électronique et reçus</h2>
     <p>Les données de carte et de portefeuille sont collectées par Stripe Checkout sur le téléphone du client. Une page de succès de navigateur ne constitue jamais, à elle seule, une preuve de paiement, de remise de batterie ou de fin de location. Le système s'appuie sur les confirmations serveur et l'état physique de la borne. Lorsqu'une adresse email est fournie, Chargeurs.ch peut envoyer des messages transactionnels relatifs à la garantie, au début physique de la location, au retour, au règlement et au reçu. Ces messages sont nécessaires au suivi de la transaction et sont distincts de toute communication marketing.</p>
@@ -62,13 +61,13 @@ function Privacy() {
     <p>Fournir et sécuriser la location, demander la garantie, confirmer le paiement, piloter la délivrance, détecter le retour, calculer le prix final, effectuer une capture, une libération d'autorisation, un remboursement ou un complément contractuellement dû, envoyer les confirmations et reçus transactionnels, prévenir les abus, assister le client, maintenir les bornes, respecter les obligations comptables et défendre les droits liés à la transaction.</p>
 
     <h2>3. Sous-traitants et destinataires</h2>
-    <p>Stripe traite les paiements et peut conserver un moyen de paiement lorsque le client choisit le parcours carte et que cette conservation est demandée pour les besoins contractuels décrits dans les conditions. Supabase héberge l'authentification, la base, les fonctions serveur et les événements applicatifs. ChargeNow reçoit les commandes et données techniques nécessaires au fonctionnement du matériel. Un prestataire d'email transactionnel peut recevoir l'adresse email, la langue et le contenu strictement nécessaire à l'envoi des confirmations et reçus. L'hébergeur web sert l'interface. Les accès internes sont limités par rôle et journalisés.</p>
+    <p>Stripe traite les paiements et peut conserver un moyen de paiement lorsque le client choisit le parcours carte et que cette conservation est demandée pour les besoins contractuels décrits dans les conditions. Supabase héberge l’authentification, la base, les fonctions serveur et les événements applicatifs. ChargeNow reçoit les données techniques nécessaires aux opérations de borne. Resend peut traiter l’adresse email, la langue et le contenu strictement nécessaire aux confirmations transactionnelles lorsqu’il est configuré. PassStudio ne reçoit des données Wallet que lors d’une action Wallet explicitement demandée ; les synchronisations et pushes automatiques sont désactivés dans le pilote. Vercel sert l’interface web. Les mesures d’audience comprennent des impressions publicitaires agrégées et des identifiants techniques de borne ; les accès internes sont limités par rôle et journalisés.</p>
 
     <h2>4. Données affichées sur une borne publique</h2>
     <p>Le récapitulatif affiché sur la borne est volontairement limité : durée, tarif, garantie, montants de règlement, catégorie de moyen de paiement, borne/slot de retour et référence publique. L'adresse email, le nom du client, le numéro de carte et les quatre derniers chiffres de la carte ne sont pas destinés à être affichés sur l'écran public.</p>
 
     <h2>5. Conservation et sécurité</h2>
-    <p>Les durées de conservation dépendent de la finalité, de la prévention des abus, de la résolution des litiges et des obligations légales suisses, notamment comptables. Les secrets restent côté serveur, les tokens kiosque sont hachés en base et les communications utilisent TLS. Les identifiants Stripe techniques sont conservés uniquement dans la mesure nécessaire au règlement, au support, à la preuve et aux obligations légales. Les durées précises devront être formalisées dans la politique de conservation avant la production commerciale.</p>
+    <p>Les durées de conservation dépendent de la finalité, de la prévention des abus, de la résolution des litiges et des obligations légales suisses, notamment comptables. Les impressions publicitaires brutes sont conservées environ 14 jours puis agrégées ; cette règle ne concerne ni les locations, ni les paiements, ni les éléments de preuve. Les secrets restent côté serveur, les tokens kiosque sont hachés en base et les communications utilisent TLS. Les identifiants Stripe techniques sont conservés uniquement dans la mesure nécessaire au règlement, au support, à la preuve et aux obligations légales. Les durées précises des données financières et contractuelles devront être formalisées avant la production commerciale.</p>
 
     <h2>6. Communications transactionnelles et marketing</h2>
     <p>Les emails relatifs à une garantie, une location, un retour, un règlement, un reçu ou un incident servent à exécuter et documenter le service demandé. Ils ne constituent pas, à eux seuls, un consentement à recevoir des offres promotionnelles. Toute prospection marketing doit reposer sur un choix séparé lorsque le droit applicable l'exige.</p>

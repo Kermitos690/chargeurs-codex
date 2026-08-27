@@ -2,7 +2,10 @@
 
 Status date: 2026-07-15
 
-This document is the canonical operational source for the Chargeurs.ch project. It supersedes descriptions, prompts, screenshots and architectural assumptions from older ChatGPT discussions, legacy Lovable projects and abandoned prototypes.
+This document is a historical architecture and business-decision record. The
+current pre-production operational source is
+`docs/PRE_PRODUCTION_CANONICAL_OVERVIEW.md`; it supersedes this file for
+environment, runtime and monetary policy.
 
 ## 1. Canonical source of truth
 
@@ -40,14 +43,11 @@ The currently retained commercial rules are:
 
 - customer starts a rental from a QR code displayed on the kiosk;
 - no physical Wisepad payment terminal is required for the retained test architecture;
-- initial payment basis: CHF 30;
-- hourly rate: CHF 1.50;
-- billing increment: 30 minutes, therefore CHF 0.75 per increment;
-- included minutes: 0;
-- daily cap: CHF 18;
-- non-return total: CHF 99;
-- the non-return amount is composed of the initial CHF 30 basis plus a possible CHF 69 supplement;
-- when the final amount is below CHF 30, only the final amount must remain charged;
+- payment basis, rate, billing increment, daily cap and non-return values come
+  from the versioned server-side pricing snapshot selected for the station;
+- the customer must see that snapshot before accepting the rental contract;
+- when the final amount is below the accepted guarantee, only the final amount
+  must remain charged or retained, subject to the payment method;
 - a battery confirmed as returned can close the rental and trigger final settlement;
 - a battery leaving the Chargeurs.ch ecosystem and not returned is treated as acquired under the non-return rule;
 - pricing values must come from the server-side pricing snapshot, never from the browser;

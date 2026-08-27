@@ -53,6 +53,8 @@ const initial: State = {
   walletNotifications: [],
 };
 
+const PILOT_MEMBER_RATE_LABEL = "2 CHF jusqu’à 2 h · puis +1 CHF / h commencée";
+
 export default function AccountPass() {
   const [state, setState] = useState<State>(initial);
   const [walletHistoryError, setWalletHistoryError] = useState(false);
@@ -185,7 +187,9 @@ export default function AccountPass() {
       if (error || !data?.ok) throw new Error(String(data?.error ?? "WALLET_PASS_UNAVAILABLE"));
       const addToWalletUrl = String(data.addToWalletUrl ?? "");
       if (!/^https:\/\/www\.passstudio\.online\/i\//i.test(addToWalletUrl)) throw new Error("WALLET_URL_INVALID");
-      setWalletMessage(action === "sync" ? "Pass synchronisé. Ouverture du Wallet…" : "Pass créé. Ouverture du Wallet…");
+      setWalletMessage(action === "sync"
+        ? (data.status === "current" ? "Pass ouvert. Sa synchronisation fournisseur est désactivée pendant le pilote." : "Pass synchronisé. Ouverture du Wallet…")
+        : "Pass créé. Ouverture du Wallet…");
       await load();
       window.location.assign(addToWalletUrl);
     } catch {
@@ -245,15 +249,15 @@ export default function AccountPass() {
         <div className="mt-8 grid gap-5 lg:grid-cols-[1fr_320px]">
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Info icon={CircleDollarSign} label="Tarif membre" value={plan ? `${formatCents(plan.hourly_cents, plan.currency)} / h` : "—"} />
-              <Info icon={CalendarClock} label="Plafond journalier" value={plan ? `${formatCents(plan.daily_cap_cents, plan.currency)} / jour` : "—"} />
+              <Info icon={CircleDollarSign} label="Tarif membre pilote" value={PILOT_MEMBER_RATE_LABEL} />
+              <Info icon={CalendarClock} label="Plafond journalier" value="5.90 CHF / 24 h" />
               <Info icon={Gem} label="ChargePoints" value={state.chargePoints.balance.toLocaleString("fr-CH")} />
               <Info icon={CheckCircle2} label="Statut adhésion" value={state.membership?.status ?? "Aucune"} />
-              <Info icon={WalletCards} label="Crédit location disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
+              <Info icon={WalletCards} label="Solde prépayé disponible" value={formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)} />
               {plan?.renewal_credit_cents ? <Info icon={CircleDollarSign} label="Crédit attribué par période" value={formatCents(plan.renewal_credit_cents, plan.currency)} /> : null}
               <Info icon={CalendarClock} label={cancellationScheduled ? "Fin de l’adhésion" : "Prochaine échéance"} value={cancellationScheduled ? (periodEnd ? formatAccountDate(periodEnd) : "—") : (state.membership?.renews_at ? formatAccountDate(state.membership.renews_at) : "—")} />
             </div>
-            <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le crédit location est déduit automatiquement du prix final de votre location. Le solde éventuel reste réglé par le moyen de paiement choisi ; la garantie de location ne peut pas être réglée avec ce crédit. Lorsqu’un règlement doit être vérifié, le crédit concerné reste réservé à cette location jusqu’à sa réconciliation.</p>
+            <p className="mt-5 max-w-2xl text-sm text-muted-foreground">Le prix faisant foi reste le snapshot affiché avant chaque location. Pour une location membre v3, si au moins 30 CHF sont disponibles, le backend peut réserver 30 CHF dans le solde prépayé sans créer une seconde garantie Stripe ; au retour, seul le prix réel est consommé et le reste est libéré. Si le solde est insuffisant, le parcours de garantie Stripe complet reste séparé.</p>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[.045] p-5 text-center">
@@ -300,10 +304,10 @@ export default function AccountPass() {
         <article className="glass rounded-3xl p-6">
           <div className="flex items-center gap-3"><Smartphone className="h-7 w-7 text-primary" /><h2 className="font-display text-xl font-bold">Apple Wallet / Google Wallet</h2></div>
           <p className="mt-3 text-lg font-semibold">{providerLabel}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{membershipActive ? `Votre Pass est relié au solde Chargeurs+ actuel (${formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)}). Ouvrez-le pour forcer une synchronisation Pass Studio.` : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{membershipActive ? `Votre Pass est relié au solde Chargeurs+ actuel (${formatCents(state.rentalCredit.balanceCents, state.rentalCredit.currency)}). Son ouverture reste disponible ; les synchronisations fournisseur automatiques sont désactivées pendant le pilote.` : "Le bouton Wallet devient disponible dès que votre adhésion Chargeurs+ est active."}</p>
           <Button className="mt-5 w-full rounded-2xl bg-black py-6 text-base font-bold text-white hover:bg-black/85" disabled={!membershipActive || Boolean(walletAction)} onClick={() => void addToWallet()}>
             {walletAction ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <WalletCards className="mr-2 h-5 w-5" />}
-            {providerStatus === "issued" ? "Ouvrir / synchroniser mon Wallet" : "Ajouter à Apple / Google Wallet"}
+            {providerStatus === "issued" ? "Ouvrir mon Wallet" : "Ajouter à Apple / Google Wallet"}
           </Button>
           <p className="mt-3 text-xs text-muted-foreground">Le lien d’ajout Pass Studio est généré côté serveur et n’expose aucune clé fournisseur.</p>
           {state.walletPass ? <p className="mt-3 text-xs text-muted-foreground">Révision {state.walletPass.pass_revision} · version token {state.walletPass.token_version}</p> : null}

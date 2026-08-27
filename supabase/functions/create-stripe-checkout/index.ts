@@ -6,6 +6,9 @@ import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
+const TERMS_VERSION = "terms-2026-08-26-preproduction-v2";
+const PRIVACY_VERSION = "privacy-2026-08-26-preproduction-v2";
+
 const headers = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token, x-idempotency-key",
@@ -103,6 +106,11 @@ Deno.serve(async (req) => {
     if (String(session.kiosk_device_id ?? "") !== String(device.id)) return json({ ok: false, error: "KIOSK_DEVICE_MISMATCH" }, 403);
     if (session.expires_at && Date.parse(session.expires_at) < Date.now()) return json({ ok: false, error: "SESSION_EXPIRED" }, 410);
     if (session.paid_at) return json({ ok: false, error: "SESSION_ALREADY_PAID" }, 409);
+    if (
+      session.contract_terms_version !== TERMS_VERSION
+      || session.contract_privacy_version !== PRIVACY_VERSION
+      || !session.contract_accepted_at
+    ) return json({ ok: false, error: "CONTRACT_ACCEPTANCE_REQUIRED" }, 409);
 
     const secretKey = (Deno.env.get("STRIPE_SECRET_KEY") ?? "").trim();
     if (!(secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_"))) return json({ ok: false, error: "STRIPE_TEST_KEY_REQUIRED" }, 503);
@@ -138,6 +146,7 @@ Deno.serve(async (req) => {
       rental_session_id: String(session.id), public_session_code: publicCode, station_id: stationId,
       kiosk_device_id: String(session.kiosk_device_id ?? ""), pricing_snapshot_hash: pricingHash,
       deposit_amount_cents: String(depositCents), payment_purpose: "rental_guarantee",
+      terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION,
     };
 
     const checkout = await stripe.checkout.sessions.create({

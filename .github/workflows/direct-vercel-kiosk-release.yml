@@ -59,17 +59,17 @@ jobs:
       - name: Pull production environment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.6.2 pull --yes --environment=production --token="$VERCEL_TOKEN"
 
       - name: Build prebuilt deployment
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.6.2 build --prod --token="$VERCEL_TOKEN"
 
       - name: Deploy prebuilt production
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.6.2 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
 
       - name: Record deployment result
         if: always()

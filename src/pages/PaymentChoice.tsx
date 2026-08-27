@@ -8,8 +8,8 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const TERMS_VERSION = "terms-2026-08-10-v1";
-const PRIVACY_VERSION = "privacy-2026-08-10-v1";
+const TERMS_VERSION = "terms-2026-08-26-preproduction-v2";
+const PRIVACY_VERSION = "privacy-2026-08-26-preproduction-v2";
 
 const PROGRESS_STATES = new Set([
   "payment_succeeded", "ejecting", "ejected", "active_rental", "battery_taken", "battery_returned", "completed",
@@ -20,15 +20,23 @@ const TERMINAL_STATUS_STATES = new Set([
 ]);
 
 type Lang = "fr" | "de" | "en";
+type PricingTier = { upper_minutes?: number | null; total_cents?: number | null };
 type Status = {
   state?: string;
   currency?: string;
   deposit_amount_cents?: number | null;
   pricing?: {
+    profile_name?: string | null;
+    pricing_rules_version?: number | null;
+    initial_fee_cents?: number | null;
+    included_minutes?: number | null;
+    min_amount_cents?: number | null;
     period_minutes?: number | null;
     price_per_period_cents?: number | null;
     daily_cap_cents?: number | null;
     unreturned_fee_cents?: number | null;
+    tiered?: boolean | null;
+    tiers?: PricingTier[] | null;
   } | null;
 };
 
@@ -47,8 +55,12 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Plafond journalier",
     nonReturn: "Non-retour",
-    continueCard: "Continuer avec carte / wallet",
-    continueTwint: "Continuer avec TWINT",
+    then: "puis",
+    upTo: "jusqu’à",
+    startedHour: "par heure commencée",
+    accordingToDuration: "selon la durée",
+    continueCard: "Autoriser la garantie et louer",
+    continueTwint: "Payer la garantie et louer",
     secure: "Paiement sécurisé par Stripe",
     loading: "Chargement de votre location…",
     invalid: "Cette session de location n’est plus disponible.",
@@ -68,8 +80,12 @@ const COPY = {
     guarantee: "Garantie",
     dailyCap: "Tageslimit",
     nonReturn: "Nichtrückgabe",
-    continueCard: "Mit Karte / Wallet fortfahren",
-    continueTwint: "Mit TWINT fortfahren",
+    then: "danach",
+    upTo: "bis",
+    startedHour: "pro angefangene Stunde",
+    accordingToDuration: "je nach Dauer",
+    continueCard: "Garantie autorisieren und mieten",
+    continueTwint: "Garantie zahlen und mieten",
     secure: "Sichere Zahlung mit Stripe",
     loading: "Miete wird geladen…",
     invalid: "Diese Mietsitzung ist nicht mehr verfügbar.",
@@ -89,8 +105,12 @@ const COPY = {
     guarantee: "Guarantee",
     dailyCap: "Daily cap",
     nonReturn: "Non-return",
-    continueCard: "Continue with card / wallet",
-    continueTwint: "Continue with TWINT",
+    then: "then",
+    upTo: "up to",
+    startedHour: "per started hour",
+    accordingToDuration: "depending on duration",
+    continueCard: "Authorise guarantee and rent",
+    continueTwint: "Pay guarantee and rent",
     secure: "Secure payment by Stripe",
     loading: "Loading your rental…",
     invalid: "This rental session is no longer available.",
@@ -100,6 +120,41 @@ const COPY = {
 
 function cents(value: number | null | undefined, currency = "CHF") {
   return `${(Number(value ?? 0) / 100).toFixed(2)} ${currency}`;
+}
+
+function pricingLabel(pricing: Status["pricing"], currency: string, lang: Lang) {
+  if (!pricing) return "—";
+  const copy = COPY[lang];
+  const period = Number(pricing.period_minutes ?? 0);
+  const perPeriod = Number(pricing.price_per_period_cents ?? 0);
+  const initial = Number(pricing.initial_fee_cents ?? 0);
+  const included = Number(pricing.included_minutes ?? 0);
+  const minimum = Number(pricing.min_amount_cents ?? 0);
+  const rulesVersion = Number(pricing.pricing_rules_version ?? 0);
+
+  if (rulesVersion === 3 && pricing.profile_name === "Chargeurs.ch Client" && period > 0 && perPeriod >= 0) {
+    const firstCoveredMinutes = included + period;
+    const firstPrice = Math.max(minimum, initial + perPeriod);
+    if (firstCoveredMinutes === 120 && period === 60) {
+      return `${cents(firstPrice, currency)} ${copy.upTo} 2 h · ${copy.then} +${cents(perPeriod, currency)} ${copy.startedHour}`;
+    }
+    return `${cents(firstPrice, currency)} / ${firstCoveredMinutes} min · ${copy.then} +${cents(perPeriod, currency)} / ${period} min`;
+  }
+
+  const tiers = Array.isArray(pricing.tiers)
+    ? pricing.tiers
+      .map((tier) => ({ upper: Number(tier?.upper_minutes ?? 0), total: Number(tier?.total_cents ?? 0) }))
+      .filter((tier) => tier.upper > 0 && tier.total >= 0)
+      .sort((a, b) => a.upper - b.upper)
+    : [];
+  if (pricing.tiered === true && tiers.length > 0) {
+    const first = tiers[0];
+    const last = tiers[tiers.length - 1];
+    if (first.upper === last.upper) return `${cents(first.total, currency)} / ${first.upper} min`;
+    return `${cents(first.total, currency)} → ${cents(last.total, currency)} · ${copy.accordingToDuration}`;
+  }
+
+  return period > 0 ? `${cents(perPeriod, currency)} / ${period} min` : "—";
 }
 
 export default function PaymentChoice() {
@@ -153,9 +208,17 @@ export default function PaymentChoice() {
 
   const currency = status?.currency ?? "CHF";
   const pricing = status?.pricing;
-  const period = Number(pricing?.period_minutes ?? 30);
-  const perPeriod = Number(pricing?.price_per_period_cents ?? 0);
-  const hourly = period > 0 ? Math.round(perPeriod * 60 / period) : 0;
+  const tiers = Array.isArray(pricing?.tiers) ? pricing.tiers : [];
+  const tierDailyCap = pricing?.tiered === true
+    ? tiers
+      .map((tier) => ({ upper: Number(tier?.upper_minutes ?? 0), total: Number(tier?.total_cents ?? 0) }))
+      .filter((tier) => tier.upper > 0 && tier.upper <= 1440 && tier.total >= 0)
+      .sort((a, b) => a.upper - b.upper)
+      .at(-1)?.total ?? 0
+    : 0;
+  const displayDailyCap = Number(pricing?.daily_cap_cents ?? 0) > 0
+    ? Number(pricing?.daily_cap_cents)
+    : tierDailyCap;
 
   return (
     <div className="relative min-h-screen overflow-hidden px-5 py-8 text-foreground">
@@ -167,9 +230,9 @@ export default function PaymentChoice() {
             <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">{c.title}</h1>
             <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">{c.subtitle}</p>
             <div className="mt-6 flex flex-wrap justify-center gap-3 text-sm">
-              <span className="glass rounded-full px-4 py-2"><strong>{c.price}:</strong> {cents(hourly, currency)} / h</span>
+              <span className="glass rounded-full px-4 py-2"><strong>{c.price}:</strong> {pricingLabel(pricing, currency, lang)}</span>
               <span className="glass rounded-full px-4 py-2"><strong>{c.guarantee}:</strong> {cents(status.deposit_amount_cents, currency)}</span>
-              <span className="glass rounded-full px-4 py-2"><strong>{c.dailyCap}:</strong> {cents(pricing?.daily_cap_cents, currency)}</span>
+              {displayDailyCap > 0 && <span className="glass rounded-full px-4 py-2"><strong>{c.dailyCap}:</strong> {cents(displayDailyCap, currency)}</span>}
               <span className="glass rounded-full px-4 py-2"><strong>{c.nonReturn}:</strong> {cents(pricing?.unreturned_fee_cents, currency)}</span>
             </div>
           </section>
@@ -198,7 +261,7 @@ export default function PaymentChoice() {
 
           <label className="glass mt-6 flex cursor-pointer items-start gap-3 rounded-2xl p-4 text-sm text-muted-foreground">
             <Checkbox checked={accepted} onCheckedChange={(value) => setAccepted(value === true)} />
-            <span>{c.legal} <a href="/legal/terms" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Conditions</a> · <a href="/legal/privacy" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Privacy</a></span>
+            <span>{c.legal} <a href="/legal/conditions" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Conditions</a> · <a href="/legal/confidentialite" target="_blank" rel="noreferrer" className="font-semibold text-primary underline">Privacy</a></span>
           </label>
           {error && <p className="mt-4 text-center text-sm font-semibold text-destructive">{error}</p>}
           <div className="mt-5 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-4 w-4 text-success" />{c.secure}</div>

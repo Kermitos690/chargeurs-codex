@@ -14,6 +14,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useI18n } from "@/i18n/i18n";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useKioskPwa } from "@/pwa/useKioskPwa";
 import { getLockedStation, lockStationIfUnset, isValidStationId } from "@/lib/kioskLock";
@@ -51,7 +52,7 @@ type KioskSlot = {
   status: "ready" | "recommended" | "charging" | "checking" | "unavailable" | "return_available" | "technical_issue" | "maintenance";
   recommended: boolean;
 };
-type Phase = "loading" | "idle" | "pricing" | "starting" | "payment_ready" | "terminal" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
+type Phase = "loading" | "idle" | "pricing" | "starting" | "contract_review" | "payment_ready" | "terminal" | "qr" | "waitpay" | "success" | "error" | "support" | "expired";
 type NativeKioskWindow = Window & {
   ChargeursNative?: { kioskUiReady?: () => void };
 };
@@ -104,6 +105,9 @@ export default function Kiosk() {
   const [inactivitySeconds, setInactivitySeconds] = useState<number | null>(null);
   const [cancellingCheckout, setCancellingCheckout] = useState(false);
   const [cancelCheckoutError, setCancelCheckoutError] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalSaving, setLegalSaving] = useState(false);
   const tapRef = useRef<{ n: number; t: number }>({ n: 0, t: 0 });
   const idemRef = useRef<string | null>(null);
   const seenStateVersionRef = useRef<number>(-1);
@@ -113,7 +117,7 @@ export default function Kiosk() {
   const net = useOnlineStatus();
   const offline = kioskTransportUnavailable(net, backendReachable);
   const { needRefresh, swUrl, applyUpdate } = useKioskPwa();
-  const busy = ["starting", "payment_ready", "terminal", "qr", "waitpay", "success", "support"].includes(phase);
+  const busy = ["starting", "contract_review", "payment_ready", "terminal", "qr", "waitpay", "success", "support"].includes(phase);
 
   const onLogoTap = useCallback(() => {
     const nowMs = Date.now();
@@ -225,7 +229,7 @@ export default function Kiosk() {
     seenStateVersionRef.current = -1;
     releaseFallbackAtRef.current = 0;
     setPhase("idle"); setCheckoutUrl(null); setSessionId(null);
-    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null);
+    setPublicCode(null); setExpiresAt(null); setSlotNum(null); setStatusMsg(null); setFlowFailure(null); setTermsAccepted(false); setLegalModalOpen(false); setLegalSaving(false);
     void refreshKioskData();
   }, [refreshKioskData]);
 
@@ -444,6 +448,35 @@ export default function Kiosk() {
     setPhase("qr");
   }, [failFlow, lang]);
 
+  const recordContractAcceptance = useCallback(async () => {
+    if (!sessionId || !termsAccepted || legalSaving) return;
+    const kioskToken = readKioskToken();
+    if (!kioskToken) {
+      failFlow({ code: "KIOSK_AUTH_REQUIRED", sessionId, step: "create_stripe_checkout" });
+      return;
+    }
+    setLegalSaving(true);
+    const { data, transportError } = await invokeKioskEdgeProxy<KioskFunctionResponse>(
+      "/api/kiosk/record-rental-contract-acceptance",
+      {
+        rentalSessionId: sessionId,
+        accepted: true,
+        acceptanceSurface: "kiosk",
+        language: lang,
+        termsVersion: "terms-2026-08-26-preproduction-v2",
+        privacyVersion: "privacy-2026-08-26-preproduction-v2",
+      },
+      { "X-Kiosk-Token": kioskToken },
+    );
+    setLegalSaving(false);
+    if (transportError || !data?.ok) {
+      failFlow({ code: data?.error ?? "CONTRACT_ACCEPTANCE_UNAVAILABLE", sessionId, step: "create_stripe_checkout" });
+      return;
+    }
+    setLegalModalOpen(false);
+    setPhase("payment_ready");
+  }, [failFlow, lang, legalSaving, sessionId, termsAccepted]);
+
   const startRental = async () => {
     setPhase("starting");
     try {
@@ -455,11 +488,12 @@ export default function Kiosk() {
       if (!idemRef.current) idemRef.current = createKioskIdempotencyKey();
       const { data: sess, transportError: sessionTransportError } = await invokeKioskEdgeProxy<KioskFunctionResponse & {
         session?: { id?: string; public_session_code?: string | null; expires_at?: string | null };
+        snapshot?: Quote;
       }>("/api/kiosk/create-rental-session", { stationId, language: lang, selectedSlotNum: slotNum }, {
         "X-Kiosk-Token": kioskToken,
         "X-Idempotency-Key": idemRef.current,
       });
-      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string; public_session_code?: string | null; expires_at?: string | null } }) | null;
+      const sessionResponse = sess as (KioskFunctionResponse & { session?: { id?: string; public_session_code?: string | null; expires_at?: string | null }; snapshot?: Quote }) | null;
       if (sessionTransportError || !sessionResponse?.ok || !sessionResponse.session?.id) {
         failFlow({
           code: sessionResponse?.error ?? "RENTAL_SESSION_REQUEST_FAILED",
@@ -469,13 +503,15 @@ export default function Kiosk() {
         return;
       }
       const rentalSessionId = sessionResponse.session.id;
+      if (sessionResponse.snapshot) setQuote(sessionResponse.snapshot);
       seenStateVersionRef.current = -1;
       releaseFallbackAtRef.current = 0;
       setSessionId(rentalSessionId);
       setPublicCode(sessionResponse.session.public_session_code ?? null);
       setExpiresAt(sessionResponse.session.expires_at ? new Date(sessionResponse.session.expires_at).getTime() : null);
       setFlowFailure(null);
-      setPhase("payment_ready");
+      setTermsAccepted(false);
+      setPhase("contract_review");
     } catch {
       failFlow({ code: "RENTAL_SESSION_NETWORK_FAILURE", step: "create_rental_session", sessionId: sessionId ?? undefined });
     }
@@ -685,6 +721,20 @@ export default function Kiosk() {
 
           {phase === "starting" && (
             <motion.div key="starting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-6"><Loader2 className="h-20 w-20 animate-spin text-primary" /><p className="text-3xl font-bold text-muted-foreground">{t("kiosk.starting")}</p></motion.div>
+          )}
+
+          {phase === "contract_review" && sessionId && (
+            <motion.section key="contract-review" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="w-full max-w-4xl rounded-[2.5rem] border border-white/15 bg-slate-950/45 p-8 shadow-[0_30px_90px_rgba(0,0,0,.35)]">
+              <div className="mx-auto max-w-3xl text-center">
+                <p className="text-sm font-black tracking-[.16em] text-cyan-200">LOCATION · ÉTAPE CONTRACTUELLE</p>
+                <h2 className="mt-4 font-display text-4xl font-black">Avant de choisir votre paiement</h2>
+                <p className="mt-4 text-xl text-slate-200/80">Vérifiez le tarif figé pour cette location, la garantie et les conséquences de non-retour. Aucun paiement ni déverrouillage n’est lancé à cette étape.</p>
+                {quote && <div className="mt-6 grid gap-3 text-left sm:grid-cols-3"><div className="rounded-2xl bg-white/8 p-4"><p className="text-sm text-slate-300">Garantie</p><p className="mt-1 text-2xl font-black">{fmtCents(quote.deposit_cents, quote.currency)}</p></div><div className="rounded-2xl bg-white/8 p-4"><p className="text-sm text-slate-300">Plafond journalier</p><p className="mt-1 text-2xl font-black">{fmtCents(quote.daily_cap_cents, quote.currency)}</p></div><div className="rounded-2xl bg-white/8 p-4"><p className="text-sm text-slate-300">Non-retour</p><p className="mt-1 text-2xl font-black">{fmtCents(quote.unreturned_fee_cents, quote.currency)}</p></div></div>}
+                <label className="mt-7 flex cursor-pointer items-start gap-4 rounded-2xl border border-white/15 bg-white/[.06] p-5 text-left text-lg text-slate-100"><Checkbox checked={termsAccepted} onCheckedChange={(value) => setTermsAccepted(value === true)} /><span>J’accepte les <button type="button" onClick={(event) => { event.preventDefault(); setLegalModalOpen(true); }} className="font-bold text-cyan-200 underline">Conditions générales de location</button> et confirme avoir pris connaissance de la <button type="button" onClick={(event) => { event.preventDefault(); setLegalModalOpen(true); }} className="font-bold text-cyan-200 underline">Politique de confidentialité</button>.</span></label>
+                <Button disabled={!termsAccepted || legalSaving} onClick={() => void recordContractAcceptance()} className="mt-6 h-auto w-full rounded-2xl bg-gradient-primary px-8 py-5 text-xl font-black">{legalSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShieldCheck className="mr-2 h-5 w-5" />}Choisir mon moyen de paiement</Button>
+              </div>
+              {legalModalOpen && <div role="dialog" aria-modal="true" aria-label="Conditions de location" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/85 p-6"><section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[2rem] border border-white/15 bg-slate-950 p-7 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-cyan-200">Conditions de location · v2026-08-26</p><h3 className="mt-2 font-display text-3xl font-black">Résumé avant paiement</h3></div><Button variant="ghost" onClick={() => setLegalModalOpen(false)} aria-label="Fermer les conditions"><X className="h-6 w-6" /></Button></div><p className="mt-5 text-lg text-slate-200/85">La garantie affichée dépend du moyen de paiement : carte/wallet = autorisation temporaire ; TWINT = débit initial puis remboursement de la différence si le montant final est inférieur. La location commence seulement après paiement confirmé et remise physique de la batterie.</p><p className="mt-4 text-lg text-slate-200/85">La batterie doit être rendue dans une borne compatible. Le montant de non-retour affiché correspond au snapshot tarifaire de cette location.</p><div className="mt-6 flex flex-wrap items-center gap-5"><div className="rounded-2xl bg-white p-3"><QRCodeSVG value="https://chargeurs.ch/legal/conditions" size={180} level="M" includeMargin={false} /></div><div className="flex flex-col gap-3"><a href="/legal/conditions" target="_blank" rel="noreferrer" className="font-bold text-cyan-200 underline">Lire les Conditions générales</a><a href="/legal/confidentialite" target="_blank" rel="noreferrer" className="font-bold text-cyan-200 underline">Lire la Politique de confidentialité</a><p className="text-sm text-slate-400">Scannez le QR code pour conserver le lien sur votre téléphone.</p></div></div><Button className="mt-7 w-full rounded-2xl py-6 text-lg font-bold" onClick={() => setLegalModalOpen(false)}>Retour à la confirmation</Button></section></div>}
+            </motion.section>
           )}
 
           {phase === "payment_ready" && sessionId && (

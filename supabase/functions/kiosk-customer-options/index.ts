@@ -1,7 +1,9 @@
-// Return kiosk journeys with server-owned pricing and active membership offer.
+// Return kiosk journeys with server-owned pricing and record rental-contract acceptance.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { adminClient, verifyKioskDevice } from "../_shared/db.ts";
 
+const TERMS_VERSION = "terms-2026-08-26-preproduction-v2";
+const PRIVACY_VERSION = "privacy-2026-08-26-preproduction-v2";
 const headers = {
   ...corsHeaders,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-kiosk-token",
@@ -9,6 +11,7 @@ const headers = {
 };
 
 type Tier = { upper_minutes: number; total_cents: number };
+type Reply = (body: Record<string, unknown>, status?: number) => Response;
 
 function normalizedTiers(snapshot: Record<string, unknown>): Tier[] {
   if (!Array.isArray(snapshot.tiers)) return [];
@@ -22,8 +25,6 @@ function normalizedTiers(snapshot: Record<string, unknown>): Tier[] {
 }
 
 function hourlyCents(snapshot: Record<string, unknown>): number | null {
-  // Linear member tariffs keep an hourly projection. Tiered guest tariffs must
-  // never be flattened into a misleading CHF/hour number.
   if (snapshot.tiered === true) return null;
   const cents = Number(snapshot.price_per_period_cents);
   const minutes = Number(snapshot.period_minutes);
@@ -31,21 +32,165 @@ function hourlyCents(snapshot: Record<string, unknown>): number | null {
   return Math.round(cents * 60 / minutes);
 }
 
+async function triggerEjection(rentalSessionId: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!supabaseUrl || !serviceRole) return { ok: false, status: 0, error: "SUPABASE_INTERNAL_CONFIG_MISSING" };
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/eject-after-payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRole}`,
+      },
+      body: JSON.stringify({ rentalSessionId }),
+    });
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    return {
+      ok: response.ok,
+      status: response.status,
+      error: typeof payload.error === "string" ? payload.error : null,
+    };
+  } catch {
+    return { ok: false, status: 0, error: "EJECT_TRIGGER_UNAVAILABLE" };
+  }
+}
+
+async function recordContractAcceptance(
+  req: Request,
+  db: ReturnType<typeof adminClient>,
+  body: Record<string, unknown>,
+  reply: Reply,
+) {
+  const rentalSessionId = typeof body.rentalSessionId === "string" ? body.rentalSessionId : "";
+  const accepted = body.accepted === true;
+  const surface = body.acceptanceSurface === "kiosk" ? "kiosk" : "";
+  const language = body.language === "de" || body.language === "en" ? body.language : "fr";
+  if (!rentalSessionId || !accepted || surface !== "kiosk") {
+    return reply({ ok: false, error: "CONTRACT_ACCEPTANCE_REQUIRED" }, 400);
+  }
+
+  const { data: session, error: sessionError } = await db.from("rental_sessions")
+    .select("id,station_id,kiosk_device_id,state,expires_at,customer_segment,settlement_strategy,settlement_status,contract_terms_version,contract_privacy_version,contract_accepted_at")
+    .eq("id", rentalSessionId).maybeSingle();
+  if (sessionError) throw sessionError;
+  if (!session) return reply({ ok: false, error: "SESSION_NOT_FOUND" }, 404);
+  if (session.expires_at && Date.parse(session.expires_at) < Date.now()) {
+    return reply({ ok: false, error: "SESSION_EXPIRED" }, 410);
+  }
+
+  const kiosk = await verifyKioskDevice(req, db, String(session.station_id));
+  if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
+  if (String(kiosk.device.id) !== String(session.kiosk_device_id)) {
+    return reply({ ok: false, error: "KIOSK_DEVICE_MISMATCH" }, 403);
+  }
+
+  const alreadyAccepted = session.contract_terms_version === TERMS_VERSION
+    && session.contract_privacy_version === PRIVACY_VERSION
+    && Boolean(session.contract_accepted_at);
+  const alreadyPrepaid = alreadyAccepted
+    && session.customer_segment === "member"
+    && session.settlement_strategy === "membership_prepaid"
+    && session.settlement_status === "prepaid"
+    && session.state === "payment_succeeded";
+
+  if (alreadyPrepaid) {
+    const ejection = await triggerEjection(rentalSessionId);
+    return reply({
+      ok: true,
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+      acceptedAt: session.contract_accepted_at,
+      prepaidAuthorized: true,
+      prepaidReason: "ALREADY_AUTHORIZED",
+      ejectionTriggered: ejection.ok,
+      ejectionTriggerStatus: ejection.status,
+      ejectionTriggerError: ejection.error,
+    });
+  }
+
+  if (!["created", "checkout_created"].includes(String(session.state))) {
+    return reply({ ok: false, error: "SESSION_NOT_ACCEPTING_CONTRACT" }, 409);
+  }
+
+  const acceptedAt = new Date().toISOString();
+  const { error: updateError } = await db.from("rental_sessions").update({
+    contract_terms_version: TERMS_VERSION,
+    contract_privacy_version: PRIVACY_VERSION,
+    contract_accepted_at: acceptedAt,
+    updated_at: acceptedAt,
+  }).eq("id", rentalSessionId);
+  if (updateError) throw updateError;
+  await db.from("audit_logs").insert({
+    action: "rental.contract.accepted",
+    target: rentalSessionId,
+    data: { terms_version: TERMS_VERSION, privacy_version: PRIVACY_VERSION, surface, language },
+  }).then(() => {}, () => {});
+
+  let prepaidAuthorized = false;
+  let prepaidReason = session.customer_segment === "member" ? "PREPAID_NOT_AVAILABLE" : "NOT_MEMBER";
+  let reservedCents = 0;
+  let ejection = { ok: false, status: 0, error: null as string | null };
+
+  if (session.customer_segment === "member") {
+    const { data: prepaidData, error: prepaidError } = await db.rpc("authorize_member_prepaid_rental", {
+      p_rental_id: rentalSessionId,
+      p_kiosk_device_id: kiosk.device.id,
+      p_correlation_id: crypto.randomUUID(),
+    });
+    if (prepaidError) {
+      const message = String(prepaidError.message ?? "");
+      if (message.includes("MEMBER_PREPAID_V3_SNAPSHOT_REQUIRED")) {
+        prepaidReason = "PREPAID_V3_NOT_AVAILABLE";
+      } else if (message.includes("PAYMENT_ALREADY_STARTED") || message.includes("PAYMENT_RAIL_ALREADY_CLAIMED")) {
+        prepaidReason = "PAYMENT_RAIL_ALREADY_STARTED";
+      } else {
+        throw prepaidError;
+      }
+    } else {
+      const result = (Array.isArray(prepaidData) ? prepaidData[0] : prepaidData) as Record<string, unknown> | null;
+      prepaidAuthorized = result?.authorized === true;
+      prepaidReason = String(result?.reason ?? (prepaidAuthorized ? "AUTHORIZED" : "PREPAID_NOT_AVAILABLE"));
+      reservedCents = Number(result?.reserved_cents ?? 0);
+      if (prepaidAuthorized) ejection = await triggerEjection(rentalSessionId);
+    }
+  }
+
+  return reply({
+    ok: true,
+    termsVersion: TERMS_VERSION,
+    privacyVersion: PRIVACY_VERSION,
+    acceptedAt,
+    prepaidAuthorized,
+    prepaidReason,
+    reservedCents,
+    prepaidCurrency: prepaidAuthorized ? "CHF" : null,
+    ejectionTriggered: prepaidAuthorized ? ejection.ok : false,
+    ejectionTriggerStatus: prepaidAuthorized ? ejection.status : null,
+    ejectionTriggerError: prepaidAuthorized ? ejection.error : null,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers });
   const correlationId = crypto.randomUUID();
-  const reply = (body: Record<string, unknown>, status = 200) => new Response(
+  const reply: Reply = (body, status = 200) => new Response(
     JSON.stringify({ ...body, correlationId }),
     { status, headers: { ...headers, "Content-Type": "application/json", "X-Correlation-Id": correlationId } },
   );
   if (req.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    const db = adminClient();
+
+    if (body.rentalSessionId !== undefined || body.acceptanceSurface !== undefined) {
+      return await recordContractAcceptance(req, db, body, reply);
+    }
+
     const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId)) return reply({ ok: false, error: "INVALID_STATION" }, 400);
 
-    const db = adminClient();
     const kiosk = await verifyKioskDevice(req, db, stationId);
     if (!kiosk.ok) return reply({ ok: false, error: kiosk.error }, kiosk.status);
 
@@ -66,8 +211,6 @@ Deno.serve(async (req) => {
         p_end: null,
         p_rental_state: "quote",
         p_return_state: "normal",
-        // The resolved pricing profile owns currency. Do not force a stale
-        // station-level field into the pricing engine.
         p_currency: null,
       });
       if (error || !data) return null;
@@ -125,6 +268,6 @@ Deno.serve(async (req) => {
     return reply({ ok: true, guest, member, memberAvailable: Boolean(member), membershipPlan });
   } catch (error) {
     console.error("kiosk-customer-options", error instanceof Error ? error.message : "UNKNOWN_ERROR");
-    return reply({ ok: false, error: "CUSTOMER_OPTIONS_FAILED" }, 500);
+    return reply({ ok: false, error: "KIOSK_CUSTOMER_OPTIONS_FAILED" }, 500);
   }
 });

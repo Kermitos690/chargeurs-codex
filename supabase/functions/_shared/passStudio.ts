@@ -10,6 +10,7 @@ export type PassStudioPass = {
   distributionMode?: string;
   fieldsEditable?: boolean;
   fieldKeys?: string[];
+  fieldLabels?: Record<string, string>;
   templateOwnedFieldKeys?: string[];
 };
 
