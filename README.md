@@ -115,10 +115,15 @@ Le frontend, le kiosk et les webhooks ne doivent jamais imposer directement un �
 
 ## État de préproduction
 
-La PR de hardening consolide le frontend, Stripe TEST, le ledger membre, ChargeNow, l'enrôlement, les contrats et la préparation du pilote. Les migrations de base v3/prépayé et la correction finale du profil membre sont appliquées et vérifiables sur le Supabase staging ; cela ne remplace ni le déploiement des Edge Functions correspondantes, ni un test physique, ni une validation juridique/comptable.
+La PR de hardening consolide le frontend, Stripe TEST, le ledger membre, ChargeNow, l'enrôlement, les contrats et la préparation du pilote.
+
+Au 27 août 2026, une vérification **lecture seule** du Supabase staging `xqepbqnaenoeyfjkjnzl` confirme que l'état de base de données reflète déjà les paramètres finaux du profil membre v3 et que les primitives `authorize_member_prepaid_rental` / `settle_member_prepaid_on_return` existent. Les vecteurs tarifaires membre contrôlés sur `compute_customer_pricing_snapshot` ne présentent aucun écart.
+
+En revanche, `supabase_migrations.schema_migrations` ne contient pas les versions `20260827010000`, `20260827020000` et `20260827030000`. Le staging présente donc un **drift de registre de migrations** : ne pas lancer un `db push` aveugle avant d'avoir réconcilié l'historique. Cette présence d'objets en base ne prouve pas non plus que toutes les Edge Functions de la branche correspondent au HEAD, ni qu'un scénario E2E a été validé.
 
 Restent notamment à valider avant production commerciale :
 
+- réconciliation propre du registre de migrations staging v3/prépayé ;
 - déploiement staging contrôlé des Edge Functions correspondant au code v3/prépayé ;
 - tests contrôlés du rail membre prépayé sans Stripe et du fallback Express ;
 - éjection/retour physique sur les bornes qualifiées ;
@@ -160,6 +165,8 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+La validation ciblée v3/prépayé est documentée dans `TESTING.md` et automatisée par `.github/workflows/pre-production-v3-financial-ci.yml`. Ce workflow n'utilise aucun secret projet, n'écrit pas dans Supabase, n'appelle pas Stripe et ne commande aucun matériel.
 
 Des scripts supplémentaires existent pour les tests Deno, PostgreSQL, Stripe, ChargeNow, callbacks, concurrence, résilience, sécurité et Android. Voir `TESTING.md`, `package.json` et les workflows GitHub Actions.
 
