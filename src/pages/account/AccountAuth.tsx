@@ -158,16 +158,25 @@ export default function AccountAuth() {
           </div>
         )}
         <div className="space-y-3">
-          <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          {mode === "signup" && <Input placeholder="Nom (facultatif)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={120} autoComplete="name" />}
+          <label htmlFor="customer-email" className="sr-only">Adresse email</label>
+          <Input id="customer-email" name="email" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" className="min-h-11" />
+          {mode === "signup" && (
+            <>
+              <label htmlFor="customer-display-name" className="sr-only">Nom</label>
+              <Input id="customer-display-name" name="displayName" placeholder="Nom (facultatif)" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={120} autoComplete="name" className="min-h-11" />
+            </>
+          )}
           {mode !== "forgot" && (
-            <Input type="password" placeholder={mode === "signup" ? `Mot de passe (${CUSTOMER_PASSWORD_MIN_LENGTH} caractères minimum)` : "Mot de passe"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={mode === "signup" ? CUSTOMER_PASSWORD_MIN_LENGTH : 1} autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+            <>
+              <label htmlFor="customer-password" className="sr-only">Mot de passe</label>
+              <Input id="customer-password" name="password" type="password" placeholder={mode === "signup" ? `Mot de passe (${CUSTOMER_PASSWORD_MIN_LENGTH} caractères minimum)` : "Mot de passe"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={mode === "signup" ? CUSTOMER_PASSWORD_MIN_LENGTH : 1} autoComplete={mode === "signup" ? "new-password" : "current-password"} className="min-h-11" />
+            </>
           )}
         </div>
         {mode === "signup" && (
           <label className="mt-4 flex items-start gap-3 rounded-2xl border border-border p-4 text-sm">
             <Checkbox checked={legalAccepted} onCheckedChange={(checked) => setLegalAccepted(checked === true)} />
-            <span>J’accepte les <a className="font-semibold text-primary underline" href="/legal/terms" target="_blank" rel="noreferrer">conditions d’utilisation</a> et reconnais avoir lu la <a className="font-semibold text-primary underline" href="/legal/privacy" target="_blank" rel="noreferrer">politique de confidentialité</a>.</span>
+            <span>J’accepte les <a className="font-semibold text-primary underline" href="/legal/conditions" target="_blank" rel="noreferrer">conditions d’utilisation</a> et reconnais avoir lu la <a className="font-semibold text-primary underline" href="/legal/confidentialite" target="_blank" rel="noreferrer">politique de confidentialité</a>.</span>
           </label>
         )}
         <Button type="submit" disabled={loading} className={`mt-6 w-full rounded-full py-6 text-lg font-bold ${nextPath !== "/compte" ? "bg-gradient-success text-success-foreground" : "bg-gradient-primary shadow-glow"}`}>
@@ -187,8 +196,8 @@ export default function AccountAuth() {
           </>
         )}
 
-        {mode === "login" && <button type="button" onClick={() => setMode("forgot")} className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground">Mot de passe oublié ?</button>}
-        <button type="button" onClick={() => setMode(mode === "signup" ? "login" : "signup")} className="mt-2 w-full text-center text-sm text-muted-foreground hover:text-foreground">
+        {mode === "login" && <button type="button" onClick={() => setMode("forgot")} className="mt-4 flex min-h-11 w-full items-center justify-center text-center text-sm text-muted-foreground hover:text-foreground">Mot de passe oublié ?</button>}
+        <button type="button" onClick={() => setMode(mode === "signup" ? "login" : "signup")} className="mt-2 flex min-h-11 w-full items-center justify-center text-center text-sm text-muted-foreground hover:text-foreground">
           {mode === "signup" ? "J'ai déjà un compte" : "Créer un compte"}
         </button>
       </form>

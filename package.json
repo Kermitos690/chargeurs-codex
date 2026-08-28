@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
+    "agent:frontend": "node scripts/frontend-quality-agent.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run src/test/roles.test.ts src/test/rentalState.test.ts",

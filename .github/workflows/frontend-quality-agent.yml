@@ -1,0 +1,132 @@
+name: Frontend Quality Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "URL à auditer (laisser vide pour le build local de la branche)"
+        required: false
+        default: ""
+      scope:
+        description: "Couverture"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - smoke
+          - full
+      min_score:
+        description: "Score global minimum"
+        required: true
+        default: "82"
+  pull_request:
+    types: [ready_for_review, synchronize, reopened]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config.*"
+      - "scripts/frontend-quality-agent.mjs"
+      - "scripts/frontend-agent/**"
+      - ".github/workflows/frontend-quality-agent.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "vite.config.*"
+      - "scripts/frontend-quality-agent.mjs"
+      - "scripts/frontend-agent/**"
+      - ".github/workflows/frontend-quality-agent.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FRONTEND_AGENT_STATION_ID: DTA21269
+      FRONTEND_AGENT_SCREENSHOTS: failures
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Validate frontend agent scripts
+        run: |
+          node --check scripts/frontend-quality-agent.mjs
+          node --check scripts/frontend-agent/config.mjs
+          node --check scripts/frontend-agent/cdp.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Start local preview when no URL was requested
+        id: target
+        shell: bash
+        env:
+          INPUT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_BASE_URL}" ]]; then
+            echo "base_url=${INPUT_BASE_URL}" >> "$GITHUB_OUTPUT"
+          else
+            npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/chargeurs-preview.log 2>&1 &
+            echo $! > /tmp/chargeurs-preview.pid
+            for i in {1..40}; do
+              if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+                echo "base_url=http://127.0.0.1:4173" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              sleep 0.25
+            done
+            cat /tmp/chargeurs-preview.log
+            exit 1
+          fi
+
+      - name: Frontend quality audit
+        id: audit
+        shell: bash
+        env:
+          TARGET_URL: ${{ steps.target.outputs.base_url }}
+          INPUT_SCOPE: ${{ github.event_name == 'workflow_dispatch' && inputs.scope || 'smoke' }}
+          INPUT_MIN_SCORE: ${{ github.event_name == 'workflow_dispatch' && inputs.min_score || '82' }}
+        run: |
+          set -o pipefail
+          npm run agent:frontend -- \
+            --base-url "$TARGET_URL" \
+            --scope "$INPUT_SCOPE" \
+            --min-score "$INPUT_MIN_SCORE"
+
+      - name: Add report to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/frontend-quality-agent/report.md ]]; then
+            cat artifacts/frontend-quality-agent/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-quality-agent-${{ github.run_id }}
+          path: artifacts/frontend-quality-agent/
+          retention-days: 5
+          if-no-files-found: ignore
