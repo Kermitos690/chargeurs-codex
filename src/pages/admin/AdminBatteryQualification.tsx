@@ -60,6 +60,18 @@ type RunRow = {
   completed_at: string | null;
 };
 
+type PhysicalLabel = {
+  id: string;
+  battery_id: string | null;
+  label_code: string;
+  physical_description: string | null;
+  observed_station_id: string | null;
+  observed_slot_num: number | null;
+  observed_at: string;
+  verification_state: string;
+  assigned_at: string;
+};
+
 type Dashboard = {
   station: {
     station_id: string;
@@ -73,6 +85,7 @@ type Dashboard = {
   } | null;
   batteries: BatteryRow[];
   runs: RunRow[];
+  physicalLabels: PhysicalLabel[];
   campaign: {
     inventoryCount: number;
     physicallyCycledCount: number;
@@ -124,6 +137,10 @@ export default function AdminBatteryQualification() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedBatteryId, setSelectedBatteryId] = useState("");
+  const [physicalLabelCode, setPhysicalLabelCode] = useState("");
+  const [physicalLabelNotes, setPhysicalLabelNotes] = useState("");
+  const [plannedLabelCode, setPlannedLabelCode] = useState("");
+  const [plannedLabelDescription, setPlannedLabelDescription] = useState("");
   const [method, setMethod] = useState("label_verification");
   const [modelCode, setModelCode] = useState("");
   const [ratedCapacityMah, setRatedCapacityMah] = useState("");
@@ -213,11 +230,44 @@ export default function AdminBatteryQualification() {
     if (data?.ok) setQuarantineReason("");
   };
 
+  const assignPhysicalLabel = async () => {
+    if (!selectedBatteryId) return toast.error("Sélectionnez une batterie détectée.");
+    const data = await invoke("assign_physical_label", {
+      batteryId: selectedBatteryId,
+      labelCode: physicalLabelCode,
+      notes: physicalLabelNotes || null,
+    });
+    if (data?.ok) {
+      setPhysicalLabelCode("");
+      setPhysicalLabelNotes("");
+      toast.success("Étiquette physique reliée à la batterie détectée.");
+    }
+  };
+
+  const reservePhysicalLabel = async () => {
+    const data = await invoke("reserve_physical_label", {
+      labelCode: plannedLabelCode,
+      physicalDescription: plannedLabelDescription,
+    });
+    if (data?.ok) {
+      setPlannedLabelCode("");
+      setPlannedLabelDescription("");
+      toast.success("Étiquette préparée et enregistrée.");
+    }
+  };
+
   if (!dashboard) {
     return <div className="grid min-h-64 place-items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
   const { station, campaign, guards, batteries, runs } = dashboard;
+  const labelByBatteryId = new Map((dashboard.physicalLabels ?? []).map((label) => [label.battery_id, label]));
+  const plannedLabels = (dashboard.physicalLabels ?? []).filter((label) => label.verification_state === "planned");
+  const detectedBatteries = batteries.filter((battery) => (
+    battery.station_id === "DTA21269" && battery.slot_num != null && battery.status === "in_station"
+  ));
+  const selectedBattery = batteries.find((battery) => battery.battery_id === selectedBatteryId) ?? null;
+  const selectedPhysicalLabel = selectedBattery ? labelByBatteryId.get(selectedBattery.battery_id) : null;
   const connectionState = stationConnectionState(station ?? { status: null, online: null });
   const connectionLabel = stationConnectionLabel(station ?? { status: null, online: null });
 
@@ -288,6 +338,21 @@ export default function AdminBatteryQualification() {
       </section>
 
       <section className="glass liquid-border space-y-4 rounded-2xl p-6">
+        <div>
+          <h2 className="font-display text-xl font-bold">Préparer une étiquette avant de la poser</h2>
+          <p className="text-sm text-muted-foreground">
+            Créez maintenant la fiche de votre autocollant avec un repère visuel. Elle restera « préparée » tant que la borne n’aura pas détecté la batterie exacte. Elle ne sera donc jamais confondue avec un identifiant fournisseur.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_2fr_auto]">
+          <label className="space-y-1 text-sm"><span>Code à imprimer</span><Input value={plannedLabelCode} onChange={(event) => setPlannedLabelCode(event.target.value.toUpperCase())} placeholder="CH-PB-001" maxLength={32} /></label>
+          <label className="space-y-1 text-sm"><span>Repère physique</span><Input value={plannedLabelDescription} onChange={(event) => setPlannedLabelDescription(event.target.value)} placeholder="Ex. batterie marquée CHARGEURS.CH, photo 1" maxLength={240} /></label>
+          <div className="flex items-end"><Button onClick={reservePhysicalLabel} disabled={busy !== null || !plannedLabelCode.trim() || !plannedLabelDescription.trim()}>Préparer</Button></div>
+        </div>
+        {plannedLabels.length > 0 && <div className="rounded-xl border border-border p-4"><p className="mb-2 text-sm font-semibold">Étiquettes préparées — identité fournisseur non vérifiée</p><div className="space-y-2">{plannedLabels.map((label) => <div key={label.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm"><span className="font-mono font-semibold">{label.label_code}</span><span className="text-muted-foreground">{label.physical_description ?? "sans repère"}</span></div>)}</div></div>}
+      </section>
+
+      <section className="glass liquid-border space-y-4 rounded-2xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-bold">Cycle physique</h2>
@@ -350,7 +415,7 @@ export default function AdminBatteryQualification() {
           <table className="w-full min-w-[1000px] text-left text-sm">
             <thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="p-3">Batterie</th><th className="p-3">Slot</th><th className="p-3">Mesure fournisseur</th>
+                <th className="p-3">Batterie détectée</th><th className="p-3">Étiquette physique</th><th className="p-3">Slot</th><th className="p-3">Mesure fournisseur</th>
                 <th className="p-3">Capacité annoncée</th><th className="p-3">Capacité mesurée</th><th className="p-3">Confiance</th>
                 <th className="p-3">Qualification</th><th className="p-3">Tarif</th>
               </tr>
@@ -359,6 +424,7 @@ export default function AdminBatteryQualification() {
               {batteries.map((battery) => (
                 <tr key={battery.battery_id} className="border-b border-border/60">
                   <td className="p-3 font-mono text-xs">{battery.battery_id}</td>
+                  <td className="p-3 font-mono text-xs">{labelByBatteryId.get(battery.battery_id)?.label_code ?? "à étiqueter"}</td>
                   <td className="p-3">{battery.slot_num ?? "hors borne"}</td>
                   <td className="p-3">{battery.power_level ?? "—"} <span className="text-xs text-muted-foreground">(unité non prouvée)</span></td>
                   <td className="p-3">{battery.rated_capacity_mah ? `${battery.rated_capacity_mah} mAh` : "—"}</td>
@@ -371,6 +437,48 @@ export default function AdminBatteryQualification() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="glass liquid-border space-y-4 rounded-2xl p-6">
+        <div>
+          <h2 className="font-display text-xl font-bold">Relier une étiquette à une batterie</h2>
+          <p className="text-sm text-muted-foreground">
+            Une fois la borne synchronisée, l’identifiant fournisseur détecté s’affiche ici et peut être relié à votre code imprimé.
+            L’enregistrement du lien ne déclenche ni éjection, ni location, ni paiement.
+          </p>
+        </div>
+        <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
+          <strong>Ne remettez pas une batterie issue d’une location payée uniquement pour l’étiqueter.</strong> L’insertion physique suit le flux réel de retour ; cet écran ne neutralise pas ce flux. Utilisez-le après un retour contrôlé autorisé par l’équipe release.
+        </div>
+        {detectedBatteries.length === 0 ? (
+          <div className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm">
+            Aucune batterie détectée dans DTA21269. Après un retour physique, synchronisez la borne avant de créer un lien.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <label className="space-y-1 text-sm"><span>Batterie détectée par la borne</span><select className="h-10 w-full rounded-md border border-input bg-background px-3" value={selectedBatteryId} onChange={(event) => setSelectedBatteryId(event.target.value)}>{detectedBatteries.map((battery) => <option key={battery.battery_id} value={battery.battery_id}>{battery.battery_id} · slot {battery.slot_num}{labelByBatteryId.get(battery.battery_id) ? ` · ${labelByBatteryId.get(battery.battery_id)?.label_code}` : ""}</option>)}</select></label>
+              <label className="space-y-1 text-sm"><span>Code imprimé sur l’autocollant</span><Input value={physicalLabelCode} onChange={(event) => setPhysicalLabelCode(event.target.value.toUpperCase())} placeholder="CH-PB-001" maxLength={32} /></label>
+              <label className="space-y-1 text-sm"><span>Note (facultatif)</span><Input value={physicalLabelNotes} onChange={(event) => setPhysicalLabelNotes(event.target.value)} placeholder="Étiquette posée le…" maxLength={1000} /></label>
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm">
+              <span className="text-muted-foreground">À confirmer : </span><strong className="font-mono">{physicalLabelCode.trim().toUpperCase() || "CH-PB-…"}</strong><span className="text-muted-foreground"> ↔ </span><strong className="font-mono">{selectedBattery?.battery_id ?? "—"}</strong><span className="text-muted-foreground"> · slot {selectedBattery?.slot_num ?? "—"}</span>
+              {selectedPhysicalLabel && <p className="mt-2 text-warning">Cette batterie porte déjà l’étiquette {selectedPhysicalLabel.label_code}. Aucun remplacement n’est autorisé depuis cet écran.</p>}
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild><Button disabled={busy !== null || !physicalLabelCode.trim() || Boolean(selectedPhysicalLabel)}>Confirmer le lien d’étiquette</Button></AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmer l’identité physique ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Vous confirmez que l’autocollant {physicalLabelCode.trim().toUpperCase() || "—"} est posé sur la batterie déjà détectée {selectedBattery?.battery_id ?? "—"}, dans le slot {selectedBattery?.slot_num ?? "—"}. Cette action n’envoie aucune commande matérielle et ne modifie aucune location ni paiement ; elle ne neutralise pas les effets d’une insertion physique déjà faite.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter><AlertDialogCancel>Annuler</AlertDialogCancel><AlertDialogAction onClick={assignPhysicalLabel}>Confirmer</AlertDialogAction></AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
       </section>
 
       <section className="glass liquid-border space-y-4 rounded-2xl p-6">

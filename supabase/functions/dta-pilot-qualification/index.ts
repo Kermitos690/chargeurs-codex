@@ -197,7 +197,7 @@ async function persistPilotStatus(db: SupabaseClient, parsed: ParsedCabinetStatu
 }
 
 async function dashboard(db: SupabaseClient) {
-  const [station, slots, batteries, runs] = await Promise.all([
+  const [station, slots, batteries, runs, labels] = await Promise.all([
     db.from("stations")
       .select("station_id,cabinet_id,name,status,online,signal,rentable_count,returnable_count,total_count,last_sync_at,environment,is_pilot,qualification_mode,qualification_updated_at")
       .eq("station_id", DTA_PILOT_STATION_ID)
@@ -214,11 +214,16 @@ async function dashboard(db: SupabaseClient) {
       .eq("station_id", DTA_PILOT_STATION_ID)
       .order("created_at", { ascending: false })
       .limit(50),
+    db.from("battery_physical_labels")
+      .select("id,battery_id,label_code,physical_description,observed_station_id,observed_slot_num,observed_at,verification_state,assigned_at")
+      .in("verification_state", ["planned", "operator_confirmed"])
+      .order("assigned_at", { ascending: false }),
   ]);
   if (station.error) throw station.error;
   if (slots.error) throw slots.error;
   if (batteries.error) throw batteries.error;
   if (runs.error) throw runs.error;
+  if (labels.error) throw labels.error;
 
   const batteryRows = batteries.data ?? [];
   const completedIds = new Set((runs.data ?? [])
@@ -230,6 +235,7 @@ async function dashboard(db: SupabaseClient) {
     slots: slots.data ?? [],
     batteries: batteryRows,
     runs: runs.data ?? [],
+    physicalLabels: labels.data ?? [],
     campaign: {
       inventoryCount: batteryRows.length,
       physicallyCycledCount: completedIds.size,
@@ -271,6 +277,124 @@ Deno.serve(async (req) => {
     const action = typeof body.action === "string" ? body.action : "status";
 
     if (action === "status") return json({ ok: true, ...(await dashboard(db)) });
+
+    if (action === "reserve_physical_label") {
+      const labelCode = typeof body.labelCode === "string" ? body.labelCode.trim().toUpperCase() : "";
+      const physicalDescription = typeof body.physicalDescription === "string" ? body.physicalDescription.trim().slice(0, 240) : "";
+      if (!/^[A-Z0-9][A-Z0-9-]{1,31}$/.test(labelCode) || !physicalDescription) {
+        return json({ ok: false, error: "VALID_PLANNED_LABEL_REQUIRED" }, 400);
+      }
+      const { data: existing, error: existingError } = await db.from("battery_physical_labels")
+        .select("id,verification_state")
+        .eq("label_code", labelCode)
+        .in("verification_state", ["planned", "operator_confirmed"])
+        .maybeSingle();
+      if (existingError) throw existingError;
+      if (existing) return json({ ok: false, error: "PHYSICAL_LABEL_ALREADY_EXISTS" }, 409);
+      const { error: insertError } = await db.from("battery_physical_labels").insert({
+        label_code: labelCode,
+        physical_description: physicalDescription,
+        observed_at: new Date().toISOString(),
+        verification_state: "planned",
+        assigned_by: actor,
+      });
+      if (insertError) throw insertError;
+      await auditLog(db, {
+        actor,
+        action: "battery.physical_label.reserved",
+        target: labelCode,
+        data: { physical_description: physicalDescription },
+      });
+      return json({ ok: true, ...(await dashboard(db)) });
+    }
+
+    if (action === "assign_physical_label") {
+      const batteryId = typeof body.batteryId === "string" ? body.batteryId.trim() : "";
+      const labelCode = typeof body.labelCode === "string" ? body.labelCode.trim().toUpperCase() : "";
+      const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1000) : "";
+      if (!batteryId || !/^[A-Z0-9][A-Z0-9-]{1,31}$/.test(labelCode)) {
+        return json({ ok: false, error: "VALID_PHYSICAL_LABEL_REQUIRED" }, 400);
+      }
+
+      // The mapping is accepted only after the provider has observed this exact
+      // battery in DTA21269. It does not call the provider or alter a rental.
+      const { data: battery, error: batteryError } = await db.from("batteries")
+        .select("battery_id,station_id,slot_num,status,updated_at")
+        .eq("battery_id", batteryId)
+        .maybeSingle();
+      if (batteryError) throw batteryError;
+      if (!battery) return json({ ok: false, error: "BATTERY_NOT_FOUND" }, 404);
+      if (battery.station_id !== DTA_PILOT_STATION_ID || battery.slot_num == null || battery.status !== "in_station") {
+        return json({ ok: false, error: "BATTERY_MUST_BE_DETECTED_IN_DTA21269" }, 409);
+      }
+
+      const [{ data: labelRecord, error: labelRecordError }, { data: batteryLabel, error: batteryLabelError }] = await Promise.all([
+        db.from("battery_physical_labels")
+          .select("id,battery_id,label_code,verification_state")
+          .eq("label_code", labelCode)
+          .in("verification_state", ["planned", "operator_confirmed"])
+          .maybeSingle(),
+        db.from("battery_physical_labels")
+          .select("id,battery_id,label_code")
+          .eq("battery_id", batteryId)
+          .eq("verification_state", "operator_confirmed")
+          .maybeSingle(),
+      ]);
+      if (labelRecordError) throw labelRecordError;
+      if (batteryLabelError) throw batteryLabelError;
+      if (labelRecord?.verification_state === "operator_confirmed" && labelRecord.battery_id !== batteryId) {
+        return json({ ok: false, error: "PHYSICAL_LABEL_ALREADY_ASSIGNED" }, 409);
+      }
+      if (batteryLabel && batteryLabel.label_code !== labelCode) {
+        return json({ ok: false, error: "BATTERY_ALREADY_HAS_PHYSICAL_LABEL" }, 409);
+      }
+
+      const observedAt = typeof battery.updated_at === "string" ? battery.updated_at : new Date().toISOString();
+      if (labelRecord?.verification_state === "planned" && !batteryLabel) {
+        const { error: confirmError } = await db.from("battery_physical_labels").update({
+          battery_id: batteryId,
+          observed_station_id: DTA_PILOT_STATION_ID,
+          observed_slot_num: battery.slot_num,
+          observed_at: observedAt,
+          verification_state: "operator_confirmed",
+          notes: notes || null,
+          assigned_by: actor,
+          assigned_at: new Date().toISOString(),
+        }).eq("id", labelRecord.id).eq("verification_state", "planned");
+        if (confirmError) throw confirmError;
+      } else if (!labelRecord && !batteryLabel) {
+        const { error: insertError } = await db.from("battery_physical_labels").insert({
+          battery_id: batteryId,
+          label_code: labelCode,
+          observed_station_id: DTA_PILOT_STATION_ID,
+          observed_slot_num: battery.slot_num,
+          observed_at: observedAt,
+          notes: notes || null,
+          assigned_by: actor,
+        });
+        if (insertError) throw insertError;
+      }
+
+      if (!batteryLabel && (labelRecord?.verification_state === "planned" || !labelRecord)) {
+        const { error: observationError } = await db.from("battery_observations").insert({
+          battery_id: batteryId,
+          station_id: DTA_PILOT_STATION_ID,
+          slot_num: battery.slot_num,
+          source: "label_entry",
+          provider_metric_kind: "unknown",
+          raw_data: { physicalLabel: labelCode, enrollment: "operator_confirmed" },
+          created_by: actor,
+        });
+        if (observationError) throw observationError;
+        await auditLog(db, {
+          actor,
+          action: "battery.physical_label.assigned",
+          target: batteryId,
+          data: { label_code: labelCode, station_id: DTA_PILOT_STATION_ID, slot_num: battery.slot_num },
+        });
+      }
+      return json({ ok: true, ...(await dashboard(db)) });
+    }
 
     const station = await loadPilotStation(db);
     if (!station) return json({ ok: false, error: "PILOT_STATION_NOT_FOUND" }, 404);
