@@ -1,0 +1,50 @@
+name: Vercel production bootstrap artifact
+
+on:
+  push:
+    branches:
+      - feat/cloudflare-staging-20260827
+    paths:
+      - .github/workflows/vercel-production-bootstrap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact production commit
+        uses: actions/checkout@v4
+        with:
+          ref: 410dac320278b32f66cab08a801fda8edd46d784
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production frontend
+        run: npm run build
+
+      - name: Verify expected Volt wiring in build source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d dist
+          grep -R "Volt" -n src/components src/pages | head -20
+          grep -R "public-contact" -n src supabase 2>/dev/null | head -20
+
+      - name: Upload exact dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chargeurs-production-410dac3-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
