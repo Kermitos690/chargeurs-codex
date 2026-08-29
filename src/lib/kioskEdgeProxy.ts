@@ -17,6 +17,7 @@ const PUBLIC_SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || STA
 export const KIOSK_PAIRING_STORAGE_KEY = "chargeurs:kiosk:customer-pairing-id";
 export const KIOSK_JOURNEY_STORAGE_KEY = "chargeurs:kiosk:customer-journey";
 export const KIOSK_AUTH_REQUIRED_EVENT = "chargeurs:kiosk-auth-required";
+export const KIOSK_CABINET_WAKE_EVENT = "chargeurs:kiosk-cabinet-wake";
 
 const QUIET_READ_TTL_MS = 10 * 60_000;
 const SETTLING_READ_TTL_MS = 2_000;
@@ -24,6 +25,12 @@ const FINAL_READ_TTL_MS = 5_000;
 const AD_IMPRESSION_SAMPLE_MS = 30 * 60_000;
 const AD_IMPRESSION_SAMPLE_PREFIX = "chargeurs:ads:impression-sample:";
 const POST_EVENT_REINVALIDATE_MS = 1_500;
+const PAYMENT_REQUIRED_RETRY_BASE_MS = 60_000;
+const PAYMENT_REQUIRED_RETRY_MAX_MS = 10 * 60_000;
+const RATE_LIMIT_RETRY_BASE_MS = 5_000;
+const RATE_LIMIT_RETRY_MAX_MS = 2 * 60_000;
+const SERVER_ERROR_RETRY_BASE_MS = 2_000;
+const SERVER_ERROR_RETRY_MAX_MS = 30_000;
 
 export type KioskProxyResult<T> = {
   data: T | null;
@@ -51,8 +58,15 @@ type CachedProxyResult = {
   result: KioskProxyResult<unknown>;
 };
 
+type ReadFailureBudget = {
+  failures: number;
+  retryAt: number;
+  result: KioskProxyResult<unknown>;
+};
+
 const readCache = new Map<string, CachedProxyResult>();
 const readInflight = new Map<string, Promise<KioskProxyResult<unknown>>>();
+const readFailureBudget = new Map<string, ReadFailureBudget>();
 const stationCacheKeys = new Map<string, Set<string>>();
 const cabinetWakeSubscriptions = new Set<string>();
 
@@ -196,6 +210,9 @@ function ensureCabinetWakeSubscription(stationId: string) {
       // event arrived cannot repopulate a stale 10-minute cache immediately
       // after the first invalidation.
       invalidateKioskReadCache(stationId);
+      window.dispatchEvent(new CustomEvent(KIOSK_CABINET_WAKE_EVENT, {
+        detail: { stationId },
+      }));
       window.setTimeout(() => invalidateKioskReadCache(stationId), POST_EVENT_REINVALIDATE_MS);
     })
     .subscribe();
@@ -211,6 +228,15 @@ function readTtlMs(path: KioskProxyPath, body: Record<string, unknown>, data: un
   if (stage === "settling") return SETTLING_READ_TTL_MS;
   if (stage === "completed" || stage === "support") return FINAL_READ_TTL_MS;
   return QUIET_READ_TTL_MS;
+}
+
+export function kioskReadRetryDelayMs(status: number | null, failures: number): number {
+  const attempt = Math.max(1, Math.floor(failures));
+  const exponential = (base: number, max: number) => Math.min(max, base * (2 ** Math.min(attempt - 1, 10)));
+  if (status === 402) return exponential(PAYMENT_REQUIRED_RETRY_BASE_MS, PAYMENT_REQUIRED_RETRY_MAX_MS);
+  if (status === 429) return exponential(RATE_LIMIT_RETRY_BASE_MS, RATE_LIMIT_RETRY_MAX_MS);
+  if (status === null || status >= 500) return exponential(SERVER_ERROR_RETRY_BASE_MS, SERVER_ERROR_RETRY_MAX_MS);
+  return 0;
 }
 
 function cachedResultFor<T>(path: KioskProxyPath, key: string): KioskProxyResult<T> | null {
@@ -231,6 +257,28 @@ function cachedResultFor<T>(path: KioskProxyPath, key: string): KioskProxyResult
     };
   }
   return cached.result as KioskProxyResult<T>;
+}
+
+function transientFailureFor<T>(key: string): KioskProxyResult<T> | null {
+  const failure = readFailureBudget.get(key);
+  if (!failure) return null;
+  if (failure.retryAt <= Date.now()) return null;
+  return failure.result as KioskProxyResult<T>;
+}
+
+function rememberTransientFailure(key: string, result: KioskProxyResult<unknown>) {
+  const previous = readFailureBudget.get(key);
+  const failures = (previous?.failures ?? 0) + 1;
+  const delay = kioskReadRetryDelayMs(result.status, failures);
+  if (delay <= 0) {
+    readFailureBudget.delete(key);
+    return;
+  }
+  readFailureBudget.set(key, {
+    failures,
+    retryAt: Date.now() + delay,
+    result,
+  });
 }
 
 function impressionSampleKey(body: Record<string, unknown>): string {
@@ -332,6 +380,9 @@ export async function invokeKioskEdgeProxy<T>(
 
     const pending = readInflight.get(key);
     if (pending) return pending as Promise<KioskProxyResult<T>>;
+
+    const suppressed = transientFailureFor<T>(key);
+    if (suppressed) return suppressed;
   }
 
   const request = invokeNetwork<T>(path, body, headers);
@@ -339,16 +390,37 @@ export async function invokeKioskEdgeProxy<T>(
 
   try {
     const result = await request;
+    const successful = !result.transportError
+      && !result.authError
+      && result.status !== null
+      && result.status >= 200
+      && result.status < 300;
     const ttl = readTtlMs(path, body, result.data);
-    if (ttl > 0 && !result.transportError && !result.authError && result.status !== null && result.status >= 200 && result.status < 300) {
+
+    if (cacheable) {
+      if (successful) {
+        readFailureBudget.delete(key);
+      } else {
+        rememberTransientFailure(key, result as KioskProxyResult<unknown>);
+      }
+    }
+
+    if (ttl > 0 && successful) {
       readCache.set(key, { expiresAt: Date.now() + ttl, result: result as KioskProxyResult<unknown> });
       rememberStationCacheKey(stationId, key);
     }
-    if (path === "/api/kiosk/ads-playlist" && body.action === "impression" && !result.transportError && !result.authError && result.status === 200) {
+    if (path === "/api/kiosk/ads-playlist" && body.action === "impression" && successful) {
       markAdImpressionSample(body);
     }
     return result;
   } finally {
     if (cacheable) readInflight.delete(key);
   }
+}
+
+export function __resetKioskEdgeProxyStateForTests() {
+  readCache.clear();
+  readInflight.clear();
+  readFailureBudget.clear();
+  stationCacheKeys.clear();
 }
