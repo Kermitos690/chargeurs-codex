@@ -3,11 +3,12 @@ import { useLocation } from "react-router-dom";
 import { readKioskToken } from "@/lib/kioskFetch";
 import {
   KIOSK_CABINET_WAKE_EVENT,
+  invalidateKioskReadCache,
   invokeKioskEdgeProxy,
 } from "@/lib/kioskEdgeProxy";
 import { KioskReturnOverlay } from "./KioskReturnOverlay";
 
-const FALLBACK_CHECK_MS = 60_000;
+const FALLBACK_CHECK_MS = 2 * 60_000;
 const ACTIVE_WINDOW_MS = 5 * 60_000;
 
 type ReturnProbe = {
@@ -28,9 +29,10 @@ function stationFromPath(pathname: string) {
  *   wakes the overlay immediately.
  *
  * Safety path:
- *   a sparse fallback probe catches a missed broadcast. The proxy's quiet cache
- *   and 402/429/5xx retry budget remain authoritative, so the fallback cannot
- *   recreate the historical sub-second network storm.
+ *   a sparse two-minute fallback probe catches a missed broadcast. It explicitly
+ *   refreshes the successful quiet cache, while the proxy's 402/429/5xx retry
+ *   budget is kept separate and remains authoritative. A quota restriction can
+ *   therefore never recreate the historical sub-second network storm.
  */
 export function KioskReturnOverlayGate() {
   const location = useLocation();
@@ -75,9 +77,13 @@ export function KioskReturnOverlayGate() {
       activeTimerRef.current = null;
       setActive(false);
     };
+    const fallbackProbe = () => {
+      invalidateKioskReadCache(stationId);
+      void probe();
+    };
 
     void probe();
-    const fallbackId = window.setInterval(() => void probe(), FALLBACK_CHECK_MS);
+    const fallbackId = window.setInterval(fallbackProbe, FALLBACK_CHECK_MS);
     window.addEventListener(KIOSK_CABINET_WAKE_EVENT, onCabinetWake as EventListener);
     window.addEventListener("chargeurs:kiosk-flow-complete", onFlowComplete);
 
