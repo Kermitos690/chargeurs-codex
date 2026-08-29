@@ -1,0 +1,1 @@
+import type { PassStudioPass } from "./passStudio.ts"; export function guestPresentationFields(_pass:PassStudioPass,_presentation:unknown){throw new Error("GUEST_WALLET_DISABLED_IN_THIS_ROLLOUT");} export async function resolveExpressPass(_apiKey:string){throw new Error("GUEST_WALLET_DISABLED_IN_THIS_ROLLOUT");}
