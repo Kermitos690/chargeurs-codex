@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { KioskAdvertisingLayer } from "./KioskAdvertisingLayer";
 import { KioskAdvertisingPartnerBridge } from "./KioskAdvertisingPartnerBridge";
-import { KioskAdvertisingPortraitFocus } from "./KioskAdvertisingPortraitFocus";
+import { KioskAdvertisingSmartCrop } from "./KioskAdvertisingSmartCrop";
 import { invokeKioskEdgeProxy } from "@/lib/kioskEdgeProxy";
 import {
   estimateNetworkClockSample,
@@ -69,9 +69,9 @@ function warmCachedAdvertisingMedia() {
  * authoritative between sparse resyncs; ad boundaries themselves are still
  * calculated locally from the shared timeline epoch.
  *
- * Partner QR/data and portrait smart-crop helpers are mounted only inside this
- * Advertising runtime. Either helper may fail closed without propagating to the
- * kiosk product shell.
+ * Partner QR/data and Home landscape smart-crop helpers are mounted only inside
+ * this Advertising runtime. Either helper may fail closed without propagating to
+ * the kiosk product shell.
  *
  * This wrapper owns no rental, payment, return, inventory or hardware state.
  */
@@ -158,7 +158,7 @@ export function KioskAdvertisingSynchronizedLayer() {
     <>
       <KioskAdvertisingLayer authoritativeClockOffsetMs={authoritativeClockOffsetMs} />
       <KioskAdvertisingPartnerBridge />
-      <KioskAdvertisingPortraitFocus />
+      <KioskAdvertisingSmartCrop />
     </>
   );
 }

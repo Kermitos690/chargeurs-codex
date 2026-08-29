@@ -1,0 +1,97 @@
+/*
+ * Home partner rail smart-landscape contract.
+ *
+ * The creative is always presented as a landscape window on Home. A lightweight
+ * focal-point enhancer updates --kiosk-ad-focus-x/y; if it cannot analyse the
+ * image, the same layout safely falls back to 50% 50%.
+ */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] {
+  --kiosk-ad-landscape-height: clamp(166px, 15.4vw, 196px);
+  --kiosk-ad-focus-x: 50%;
+  --kiosk-ad-focus-y: 50%;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-media,
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-media-backdrop {
+  top: 10px !important;
+  right: 10px !important;
+  bottom: auto !important;
+  left: 10px !important;
+  width: calc(100% - 20px) !important;
+  height: var(--kiosk-ad-landscape-height) !important;
+  border-radius: 18px !important;
+  object-fit: cover !important;
+  object-position: var(--kiosk-ad-focus-x) var(--kiosk-ad-focus-y) !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-media {
+  background: #020817 !important;
+  filter: none !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .26);
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-media-backdrop {
+  opacity: .84 !important;
+  filter: blur(22px) saturate(1.08) brightness(.68) !important;
+  transform: scale(1.06) translateZ(0) !important;
+}
+
+/* The enriched partner data panel directly owns the remaining rail height. */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-has-partner-qr="true"] .kiosk-ad-partner-panel--split {
+  top: calc(var(--kiosk-ad-landscape-height) + 20px) !important;
+  right: 10px !important;
+  bottom: 10px !important;
+  left: 10px !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) !important;
+  border-radius: 18px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-has-partner-qr="true"] .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__body {
+  min-height: 0;
+  align-content: center;
+  padding: 14px 12px 16px;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-has-partner-qr="true"] .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__qr {
+  width: 112px;
+  height: 112px;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-has-partner-qr="true"] .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__action {
+  font-size: 15px;
+}
+
+/* The old adaptive/contain contract must never reassert itself on the Home rail. */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-media-layout="adaptive"] .kiosk-ad-media {
+  inset: 10px 10px auto !important;
+  width: calc(100% - 20px) !important;
+  height: var(--kiosk-ad-landscape-height) !important;
+  object-fit: cover !important;
+  object-position: var(--kiosk-ad-focus-x) var(--kiosk-ad-focus-y) !important;
+  background: #020817 !important;
+  filter: none !important;
+}
+
+/* Badge stays inside the landscape creative, not in the data dock. */
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-split-badge {
+  top: 20px !important;
+  left: 20px !important;
+}
+
+html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] .kiosk-ad-muted {
+  top: calc(var(--kiosk-ad-landscape-height) - 30px) !important;
+  bottom: auto !important;
+  left: 20px !important;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"] {
+    --kiosk-ad-landscape-height: clamp(158px, 15.2vw, 184px);
+  }
+
+  html.kiosk-v3[data-kiosk-scene="home"] .kiosk-ad-split[data-smart-landscape="true"][data-has-partner-qr="true"] .kiosk-ad-partner-panel--split .kiosk-ad-partner-panel__qr {
+    width: 100px;
+    height: 100px;
+  }
+}
