@@ -197,6 +197,16 @@ export function invalidateKioskReadCache(stationId?: string) {
   stationCacheKeys.delete(stationId);
 }
 
+export function invalidateKioskReturnSummaryCache(stationId: string) {
+  const normalized = stationId.trim();
+  if (!normalized) return;
+  const key = cacheKey("/api/kiosk/return-summary", { stationId: normalized });
+  readCache.delete(key);
+  // Deliberately keep readFailureBudget intact. A fallback freshness probe may
+  // bypass a successful quiet cache, but it must never bypass an active quota,
+  // rate-limit or server-error circuit breaker.
+}
+
 function ensureCabinetWakeSubscription(stationId: string) {
   if (!stationId || cabinetWakeSubscriptions.has(stationId)) return;
   cabinetWakeSubscriptions.add(stationId);
