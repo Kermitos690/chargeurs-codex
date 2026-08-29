@@ -18,6 +18,52 @@ production, Stripe or hardware.
 
 Default state: **`BLOCKED`**.
 
+## Post-audit staging incident gates — 2026-08-29
+
+Evidence class: `POST_AUDIT_RUNTIME_EVIDENCE_2026-08-29`. The original release
+structure is the `AUDIT_SNAPSHOT_2026-08-28`.
+
+Staging is currently
+`STAGING_DEGRADED / SUPABASE_FAIR_USE_RESTRICTION`. Supabase project status may
+remain `ACTIVE_HEALTHY` while Edge Function, REST and Realtime services return
+HTTP 402 because of organization Fair Use restrictions; these states must not
+be conflated.
+
+Two additional gates are mandatory before `READY_FOR_STAGING_REVIEW`,
+`STAGING_VALIDATED`, staging reproducibility or release-readiness may be
+declared:
+
+### Gate 0A — `SUPABASE_USAGE_STORM_RESOLVED`
+
+PASS requires:
+
+- caller, session and station attribution for the high-frequency requests;
+- measured normal request rates for kiosk polling and Realtime reconnects;
+- documented retry/backoff behavior for success, transient failure and HTTP
+  402 paths;
+- evidence that duplicate mounted effects/listeners and overlapping
+  native/WebView polling are absent or bounded;
+- an observation window long enough to show that invocation and egress rates
+  remain within the approved operating envelope.
+
+Current evidence is only
+`PROBABLE_USAGE_AMPLIFICATION / INVESTIGATION_REQUIRED`. Aggressive polling,
+concurrent pollers, immediate 402 retry, missing exponential backoff, duplicate
+effects/listeners, stale sessions, native/WebView overlap and Realtime
+reconnect behavior remain unproven hypotheses. Current status: `BLOCKED`.
+
+### Gate 0B — `SUPABASE_SERVICE_RESTRICTIONS_CLEARED`
+
+PASS requires:
+
+- official evidence that the organization restriction no longer applies; and
+- successful non-mutating checks of required Edge Function, REST and Realtime
+  paths without restriction-related HTTP 402 responses.
+
+No particular subscription tier, including Pro, is required by this gate. A
+plan change may affect capacity but does not substitute for Gate 0A or prove
+that the architecture is safe. Current status: `BLOCKED`.
+
 ## Global release manifest
 
 Every future release must record:
@@ -199,5 +245,9 @@ containment plan rather than a fictional rollback.
 
 ## Current release verdict
 
-Chargeurs.ch staging is observable but not yet reproducible from one canonical
-source set. Production remains `NOT CONFIGURED` and `NO-GO`.
+Chargeurs.ch staging is
+`STAGING_DEGRADED / SUPABASE_FAIR_USE_RESTRICTION`, observable but not yet
+reproducible from one canonical source set. Gates
+`SUPABASE_USAGE_STORM_RESOLVED` and
+`SUPABASE_SERVICE_RESTRICTIONS_CLEARED` are blocked. Production remains
+`NOT CONFIGURED` and `NO-GO`.

@@ -49,6 +49,9 @@ authorized.
 | Authentication state | Supabase Auth configuration and runtime grants/policies | `RUNTIME_TRUTH` | Documentation and client assumptions are not proof of effective access. |
 | Storage state | Supabase Storage buckets, policies and object metadata | `RUNTIME_TRUTH` | Repository policies are only intended state until matched to runtime. |
 | Cron/webhook scheduling | Active Supabase Cron jobs and registered provider endpoints | `RUNTIME_TRUTH` | A function with no Git caller can still be invoked by Cron or an external webhook. |
+| Supabase project control-plane health | Supabase Management API/Dashboard project status | `RUNTIME_TRUTH` | `ACTIVE_HEALTHY` describes the project control-plane status; it does not prove that quota-restricted services are available. |
+| Supabase Fair Use/service restriction | Official Supabase organization notification plus service HTTP responses | `RUNTIME_TRUTH` | Organization quota restrictions and project health are separate facts and must be reported separately. |
+| Request volume and retry behavior | Timestamped Edge Function, API and Realtime logs correlated to known callers | `RUNTIME_TRUTH` | High-frequency requests prove a pattern, not the responsible component or root cause without caller/source attribution. |
 | Stripe payment state | Stripe object plus a verified Stripe webhook processed server-side | `RUNTIME_TRUTH` | A browser success redirect is **never payment proof**. |
 | Payment accounting projection | Reconciled Supabase payment/rental records derived from trusted Stripe events | `RUNTIME_TRUTH` | Browser or kiosk state cannot finalize a payment. |
 | ChargeNow ejection/return | Authenticated provider callback, read-back or controlled reconciliation evidence | `FIELD_TRUTH` plus `RUNTIME_TRUTH` | A command request is not proof that a battery physically moved. |
@@ -74,6 +77,42 @@ authorized.
 - Vercel serves the fleet today; Cloudflare serves a different parallel build.
 - No Chargeurs.ch production Supabase project, frontend project, domain,
   Stripe LIVE configuration or production-signed APK is proven.
+
+## Post-audit runtime evidence — 2026-08-29
+
+Evidence class: `POST_AUDIT_RUNTIME_EVIDENCE_2026-08-29`. The preceding
+baseline remains `AUDIT_SNAPSHOT_2026-08-28`.
+
+Staging is currently classified
+`STAGING_DEGRADED / SUPABASE_FAIR_USE_RESTRICTION`.
+
+- An official Supabase Fair Use notification reports **8.19 GB** egress and
+  **2,166,330** Edge Function invocations. It states that the database remains
+  accessible through Dashboard while other services are restricted.
+- A read-only status check still reports the project
+  `xqepbqnaenoeyfjkjnzl` as `ACTIVE_HEALTHY`. This control-plane fact does not
+  negate the active service restrictions.
+- Live logs show `402 Payment Required` affecting Edge Functions, REST requests
+  and Realtime WebSocket traffic. Named examples include
+  `kiosk-return-summary`, `kiosk-cabinet-snapshot`, `kiosk-ads-playlist`,
+  `kiosk-ads-clock` and `kiosk-operational-status`.
+- Repeated polling/retry traffic, including windows with multiple
+  `kiosk-return-summary` requests per second, is classified
+  `PROBABLE_USAGE_AMPLIFICATION / INVESTIGATION_REQUIRED`.
+- The exact cause is not proven. Candidate mechanisms are an aggressive
+  polling interval, concurrent kiosk components polling identical state,
+  immediate retry after a 402, missing exponential backoff, multiple mounted
+  effects/listeners, stale sessions, overlapping native/WebView polling, and
+  Realtime reconnect behavior.
+- API logs also contain user-agent
+  `ChargeursKiosk/1.0.60-terminal-sdk580-usb-discovery-staging`. Its station,
+  installed APK, signer, `versionCode` and source provenance remain `UNKNOWN`.
+
+The incident blocks release-readiness claims until
+`SUPABASE_USAGE_STORM_RESOLVED` and
+`SUPABASE_SERVICE_RESTRICTIONS_CLEARED` pass. Purchasing or requiring a Pro
+subscription is not an architectural acceptance criterion; usage amplification
+must be investigated independently of organization plan choice.
 
 ## DO NOT
 
@@ -134,8 +173,12 @@ named evidence is collected:
 | Exact source for 42 runtime-only Edge Functions | Runtime bundle/source recovery and reviewed Git representation |
 | Effective authentication for each verify_jwt=false function | Function source, grants, headers/signatures/tokens, negative tests and logs |
 | Complete callers for all 100 Edge Functions | Static call graph, function-to-function calls, frontend/Android search, Cron and external webhook inventories |
+| Exact source of the probable usage amplification | Per-request caller/session/station correlation, frontend and Android instrumentation, mount/listener counts, retry/backoff traces and Realtime reconnect traces |
+| Whether each proposed polling/retry mechanism contributes | Controlled measurement of polling intervals, duplicate component calls, HTTP 402 retry behavior, stale sessions and native/WebView overlap |
+| Clearance of current Supabase service restrictions | Official restriction-clearance evidence plus successful non-mutating Edge Function, REST and Realtime checks |
 | Safe disposition of 30 temporary/diagnostic candidates | Dependency proof, sufficient no-use logs and retained rollback source |
 | Installed Android package, versionCode, versionName, signer and APK hash on each station | Read-only ADB/package/APK inspection |
+| Station and artifact behind user-agent `ChargeursKiosk/1.0.60-terminal-sdk580-usb-discovery-staging` | Correlated station request identity plus read-only installed-package metadata, APK hash, signer and source manifest |
 | Exact Android source commit for each installed APK | Reproducible artifact comparison and build manifest |
 | Tablet model/Android OS and native reader mode per station | Read-only device inventory |
 | DTA21277 physical Stripe reader identity/binding | Stripe TEST Terminal inventory plus on-device/reader verification |

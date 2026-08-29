@@ -6,6 +6,10 @@ Audit baseline: `410dac320278b32f66cab08a801fda8edd46d784`
 This matrix separates observed runtime from target architecture. `UNKNOWN` and
 `NOT CONFIGURED` are intentional values and must not be replaced by assumptions.
 
+The environment matrix and request path below are the
+`AUDIT_SNAPSHOT_2026-08-28`. The later incident section is
+`POST_AUDIT_RUNTIME_EVIDENCE_2026-08-29` and does not rewrite that snapshot.
+
 ## Current Architecture Decision — 2026-08-29
 
 - Repository: `Kermitos690/chargeurs-codex`
@@ -25,6 +29,33 @@ This matrix separates observed runtime from target architecture. `UNKNOWN` and
 | Staging | **Vercel is the current canonical runtime** | Supabase Edge Functions | Supabase `xqepbqnaenoeyfjkjnzl` (`chargeurs-ch-staging`) | Stripe TEST only | Controlled staging stations; mutation permissions must remain gated | Three different installed version labels; no canonical staging APK | `https://chargeurs-ch-staging.vercel.app` | Active but not reproducible from a single proven source set |
 | Cloudflare experiment | Cloudflare Pages parallel build | Pages proxy to the same Supabase staging functions plus experimental Pages Functions | Same Supabase staging DB; no isolated Cloudflare DB | Stripe TEST indirectly through staging backend; exact parity `UNKNOWN` | No station is authorized to use this host | Experimental Cloudflare-origin branches only; no approved APK | `https://chargeurs-ch-staging-cf.pages.dev` | `ACTIVE_EXPERIMENT`, non-canonical |
 | Production | `NOT CONFIGURED` | `NOT CONFIGURED` | No Chargeurs.ch production Supabase project proven | Stripe LIVE is not authorized or proven configured | `NOT CONFIGURED` | No production-signed release APK | Production domain `UNKNOWN` | `NO-GO` |
+
+## Post-audit runtime incident — 2026-08-29
+
+Evidence class: `POST_AUDIT_RUNTIME_EVIDENCE_2026-08-29`.
+
+Current staging classification:
+`STAGING_DEGRADED / SUPABASE_FAIR_USE_RESTRICTION`.
+
+| Observed fact | Evidence | Interpretation |
+|---|---|---|
+| Supabase project control-plane status | Read-only project status reported `ACTIVE_HEALTHY` on 2026-08-29 | The project record and database control plane remain available; this status must not be presented as proof that every Supabase service is usable. |
+| Organization service restriction | Official Supabase Fair Use notification: egress **8.19 GB**, Edge Function invocations **2,166,330**, database accessible through Dashboard, other services restricted | Active quota/service restriction affecting staging; it is not equivalent to a project control-plane health failure. |
+| HTTP failures | Live runtime logs report `402 Payment Required` for Edge Functions, REST requests and Realtime WebSocket traffic | Backend-dependent kiosk behavior is degraded even when the Vercel frontend itself remains reachable. |
+| Named affected calls | `kiosk-return-summary`, `kiosk-cabinet-snapshot`, `kiosk-ads-playlist`, `kiosk-ads-clock`, `kiosk-operational-status` | Examples observed in the incident evidence; this is not asserted to be the complete affected-call set. |
+| Request pattern | Repeated kiosk polling/retry activity, including windows with multiple `kiosk-return-summary` requests per second | `PROBABLE_USAGE_AMPLIFICATION / INVESTIGATION_REQUIRED`; caller attribution and exact root cause are not yet proven. |
+
+Possible contributing mechanisms remain hypotheses: an aggressive polling
+interval, concurrent kiosk components polling the same state, immediate retry
+after HTTP 402, missing exponential backoff, multiple mounted frontend
+effects/listeners, stale kiosk sessions, overlapping native/WebView polling,
+and Realtime reconnect behavior.
+
+Staging must not be declared reproducible or release-ready until both
+`SUPABASE_USAGE_STORM_RESOLVED` and
+`SUPABASE_SERVICE_RESTRICTIONS_CLEARED` have passed with evidence. A paid-plan
+upgrade is not itself a release gate and would not replace investigation of the
+architectural usage pattern.
 
 ## Vercel terminology warning
 

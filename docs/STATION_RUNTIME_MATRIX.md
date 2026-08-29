@@ -5,6 +5,8 @@ Runtime observation window: **2026-08-28 UTC**
 
 This register separates database-reported station/device state from APK metadata
 read directly on a tablet. Similar version labels are not provenance evidence.
+The per-station tables are `AUDIT_SNAPSHOT_2026-08-28`; later observations are
+recorded separately and do not overwrite that snapshot.
 
 ## Canonical Android status
 
@@ -48,6 +50,28 @@ from the installed package/artifact before any line can be declared canonical.
 | Latest controlled physical test | `UNKNOWN` — no single evidence record links station, APK SHA, signer, source SHA and result | `UNKNOWN` | `UNKNOWN` |
 | Qualification | `read_only` | `disabled` | `disabled` |
 | Release readiness | `BLOCKED` | `BLOCKED` | `BLOCKED` |
+
+## Post-audit Android runtime observations
+
+Evidence class: `POST_AUDIT_RUNTIME_EVIDENCE_2026-08-29`.
+
+| Field | Observation |
+|---|---|
+| Observed user-agent label | `ChargeursKiosk/1.0.60-terminal-sdk580-usb-discovery-staging` |
+| Observation date/time | Supabase/API log sample on 2026-08-29, observed from `02:40:58` through `02:57:46` UTC |
+| Station identity | `UNKNOWN` |
+| Installed APK provenance | `UNKNOWN` |
+| Source commit | `UNKNOWN` |
+| Source branch / PR | `UNKNOWN` |
+| Signer SHA-256 | `UNKNOWN` |
+| `versionCode` | `UNKNOWN` |
+| Evidence source | Staging Supabase/API runtime log user-agent field |
+| Confidence | User-agent label and observation window: HIGH; station and artifact attribution: UNKNOWN |
+| Significance | Additional field-runtime evidence that does not match the three labels in the 2026-08-28 station snapshot. It reinforces that no `CANONICAL_STAGING_APK` can yet be declared. |
+
+The label must not be assigned to `DTA21269`, `DTA21277` or `DTA22032`
+without independent station-to-request evidence. A user-agent string does not
+prove installed package metadata, signer, binary hash or source provenance.
 
 ## Concurrent source lines
 
