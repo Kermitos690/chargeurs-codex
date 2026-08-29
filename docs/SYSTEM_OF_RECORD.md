@@ -51,7 +51,7 @@ authorized.
 | Cron/webhook scheduling | Active Supabase Cron jobs and registered provider endpoints | `RUNTIME_TRUTH` | A function with no Git caller can still be invoked by Cron or an external webhook. |
 | Supabase project control-plane health | Supabase Management API/Dashboard project status | `RUNTIME_TRUTH` | `ACTIVE_HEALTHY` describes the project control-plane status; it does not prove that quota-restricted services are available. |
 | Supabase Fair Use/service restriction | Official Supabase organization notification plus service HTTP responses | `RUNTIME_TRUTH` | Organization quota restrictions and project health are separate facts and must be reported separately. |
-| Request volume and retry behavior | Timestamped Edge Function, API and Realtime logs correlated to known callers | `RUNTIME_TRUTH` | High-frequency requests prove a pattern, not the responsible component or root cause without caller/source attribution. |
+| Request volume and retry behavior | Timestamped Edge Function, API and Realtime logs correlated to known callers | `RUNTIME_TRUTH` | High-frequency requests prove a pattern, not the responsible deployed artifact without caller/source attribution. |
 | Stripe payment state | Stripe object plus a verified Stripe webhook processed server-side | `RUNTIME_TRUTH` | A browser success redirect is **never payment proof**. |
 | Payment accounting projection | Reconciled Supabase payment/rental records derived from trusted Stripe events | `RUNTIME_TRUTH` | Browser or kiosk state cannot finalize a payment. |
 | ChargeNow ejection/return | Authenticated provider callback, read-back or controlled reconciliation evidence | `FIELD_TRUTH` plus `RUNTIME_TRUTH` | A command request is not proof that a battery physically moved. |
@@ -98,12 +98,23 @@ Staging is currently classified
   `kiosk-ads-clock` and `kiosk-operational-status`.
 - Repeated polling/retry traffic, including windows with multiple
   `kiosk-return-summary` requests per second, is classified
-  `PROBABLE_USAGE_AMPLIFICATION / INVESTIGATION_REQUIRED`.
-- The exact cause is not proven. Candidate mechanisms are an aggressive
-  polling interval, concurrent kiosk components polling identical state,
-  immediate retry after a 402, missing exponential backoff, multiple mounted
-  effects/listeners, stale sessions, overlapping native/WebView polling, and
-  Realtime reconnect behavior.
+  `PROBABLE_USAGE_AMPLIFICATION / INVESTIGATION_REQUIRED` at runtime.
+- Source inspection independently confirms a concrete amplification mechanism:
+  `KioskReturnOverlay` is globally mounted for kiosk routes and schedules
+  `return-summary` every **650 ms** plus `cabinet-snapshot` every **5 s**. A
+  later source change, commit `4ec8a43bc0bf7b1d1ff8f902a765cf31c7427580`
+  (`fix: budget kiosk edge invocations`), added quiet-read caching and in-flight
+  deduplication. The current cache stores successful 2xx reads but does not
+  cache HTTP `402` failures, so the 650 ms timer remains capable of generating
+  repeated network calls while quota restrictions are active.
+- This is classified
+  `SOURCE_CONFIRMED_USAGE_AMPLIFICATION_MECHANISM / RUNTIME_PROVENANCE_UNRESOLVED`.
+  It proves the mechanism exists in source; it does **not** prove which exact
+  Vercel bundle or Android/WebView artifact is producing every observed runtime
+  request until deployment provenance is recovered.
+- Additional contributors remain unresolved: duplicate component mounts,
+  overlapping native/WebView polling, stale kiosk sessions and Realtime
+  reconnect behavior may still add traffic and require measurement.
 - API logs also contain user-agent
   `ChargeursKiosk/1.0.60-terminal-sdk580-usb-discovery-staging`. Its station,
   installed APK, signer, `versionCode` and source provenance remain `UNKNOWN`.
@@ -173,8 +184,8 @@ named evidence is collected:
 | Exact source for 42 runtime-only Edge Functions | Runtime bundle/source recovery and reviewed Git representation |
 | Effective authentication for each verify_jwt=false function | Function source, grants, headers/signatures/tokens, negative tests and logs |
 | Complete callers for all 100 Edge Functions | Static call graph, function-to-function calls, frontend/Android search, Cron and external webhook inventories |
-| Exact source of the probable usage amplification | Per-request caller/session/station correlation, frontend and Android instrumentation, mount/listener counts, retry/backoff traces and Realtime reconnect traces |
-| Whether each proposed polling/retry mechanism contributes | Controlled measurement of polling intervals, duplicate component calls, HTTP 402 retry behavior, stale sessions and native/WebView overlap |
+| Runtime attribution of the source-confirmed usage-amplification mechanism | Exact Vercel deployment source SHA/bundle plus per-request caller/session/station correlation and installed Android/WebView provenance |
+| Whether additional polling/retry mechanisms contribute | Controlled measurement of duplicate component mounts, HTTP 402/429/5xx retry behavior, stale sessions, native/WebView overlap and Realtime reconnects |
 | Clearance of current Supabase service restrictions | Official restriction-clearance evidence plus successful non-mutating Edge Function, REST and Realtime checks |
 | Safe disposition of 30 temporary/diagnostic candidates | Dependency proof, sufficient no-use logs and retained rollback source |
 | Installed Android package, versionCode, versionName, signer and APK hash on each station | Read-only ADB/package/APK inspection |
