@@ -1,0 +1,85 @@
+name: Cloudflare staging diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/cloudflare-staging-20260827
+    paths:
+      - .github/workflows/cloudflare-staging-diagnostic.yml
+      - wrangler.toml
+      - src/integrations/supabase/**
+      - src/pages/account/**
+      - functions/api/connectivity-probe.js
+      - functions/api/supabase/**
+      - functions/api/volt-*.js
+      - functions/_shared/volt-knowledge.js
+
+permissions:
+  contents: read
+
+jobs:
+  public-check:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: Wait for deployed connectivity probe v4
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://chargeurs-ch-staging-cf.pages.dev/api/connectivity-probe'
+          for attempt in $(seq 1 30); do
+            echo "probe attempt $attempt"
+            STATUS="$(curl -sS --max-time 20 -o /tmp/probe.json -w '%{http_code}' "$URL" || true)"
+            cat /tmp/probe.json || true
+            if grep -q '"version":4' /tmp/probe.json; then
+              test "$STATUS" = "200"
+              grep -q '"ok":true' /tmp/probe.json
+              grep -q '"status":400' /tmp/probe.json
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Connectivity probe v4 never became healthy' >&2
+          exit 1
+
+      - name: Validate account page is fresh and uncached
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://chargeurs-ch-staging-cf.pages.dev/compte/login?sw=off&ci=1'
+          curl -fsS -L --max-time 20 -D /tmp/account.headers -o /tmp/account.html "$URL"
+          grep -q 'Chargeurs.ch' /tmp/account.html
+          grep -Eiq '^cache-control: .*no-store' /tmp/account.headers
+
+      - name: Validate browser-equivalent Supabase Auth and CORS
+        shell: bash
+        env:
+          SUPABASE_URL: https://xqepbqnaenoeyfjkjnzl.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhxZXBicW5hZW5vZXlmamtqbnpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NjU3MDcsImV4cCI6MjEwMDA0MTcwN30.ds9MLO16LeljHdDuzLw1eoWaf5Kk393kMUshKlQJzu4
+          APP_ORIGIN: https://chargeurs-ch-staging-cf.pages.dev
+        run: |
+          set -euo pipefail
+          STATUS="$(curl -sS --max-time 20 -D /tmp/auth.headers -o /tmp/auth.body -w '%{http_code}' \
+            -H "Origin: $APP_ORIGIN" \
+            -H 'Content-Type: application/json' \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -d '{"email":"cloudflare-browser-probe@example.invalid","password":"definitely-not-a-real-password"}' \
+            "$SUPABASE_URL/auth/v1/token?grant_type=password")"
+          cat /tmp/auth.headers
+          cat /tmp/auth.body
+          test "$STATUS" = "400"
+          grep -Eq 'invalid_credentials|Invalid login credentials' /tmp/auth.body
+          grep -Eiq '^access-control-allow-origin: (\*|https://chargeurs-ch-staging-cf\.pages\.dev)' /tmp/auth.headers
+
+      - name: Volt runtime smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY="$(curl -fsS --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -d '{"mode":"public","message":"Quels sont les tarifs de location ?","history":[],"locale":"fr"}' \
+            https://chargeurs-ch-staging-cf.pages.dev/api/volt-chat)"
+          echo "$BODY"
+          printf '%s' "$BODY" | grep -q '"ok":true'

@@ -23,7 +23,15 @@ public final class DocumentStartCredentialInjectorTest {
     }
 
     @Test
-    public void injectorIsRestrictedToEnrolledHttpsOrigin() {
+    public void injectorCanBeRestrictedToCloudflareRuntimeOrigin() {
+        assertEquals(
+            Collections.singleton("https://chargeurs-ch-staging-cf.pages.dev"),
+            DocumentStartCredentialInjector.allowedOrigins("https://chargeurs-ch-staging-cf.pages.dev")
+        );
+    }
+
+    @Test
+    public void enrollmentOriginCanRemainDistinctFromRuntimeOrigin() {
         assertEquals(
             Collections.singleton("https://chargeurs-ch-staging.vercel.app"),
             DocumentStartCredentialInjector.allowedOrigins("https://chargeurs-ch-staging.vercel.app")

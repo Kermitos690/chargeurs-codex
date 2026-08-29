@@ -1,0 +1,8 @@
+{
+  "name": "chargeurs-ch-staging-cf",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-08-27",
+  "ai": {
+    "binding": "AI"
+  }
+}

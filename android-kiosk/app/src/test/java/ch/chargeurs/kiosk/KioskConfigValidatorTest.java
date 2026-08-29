@@ -60,6 +60,28 @@ public final class KioskConfigValidatorTest {
     }
 
     @Test
+    public void resolvesPinnedEnrollmentToSeparateCloudflareRuntime() {
+        assertEquals(
+            "https://chargeurs-ch-staging-cf.pages.dev",
+            KioskConfigValidator.resolveRuntimeBaseUrl(
+                "https://chargeurs-ch-staging.vercel.app/",
+                "https://chargeurs-ch-staging.vercel.app",
+                "https://chargeurs-ch-staging-cf.pages.dev/"
+            )
+        );
+        assertNull(KioskConfigValidator.resolveRuntimeBaseUrl(
+            "https://other.example",
+            "https://chargeurs-ch-staging.vercel.app",
+            "https://chargeurs-ch-staging-cf.pages.dev"
+        ));
+        assertNull(KioskConfigValidator.resolveRuntimeBaseUrl(
+            "https://chargeurs-ch-staging.vercel.app",
+            "https://chargeurs-ch-staging.vercel.app",
+            "http://chargeurs-ch-staging-cf.pages.dev"
+        ));
+    }
+
+    @Test
     public void buildsTheLockedKioskRoute() {
         assertEquals(
             "https://chargeurs.ch/kiosk/DTA21269",

@@ -1,0 +1,3 @@
+Cloudflare Pages rebuild trigger for Volt V2 and Supabase proxy.
+No runtime logic change in this file.
+Force rebuild requested after commit 0cc64f0 so the legacy-anon Supabase transport fix is included.

@@ -19,12 +19,26 @@ public final class KioskConfig {
         return kioskToken;
     }
 
+    /** Durable enrollment origin returned by kiosk-enroll. */
     public String baseUrl() {
         return baseUrl;
     }
 
+    /**
+     * Runtime WebView URL. The encrypted enrollment origin is intentionally
+     * preserved so an APK upgrade can reuse the existing kiosk credential while
+     * the web application moves to a separately pinned Cloudflare origin.
+     */
     public String kioskUrl() {
-        return KioskConfigValidator.kioskUrl(baseUrl, stationId);
+        String runtimeBaseUrl = KioskConfigValidator.resolveRuntimeBaseUrl(
+            baseUrl,
+            BuildConfig.KIOSK_PUBLIC_BASE_URL,
+            BuildConfig.KIOSK_WEB_BASE_URL
+        );
+        if (runtimeBaseUrl == null) {
+            throw new IllegalArgumentException("INVALID_KIOSK_RUNTIME_CONFIGURATION");
+        }
+        return KioskConfigValidator.kioskUrl(runtimeBaseUrl, stationId);
     }
 
     public boolean isValid() {

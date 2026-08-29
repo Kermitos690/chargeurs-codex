@@ -55,9 +55,38 @@ public final class KioskConfigValidator {
         }
     }
 
+    /**
+     * Resolves the web runtime origin without changing the durable enrollment
+     * origin stored in SecureConfigStore. The migration fails closed unless the
+     * stored enrollment origin still matches the build-pinned enrollment host.
+     */
+    public static String resolveRuntimeBaseUrl(
+        String enrolledBaseUrl,
+        String pinnedEnrollmentBaseUrl,
+        String runtimeWebBaseUrl
+    ) {
+        String enrolled = normalizeBaseUrl(enrolledBaseUrl);
+        String pinned = normalizeBaseUrl(pinnedEnrollmentBaseUrl);
+        String runtime = normalizeBaseUrl(runtimeWebBaseUrl);
+        if (enrolled == null || pinned == null || runtime == null) return null;
+        if (!enrolled.equals(pinned)) return null;
+        return runtime;
+    }
+
     public static boolean isAllowedUrl(String candidate, String baseUrl) {
         String normalizedBase = normalizeBaseUrl(baseUrl);
         if (candidate == null || normalizedBase == null) return false;
+
+        String normalizedPinned = normalizeBaseUrl(BuildConfig.KIOSK_PUBLIC_BASE_URL);
+        if (normalizedPinned != null && normalizedPinned.equals(normalizedBase)) {
+            normalizedBase = resolveRuntimeBaseUrl(
+                baseUrl,
+                BuildConfig.KIOSK_PUBLIC_BASE_URL,
+                BuildConfig.KIOSK_WEB_BASE_URL
+            );
+            if (normalizedBase == null) return false;
+        }
+
         try {
             URI candidateUri = new URI(candidate);
             URI baseUri = new URI(normalizedBase);
