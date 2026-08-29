@@ -1,10 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  __resetKioskAwareFetchStateForTests,
   buildKioskAwareRequestInit,
   isKioskCabinetSyncRequest,
   isKioskQuoteRequest,
+  isQuotaProtectedKioskRead,
   isSafeKioskQuote,
+  kioskAwareFetch,
+  kioskReadTransportRetryDelayMs,
 } from "@/lib/kioskFetch";
+
+afterEach(() => {
+  __resetKioskAwareFetchStateForTests();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("kiosk-aware Edge Function transport", () => {
   const syncUrl = "https://example.supabase.co/functions/v1/sync-cabinet-status";
@@ -80,5 +90,67 @@ describe("kiosk quote safety guard", () => {
     })).toBe(false);
     expect(isSafeKioskQuote({ error: "PRICING_NOT_CONFIGURED" })).toBe(false);
     expect(isSafeKioskQuote(null)).toBe(false);
+  });
+});
+
+describe("quota-aware kiosk read transport", () => {
+  const statusUrl = "https://example.supabase.co/rest/v1/rpc/kiosk_session_status";
+  const stationsUrl = "https://example.supabase.co/rest/v1/stations?station_id=eq.DTA21269";
+
+  it("protects only known read-only kiosk requests", () => {
+    expect(isQuotaProtectedKioskRead(statusUrl, { method: "POST" })).toBe(true);
+    expect(isQuotaProtectedKioskRead("https://example.supabase.co/rest/v1/rpc/kiosk_quote", { method: "POST" })).toBe(true);
+    expect(isQuotaProtectedKioskRead(stationsUrl, { method: "GET" })).toBe(true);
+    expect(isQuotaProtectedKioskRead("https://example.supabase.co/functions/v1/create-stripe-checkout", { method: "POST" })).toBe(false);
+    expect(isQuotaProtectedKioskRead("https://example.supabase.co/rest/v1/rentals", { method: "POST" })).toBe(false);
+  });
+
+  it("suppresses repeated 402 network calls for the 700ms session-status poll", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "Payment Required" }), {
+      status: 402,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await kioskAwareFetch(statusUrl, { method: "POST", body: "{}" });
+    const second = await kioskAwareFetch(statusUrl, { method: "POST", body: "{}" });
+
+    expect(first.status).toBe(402);
+    expect(second.status).toBe(402);
+    expect(await second.json()).toEqual({ message: "Payment Required" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a fresh session-status read after the quota backoff expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-29T03:00:00Z"));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Payment Required" }), {
+        status: 402,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ state: "paid" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await kioskAwareFetch(statusUrl, { method: "POST", body: "{}" });
+    await vi.advanceTimersByTimeAsync(60_001);
+    const recovered = await kioskAwareFetch(statusUrl, { method: "POST", body: "{}" });
+
+    expect(recovered.status).toBe(200);
+    expect(await recovered.json()).toEqual({ state: "paid" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses bounded retry delays for quota, rate-limit and server responses", () => {
+    expect(kioskReadTransportRetryDelayMs(402, 1)).toBe(60_000);
+    expect(kioskReadTransportRetryDelayMs(402, 8)).toBe(600_000);
+    expect(kioskReadTransportRetryDelayMs(429, 1)).toBe(5_000);
+    expect(kioskReadTransportRetryDelayMs(429, 8)).toBe(120_000);
+    expect(kioskReadTransportRetryDelayMs(503, 1)).toBe(2_000);
+    expect(kioskReadTransportRetryDelayMs(503, 8)).toBe(30_000);
+    expect(kioskReadTransportRetryDelayMs(400, 1)).toBe(0);
   });
 });
