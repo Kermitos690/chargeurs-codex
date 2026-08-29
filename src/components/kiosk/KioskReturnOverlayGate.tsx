@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { readKioskToken } from "@/lib/kioskFetch";
 import {
   KIOSK_CABINET_WAKE_EVENT,
-  invalidateKioskReadCache,
+  invalidateKioskReturnSummaryCache,
   invokeKioskEdgeProxy,
 } from "@/lib/kioskEdgeProxy";
 import { KioskReturnOverlay } from "./KioskReturnOverlay";
@@ -29,9 +29,9 @@ function stationFromPath(pathname: string) {
  *   wakes the overlay immediately.
  *
  * Safety path:
- *   a sparse two-minute fallback probe catches a missed broadcast. It explicitly
- *   refreshes the successful quiet cache, while the proxy's 402/429/5xx retry
- *   budget is kept separate and remains authoritative. A quota restriction can
+ *   a sparse two-minute fallback probe catches a missed broadcast. It bypasses
+ *   only the successful return-summary quiet cache, while the proxy's
+ *   402/429/5xx retry budget remains authoritative. A quota restriction can
  *   therefore never recreate the historical sub-second network storm.
  */
 export function KioskReturnOverlayGate() {
@@ -78,7 +78,7 @@ export function KioskReturnOverlayGate() {
       setActive(false);
     };
     const fallbackProbe = () => {
-      invalidateKioskReadCache(stationId);
+      invalidateKioskReturnSummaryCache(stationId);
       void probe();
     };
 
