@@ -66,6 +66,50 @@ only while successful low-latency state observation is available. A persistent
 HTTP `402`, `429` or server failure must not turn an active session into an
 unbounded network retry loop.
 
+## Runtime proof for event-driven return wake-up
+
+A read-only inspection of staging PostgreSQL on 2026-08-29 confirms that the
+proposed event-driven wake-up has a real runtime producer:
+
+- function: `public.broadcast_kiosk_battery_in_hint`;
+- active trigger: `trg_broadcast_kiosk_battery_in_hint`;
+- trigger state: enabled (`tgenabled = 'O'`);
+- table: `public.cabinet_events`;
+- timing: `AFTER INSERT`;
+- event filter: only `BATTERY_IN` and `BATTERY_BORROW_OUT`;
+- Realtime event: `cabinet_event`;
+- topic: `kiosk-cabinet:<station_id>`.
+
+`CABINET_STATUS` heartbeat rows do **not** satisfy this trigger filter. The
+return gate therefore does not wake on each ordinary cabinet heartbeat.
+
+This proves the event source exists and is active in staging. It does not prove
+that the currently deployed kiosk bundle subscribes correctly until the reviewed
+source is deployed and measured.
+
+## Other measured background traffic
+
+The staging provider feed stored roughly **343–346 `CABINET_STATUS` events per
+station** over about 18 h 49 min before service restriction. This corresponds to
+approximately one provider status push every 3.3 minutes per station.
+
+The current callback architecture uses `cabinet-event-push-auth` as an Edge
+Function gateway and then forwards an authenticated request to the canonical
+`cabinet-event-push` Edge Function. A successfully admitted provider push can
+therefore consume two Edge Function invocations. At the measured three-station
+heartbeat cadence, a simple 24/7 extrapolation is approximately 1,320 provider
+pushes/day and ~2,640 Edge invocations/day, or ~79,000 invocations per 30-day
+month, before retries. This is material for a 500,000-invocation Free-plan
+budget, but it is not the primary source-confirmed storm.
+
+Three PostgreSQL Cron jobs also issue HTTP requests to Edge Functions every five
+minutes. Their combined schedule has a theoretical 30-day baseline of 25,920
+Edge invocations. One of them, `chargeurs-plus-push-outbox`, currently targets a
+runtime function named `noop`, representing 8,640 scheduled calls/month. The
+source for that runtime-only `noop` function is not present in `main`; retirement
+or replacement requires separate dependency proof and is not performed by this
+PR.
+
 ## Containment design in source
 
 The source-level containment branch introduces the following policy.
@@ -154,7 +198,9 @@ The source change alone does not close the incident.
 - measured per-endpoint request rates for each station;
 - evidence that persistent 402/429/5xx responses respect the intended backoff;
 - no unexpected native/WebView duplicate caller;
-- no unexplained Realtime reconnect storm.
+- no unexplained Realtime reconnect storm;
+- reviewed disposition of scheduled/runtime-only background Edge traffic that
+  materially consumes the Free-plan budget.
 
 `SUPABASE_SERVICE_RESTRICTIONS_CLEARED` requires:
 
