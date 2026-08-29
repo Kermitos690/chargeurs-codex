@@ -5,6 +5,7 @@ import {
   KIOSK_CABINET_WAKE_EVENT,
   invalidateKioskReturnSummaryCache,
   invokeKioskEdgeProxy,
+  releaseKioskCabinetWakeSubscription,
 } from "@/lib/kioskEdgeProxy";
 import { KioskReturnOverlay } from "./KioskReturnOverlay";
 
@@ -93,6 +94,7 @@ export function KioskReturnOverlayGate() {
       window.removeEventListener("chargeurs:kiosk-flow-complete", onFlowComplete);
       if (activeTimerRef.current !== null) window.clearTimeout(activeTimerRef.current);
       activeTimerRef.current = null;
+      releaseKioskCabinetWakeSubscription(stationId);
     };
   }, [activateTemporarily, probe, stationId]);
 

@@ -31,6 +31,7 @@ const RATE_LIMIT_RETRY_BASE_MS = 5_000;
 const RATE_LIMIT_RETRY_MAX_MS = 2 * 60_000;
 const SERVER_ERROR_RETRY_BASE_MS = 2_000;
 const SERVER_ERROR_RETRY_MAX_MS = 30_000;
+const REALTIME_ERROR_RETRY_MS = 10 * 60_000;
 
 export type KioskProxyResult<T> = {
   data: T | null;
@@ -68,7 +69,9 @@ const readCache = new Map<string, CachedProxyResult>();
 const readInflight = new Map<string, Promise<KioskProxyResult<unknown>>>();
 const readFailureBudget = new Map<string, ReadFailureBudget>();
 const stationCacheKeys = new Map<string, Set<string>>();
-const cabinetWakeSubscriptions = new Set<string>();
+type CabinetWakeChannel = ReturnType<typeof supabase.channel>;
+const cabinetWakeSubscriptions = new Map<string, CabinetWakeChannel>();
+const cabinetWakeRetryAt = new Map<string, number>();
 
 function customerPairingPayload(path: KioskProxyPath, body: Record<string, unknown>): Record<string, unknown> {
   if (path !== "/api/kiosk/create-rental-session") return body;
@@ -207,11 +210,26 @@ export function invalidateKioskReturnSummaryCache(stationId: string) {
   // rate-limit or server-error circuit breaker.
 }
 
+export function releaseKioskCabinetWakeSubscription(stationId: string) {
+  const normalized = stationId.trim();
+  if (!normalized) return;
+  const channel = cabinetWakeSubscriptions.get(normalized);
+  if (!channel) return;
+  cabinetWakeSubscriptions.delete(normalized);
+  void supabase.removeChannel(channel);
+}
+
+function suspendCabinetWakeSubscription(stationId: string, channel: CabinetWakeChannel) {
+  if (cabinetWakeSubscriptions.get(stationId) !== channel) return;
+  cabinetWakeRetryAt.set(stationId, Date.now() + REALTIME_ERROR_RETRY_MS);
+  releaseKioskCabinetWakeSubscription(stationId);
+}
+
 function ensureCabinetWakeSubscription(stationId: string) {
   if (!stationId || cabinetWakeSubscriptions.has(stationId)) return;
-  cabinetWakeSubscriptions.add(stationId);
+  if ((cabinetWakeRetryAt.get(stationId) ?? 0) > Date.now()) return;
 
-  supabase
+  const channel = supabase
     .channel(`kiosk-cabinet:${stationId}`)
     .on("broadcast", { event: "cabinet_event" }, () => {
       // The broadcast contains no payment, customer or battery identity. It is
@@ -224,8 +242,16 @@ function ensureCabinetWakeSubscription(stationId: string) {
         detail: { stationId },
       }));
       window.setTimeout(() => invalidateKioskReadCache(stationId), POST_EVENT_REINVALIDATE_MS);
-    })
-    .subscribe();
+    });
+  cabinetWakeSubscriptions.set(stationId, channel);
+  channel.subscribe((status) => {
+    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      // Supabase Realtime reconnects automatically. During a service
+      // restriction that default can become a persistent WebSocket retry loop,
+      // so retire the channel and let a later successful HTTP read re-arm it.
+      suspendCabinetWakeSubscription(stationId, channel);
+    }
+  });
 }
 
 function readTtlMs(path: KioskProxyPath, body: Record<string, unknown>, data: unknown): number {
@@ -308,7 +334,7 @@ function shouldSkipAdImpression(body: Record<string, unknown>): boolean {
   }
 }
 
-function markAdImpressionSample(body: Record<string, unknown>) {
+function markAdImpressionAttempt(body: Record<string, unknown>) {
   if (body.action !== "impression") return;
   try {
     localStorage.setItem(impressionSampleKey(body), String(Date.now()));
@@ -369,10 +395,6 @@ export async function invokeKioskEdgeProxy<T>(
   headers: Record<string, string>,
 ): Promise<KioskProxyResult<T>> {
   const stationId = stationIdFromBody(body);
-  if (stationId && (path === "/api/kiosk/return-summary" || path === "/api/kiosk/cabinet-snapshot")) {
-    ensureCabinetWakeSubscription(stationId);
-  }
-
   if (path === "/api/kiosk/ads-playlist" && shouldSkipAdImpression(body)) {
     return {
       data: { ok: true, sampled: true } as T,
@@ -380,6 +402,11 @@ export async function invokeKioskEdgeProxy<T>(
       status: 200,
       authError: false,
     };
+  }
+  if (path === "/api/kiosk/ads-playlist" && body.action === "impression") {
+    // Count attempts rather than only successful analytics writes. Otherwise a
+    // persistent 402 makes every playback retry the same best-effort event.
+    markAdImpressionAttempt(body);
   }
 
   const key = cacheKey(path, body);
@@ -419,8 +446,11 @@ export async function invokeKioskEdgeProxy<T>(
       readCache.set(key, { expiresAt: Date.now() + ttl, result: result as KioskProxyResult<unknown> });
       rememberStationCacheKey(stationId, key);
     }
-    if (path === "/api/kiosk/ads-playlist" && body.action === "impression" && successful) {
-      markAdImpressionSample(body);
+    if (successful && stationId && (path === "/api/kiosk/return-summary" || path === "/api/kiosk/cabinet-snapshot")) {
+      // Never open Realtime while the corresponding HTTP service is returning
+      // quota or transport errors. The two-minute fallback probe remains the
+      // recovery path until a fresh read succeeds.
+      ensureCabinetWakeSubscription(stationId);
     }
     return result;
   } finally {
@@ -433,4 +463,7 @@ export function __resetKioskEdgeProxyStateForTests() {
   readInflight.clear();
   readFailureBudget.clear();
   stationCacheKeys.clear();
+  cabinetWakeSubscriptions.forEach((channel) => void supabase.removeChannel(channel));
+  cabinetWakeSubscriptions.clear();
+  cabinetWakeRetryAt.clear();
 }

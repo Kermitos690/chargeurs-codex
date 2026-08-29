@@ -1,6 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const realtimeMock = vi.hoisted(() => {
+  const subscribe = vi.fn();
+  const on = vi.fn();
+  const channel = { on, subscribe };
+  on.mockReturnValue(channel);
+  subscribe.mockReturnValue(channel);
+  return {
+    channel,
+    createChannel: vi.fn(() => channel),
+    removeChannel: vi.fn(),
+    subscribe,
+  };
+});
+
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    channel: realtimeMock.createChannel,
+    removeChannel: realtimeMock.removeChannel,
+  },
+}));
+
 import {
   __resetKioskEdgeProxyStateForTests,
+  invalidateKioskReturnSummaryCache,
   invokeKioskEdgeProxy,
   kioskReadRetryDelayMs,
 } from "@/lib/kioskEdgeProxy";
@@ -8,6 +31,8 @@ import {
 describe("kiosk Edge proxy", () => {
   afterEach(() => {
     __resetKioskEdgeProxyStateForTests();
+    window.localStorage.clear();
+    vi.clearAllMocks();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -64,6 +89,81 @@ describe("kiosk Edge proxy", () => {
 
     expect(first.status).toBe(402);
     expect(second.status).toBe(402);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open Realtime while the corresponding kiosk read returns 402", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Payment Required" }), {
+      status: 402,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await invokeKioskEdgeProxy(
+      "/api/kiosk/return-summary",
+      { stationId: "DTA21269" },
+      { "X-Kiosk-Token": "kt_test" },
+    );
+
+    expect(realtimeMock.createChannel).not.toHaveBeenCalled();
+  });
+
+  it("retires a failed Realtime channel and does not immediately recreate it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, stage: "none" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await invokeKioskEdgeProxy(
+      "/api/kiosk/return-summary",
+      { stationId: "DTA21269" },
+      { "X-Kiosk-Token": "kt_test" },
+    );
+    expect(realtimeMock.createChannel).toHaveBeenCalledTimes(1);
+
+    const statusListener = realtimeMock.subscribe.mock.calls[0]?.[0] as ((status: string) => void) | undefined;
+    statusListener?.("CHANNEL_ERROR");
+    expect(realtimeMock.removeChannel).toHaveBeenCalledWith(realtimeMock.channel);
+
+    invalidateKioskReturnSummaryCache("DTA21269");
+    await invokeKioskEdgeProxy(
+      "/api/kiosk/return-summary",
+      { stationId: "DTA21269" },
+      { "X-Kiosk-Token": "kt_test" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(realtimeMock.createChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it("samples an Ads impression attempt even when Supabase returns 402", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "Payment Required" }), {
+      status: 402,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const impression = {
+      action: "impression",
+      stationId: "DTA21269",
+      campaignId: "campaign-1",
+      assetId: "asset-1",
+      displayMode: "home",
+    };
+
+    const first = await invokeKioskEdgeProxy(
+      "/api/kiosk/ads-playlist",
+      impression,
+      { "X-Kiosk-Token": "kt_test" },
+    );
+    const second = await invokeKioskEdgeProxy<{ sampled?: boolean }>(
+      "/api/kiosk/ads-playlist",
+      impression,
+      { "X-Kiosk-Token": "kt_test" },
+    );
+
+    expect(first.status).toBe(402);
+    expect(second).toMatchObject({ status: 200, data: { sampled: true } });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
