@@ -11,7 +11,7 @@ import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import PaymentChoice from "./pages/PaymentChoice.tsx";
 import RentalProgress from "./pages/RentalProgress.tsx";
-import { KioskReturnOverlay } from "./components/kiosk/KioskReturnOverlay.tsx";
+import { KioskReturnOverlayGate } from "./components/kiosk/KioskReturnOverlayGate.tsx";
 import { KioskHelpLauncher } from "./components/kiosk/KioskHelpLauncher.tsx";
 import { KioskOffersLauncher } from "./components/kiosk/KioskOffersLauncher.tsx";
 import { KioskOperationalGuard } from "./components/kiosk/KioskOperationalGuard.tsx";
@@ -77,7 +77,7 @@ const App = () => (
         <Sonner />
         <Router>
           <VoltWidget />
-          <KioskReturnOverlay />
+          <KioskReturnOverlayGate />
           <KioskHelpLauncher />
           <KioskOffersLauncher />
           <KioskOperationalGuard />
