@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install npm dependencies for Deno npm: imports
+      - name: "Install npm dependencies for Deno npm: imports"
         run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Type-check qualification functions
