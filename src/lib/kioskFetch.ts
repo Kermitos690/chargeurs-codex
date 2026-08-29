@@ -1,6 +1,14 @@
 const KIOSK_TOKEN_KEY = "kiosk_token";
 const KIOSK_SYNC_FUNCTION_PATH = "/functions/v1/sync-cabinet-status";
 const KIOSK_QUOTE_RPC_PATH = "/rest/v1/rpc/kiosk_quote";
+const KIOSK_SESSION_STATUS_RPC_PATH = "/rest/v1/rpc/kiosk_session_status";
+const STATIONS_REST_PATH = "/rest/v1/stations";
+const QUOTA_RETRY_BASE_MS = 60_000;
+const QUOTA_RETRY_MAX_MS = 10 * 60_000;
+const RATE_LIMIT_RETRY_BASE_MS = 5_000;
+const RATE_LIMIT_RETRY_MAX_MS = 2 * 60_000;
+const SERVER_RETRY_BASE_MS = 2_000;
+const SERVER_RETRY_MAX_MS = 30_000;
 
 const PREMIUM_GUEST = {
   currency: "CHF",
@@ -20,6 +28,16 @@ const KIOSK_TOKEN_PATTERN = /^kt_[A-Za-z0-9_-]{24,128}$/;
 const KIOSK_PAIRING_CODE_PATTERN = /^\d{6}$/;
 
 type TokenReader = () => string | null;
+type RetrySnapshot = {
+  failures: number;
+  retryAt: number;
+  status: number;
+  statusText: string;
+  headers: Array<[string, string]>;
+  body: string;
+};
+
+const kioskReadRetryBudget = new Map<string, RetrySnapshot>();
 
 export function isValidKioskToken(value: unknown): value is string {
   return typeof value === "string" && KIOSK_TOKEN_PATTERN.test(value.trim());
@@ -71,12 +89,69 @@ function requestPath(input: RequestInfo | URL): string {
   }
 }
 
+function requestMethod(input: RequestInfo | URL, init: RequestInit = {}): string {
+  if (init.method) return init.method.toUpperCase();
+  if (typeof Request !== "undefined" && input instanceof Request) return input.method.toUpperCase();
+  return "GET";
+}
+
 export function isKioskCabinetSyncRequest(input: RequestInfo | URL): boolean {
   return requestPath(input).endsWith(KIOSK_SYNC_FUNCTION_PATH);
 }
 
 export function isKioskQuoteRequest(input: RequestInfo | URL): boolean {
   return requestPath(input).endsWith(KIOSK_QUOTE_RPC_PATH);
+}
+
+export function isQuotaProtectedKioskRead(input: RequestInfo | URL, init: RequestInit = {}): boolean {
+  const path = requestPath(input);
+  const method = requestMethod(input, init);
+  if (path.endsWith(KIOSK_QUOTE_RPC_PATH) || path.endsWith(KIOSK_SESSION_STATUS_RPC_PATH)) {
+    return method === "POST";
+  }
+  if (path.endsWith(STATIONS_REST_PATH)) return method === "GET" || method === "HEAD";
+  return false;
+}
+
+function quotaProtectedReadKey(input: RequestInfo | URL, init: RequestInit = {}): string {
+  return `${requestMethod(input, init)}:${requestPath(input)}`;
+}
+
+export function kioskReadTransportRetryDelayMs(status: number, failures: number): number {
+  const attempt = Math.max(1, Math.floor(failures));
+  const exponential = (base: number, max: number) => Math.min(max, base * (2 ** Math.min(attempt - 1, 10)));
+  if (status === 402) return exponential(QUOTA_RETRY_BASE_MS, QUOTA_RETRY_MAX_MS);
+  if (status === 429) return exponential(RATE_LIMIT_RETRY_BASE_MS, RATE_LIMIT_RETRY_MAX_MS);
+  if (status >= 500) return exponential(SERVER_RETRY_BASE_MS, SERVER_RETRY_MAX_MS);
+  return 0;
+}
+
+function syntheticRetryResponse(snapshot: RetrySnapshot): Response {
+  return new Response(snapshot.body, {
+    status: snapshot.status,
+    statusText: snapshot.statusText,
+    headers: snapshot.headers,
+  });
+}
+
+async function rememberKioskReadFailure(key: string, response: Response) {
+  const previous = kioskReadRetryBudget.get(key);
+  const failures = (previous?.failures ?? 0) + 1;
+  const delay = kioskReadTransportRetryDelayMs(response.status, failures);
+  if (delay <= 0) {
+    kioskReadRetryBudget.delete(key);
+    return;
+  }
+  let body = "";
+  try { body = await response.clone().text(); } catch { /* empty synthetic body */ }
+  kioskReadRetryBudget.set(key, {
+    failures,
+    retryAt: Date.now() + delay,
+    status: response.status,
+    statusText: response.statusText,
+    headers: Array.from(response.headers.entries()),
+    body,
+  });
 }
 
 function isPremiumGuestQuote(quote: Record<string, unknown>): boolean {
@@ -156,6 +231,24 @@ async function guardKioskQuoteResponse(
 }
 
 export const kioskAwareFetch: typeof fetch = async (input, init) => {
-  const response = await globalThis.fetch(input, buildKioskAwareRequestInit(input, init));
-  return guardKioskQuoteResponse(input, response);
+  const requestInit = buildKioskAwareRequestInit(input, init);
+  const quotaProtected = isQuotaProtectedKioskRead(input, requestInit);
+  const key = quotaProtected ? quotaProtectedReadKey(input, requestInit) : "";
+  if (quotaProtected) {
+    const blocked = kioskReadRetryBudget.get(key);
+    if (blocked && blocked.retryAt > Date.now()) return syntheticRetryResponse(blocked);
+  }
+
+  const response = await globalThis.fetch(input, requestInit);
+  const guarded = await guardKioskQuoteResponse(input, response);
+  if (quotaProtected) {
+    const delay = kioskReadTransportRetryDelayMs(guarded.status, (kioskReadRetryBudget.get(key)?.failures ?? 0) + 1);
+    if (delay > 0) await rememberKioskReadFailure(key, guarded);
+    else kioskReadRetryBudget.delete(key);
+  }
+  return guarded;
 };
+
+export function __resetKioskAwareFetchStateForTests() {
+  kioskReadRetryBudget.clear();
+}
