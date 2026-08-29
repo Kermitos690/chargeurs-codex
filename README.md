@@ -2,31 +2,56 @@
 
 Chargeurs.ch est une plateforme de location de batteries externes / powerbanks destinée aux bars, restaurants, hôtels, clubs, commerces et événements en Suisse romande.
 
-Le dépôt contient l'application web publique, les écrans kiosk, l'espace client, l'administration, le moteur tarifaire, le Rental Orchestrator et les fonctions Supabase utilisées pour Stripe et ChargeNow.
+Le dépôt contient l'application web publique, les écrans kiosk, l'espace client, l'administration, le moteur tarifaire, le Rental Orchestrator, les sources Supabase et l'application Android.
 
-> Source opérationnelle canonique : `docs/PROJECT_BIBLE.md`.
+> Commencer par `docs/SYSTEM_OF_RECORD.md`. Il distingue la vérité du source,
+> la vérité du runtime, la vérité terrain, la cible et les inconnues. L'ancienne
+> `docs/PROJECT_BIBLE.md` est un document historique et contient des hypothèses
+> Lovable, pricing et architecture qui ne décrivent plus intégralement le
+> runtime.
+
+## Current Architecture Decision — 2026-08-29
+
+| Domaine | Décision actuelle |
+|---|---|
+| Repository | `Kermitos690/chargeurs-codex` |
+| Mainline | `main` |
+| Baseline d'audit | `410dac320278b32f66cab08a801fda8edd46d784` |
+| Frontend staging | Vercel, sous réserve de réconciliation du propriétaire et de la provenance du déploiement |
+| Backend staging | Supabase `xqepbqnaenoeyfjkjnzl` |
+| Paiements staging | Stripe TEST uniquement |
+| Cloudflare | Expérience parallèle, non canonique et non utilisée par la flotte |
+| Android | Aucune APK staging canonique |
+| Production | `NOT CONFIGURED` / `NO-GO` |
+
+`main` est la direction canonique du source, mais ne représente pas encore
+parfaitement le staging déployé. Aucun déploiement production ni aucune migration
+de borne vers Cloudflare n'est autorisé.
 
 ## Parcours produit cible
 
+Cette section décrit `TARGET_ARCHITECTURE`, pas la preuve d'un parcours
+actuellement validé de bout en bout.
+
 1. Le client voit une borne Chargeurs.ch.
 2. Il scanne le QR code affiché par le kiosk.
-3. Stripe autorise ou collecte la base initiale de 30 CHF selon le moyen de paiement.
+3. Stripe autorise ou collecte le montant déterminé par le snapshot tarifaire serveur selon le moyen de paiement.
 4. Le backend confirme le paiement puis demande l'éjection d'une batterie précise à ChargeNow.
 5. La location devient active après confirmation matérielle.
 6. Le retour physique est corrélé à la batterie et au slot.
 7. Le moteur calcule le montant final et effectue la capture, l'annulation ou le remboursement approprié.
-8. En cas de non-retour confirmé, le total prévu est de 99 CHF.
+8. En cas de non-retour confirmé, le backend applique le contrat versionné du snapshot de la location.
 
-## Règles tarifaires canoniques
+## Vérité tarifaire
 
-- Base initiale : 30 CHF
-- Prix : 1,50 CHF par heure
-- Incrément : 30 minutes, soit 0,75 CHF
-- Plafond journalier : 18 CHF
-- Non-retour : 99 CHF au total
-- Supplément potentiel après les 30 CHF initiaux : 69 CHF
+Les valeurs tarifaires historiques inscrites dans d'anciens documents ne sont
+pas l'autorité du pricing actuel. Pour une nouvelle location, la vérité runtime
+est le profil tarifaire actif et versionné dans la base de l'environnement. Pour
+une location existante, l'autorité est son snapshot tarifaire immuable.
 
-Les montants doivent provenir exclusivement d'un snapshot tarifaire serveur. Le navigateur et le kiosk ne sont jamais une source de vérité financière.
+Le navigateur, le kiosk et une redirection Stripe `success_url` ne sont jamais
+une source de vérité financière. La preuve de paiement repose sur l'objet Stripe
+et un webhook Stripe vérifié et traité côté serveur.
 
 ## Architecture actuelle
 
@@ -59,6 +84,12 @@ Routes principales :
 - Row-Level Security
 - mutations privilégiées réservées au rôle serveur `service_role`
 
+Le backend staging canonique actuel est le projet
+`xqepbqnaenoeyfjkjnzl` (`chargeurs-ch-staging`). Il contient davantage de
+migrations et de fonctions actives que `main`; voir
+`docs/MIGRATION_RECONCILIATION.md` et
+`docs/SUPABASE_FUNCTION_INVENTORY.md`.
+
 ### Paiements
 
 - Stripe Checkout et PaymentIntent
@@ -74,7 +105,14 @@ Routes principales :
 
 ### Android
 
-Le projet Android natif consolidé se trouve dans `android-kiosk/`. Il inclut le Gradle Wrapper, l'enrôlement à usage unique, Android Keystore, WebView restreinte, démarrage après boot, watchdog, diagnostic matériel et un pont natif qui refuse toute éjection sans autorisation JWS courte. La signature production et la certification matérielle restent des validations du propriétaire.
+Le projet Android natif se trouve dans `android-kiosk/`. Il inclut le Gradle
+Wrapper, l'enrôlement à usage unique, Android Keystore, WebView restreinte,
+démarrage après boot, watchdog, diagnostic matériel et garde-fous de pont natif.
+
+Il n'existe pas encore une seule ligne Android staging canonique. DTA21269,
+DTA21277 et DTA22032 rapportent trois libellés de version différents, et le
+package, `versionCode`, signer, APK SHA et commit source installés ne sont pas
+tous prouvés. Voir `docs/STATION_RUNTIME_MATRIX.md`.
 
 ## Rental Orchestrator
 
@@ -92,27 +130,25 @@ Le frontend, le kiosk et les webhooks ne doivent jamais imposer directement un �
 
 ## État réel du projet
 
-La branche de livraison consolide le frontend, le règlement Stripe, l'API plateforme, ChargeNow, le RBAC/organisations, l'enrôlement et Android. Restent non prouvés sans les accès du propriétaire :
+- Vercel sert actuellement le frontend des trois bornes connues.
+- Cloudflare Pages sert un build parallèle différent, sans borne autorisée.
+- Supabase staging contient 257 entrées de migration et 100 Edge Functions
+  actives, contre 151 fichiers de migration et 59 répertoires de fonctions dans
+  `main`.
+- Stripe TEST est le seul mode de paiement autorisé.
+- Aucune architecture production complète n'est prouvée.
+- Aucune APK staging canonique n'est désignée.
 
-- application de toutes les migrations récentes ;
-- autorisation et capture partielle Stripe test ;
-- remboursement partiel TWINT ;
-- éjection et retour ChargeNow corrélés ;
-- cycle complet sur DTA21269 ;
-- APK release signé, installé et testé sur la tablette réelle ;
-- protocole série fournisseur, volontairement bloqué en `NOT_CONFIGURED`.
-
-Une CI verte valide la qualité du code du dépôt. Elle ne prouve pas une connexion réelle à Stripe, Supabase ou ChargeNow.
+Une CI verte validerait uniquement les étapes réellement exécutées. Un run avec
+`runner_id=0` et `steps=[]` n'est pas un échec de tests : aucun runner n'a lancé
+les commandes. Même une CI réellement verte ne prouve pas une connexion Stripe,
+Supabase ou ChargeNow ni un résultat matériel.
 
 ## Sécurité de bêta
 
-Les locations kiosk doivent rester désactivées tant que le gate complet n'est pas validé :
-
-```text
-beta_rentals_enabled = false
-```
-
-Ne pas activer ce réglage avant :
+L'activation effective des locations et mutations reste une vérité runtime et
+doit être vérifiée sans publier la valeur des secrets. Aucun gate ne doit être
+activé avant :
 
 - validation des migrations sur un Supabase staging distinct ;
 - déploiement des Edge Functions staging ;
@@ -160,8 +196,37 @@ Tous les domaines sont configurables ; aucun domaine temporaire n'est une hypoth
 
 ## Gouvernance
 
-Toute modification des règles métier, de l'architecture, de l'ordre d'intégration ou du domaine actif doit être enregistrée dans `docs/PROJECT_BIBLE.md` avant fusion.
+Toute modification des règles métier, de l'architecture, de l'ordre
+d'intégration ou du domaine actif doit actualiser
+`docs/SYSTEM_OF_RECORD.md` et la matrice concernée avant fusion. Les anciennes
+décisions de `docs/PROJECT_BIBLE.md` doivent être citées comme `HISTORICAL`, pas
+comme runtime actuel.
+
+## DO NOT
+
+- aucun `supabase db push` aveugle ;
+- aucune suppression massive d'Edge Functions ;
+- aucune réécriture de timestamps de migration contre staging ;
+- aucune bascule de flotte vers Cloudflare ;
+- aucune fusion monolithique de #338 ;
+- aucune fusion de #341 ;
+- aucun choix d'APK fondé uniquement sur le numéro de version ;
+- aucun usage Stripe LIVE ;
+- aucune mutation hardware depuis un endpoint diagnostic ou public de secours.
 
 ## Documentation de livraison
 
-Commencer par `ARCHITECTURE.md`, `DEPLOYMENT.md`, `REQUIRED_CREDENTIALS.md`, `PRODUCTION_CHECKLIST.md`, `KNOWN_LIMITATIONS.md` et `FINAL_DELIVERY_REPORT.md`. Les guides Stripe, ChargeNow, Android, provisionnement, sécurité, incidents et exploitation sont à la racine du dépôt.
+Commencer par :
+
+1. `docs/SYSTEM_OF_RECORD.md`
+2. `docs/DEPLOYMENT_MATRIX.md`
+3. `docs/STATION_RUNTIME_MATRIX.md`
+4. `docs/SUPABASE_FUNCTION_INVENTORY.md`
+5. `docs/MIGRATION_RECONCILIATION.md`
+6. `docs/PR_CONVERGENCE_REGISTER.md`
+7. `docs/RELEASE_RUNBOOK.md`
+8. `ARCHITECTURE.md`
+
+`DEPLOYMENT.md`, `REQUIRED_CREDENTIALS.md`, `PRODUCTION_CHECKLIST.md`,
+`KNOWN_LIMITATIONS.md`, `FINAL_DELIVERY_REPORT.md` et les guides historiques
+restent des références à confronter au présent registre avant utilisation.
