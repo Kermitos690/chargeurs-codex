@@ -144,6 +144,33 @@ describe("quota-aware kiosk read transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("bounds repeated transport exceptions on protected kiosk reads", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("network unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(kioskAwareFetch(statusUrl, { method: "POST", body: "{}" }))
+      .rejects.toThrow("network unavailable");
+    const suppressed = await kioskAwareFetch(statusUrl, { method: "POST", body: "{}" });
+
+    expect(suppressed.status).toBe(503);
+    expect(await suppressed.json()).toEqual({ error: "KIOSK_READ_TRANSPORT_UNAVAILABLE" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never circuit-breaks a mutative database request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "Payment Required" }), {
+      status: 402,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const mutationUrl = "https://example.supabase.co/rest/v1/rentals";
+
+    await kioskAwareFetch(mutationUrl, { method: "POST", body: "{}" });
+    await kioskAwareFetch(mutationUrl, { method: "POST", body: "{}" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("uses bounded retry delays for quota, rate-limit and server responses", () => {
     expect(kioskReadTransportRetryDelayMs(402, 1)).toBe(60_000);
     expect(kioskReadTransportRetryDelayMs(402, 8)).toBe(600_000);

@@ -154,6 +154,21 @@ async function rememberKioskReadFailure(key: string, response: Response) {
   });
 }
 
+function rememberKioskReadTransportFailure(key: string) {
+  const previous = kioskReadRetryBudget.get(key);
+  const failures = (previous?.failures ?? 0) + 1;
+  const status = 503;
+  const delay = kioskReadTransportRetryDelayMs(status, failures);
+  kioskReadRetryBudget.set(key, {
+    failures,
+    retryAt: Date.now() + delay,
+    status,
+    statusText: "Kiosk read transport unavailable",
+    headers: [["content-type", "application/json"]],
+    body: JSON.stringify({ error: "KIOSK_READ_TRANSPORT_UNAVAILABLE" }),
+  });
+}
+
 function isPremiumGuestQuote(quote: Record<string, unknown>): boolean {
   if (String(quote.customer_segment ?? "guest") !== "guest") return false;
   if (quote.tiered !== true) return false;
@@ -239,7 +254,13 @@ export const kioskAwareFetch: typeof fetch = async (input, init) => {
     if (blocked && blocked.retryAt > Date.now()) return syntheticRetryResponse(blocked);
   }
 
-  const response = await globalThis.fetch(input, requestInit);
+  let response: Response;
+  try {
+    response = await globalThis.fetch(input, requestInit);
+  } catch (error) {
+    if (quotaProtected) rememberKioskReadTransportFailure(key);
+    throw error;
+  }
   const guarded = await guardKioskQuoteResponse(input, response);
   if (quotaProtected) {
     const delay = kioskReadTransportRetryDelayMs(guarded.status, (kioskReadRetryBudget.get(key)?.failures ?? 0) + 1);
