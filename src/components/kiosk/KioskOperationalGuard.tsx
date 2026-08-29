@@ -18,8 +18,14 @@ type StatusResponse = {
 };
 
 const HEALTHY_CHECK_MS = 10 * 60_000;
-const BLOCKED_CHECK_MS = 30_000;
-const RETRY_CHECK_MS = 60_000;
+const BLOCKED_CHECK_MS = 5 * 60_000;
+const RETRY_BASE_MS = 60_000;
+const RETRY_MAX_MS = 10 * 60_000;
+
+export function kioskOperationalRetryDelayMs(failures: number) {
+  const attempt = Math.max(1, Math.floor(failures));
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * (2 ** Math.min(attempt - 1, 10)));
+}
 
 const COPY = {
   fr: {
@@ -77,6 +83,7 @@ export function KioskOperationalGuard() {
   const [reason, setReason] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const checkInFlightRef = useRef(false);
+  const retryCountRef = useRef(0);
 
   const check = useCallback(async (): Promise<"healthy" | "blocked" | "retry"> => {
     if (!stationId) {
@@ -116,17 +123,21 @@ export function KioskOperationalGuard() {
     const schedule = async () => {
       const result = await check();
       if (cancelled) return;
-      const delay = result === "blocked"
-        ? BLOCKED_CHECK_MS
-        : result === "healthy"
-          ? HEALTHY_CHECK_MS
-          : RETRY_CHECK_MS;
+      let delay: number;
+      if (result === "retry") {
+        retryCountRef.current += 1;
+        delay = kioskOperationalRetryDelayMs(retryCountRef.current);
+      } else {
+        retryCountRef.current = 0;
+        delay = result === "blocked" ? BLOCKED_CHECK_MS : HEALTHY_CHECK_MS;
+      }
       timer = window.setTimeout(() => void schedule(), delay);
     };
 
     void schedule();
     return () => {
       cancelled = true;
+      retryCountRef.current = 0;
       if (timer !== null) window.clearTimeout(timer);
     };
   }, [check, stationId]);
