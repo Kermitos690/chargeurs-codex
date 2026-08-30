@@ -32,7 +32,6 @@ create table if not exists kiosk_devices (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists kiosk_devices_station_idx on kiosk_devices(station_id);
 
 create table if not exists pilot_pricing_profiles (
@@ -49,7 +48,6 @@ create table if not exists pilot_pricing_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create unique index if not exists pilot_pricing_one_active_station_idx
   on pilot_pricing_profiles(coalesce(station_id, '__default__')) where active = true;
 
@@ -64,26 +62,65 @@ create table if not exists rental_sessions (
   id uuid primary key default gen_random_uuid(),
   station_id text not null references stations(station_id),
   kiosk_device_id uuid references kiosk_devices(id),
-  public_session_code text unique,
+  public_session_code text not null unique,
   state text not null default 'created',
-  selected_slot_num integer,
+  state_version integer not null default 0,
+  selected_slot_num integer not null,
   battery_id text,
+  customer_language text not null default 'fr',
   currency text not null default 'CHF',
-  pricing_snapshot jsonb,
-  amount_expected numeric(10,2),
-  stripe_checkout_session_id text,
+  pricing_snapshot jsonb not null,
+  pricing_snapshot_hash text not null,
+  deposit_amount_cents integer not null check (deposit_amount_cents > 0),
+  amount_expected numeric(10,2) not null,
+  payment_status text not null default 'not_started',
+  stripe_checkout_session_id text unique,
   stripe_payment_intent_id text,
+  stripe_payment_method_type text,
+  payment_authorized_cents integer not null default 0,
+  payment_captured_cents integer not null default 0,
+  checkout_url text,
+  checkout_url_expires_at timestamptz,
   provider_trade_no text,
-  idempotency_key text unique,
-  expires_at timestamptz,
+  idempotency_key text not null unique,
+  expires_at timestamptz not null,
   paid_at timestamptz,
   ejected_at timestamptz,
   returned_at timestamptz,
+  failure_code text,
+  failure_message text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists rental_sessions_station_state_idx on rental_sessions(station_id, state);
+create index if not exists rental_sessions_public_code_idx on rental_sessions(public_session_code);
+
+create table if not exists payments (
+  id uuid primary key default gen_random_uuid(),
+  rental_session_id uuid not null references rental_sessions(id) on delete cascade,
+  stripe_checkout_session_id text unique,
+  stripe_payment_intent_id text,
+  status text not null default 'pending',
+  currency text not null default 'CHF',
+  amount_authorized_cents integer not null default 0,
+  amount_captured_cents integer not null default 0,
+  amount_refunded_cents integer not null default 0,
+  payment_method_type text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists payments_rental_session_idx on payments(rental_session_id);
+
+create table if not exists stripe_webhook_events (
+  event_id text primary key,
+  event_type text not null,
+  object_id text,
+  rental_session_id uuid references rental_sessions(id),
+  processing_status text not null default 'received',
+  failure_code text,
+  received_at timestamptz not null default now(),
+  processed_at timestamptz
+);
 
 create table if not exists audit_logs (
   id bigint generated always as identity primary key,
@@ -102,6 +139,8 @@ values
   ('DTA22032','DTA22032','Chargeurs.ch — Borne DTA22032',null,'maintenance',true,0,0,4,'CHF',0.75,'2026-08-28T22:11:49.501611Z','staging',false,false)
 on conflict (station_id) do nothing;
 
+-- Mirrors the current canonical guest V3 profile. The 30 CHF non-return value
+-- is the contractual total, not an additional +30 CHF fee.
 with inserted as (
   insert into pilot_pricing_profiles (
     station_id,name,currency,deposit_cents,total_cap_cents,unreturned_total_cents,unreturned_after_minutes,profile_version,active
