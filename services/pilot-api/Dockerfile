@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 COPY server.mjs ./
+COPY lib ./lib
 
 ENV NODE_ENV=production
 ENV PORT=8787
