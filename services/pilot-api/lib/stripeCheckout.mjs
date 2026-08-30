@@ -8,6 +8,21 @@ function testStripe() {
   return new Stripe(key, { apiVersion: "2025-09-30.clover" });
 }
 
+async function withTransaction(pool, operation) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await operation(client);
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function safeOrigin(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
@@ -116,9 +131,8 @@ export async function createTestCheckout(pool, auth, body) {
   }, { idempotencyKey: `pilot_checkout:v1:${session.id}:${session.pricing_snapshot_hash}` });
 
   const expiresIso = new Date(expiresAt * 1000).toISOString();
-  await pool.query("begin");
-  try {
-    await pool.query(
+  await withTransaction(pool, async (client) => {
+    await client.query(
       `update rental_sessions
           set stripe_checkout_session_id=$2, checkout_url=$3, checkout_url_expires_at=$4,
               expires_at=$4, state='checkout_created', state_version=state_version+1,
@@ -126,21 +140,17 @@ export async function createTestCheckout(pool, auth, body) {
         where id=$1`,
       [session.id, checkout.id, checkout.url, expiresIso],
     );
-    await pool.query(
+    await client.query(
       `insert into payments(rental_session_id,stripe_checkout_session_id,status,currency)
        values($1,$2,'pending',$3)
        on conflict(rental_session_id) do update set stripe_checkout_session_id=excluded.stripe_checkout_session_id,status='pending',updated_at=now()`,
       [session.id, checkout.id, session.currency],
     );
-    await pool.query(
+    await client.query(
       `insert into audit_logs(action,target,data) values ('stripe.checkout.test_created',$1,$2::jsonb)`,
       [session.id, JSON.stringify({ checkout_id: checkout.id, station_id: session.station_id, deposit_cents: depositCents, payment_methods: ["card"], capture_method: "manual", hardware_ejection_triggered: false })],
     );
-    await pool.query("commit");
-  } catch (error) {
-    await pool.query("rollback");
-    throw error;
-  }
+  });
 
   return {
     ok: true,
@@ -210,32 +220,28 @@ export async function processStripeWebhook(pool, rawBody, signature) {
       if (paymentMethodId) {
         try { paymentMethodType = (await stripe.paymentMethods.retrieve(paymentMethodId)).type || "card"; } catch { /* card-only pilot */ }
       }
+      const authorizedCents = Number(intent.amount_capturable || intent.amount || expectedCents);
 
-      await pool.query("begin");
-      try {
-        await pool.query(
+      await withTransaction(pool, async (client) => {
+        await client.query(
           `update rental_sessions
               set state='payment_authorized', state_version=state_version+1, payment_status='authorized',
                   stripe_payment_intent_id=$2, stripe_payment_method_type=$3,
                   payment_authorized_cents=$4, paid_at=coalesce(paid_at,now()), updated_at=now()
             where id=$1 and state in ('created','checkout_created','payment_pending','payment_authorized')`,
-          [session.id, intent.id, paymentMethodType, Number(intent.amount_capturable || intent.amount || expectedCents)],
+          [session.id, intent.id, paymentMethodType, authorizedCents],
         );
-        await pool.query(
+        await client.query(
           `insert into payments(rental_session_id,stripe_checkout_session_id,stripe_payment_intent_id,status,currency,amount_authorized_cents,payment_method_type)
            values($1,$2,$3,'authorized','CHF',$4,$5)
            on conflict(rental_session_id) do update set stripe_payment_intent_id=excluded.stripe_payment_intent_id,status='authorized',amount_authorized_cents=excluded.amount_authorized_cents,payment_method_type=excluded.payment_method_type,updated_at=now()`,
-          [session.id, checkout.id, intent.id, Number(intent.amount_capturable || intent.amount || expectedCents), paymentMethodType],
+          [session.id, checkout.id, intent.id, authorizedCents, paymentMethodType],
         );
-        await pool.query(
+        await client.query(
           `insert into audit_logs(action,target,data) values ('stripe.payment.test_authorized',$1,$2::jsonb)`,
-          [session.id, JSON.stringify({ event_id: event.id, payment_intent_id: intent.id, amount_authorized_cents: Number(intent.amount_capturable || intent.amount || expectedCents), hardware_ejection_triggered: false })],
+          [session.id, JSON.stringify({ event_id: event.id, payment_intent_id: intent.id, amount_authorized_cents: authorizedCents, hardware_ejection_triggered: false })],
         );
-        await pool.query("commit");
-      } catch (error) {
-        await pool.query("rollback");
-        throw error;
-      }
+      });
     } else if (event.type === "checkout.session.expired" && rentalSessionId) {
       await pool.query(
         `update rental_sessions set state='payment_expired',state_version=state_version+1,payment_status='expired',updated_at=now()
