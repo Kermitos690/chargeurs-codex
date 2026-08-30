@@ -7,6 +7,7 @@ import { I18nProvider } from "@/i18n/i18n";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import KioskPremiumGateV3 from "./pages/KioskPremiumGateV3.tsx";
+import KioskGuestOnlyPilot from "./pages/KioskGuestOnlyPilot.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
 import Pay from "./pages/Pay.tsx";
 import PaymentChoice from "./pages/PaymentChoice.tsx";
@@ -68,6 +69,8 @@ import LegalPage from "./pages/LegalPage.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
+const pilotGuestOnly = import.meta.env.VITE_KIOSK_PILOT_GUEST_ONLY === "true";
+const KioskRuntime = pilotGuestOnly ? KioskGuestOnlyPilot : KioskPremiumGateV3;
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -79,7 +82,7 @@ const App = () => (
           <VoltWidget />
           <KioskReturnOverlayGate />
           <KioskHelpLauncher />
-          <KioskOffersLauncher />
+          {!pilotGuestOnly && <KioskOffersLauncher />}
           <KioskOperationalGuard />
           <KioskNativeIdleUpdateGuard />
           <Routes>
@@ -90,8 +93,8 @@ const App = () => (
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
             <Route path="/kiosk" element={<KioskHome />} />
-            <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
-            <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
+            <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskRuntime /></KioskIdentityGate>} />
+            <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskRuntime /></KioskIdentityGate>} />
 
             <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
             <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
