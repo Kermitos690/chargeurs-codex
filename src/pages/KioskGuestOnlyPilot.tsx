@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldCheck, Smartphone, Zap } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/i18n";
-import Kiosk from "./Kiosk";
+import KioskPilotRuntime from "./KioskPilotRuntime";
 
 type PilotCopy = {
   eyebrow: string;
@@ -52,62 +52,28 @@ const COPY: Record<"fr" | "en" | "de", PilotCopy> = {
 /**
  * Pilot-only kiosk shell.
  *
- * This deliberately removes the member/account choice from the physical kiosk
- * without deleting the full customer journey from the product. The existing
- * Kiosk component remains the single transaction owner for pricing, session,
- * Stripe checkout, release and return state.
+ * The complete Chargeurs+ journey remains in the main product, but this pilot
+ * mounts a separate Express runtime so the physical station can move away from
+ * quota-sensitive Supabase Edge/Realtime services without touching customer
+ * accounts or production payments.
  */
 export default function KioskGuestOnlyPilot() {
   const { lang } = useI18n();
   const copy = COPY[lang];
   const [started, setStarted] = useState(false);
-  const protectedJourneySeen = useRef(false);
-
-  useEffect(() => {
-    if (!started) {
-      protectedJourneySeen.current = false;
-      return;
-    }
-
-    const inspect = () => {
-      const protectedStage = Boolean(
-        document.querySelector(
-          ".kiosk-payment-rail-stage, .kiosk-qr-stage, .kiosk-release-stage, .kiosk-ready-stage",
-        ),
-      );
-      if (protectedStage) protectedJourneySeen.current = true;
-
-      // Kiosk resets itself to its idle scene after a completed/cancelled flow.
-      // Only return to this pilot home if a protected journey was actually seen,
-      // so the first normal idle render after pressing the CTA is not intercepted.
-      if (protectedJourneySeen.current && document.querySelector(".kiosk-idle-stage")) {
-        protectedJourneySeen.current = false;
-        setStarted(false);
-      }
-    };
-
-    inspect();
-    const observer = new MutationObserver(inspect);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
-
-    const returnHome = () => setStarted(false);
-    window.addEventListener("chargeurs:kiosk-return-home", returnHome);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("chargeurs:kiosk-return-home", returnHome);
-    };
-  }, [started]);
 
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.kioskPilot = "guest-only";
+    root.dataset.kioskPilot = "guest-only-selfhost";
+    const returnHome = () => setStarted(false);
+    window.addEventListener("chargeurs:kiosk-return-home", returnHome);
     return () => {
+      window.removeEventListener("chargeurs:kiosk-return-home", returnHome);
       delete root.dataset.kioskPilot;
     };
   }, []);
 
-  if (started) return <Kiosk />;
+  if (started) return <KioskPilotRuntime />;
 
   return (
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-background px-6 py-8 text-foreground">
