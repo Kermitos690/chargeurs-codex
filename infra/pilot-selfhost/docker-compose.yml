@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chargeurs_pilot}
+      POSTGRES_USER: ${POSTGRES_USER:-chargeurs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pilot_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chargeurs} -d ${POSTGRES_DB:-chargeurs_pilot}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - pilot_internal
+
+  api:
+    build:
+      context: ../../services/pilot-api
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chargeurs}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chargeurs_pilot}
+      PILOT_ALLOWED_ORIGIN: ${PILOT_ALLOWED_ORIGIN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8787:8787"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8787/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - pilot_internal
+
+networks:
+  pilot_internal:
+    driver: bridge
+
+volumes:
+  pilot_postgres:
