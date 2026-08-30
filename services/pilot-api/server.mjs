@@ -5,6 +5,8 @@ import { verifyKioskDevice } from "./lib/auth.mjs";
 import { getGuestQuote, getStation } from "./lib/data.mjs";
 import { isChargeNowConfigured } from "./lib/chargenow.mjs";
 import { readCabinetSnapshot } from "./lib/cabinetSnapshot.mjs";
+import { createGuestRentalSession, publicSessionStatus } from "./lib/rentals.mjs";
+import { createTestCheckout, processStripeWebhook } from "./lib/stripeCheckout.mjs";
 
 const { Pool } = pg;
 const port = Number(process.env.PORT || 8787);
@@ -53,7 +55,7 @@ async function databaseReady() {
   }
 }
 
-async function readJson(req, maxBytes = 32 * 1024) {
+async function readRaw(req, maxBytes = 1024 * 1024) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -61,9 +63,14 @@ async function readJson(req, maxBytes = 32 * 1024) {
     if (size > maxBytes) throw Object.assign(new Error("PAYLOAD_TOO_LARGE"), { statusCode: 413 });
     chunks.push(chunk);
   }
-  if (!chunks.length) return {};
+  return Buffer.concat(chunks);
+}
+
+async function readJson(req, maxBytes = 32 * 1024) {
+  const raw = await readRaw(req, maxBytes);
+  if (!raw.length) return {};
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return JSON.parse(raw.toString("utf8"));
   } catch {
     throw Object.assign(new Error("INVALID_JSON"), { statusCode: 400 });
   }
@@ -77,6 +84,19 @@ async function authenticateStationRequest(req, body) {
   if (!pool) return { ok: false, status: 503, error: "DATABASE_URL_MISSING" };
   const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
   if (!validStationId(stationId)) return { ok: false, status: 400, error: "MISSING_STATION" };
+  const auth = await verifyKioskDevice(pool, req.headers, stationId);
+  if (!auth.ok) return auth;
+  return { ok: true, stationId, ...auth };
+}
+
+async function authenticateRentalRequest(req, rentalSessionId) {
+  if (!pool) return { ok: false, status: 503, error: "DATABASE_URL_MISSING" };
+  if (!/^[0-9a-f-]{36}$/i.test(String(rentalSessionId || ""))) {
+    return { ok: false, status: 400, error: "MISSING_SESSION" };
+  }
+  const result = await pool.query("select station_id from rental_sessions where id=$1 limit 1", [rentalSessionId]);
+  const stationId = String(result.rows[0]?.station_id || "");
+  if (!stationId) return { ok: false, status: 404, error: "SESSION_NOT_FOUND" };
   const auth = await verifyKioskDevice(pool, req.headers, stationId);
   if (!auth.ok) return auth;
   return { ok: true, stationId, ...auth };
@@ -146,6 +166,39 @@ async function handleCabinetSnapshot(req, res, body) {
   });
 }
 
+async function handleCreateRental(req, res, body) {
+  const auth = await authenticateStationRequest(req, body);
+  if (!auth.ok) return sendJson(req, res, auth.status, { ok: false, error: auth.error });
+  const result = await createGuestRentalSession(pool, auth, body, req.headers);
+  return sendJson(req, res, result.status, result.ok
+    ? { ok: true, session: result.session, snapshot: result.snapshot, idempotent: result.idempotent }
+    : { ok: false, error: result.error });
+}
+
+async function handleCreateCheckout(req, res, body) {
+  const auth = await authenticateRentalRequest(req, body.rentalSessionId);
+  if (!auth.ok) return sendJson(req, res, auth.status, { ok: false, error: auth.error });
+  const result = await createTestCheckout(pool, auth, body);
+  return sendJson(req, res, result.status, result.ok
+    ? {
+        ok: true,
+        checkout_url: result.checkout_url,
+        checkout_id: result.checkout_id,
+        public_session_code: result.public_session_code,
+        expires_at: result.expires_at,
+        deposit_cents: result.deposit_cents,
+        reused: result.reused,
+      }
+    : { ok: false, error: result.error });
+}
+
+async function handlePublicSessionStatus(req, res, body) {
+  if (!pool) return sendJson(req, res, 503, { ok: false, error: "DATABASE_URL_MISSING" });
+  const session = await publicSessionStatus(pool, body.rentalSessionId, body.publicCode);
+  if (!session) return sendJson(req, res, 404, { ok: false, error: "SESSION_NOT_FOUND" });
+  return sendJson(req, res, 200, { ok: true, session });
+}
+
 const server = http.createServer(async (req, res) => {
   const method = req.method || "GET";
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -161,8 +214,10 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       service: "chargeurs-pilot-api",
       mode: "guest-only",
-      version: "0.2.0",
+      version: "0.3.0",
       chargenowConfigured: isChargeNowConfigured(),
+      stripeTestConfigured: /^(sk|rk)_test_/.test(String(process.env.STRIPE_SECRET_KEY || "")),
+      hardwareEjectionEnabled: false,
     });
     return;
   }
@@ -177,14 +232,41 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Stripe signature verification requires the exact raw request bytes.
+  if (method === "POST" && url.pathname === "/webhooks/stripe") {
+    try {
+      const raw = await readRaw(req, 1024 * 1024);
+      const signature = String(req.headers["stripe-signature"] || "");
+      const result = await processStripeWebhook(pool, raw, signature);
+      return sendJson(req, res, result.status, result.ok
+        ? { ok: true, received: result.received === true, duplicate: result.duplicate === true }
+        : { ok: false, error: result.error });
+    } catch (error) {
+      const status = Number(error?.statusCode) || 500;
+      return sendJson(req, res, status, { ok: false, error: status === 413 ? "PAYLOAD_TOO_LARGE" : "WEBHOOK_ERROR" });
+    }
+  }
+
+  if (method === "POST" && url.pathname === "/api/pilot/session-status") {
+    try {
+      return await handlePublicSessionStatus(req, res, await readJson(req));
+    } catch (error) {
+      const status = Number(error?.statusCode) || 500;
+      return sendJson(req, res, status, { ok: false, error: status === 400 || status === 413 ? error.message : "INTERNAL_ERROR" });
+    }
+  }
+
   if (method === "POST" && url.pathname.startsWith("/api/kiosk/")) {
     try {
       const body = await readJson(req);
       if (url.pathname === "/api/kiosk/station") return await handleStation(req, res, body);
       if (url.pathname === "/api/kiosk/quote") return await handleQuote(req, res, body);
       if (url.pathname === "/api/kiosk/cabinet-snapshot") return await handleCabinetSnapshot(req, res, body);
+      if (url.pathname === "/api/kiosk/create-rental-session") return await handleCreateRental(req, res, body);
+      if (url.pathname === "/api/kiosk/create-stripe-checkout") return await handleCreateCheckout(req, res, body);
 
-      // Financial and hardware mutation routes stay fail-closed until ported.
+      // Any hardware release/return mutation remains fail-closed until a
+      // separately reviewed and explicitly authorized field test.
       return sendJson(req, res, 503, {
         ok: false,
         error: "PILOT_ROUTE_NOT_MIGRATED",
@@ -202,7 +284,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(JSON.stringify({ level: "info", event: "pilot_api_listening", host, port, databaseConfigured: Boolean(databaseUrl) }));
+  console.log(JSON.stringify({ level: "info", event: "pilot_api_listening", host, port, databaseConfigured: Boolean(databaseUrl), hardwareEjectionEnabled: false }));
 });
 
 async function shutdown(signal) {
