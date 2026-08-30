@@ -9,6 +9,7 @@ import NotFound from "./pages/NotFound.tsx";
 import KioskPremiumGateV3 from "./pages/KioskPremiumGateV3.tsx";
 import KioskGuestOnlyPilot from "./pages/KioskGuestOnlyPilot.tsx";
 import KioskHome from "./pages/KioskHome.tsx";
+import PilotPaymentResult from "./pages/PilotPaymentResult.tsx";
 import Pay from "./pages/Pay.tsx";
 import PaymentChoice from "./pages/PaymentChoice.tsx";
 import RentalProgress from "./pages/RentalProgress.tsx";
@@ -97,6 +98,7 @@ const App = () => (
             <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskRuntime /></KioskIdentityGate>} />
             <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskRuntime /></KioskIdentityGate>} />
 
+            <Route path="/pilot/pay/:rentalSessionId" element={<PilotPaymentResult />} />
             <Route path="/pay/:rentalSessionId/choose" element={<PaymentChoice />} />
             <Route path="/pay/:rentalSessionId/progress" element={<RentalProgress />} />
             <Route path="/pay/:rentalSessionId" element={<Pay />} />
