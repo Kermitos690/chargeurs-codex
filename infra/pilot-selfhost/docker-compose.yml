@@ -7,6 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - pilot_postgres:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chargeurs} -d ${POSTGRES_DB:-chargeurs_pilot}"]
       interval: 5s
@@ -31,6 +32,12 @@ services:
       PORT: 8787
       DATABASE_URL: postgresql://${POSTGRES_USER:-chargeurs}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chargeurs_pilot}
       PILOT_ALLOWED_ORIGIN: ${PILOT_ALLOWED_ORIGIN:-}
+      CHARGENOW_API_BASE_URL: ${CHARGENOW_API_BASE_URL:-https://developer.chargenow.top/cdb-open-api/v1}
+      CHARGENOW_BASIC_USERNAME: ${CHARGENOW_BASIC_USERNAME:-}
+      CHARGENOW_BASIC_PASSWORD: ${CHARGENOW_BASIC_PASSWORD:-}
+      CHARGENOW_BASIC_AUTH: ${CHARGENOW_BASIC_AUTH:-}
+      CHARGENOW_TIMEOUT_MS: ${CHARGENOW_TIMEOUT_MS:-10000}
+      MIN_RENTAL_BATTERY_PERCENT: ${MIN_RENTAL_BATTERY_PERCENT:-20}
     depends_on:
       postgres:
         condition: service_healthy
