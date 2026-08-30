@@ -70,6 +70,7 @@ import LegalPage from "./pages/LegalPage.tsx";
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
 const pilotGuestOnly = import.meta.env.VITE_KIOSK_PILOT_GUEST_ONLY === "true";
+const pilotSelfHosted = pilotGuestOnly && Boolean(import.meta.env.VITE_KIOSK_API_BASE_URL);
 const KioskRuntime = pilotGuestOnly ? KioskGuestOnlyPilot : KioskPremiumGateV3;
 
 const App = () => (
@@ -79,11 +80,11 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Router>
-          <VoltWidget />
-          <KioskReturnOverlayGate />
+          {!pilotSelfHosted && <VoltWidget />}
+          {!pilotSelfHosted && <KioskReturnOverlayGate />}
           <KioskHelpLauncher />
           {!pilotGuestOnly && <KioskOffersLauncher />}
-          <KioskOperationalGuard />
+          {!pilotSelfHosted && <KioskOperationalGuard />}
           <KioskNativeIdleUpdateGuard />
           <Routes>
             <Route path="/" element={<Index />} />
