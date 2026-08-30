@@ -164,15 +164,34 @@ export async function createTestCheckout(pool, auth, body) {
   };
 }
 
-async function markWebhookEvent(pool, event, rentalSessionId) {
-  const inserted = await pool.query(
-    `insert into stripe_webhook_events(event_id,event_type,object_id,rental_session_id,processing_status)
-     values($1,$2,$3,$4,'received')
-     on conflict(event_id) do nothing
+async function claimWebhookEvent(pool, event, rentalSessionId) {
+  const safeRentalId = /^[0-9a-f-]{36}$/i.test(String(rentalSessionId || "")) ? rentalSessionId : null;
+  const claimed = await pool.query(
+    `insert into stripe_webhook_events(event_id,event_type,object_id,rental_session_id,processing_status,received_at,failure_code,processed_at)
+     values($1,$2,$3,$4,'received',now(),null,null)
+     on conflict(event_id) do update
+       set event_type=excluded.event_type,
+           object_id=excluded.object_id,
+           rental_session_id=coalesce(stripe_webhook_events.rental_session_id, excluded.rental_session_id),
+           processing_status='received',
+           received_at=now(),
+           failure_code=null,
+           processed_at=null
+       where stripe_webhook_events.processing_status='failed'
+          or (stripe_webhook_events.processing_status='received' and stripe_webhook_events.received_at < now() - interval '5 minutes')
      returning event_id`,
-    [event.id, event.type, event.data?.object?.id || null, rentalSessionId || null],
+    [event.id, event.type, event.data?.object?.id || null, safeRentalId],
   );
-  return Boolean(inserted.rows[0]);
+  if (claimed.rows[0]) return { claimed: true, duplicate: false };
+
+  const existing = await pool.query(
+    "select processing_status from stripe_webhook_events where event_id=$1 limit 1",
+    [event.id],
+  );
+  return {
+    claimed: false,
+    duplicate: existing.rows[0]?.processing_status === "processed",
+  };
 }
 
 export async function processStripeWebhook(pool, rawBody, signature) {
@@ -194,13 +213,17 @@ export async function processStripeWebhook(pool, rawBody, signature) {
     ? metadata.rental_session_id
     : typeof object?.client_reference_id === "string" ? object.client_reference_id : null;
 
-  const firstHandler = await markWebhookEvent(pool, event, rentalSessionId);
-  if (!firstHandler) return { ok: true, status: 200, duplicate: true };
+  const claim = await claimWebhookEvent(pool, event, rentalSessionId);
+  if (!claim.claimed) {
+    // Processed duplicates and concurrent handlers both receive HTTP 200 so
+    // Stripe does not create a retry storm. Failed/stale handlers are reclaimable.
+    return { ok: true, status: 200, duplicate: claim.duplicate, inProgress: !claim.duplicate };
+  }
 
   try {
     if (event.type === "checkout.session.completed") {
       const checkout = object;
-      if (!rentalSessionId) throw new Error("RENTAL_SESSION_METADATA_MISSING");
+      if (!rentalSessionId || !/^[0-9a-f-]{36}$/i.test(rentalSessionId)) throw new Error("RENTAL_SESSION_METADATA_MISSING");
       const sessionResult = await pool.query("select * from rental_sessions where id=$1 limit 1", [rentalSessionId]);
       const session = sessionResult.rows[0];
       if (!session) throw new Error("SESSION_NOT_FOUND");
@@ -242,13 +265,13 @@ export async function processStripeWebhook(pool, rawBody, signature) {
           [session.id, JSON.stringify({ event_id: event.id, payment_intent_id: intent.id, amount_authorized_cents: authorizedCents, hardware_ejection_triggered: false })],
         );
       });
-    } else if (event.type === "checkout.session.expired" && rentalSessionId) {
+    } else if (event.type === "checkout.session.expired" && rentalSessionId && /^[0-9a-f-]{36}$/i.test(rentalSessionId)) {
       await pool.query(
         `update rental_sessions set state='payment_expired',state_version=state_version+1,payment_status='expired',updated_at=now()
           where id=$1 and paid_at is null`,
         [rentalSessionId],
       );
-    } else if (event.type === "payment_intent.payment_failed" && rentalSessionId) {
+    } else if (event.type === "payment_intent.payment_failed" && rentalSessionId && /^[0-9a-f-]{36}$/i.test(rentalSessionId)) {
       await pool.query(
         `update rental_sessions set state='payment_failed',state_version=state_version+1,payment_status='failed',failure_code='PAYMENT_INTENT_FAILED',updated_at=now()
           where id=$1 and paid_at is null`,
@@ -257,7 +280,7 @@ export async function processStripeWebhook(pool, rawBody, signature) {
     }
 
     await pool.query(
-      "update stripe_webhook_events set processing_status='processed',processed_at=now() where event_id=$1",
+      "update stripe_webhook_events set processing_status='processed',processed_at=now(),failure_code=null where event_id=$1",
       [event.id],
     );
     return { ok: true, status: 200, received: true };
