@@ -33,7 +33,10 @@ const SUPER_ONLY = ["super_admin"] as const;
 export const ADMIN_NAV: AdminNavGroup[] = [
   {
     label: "Pilotage",
-    items: [{ to: "/admin", icon: LayoutDashboard, label: "Vue d'ensemble", end: true, roles: ALL_INTERNAL }],
+    items: [
+      { to: "/admin", icon: LayoutDashboard, label: "Vue d'ensemble", end: true, roles: ALL_INTERNAL },
+      { to: "/admin/network-overview", icon: Activity, label: "Réseau détaillé", roles: ALL_INTERNAL },
+    ],
   },
   {
     label: "Exploitation",

@@ -11,6 +11,8 @@ import { LogOut, Loader2, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ADMIN_NAV, canAccessAdminPath } from "./adminNav";
 
+export type AdminOutletContext = { roles: string[] };
+
 function NavGroups({ roles, onNavigate }: { roles: string[]; onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-5">
@@ -52,6 +54,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const isCommandCenterHome = location.pathname === "/admin";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -96,7 +99,6 @@ export default function AdminLayout() {
     <div className="relative min-h-screen">
       <LiquidBackground />
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className="glass-strong sticky top-0 hidden h-screen w-64 flex-col p-5 lg:flex">
           <div className="mb-6"><BrandLogo size="sm" /></div>
           <ScrollArea className="-mx-2 flex-1 px-2">
@@ -107,12 +109,11 @@ export default function AdminLayout() {
           </Button>
         </aside>
 
-        {/* Mobile top bar with hamburger sheet */}
         <header className="glass-strong fixed inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3 lg:hidden">
           <BrandLogo size="sm" />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" aria-label="Ouvrir le menu" className="gap-2 border border-border px-3">
+              <Button variant="ghost" aria-label="Ouvrir le menu administrateur" className="gap-2 border border-border px-3">
                 <Menu className="h-5 w-5" /> <span>Menu</span>
               </Button>
             </SheetTrigger>
@@ -130,8 +131,11 @@ export default function AdminLayout() {
           </Sheet>
         </header>
 
-        <main className="flex-1 overflow-x-hidden p-5 pt-20 sm:p-8 lg:pt-8">
-          <Outlet />
+        <main className={cn(
+          "flex-1 overflow-x-hidden",
+          isCommandCenterHome ? "p-0 pt-16 lg:p-8 lg:pt-8" : "p-5 pt-20 sm:p-8 lg:pt-8",
+        )}>
+          <Outlet context={{ roles } satisfies AdminOutletContext} />
         </main>
       </div>
     </div>
