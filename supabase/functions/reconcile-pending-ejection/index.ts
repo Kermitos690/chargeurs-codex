@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { isCanonicalUuid } from "../_shared/uuid.ts";
 
 // Known double-release incident on DTA21269: second BATTERY_BORROW_OUT arrived
 // 646 ms after the first one. Wait after the FIRST physical event, not after
@@ -15,7 +16,6 @@ const reply = (body: unknown, status = 200, cid = crypto.randomUUID()) => new Re
     "X-Correlation-Id": cid,
   },
 });
-const uuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f-]{27}[0-9a-f]$/i.test(v);
 async function sha256Hex(input: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const stationId = typeof body.stationId === "string" ? body.stationId.trim() : "";
     const rentalSessionId = body.rentalSessionId;
-    if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId) || !uuid(rentalSessionId)) return reply({ ok: false, error: "INVALID_RECONCILIATION_REQUEST" }, 400, cid);
+    if (!/^[A-Za-z0-9_-]{4,32}$/.test(stationId) || !isCanonicalUuid(rentalSessionId)) return reply({ ok: false, error: "INVALID_RECONCILIATION_REQUEST" }, 400, cid);
 
     const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";

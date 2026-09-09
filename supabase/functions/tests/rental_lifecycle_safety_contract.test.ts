@@ -6,19 +6,31 @@ const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-e
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
 const refundSource = await Deno.readTextFile("supabase/functions/_shared/stripeRefundRuntime.ts");
 
-Deno.test("uncertain ejection results never trigger automatic retry or refund", () => {
-  assert(ejectSource.includes("hardwareCommandIssued = true"));
-  assert(ejectSource.includes("EJECTION_RECONCILIATION_REQUIRED"));
-  assert(ejectSource.includes("Aucun retry ou remboursement automatique"));
-  assert(ejectSource.includes('state: "eject_failed"'));
+Deno.test("customer release is one O2 command with physical reconciliation and no C3", () => {
+  assert(ejectSource.includes('new URL(`${BASE}/rent/order/create`)'));
+  assert(ejectSource.includes("hasQualifiedO2OnlyProof"));
+  assert(ejectSource.includes("O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING"));
+  assert(ejectSource.includes("requiresPhysicalReconciliation: true"));
+  assert(ejectSource.includes("noSecondHardwareCommand: true"));
+  assert(ejectSource.includes("no_c3: true"));
+  assertEquals(ejectSource.includes('new URL(`${BASE}/cabinet/ejectByRent`)'), false);
 });
 
-Deno.test("ChargeNow release callbacks require exact battery identity", () => {
-  assert(callbackSource.includes("RELEASE_IDENTITY_INCOMPLETE"));
-  assert(callbackSource.includes("RELEASE_BATTERY_MISMATCH"));
-  assert(callbackSource.includes('eventType: "battery_released"'));
-  assert(callbackSource.includes('eventType: "rental_activated"'));
-  assertEquals(callbackSource.includes('eventType: "rental_failed"'), false);
+Deno.test("ChargeNow release callbacks never activate a rental without physical reconciliation", () => {
+  assert(callbackSource.includes("RELEASE_PROVIDER_NOTIFICATION_ONLY"));
+  assert(callbackSource.includes("requires_physical_reconciliation: true"));
+  assertEquals(callbackSource.includes("confirmProviderRelease("), false);
+  assertEquals(callbackSource.includes('eventType: "battery_released"'), false);
+  assertEquals(callbackSource.includes('eventType: "rental_activated"'), false);
+});
+
+Deno.test("ChargeNow return settlement requires contractual BATTERY_IN evidence", () => {
+  assert(callbackSource.includes("RETURN_IDENTITY_INCOMPLETE"));
+  assert(callbackSource.includes("RETURN_PHYSICAL_EVIDENCE_MISSING"));
+  assert(callbackSource.includes("contractualBatteryId"));
+  assert(callbackSource.includes("returnedSlotNum"));
+  assertEquals(callbackSource.includes("physical?.receivedAt ?? new Date().toISOString()"), false);
+  assertEquals(callbackSource.includes("observedSlot === slotNum"), false);
 });
 
 Deno.test("legacy BATTERY_IN events cannot select the latest station rental", () => {
