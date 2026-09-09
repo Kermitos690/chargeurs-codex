@@ -6,11 +6,14 @@ const cabinetEventSource = await Deno.readTextFile("supabase/functions/cabinet-e
 const adminSource = await Deno.readTextFile("supabase/functions/rental-admin-action/index.ts");
 const refundSource = await Deno.readTextFile("supabase/functions/_shared/stripeRefundRuntime.ts");
 
-Deno.test("uncertain ejection results never trigger automatic retry or refund", () => {
-  assert(ejectSource.includes("hardwareCommandIssued = true"));
-  assert(ejectSource.includes("EJECTION_RECONCILIATION_REQUIRED"));
-  assert(ejectSource.includes("Aucun retry ou remboursement automatique"));
-  assert(ejectSource.includes('state: "eject_failed"'));
+Deno.test("customer release is one O2 command with physical reconciliation and no C3", () => {
+  assert(ejectSource.includes('new URL(`${BASE}/rent/order/create`)'));
+  assert(ejectSource.includes("hasQualifiedO2OnlyProof"));
+  assert(ejectSource.includes("O2_CALLBACK_ONLY_PHYSICAL_PROOF_MISSING"));
+  assert(ejectSource.includes("requiresPhysicalReconciliation: true"));
+  assert(ejectSource.includes("noSecondHardwareCommand: true"));
+  assert(ejectSource.includes("no_c3: true"));
+  assertEquals(ejectSource.includes('new URL(`${BASE}/cabinet/ejectByRent`)'), false);
 });
 
 Deno.test("ChargeNow release callbacks never activate a rental without physical reconciliation", () => {
