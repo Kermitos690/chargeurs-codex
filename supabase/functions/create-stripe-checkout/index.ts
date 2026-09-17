@@ -1,7 +1,5 @@
 // create-stripe-checkout — real hosted Stripe Checkout for the kiosk QR.
-// Customer-facing methods are intentionally limited to card wallets/cards and
-// TWINT. Card/Apple Pay/Google Pay use a manual-capture authorization; TWINT
-// keeps its native automatic-capture/refund semantics.
+// QR remains a first-class rail. The backend atomically claims QR before any new Stripe side effect.
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
@@ -68,7 +66,7 @@ async function ensurePaymentStarted(db: any, session: any) {
     p_event_type: "payment_started",
     p_idempotency_key: `payment_started:direct_stripe:${session.id}`,
     p_occurred_at: new Date().toISOString(),
-    p_metadata: { source: "kiosk_direct_stripe_checkout" },
+    p_metadata: { source: "kiosk_direct_stripe_checkout", payment_rail: "QR" },
     p_resulting_state: "payment_pending",
     p_payment_intent_id: null,
     p_station_id: session.station_id ?? null,
@@ -116,13 +114,26 @@ Deno.serve(async (req) => {
     const storedHash = typeof session.pricing_snapshot_hash === "string" ? session.pricing_snapshot_hash : "";
     if (storedHash && await snapshotHash(snapshot) !== storedHash) return json({ ok: false, error: "SNAPSHOT_INVALID" }, 409);
 
+    // First-rail-wins is established BEFORE any Stripe Checkout create/retrieve side effect.
+    const { error: railError } = await db.rpc("claim_rental_payment_rail", {
+      p_rental_id: session.id,
+      p_rail: "qr_checkout",
+      p_correlation_id: correlationId,
+      p_metadata: { source: "create_stripe_checkout", station_id: stationId },
+    });
+    if (railError) {
+      const message = String(railError.message ?? "");
+      if (message.includes("PAYMENT_RAIL_ALREADY_CLAIMED")) return json({ ok: false, error: "PAYMENT_RAIL_ALREADY_CLAIMED" }, 409);
+      throw railError;
+    }
+
     const stripe = new Stripe(secretKey, { apiVersion: "2025-09-30.clover" as any, httpClient: Stripe.createFetchHttpClient() });
 
     if (session.stripe_checkout_session_id) {
       try {
         const existing = await stripe.checkout.sessions.retrieve(String(session.stripe_checkout_session_id));
         if (existing.status === "open" && existing.url) {
-          return json({ ok: true, checkout_url: existing.url, checkout_id: existing.id, public_session_code: session.public_session_code, expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : session.checkout_url_expires_at, status: "awaiting_payment", deposit_cents: depositCents });
+          return json({ ok: true, paymentRail: "QR", checkout_url: existing.url, checkout_id: existing.id, public_session_code: session.public_session_code, expires_at: existing.expires_at ? new Date(existing.expires_at * 1000).toISOString() : session.checkout_url_expires_at, status: "awaiting_payment", deposit_cents: depositCents });
         }
       } catch { /* fresh Checkout below */ }
     }
@@ -137,7 +148,7 @@ Deno.serve(async (req) => {
     const metadata: Record<string, string> = {
       rental_session_id: String(session.id), public_session_code: publicCode, station_id: stationId,
       kiosk_device_id: String(session.kiosk_device_id ?? ""), pricing_snapshot_hash: pricingHash,
-      deposit_amount_cents: String(depositCents), payment_purpose: "rental_guarantee",
+      deposit_amount_cents: String(depositCents), payment_purpose: "rental_guarantee", payment_rail: "qr_checkout",
     };
 
     const checkout = await stripe.checkout.sessions.create({
@@ -162,9 +173,9 @@ Deno.serve(async (req) => {
     const { error: paymentError } = await db.from("payments").upsert({ rental_session_id: session.id, stripe_session_id: checkout.id, amount: depositCents / 100, currency: session.currency, status: "pending", amount_authorized_cents: 0, amount_captured_cents: 0, amount_refunded_cents: 0 }, { onConflict: "stripe_session_id" });
     if (paymentError) throw paymentError;
 
-    await db.from("audit_logs").insert({ action: "stripe.checkout.direct_created", target: String(session.id), data: { stripe_checkout_session_id: checkout.id, station_id: stationId, deposit_cents: depositCents, currency, pricing_snapshot_hash: pricingHash, qr_target: "stripe_checkout", payment_methods: ["card", "twint"], card_capture: "manual", twint_capture: "automatic", stripe_api_version: "2025-09-30.clover", success_route: "legacy_and_current_compatible_success", correlation_id: correlationId } }).then(() => {}, () => {});
+    await db.from("audit_logs").insert({ action: "stripe.checkout.direct_created", target: String(session.id), data: { stripe_checkout_session_id: checkout.id, station_id: stationId, deposit_cents: depositCents, currency, pricing_snapshot_hash: pricingHash, qr_target: "stripe_checkout", payment_rail: "QR", payment_methods: ["card", "twint"], card_capture: "manual", twint_capture: "automatic", stripe_api_version: "2025-09-30.clover", correlation_id: correlationId } }).then(() => {}, () => {});
 
-    return json({ ok: true, checkout_url: checkout.url, checkout_id: checkout.id, public_session_code: session.public_session_code, expires_at: expiresIso, status: "awaiting_payment", deposit_cents: depositCents });
+    return json({ ok: true, paymentRail: "QR", checkout_url: checkout.url, checkout_id: checkout.id, public_session_code: session.public_session_code, expires_at: expiresIso, status: "awaiting_payment", deposit_cents: depositCents });
   } catch (error) {
     const raw = error as any;
     const errorCode = typeof raw?.code === "string" ? raw.code : (error instanceof Error ? error.message : "UNKNOWN");
