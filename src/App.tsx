@@ -65,6 +65,7 @@ import AdminInventory from "./pages/admin/AdminInventory.tsx";
 import AdminVoltSupport from "./pages/admin/AdminVoltSupport.tsx";
 import "./pages/admin/admin-advertising.css";
 import LegalPage from "./pages/LegalPage.tsx";
+import CashRegisterPreview from "./pages/CashRegisterPreview.tsx";
 
 const queryClient = new QueryClient();
 const Router = import.meta.env.VITE_ROUTER_MODE === "hash" ? HashRouter : BrowserRouter;
@@ -89,6 +90,7 @@ const App = () => (
             <Route path="/support" element={<Support />} />
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
+            <Route path="/caisse-preview" element={<CashRegisterPreview />} />
             <Route path="/kiosk" element={<KioskHome />} />
             <Route path="/kiosk/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
             <Route path="/kiosk/station/:stationId" element={<KioskIdentityGate><KioskPremiumGateV3 /></KioskIdentityGate>} />
