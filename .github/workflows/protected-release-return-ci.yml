@@ -1,0 +1,57 @@
+name: Protected Release and Return CI
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/reconcile-pending-ejection/**"
+      - "supabase/functions/chargenow-rent-callback/**"
+      - "supabase/functions/_shared/returnCorrelation.ts"
+      - "supabase/functions/_shared/uuid.ts"
+      - "supabase/functions/tests/chargenow_return_correlation_contract.test.ts"
+      - "supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts"
+      - "supabase/functions/tests/reconcile_pending_ejection_uuid.test.ts"
+      - "supabase/functions/tests/rental_lifecycle_safety_contract.test.ts"
+      - ".github/workflows/protected-release-return-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-release-return-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protected-core-contract:
+    name: Protected Core physical-proof contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check reconcile-pending-ejection
+        run: deno check supabase/functions/reconcile-pending-ejection/index.ts
+
+      - name: Check chargenow-rent-callback
+        run: deno check supabase/functions/chargenow-rent-callback/index.ts
+
+      - name: Check return correlation helper
+        run: deno check supabase/functions/_shared/returnCorrelation.ts
+
+      - name: Test canonical UUID validation
+        run: deno test supabase/functions/tests/reconcile_pending_ejection_uuid.test.ts
+
+      - name: Test return correlation
+        run: deno test --allow-read supabase/functions/tests/chargenow_return_correlation_contract.test.ts
+
+      - name: Test pending ejection reconciliation
+        run: deno test --allow-read supabase/functions/tests/pending_ejection_reconciliation_contract.test.ts
+
+      - name: Test rental lifecycle safety
+        run: deno test --allow-read supabase/functions/tests/rental_lifecycle_safety_contract.test.ts
