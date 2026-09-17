@@ -21,6 +21,7 @@ import { VoltWidget } from "./components/support/VoltWidget.tsx";
 
 import CityPowerbank from "./pages/CityPowerbank.tsx";
 import Partners from "./pages/Partners.tsx";
+import SelectaPartner from "./pages/SelectaPartner.tsx";
 import Support from "./pages/Support.tsx";
 import PublicStation from "./pages/public/PublicStation.tsx";
 import AccountAuth from "./pages/account/AccountAuth.tsx";
@@ -87,6 +88,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/powerbank/:citySlug" element={<CityPowerbank />} />
             <Route path="/partenaires" element={<Partners />} />
+            <Route path="/selecta" element={<SelectaPartner />} />
             <Route path="/support" element={<Support />} />
             <Route path="/bornes/:stationId" element={<PublicStation />} />
             <Route path="/legal/:kind" element={<LegalPage />} />
